@@ -85,7 +85,7 @@ export function AppHeader({
             size="sm"
             variant="ghost"
             onClick={togglePrivacy}
-            aria-label={blurred ? "Show emails" : "Hide emails"}
+            aria-label={blurred ? "Show sensitive values" : "Hide sensitive values"}
             className="press-scale hidden h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground sm:inline-flex"
           >
             <PrivacyIcon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -153,7 +153,7 @@ export function AppHeader({
                   onClick={togglePrivacy}
                 >
                   <PrivacyIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                  {blurred ? "Show Emails" : "Hide Emails"}
+                  {blurred ? "Show Sensitive Values" : "Hide Sensitive Values"}
                 </button>
                 {showLogout && (
                   <button

@@ -18,12 +18,14 @@ import {
 } from "@/components/ui/table";
 import { useDevices } from "@/features/devices/hooks/use-devices";
 import { useDialogState } from "@/hooks/use-dialog-state";
+import { usePrivacyStore } from "@/hooks/use-privacy";
 import { getErrorMessageOrNull } from "@/utils/errors";
 import { formatTimeLong } from "@/utils/formatters";
 
 export function DevicesPage() {
   const [deviceName, setDeviceName] = useState("");
   const [deviceIpAddress, setDeviceIpAddress] = useState("");
+  const blurred = usePrivacyStore((s) => s.blurred);
   const { devicesQuery, createMutation, deleteMutation } = useDevices();
   const deleteDialog = useDialogState<{ id: string; name: string }>();
 
@@ -144,8 +146,12 @@ export function DevicesPage() {
                   const created = formatTimeLong(entry.createdAt);
                   return (
                     <TableRow key={entry.id}>
-                      <TableCell className="font-medium">{entry.name}</TableCell>
-                      <TableCell className="font-mono text-xs">{entry.ipAddress}</TableCell>
+                      <TableCell className="font-medium">
+                        <span className={blurred ? "privacy-blur" : undefined}>{entry.name}</span>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <span className={blurred ? "privacy-blur" : undefined}>{entry.ipAddress}</span>
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {created.date} {created.time}
                       </TableCell>

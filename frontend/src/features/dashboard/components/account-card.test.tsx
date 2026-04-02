@@ -1,5 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AccountCard } from "@/features/dashboard/components/account-card";
 import { usePrivacyStore } from "@/hooks/use-privacy";
@@ -52,5 +53,74 @@ describe("AccountCard", () => {
 
     expect(screen.getByText("AWS Account MSP")).toBeInTheDocument();
     expect(container.querySelector(".privacy-blur")).not.toBeNull();
+  });
+
+  it("enables use this account button when snapshot exists and 5h quota is available", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 44,
+        secondaryRemainingPercent: 73,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
+  });
+
+  it("disables use this account button when 5h quota is unavailable", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 73,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
+  });
+
+  it("disables use this account button when codex-auth snapshot is unavailable", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 44,
+        secondaryRemainingPercent: 73,
+      },
+      codexAuth: {
+        hasSnapshot: false,
+        snapshotName: null,
+        activeSnapshotName: null,
+        isActiveSnapshot: false,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
+  });
+
+  it("calls useLocal action when use this account button is clicked", async () => {
+    const user = userEvent.setup({ delay: null });
+    const account = createAccountSummary();
+    const onAction = vi.fn();
+
+    render(<AccountCard account={account} onAction={onAction} />);
+
+    await user.click(screen.getByRole("button", { name: "Use this account" }));
+
+    expect(onAction).toHaveBeenCalledWith(account, "useLocal");
   });
 });

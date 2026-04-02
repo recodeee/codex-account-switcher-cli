@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import base64
+import json
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 
+from app.core.auth import generate_unique_account_id
 from app.core.crypto import TokenEncryptor
 from app.core.utils.time import naive_utc_to_epoch, utcnow
 from app.db.models import Account, AccountStatus
@@ -28,6 +32,25 @@ def _make_account(account_id: str, email: str, plan_type: str = "plus") -> Accou
         status=AccountStatus.ACTIVE,
         deactivation_reason=None,
     )
+
+
+def _encode_jwt(payload: dict[str, object]) -> str:
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    body = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+    return f"header.{body}.sig"
+
+
+def _write_auth_snapshot(path: Path, *, email: str, account_id: str) -> None:
+    payload = {"email": email}
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": account_id,
+        },
+    }
+    path.write_text(json.dumps(auth_json))
 
 
 @pytest.mark.asyncio
@@ -88,6 +111,29 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
     # At least one trend point should have non-zero request count
     request_values = [p["v"] for p in trends["requests"]]
     assert any(v > 0 for v in request_values)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_overview_auto_imports_codex_auth_snapshots(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "tokio.json", email="tokio@example.com", account_id="acc_tokio")
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    response = await async_client.get("/api/dashboard/overview")
+    assert response.status_code == 200
+    payload = response.json()
+    expected_account_id = generate_unique_account_id("acc_tokio", "tokio@example.com")
+
+    account_ids = [account["accountId"] for account in payload["accounts"]]
+    assert expected_account_id in account_ids
 
 
 @pytest.mark.asyncio

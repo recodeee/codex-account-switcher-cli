@@ -8,10 +8,11 @@ import { buildDuplicateAccountIdSet } from "@/utils/account-identifiers";
 
 export type AccountCardsProps = {
   accounts: AccountSummary[];
+  useLocalBusy?: boolean;
   onAction?: AccountCardProps["onAction"];
 };
 
-export function AccountCards({ accounts, onAction }: AccountCardsProps) {
+export function AccountCards({ accounts, useLocalBusy = false, onAction }: AccountCardsProps) {
   const duplicateAccountIds = useMemo(() => buildDuplicateAccountIdSet(accounts), [accounts]);
 
   if (accounts.length === 0) {
@@ -28,7 +29,12 @@ export function AccountCards({ accounts, onAction }: AccountCardsProps) {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {accounts.map((account, index) => (
         <div key={account.accountId} className="animate-fade-in-up" style={{ animationDelay: `${index * 75}ms` }}>
-          <AccountCard account={account} showAccountId={duplicateAccountIds.has(account.accountId)} onAction={onAction} />
+          <AccountCard
+            account={account}
+            showAccountId={duplicateAccountIds.has(account.accountId)}
+            useLocalBusy={useLocalBusy}
+            onAction={onAction}
+          />
         </div>
       ))}
     </div>

@@ -15,6 +15,7 @@ The friction discourages keeping codex-lb account entries fresh after token refr
 - `codex-lb-sync-all` imports all `~/.codex/accounts/*.json` snapshots in one run.
 - `codex-lb-sync-all` also imports the active `~/.codex/auth.json` snapshot from `codex login` when present.
 - Dashboard accounts UI adds a per-account **Use this** action that executes `codex-auth use <snapshot>` on the host.
+- `GET /api/accounts` and `GET /api/dashboard/overview` auto-import local codex snapshots so newly logged-in accounts show up in dashboard account views without manual upload.
 - Support dashboard-auth-protected environments by logging in via password and optional TOTP when needed.
 - Document the fast-switch flow in the README.
 

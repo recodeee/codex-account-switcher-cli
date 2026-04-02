@@ -9,7 +9,6 @@ import { AccountCards } from "@/features/dashboard/components/account-cards";
 import { DashboardSkeleton } from "@/features/dashboard/components/dashboard-skeleton";
 import { RequestFilters } from "@/features/dashboard/components/filters/request-filters";
 import { RecentRequestsTable } from "@/features/dashboard/components/recent-requests-table";
-import { StatsGrid } from "@/features/dashboard/components/stats-grid";
 import { UsageDonuts } from "@/features/dashboard/components/usage-donuts";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import { useRequestLogs } from "@/features/dashboard/hooks/use-request-logs";
@@ -27,7 +26,7 @@ export function DashboardPage() {
   const isDark = useThemeStore((s) => s.theme === "dark");
   const dashboardQuery = useDashboard();
   const { filters, logsQuery, optionsQuery, updateFilters } = useRequestLogs();
-  const { resumeMutation } = useAccountMutations();
+  const { resumeMutation, useLocalMutation } = useAccountMutations();
 
   const isRefreshing = dashboardQuery.isFetching || logsQuery.isFetching;
 
@@ -47,9 +46,12 @@ export function DashboardPage() {
         case "reauth":
           navigate(`/accounts?selected=${account.accountId}`);
           break;
+        case "useLocal":
+          void useLocalMutation.mutateAsync(account.accountId);
+          break;
       }
     },
-    [navigate, resumeMutation],
+    [navigate, resumeMutation, useLocalMutation],
   );
 
   const overview = dashboardQuery.data;
@@ -130,8 +132,6 @@ export function DashboardPage() {
         <DashboardSkeleton />
       ) : (
         <>
-          <StatsGrid stats={view.stats} />
-
             <UsageDonuts
               primaryItems={view.primaryUsageItems}
               secondaryItems={view.secondaryUsageItems}
@@ -146,7 +146,11 @@ export function DashboardPage() {
               <h2 className="text-[13px] font-medium uppercase tracking-wider text-muted-foreground">Accounts</h2>
               <div className="h-px flex-1 bg-border" />
             </div>
-            <AccountCards accounts={overview?.accounts ?? []} onAction={handleAccountAction} />
+            <AccountCards
+              accounts={overview?.accounts ?? []}
+              useLocalBusy={useLocalMutation.isPending}
+              onAction={handleAccountAction}
+            />
           </section>
 
           <section className="space-y-4">

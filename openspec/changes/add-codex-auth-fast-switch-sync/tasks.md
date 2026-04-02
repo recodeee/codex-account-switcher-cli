@@ -6,3 +6,4 @@
 - [x] 6. Add a bulk sync command to import all codex-auth snapshots in one run.
 - [x] 7. Extend bulk sync to include active `~/.codex/auth.json` from `codex login` when present.
 - [x] 8. Add dashboard per-account **Use this** action with 5h-quota gating and codex-auth snapshot matching.
+- [x] 9. Auto-import local codex snapshots during account-list surfaces (`GET /api/accounts`, `GET /api/dashboard/overview`) so newly logged-in accounts appear without manual import.

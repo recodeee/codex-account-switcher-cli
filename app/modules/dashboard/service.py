@@ -7,6 +7,7 @@ from app.core.crypto import TokenEncryptor
 from app.core.usage.types import UsageWindowRow
 from app.core.utils.time import utcnow
 from app.db.models import UsageHistory
+from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
 from app.modules.accounts.mappers import build_account_summaries
 from app.modules.dashboard.repository import DashboardRepository
 from app.modules.dashboard.schemas import (
@@ -32,6 +33,7 @@ class DashboardService:
 
     async def get_overview(self) -> DashboardOverviewResponse:
         now = utcnow()
+        await sync_local_codex_auth_snapshots(repo=self._repo.accounts_repo, encryptor=self._encryptor)
         accounts = await self._repo.list_accounts()
         primary_usage = await self._repo.latest_usage_by_account("primary")
         secondary_usage = await self._repo.latest_usage_by_account("secondary")

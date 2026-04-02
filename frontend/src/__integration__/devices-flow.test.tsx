@@ -28,6 +28,11 @@ describe("devices flow integration", () => {
     await user.click(screen.getByRole("button", { name: "Add device" }));
     expect(await screen.findByText("ksskringdistance03")).toBeInTheDocument();
     expect(screen.getByText("192.168.0.1")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Hide sensitive values" }));
+    expect(screen.getByText("ksskringdistance03")).toHaveClass("privacy-blur");
+    expect(screen.getByText("192.168.0.1")).toHaveClass("privacy-blur");
+
     await user.click(screen.getByRole("button", { name: "Copy ksskringdistance03 and 192.168.0.1" }));
     expect(writeText).toHaveBeenCalledWith("ksskringdistance03\t192.168.0.1");
 

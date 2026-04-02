@@ -70,3 +70,27 @@ The dashboard SHALL expose a per-account action that switches the host's active 
 - **WHEN** `primary_remaining_percent` is missing/zero OR no matched codex-auth snapshot exists
 - **THEN** the dashboard shows **Use this** as disabled/gray
 - **AND** provides an explanatory reason
+
+### Requirement: Dashboard auto-detects local codex snapshots
+
+`GET /api/accounts` and `GET /api/dashboard/overview` SHALL auto-import local Codex auth snapshots into codex-lb so newly logged-in accounts appear in dashboard account lists without manual file import.
+
+#### Scenario: Auto-import missing snapshot account on first list
+
+- **WHEN** `~/.codex/accounts/*.json` contains a valid snapshot for an account not yet stored in codex-lb
+- **AND** `CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST=true`
+- **THEN** the next `GET /api/accounts` request imports that snapshot account
+- **AND** the response includes the account
+
+#### Scenario: Auto-import also applies to dashboard overview
+
+- **WHEN** `~/.codex/accounts/*.json` contains a valid snapshot for an account not yet stored in codex-lb
+- **AND** `CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST=true`
+- **THEN** the next `GET /api/dashboard/overview` request imports that snapshot account
+- **AND** the response includes the account in `accounts`
+
+#### Scenario: Auto-import can be disabled
+
+- **WHEN** `CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST=false`
+- **THEN** `GET /api/accounts` and `GET /api/dashboard/overview` do not auto-import snapshots
+- **AND** only already-imported accounts are returned

@@ -15,6 +15,11 @@ The `/project-conventions` skill is auto-activated on code edits (PreToolUse gua
 | Code Conventions (Full) | `/project-conventions` skill | On code edit (auto-enforced) |
 | Git Workflow | `.agents/conventions/git-workflow.md` | Commit / PR |
 
+## Versioning Rule
+
+- Always bump the app version by **+1 patch** in `frontend/package.json` on every implemented code change.
+- Keep the UI version badge/header in sync with `frontend/package.json`.
+
 ## Workflow (OpenSpec-first)
 
 This repo uses **OpenSpec as the primary workflow and SSOT** for change-driven development.

@@ -44,6 +44,7 @@ describe("dashboard flow integration", () => {
 
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(await screen.findByText("Request Logs")).toBeInTheDocument();
+    expect(screen.queryByText("Requests (7d)")).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(overviewCalls).toBeGreaterThan(0);
@@ -70,5 +71,21 @@ describe("dashboard flow integration", () => {
       expect(requestLogCalls).toBeGreaterThan(logsAfterFilter);
     });
     expect(overviewCalls).toBe(overviewAfterLoad);
+  });
+
+  it("switches local codex account from dashboard account card", async () => {
+    const user = userEvent.setup({ delay: null });
+
+    window.history.pushState({}, "", "/dashboard");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+
+    const useButtons = await screen.findAllByRole("button", { name: "Use this account" });
+    const enabledButton = useButtons.find((button) => !button.hasAttribute("disabled"));
+    expect(enabledButton).toBeDefined();
+
+    await user.click(enabledButton!);
+    expect(await screen.findByText(/Switched to/i)).toBeInTheDocument();
   });
 });

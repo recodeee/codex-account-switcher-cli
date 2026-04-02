@@ -13,11 +13,12 @@ import {
 } from "@/utils/account-status";
 import { formatPercentNullable, formatQuotaResetLabel, formatSlug } from "@/utils/formatters";
 
-type AccountAction = "details" | "resume" | "reauth";
+type AccountAction = "details" | "resume" | "reauth" | "useLocal";
 
 export type AccountCardProps = {
   account: AccountSummary;
   showAccountId?: boolean;
+  useLocalBusy?: boolean;
   onAction?: (account: AccountSummary, action: AccountAction) => void;
 };
 
@@ -65,12 +66,19 @@ function QuotaBar({
   );
 }
 
-export function AccountCard({ account, showAccountId = false, onAction }: AccountCardProps) {
+export function AccountCard({ account, showAccountId = false, useLocalBusy = false, onAction }: AccountCardProps) {
   const blurred = usePrivacyStore((s) => s.blurred);
   const status = normalizeStatus(account.status);
   const primaryRemaining = account.usage?.primaryRemainingPercent ?? null;
   const secondaryRemaining = account.usage?.secondaryRemainingPercent ?? null;
   const weeklyOnly = account.windowMinutesPrimary == null && account.windowMinutesSecondary != null;
+  const hasSnapshot = account.codexAuth?.hasSnapshot ?? false;
+  const canUseLocally = typeof primaryRemaining === "number" && primaryRemaining > 0 && hasSnapshot;
+  const useLocalDisabledReason = typeof primaryRemaining !== "number" || primaryRemaining <= 0
+    ? "No 5h quota remaining."
+    : !hasSnapshot
+      ? "No codex-auth snapshot found for this account."
+      : null;
 
   const primaryReset = formatQuotaResetLabel(account.resetAtPrimary ?? null);
   const secondaryReset = formatQuotaResetLabel(account.resetAtSecondary ?? null);
@@ -115,6 +123,22 @@ export function AccountCard({ account, showAccountId = false, onAction }: Accoun
 
       {/* Actions */}
       <div className="mt-3 flex items-center gap-1.5 border-t pt-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className={cn(
+            "h-7 gap-1.5 rounded-lg text-xs",
+            canUseLocally
+              ? "text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+              : "text-muted-foreground",
+          )}
+          disabled={!canUseLocally || useLocalBusy}
+          title={useLocalDisabledReason ?? undefined}
+          onClick={() => onAction?.(account, "useLocal")}
+        >
+          Use this account
+        </Button>
         <Button
           type="button"
           size="sm"

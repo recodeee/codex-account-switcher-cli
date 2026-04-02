@@ -17,6 +17,7 @@ from app.core.crypto import TokenEncryptor
 from app.core.plan_types import coerce_account_plan_type
 from app.core.utils.time import naive_utc_to_epoch, to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus
+from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     CodexAuthSnapshotNotFoundError,
@@ -63,6 +64,8 @@ class AccountsService:
         self._encryptor = TokenEncryptor()
 
     async def list_accounts(self) -> list[AccountSummary]:
+        await sync_local_codex_auth_snapshots(repo=self._repo, encryptor=self._encryptor)
+
         accounts = await self._repo.list_accounts()
         if not accounts:
             return []
@@ -160,30 +163,7 @@ class AccountsService:
         )
 
     async def import_account(self, raw: bytes) -> AccountImportResponse:
-        try:
-            auth = parse_auth_json(raw)
-        except (json.JSONDecodeError, ValidationError, UnicodeDecodeError, TypeError) as exc:
-            raise InvalidAuthJsonError("Invalid auth.json payload") from exc
-        claims = claims_from_auth(auth)
-
-        email = claims.email or DEFAULT_EMAIL
-        raw_account_id = claims.account_id
-        account_id = generate_unique_account_id(raw_account_id, email)
-        plan_type = coerce_account_plan_type(claims.plan_type, DEFAULT_PLAN)
-        last_refresh = to_utc_naive(auth.last_refresh_at) if auth.last_refresh_at else utcnow()
-
-        account = Account(
-            id=account_id,
-            chatgpt_account_id=raw_account_id,
-            email=email,
-            plan_type=plan_type,
-            access_token_encrypted=self._encryptor.encrypt(auth.tokens.access_token),
-            refresh_token_encrypted=self._encryptor.encrypt(auth.tokens.refresh_token),
-            id_token_encrypted=self._encryptor.encrypt(auth.tokens.id_token),
-            last_refresh=last_refresh,
-            status=AccountStatus.ACTIVE,
-            deactivation_reason=None,
-        )
+        account = self._account_from_auth_bytes(raw)
 
         saved = await self._repo.upsert(account)
         if self._usage_repo and self._usage_updater:
@@ -249,4 +229,29 @@ class AccountsService:
             snapshot_name=selected_snapshot_name,
             active_snapshot_name=active_snapshot_name,
             is_active_snapshot=bool(active_snapshot_name and active_snapshot_name in snapshot_names),
+        )
+
+    def _account_from_auth_bytes(self, raw: bytes) -> Account:
+        try:
+            auth = parse_auth_json(raw)
+        except (json.JSONDecodeError, ValidationError, UnicodeDecodeError, TypeError) as exc:
+            raise InvalidAuthJsonError("Invalid auth.json payload") from exc
+
+        claims = claims_from_auth(auth)
+        email = claims.email or DEFAULT_EMAIL
+        raw_account_id = claims.account_id
+        account_id = generate_unique_account_id(raw_account_id, email)
+        plan_type = coerce_account_plan_type(claims.plan_type, DEFAULT_PLAN)
+        last_refresh = to_utc_naive(auth.last_refresh_at) if auth.last_refresh_at else utcnow()
+        return Account(
+            id=account_id,
+            chatgpt_account_id=raw_account_id,
+            email=email,
+            plan_type=plan_type,
+            access_token_encrypted=self._encryptor.encrypt(auth.tokens.access_token),
+            refresh_token_encrypted=self._encryptor.encrypt(auth.tokens.refresh_token),
+            id_token_encrypted=self._encryptor.encrypt(auth.tokens.id_token),
+            last_refresh=last_refresh,
+            status=AccountStatus.ACTIVE,
+            deactivation_reason=None,
         )

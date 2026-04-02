@@ -90,6 +90,7 @@ Environment variable shortcuts are also supported:
 - `CODEX_LB_DASHBOARD_TOTP_CODE`
 - `CODEX_LB_DASHBOARD_TOTP_COMMAND` (command that prints a code)
 - `CODEX_AUTH_JSON_PATH` (override active auth file path; default: `~/.codex/auth.json`)
+- `CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST` (default: `true`; set `false` to disable dashboard auto-import)
 
 `codex-lb-switch` runs `codex-auth use <name>`, then imports `~/.codex/accounts/<name>.json` into codex-lb.
 
@@ -118,6 +119,13 @@ In the dashboard **Accounts** page, each account now has a **Use this** action:
 
 - enabled (green) when 5h quota is available and a matching `codex-auth` snapshot exists
 - disabled (gray) when 5h quota is depleted or no matching snapshot is found
+
+When `CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST=true` (default), loading dashboard account lists (including **Accounts** and **Dashboard** views) auto-imports:
+
+- snapshots in `~/.codex/accounts/*.json`
+- active `~/.codex/auth.json` when it points to a different file
+
+> Docker Compose note: the default `docker-compose.yml` mounts `${HOME}/.codex` into the server container as read-only, so codex-auth snapshots on your host are visible to codex-lb.
 
 ## Client Setup
 

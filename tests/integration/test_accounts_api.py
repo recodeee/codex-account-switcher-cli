@@ -69,6 +69,60 @@ async def test_import_and_list_accounts(async_client):
 
 
 @pytest.mark.asyncio
+async def test_accounts_list_auto_imports_codex_auth_snapshots(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "tokio.json", email="tokio@example.com", account_id="acc_tokio")
+    (tmp_path / "current").write_text("tokio")
+
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    first = await async_client.get("/api/accounts")
+    assert first.status_code == 200
+
+    expected_account_id = generate_unique_account_id("acc_tokio", "tokio@example.com")
+    accounts = first.json()["accounts"]
+    assert len(accounts) == 1
+    assert accounts[0]["accountId"] == expected_account_id
+    assert accounts[0]["email"] == "tokio@example.com"
+    assert accounts[0]["codexAuth"]["hasSnapshot"] is True
+    assert accounts[0]["codexAuth"]["snapshotName"] == "tokio"
+    assert accounts[0]["codexAuth"]["activeSnapshotName"] == "tokio"
+    assert accounts[0]["codexAuth"]["isActiveSnapshot"] is True
+
+    second = await async_client.get("/api/accounts")
+    assert second.status_code == 200
+    assert len(second.json()["accounts"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_does_not_auto_import_when_disabled(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "tokio.json", email="tokio@example.com", account_id="acc_tokio")
+
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "false")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    response = await async_client.get("/api/accounts")
+    assert response.status_code == 200
+    assert response.json()["accounts"] == []
+
+
+@pytest.mark.asyncio
 async def test_reactivate_missing_account_returns_404(async_client):
     response = await async_client.post("/api/accounts/missing/reactivate")
     assert response.status_code == 404
