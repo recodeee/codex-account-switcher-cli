@@ -1,4 +1,5 @@
 - [x] Add post-switch auth pointer validation and repair in backend account switching flow.
 - [x] Ensure fallback pointer writes use relative symlink targets for cross-runtime path safety.
 - [x] Add unit and integration coverage for repairing broken auth pointer targets after successful CLI switch.
+- [x] Enforce writable `.codex` bind mounts in compose configs used for dashboard switching.
 - [x] Run targeted lint/tests and `openspec validate --specs`.

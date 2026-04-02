@@ -8,6 +8,7 @@ That path is valid in the container but invalid on the host terminal, which late
 - Harden backend local account switching to verify the active auth pointer after `codex-auth use`.
 - If the pointer is missing, broken, or points to the wrong snapshot, repair it by writing canonical local pointers (`current` + `auth.json`) directly.
 - Write `auth.json` symlink targets as relative paths so they remain valid across host/container path differences.
+- Enforce writable `.codex` bind mounts in runtime/deploy compose configs used by dashboard switching.
 
 ## Impact
 

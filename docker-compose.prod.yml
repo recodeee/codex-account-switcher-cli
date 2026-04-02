@@ -15,6 +15,7 @@ services:
     ports:
       - "2455:2455"
     volumes:
+      - ${HOME}/.codex:/home/app/.codex:rw
       - codex-lb-data:/var/lib/codex-lb
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:2455/health/ready')"]

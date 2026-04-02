@@ -155,6 +155,8 @@ When `CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST=true` (default), loading 
 - active `~/.codex/auth.json` when it points to a different file
 
 > Docker Compose note: the default `docker-compose.yml` mounts `${HOME}/.codex` into the server container as read-only, so codex-auth snapshots on your host are visible to codex-lb.
+>
+> `./redeploy.sh` also installs/updates the bundled `codex-auth` package globally from `./codex-account-switcher` before rebuilding containers. Use `--skip-codex-auth-install` (or `CODEX_LB_INSTALL_CODEX_AUTH=false`) to disable that step.
 
 ## Client Setup
 

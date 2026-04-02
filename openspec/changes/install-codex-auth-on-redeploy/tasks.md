@@ -1,0 +1,4 @@
+- [x] Add redeploy install/update step for global `codex-auth` from `./codex-account-switcher`.
+- [x] Add opt-out controls (`--skip-codex-auth-install`, `CODEX_LB_INSTALL_CODEX_AUTH`).
+- [x] Update user-facing redeploy documentation.
+- [ ] Validate specs with `openspec validate --specs`.

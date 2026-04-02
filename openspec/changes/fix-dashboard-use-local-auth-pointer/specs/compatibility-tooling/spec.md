@@ -18,3 +18,9 @@ If the pointer is missing, broken, or not aligned with the selected snapshot, th
 - **WHEN** backend runs in a different filesystem prefix than the host terminal (for example container `/home/app` vs host `/home/deadpool`)
 - **THEN** repaired `auth.json` uses a relative symlink target under the local `.codex` directory
 - **AND** host-side `codex login status` can resolve the selected snapshot without `os error 2`
+
+#### Scenario: Compose runtime allows pointer rewrites
+
+- **WHEN** dashboard local account switching is used in Docker runtime/deploy compose configurations
+- **THEN** the `.codex` bind mount for the server container is writable (`:rw`)
+- **AND** switch operations can persist repaired `current` and `auth.json` pointers
