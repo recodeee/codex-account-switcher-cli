@@ -90,6 +90,12 @@ export function createAccountSummary(
 			refresh: { state: "stored" },
 			idToken: { state: "parsed" },
 		},
+		codexAuth: {
+			hasSnapshot: true,
+			snapshotName: "main",
+			activeSnapshotName: "main",
+			isActiveSnapshot: true,
+		},
 		...overrides,
 	});
 }
@@ -102,6 +108,12 @@ export function createDefaultAccounts(): AccountSummary[] {
 			email: "secondary@example.com",
 			displayName: "secondary@example.com",
 			status: "paused",
+			codexAuth: {
+				hasSnapshot: true,
+				snapshotName: "secondary",
+				activeSnapshotName: "main",
+				isActiveSnapshot: false,
+			},
 			usage: {
 				primaryRemainingPercent: 45,
 				secondaryRemainingPercent: 12,

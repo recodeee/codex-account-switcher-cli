@@ -31,6 +31,8 @@ describe("AccountList", () => {
         ]}
         selectedAccountId="acc-1"
         onSelect={onSelect}
+        onUseLocal={() => {}}
+        useLocalBusy={false}
         onOpenImport={() => {}}
         onOpenOauth={() => {}}
       />,
@@ -64,6 +66,8 @@ describe("AccountList", () => {
         ]}
         selectedAccountId={null}
         onSelect={() => {}}
+        onUseLocal={() => {}}
+        useLocalBusy={false}
         onOpenImport={() => {}}
         onOpenOauth={() => {}}
       />,
@@ -104,6 +108,8 @@ describe("AccountList", () => {
         ]}
         selectedAccountId={null}
         onSelect={() => {}}
+        onUseLocal={() => {}}
+        useLocalBusy={false}
         onOpenImport={() => {}}
         onOpenOauth={() => {}}
       />,

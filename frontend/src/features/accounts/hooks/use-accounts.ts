@@ -8,6 +8,7 @@ import {
   listAccounts,
   pauseAccount,
   reactivateAccount,
+  useAccountLocally,
 } from "@/features/accounts/api";
 
 function invalidateAccountRelatedQueries(queryClient: ReturnType<typeof useQueryClient>) {
@@ -67,7 +68,18 @@ export function useAccountMutations() {
     },
   });
 
-  return { importMutation, pauseMutation, resumeMutation, deleteMutation };
+  const useLocalMutation = useMutation({
+    mutationFn: useAccountLocally,
+    onSuccess: (response) => {
+      toast.success(`Switched to ${response.snapshotName}`);
+      void queryClient.invalidateQueries({ queryKey: ["accounts", "list"] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Switch failed");
+    },
+  });
+
+  return { importMutation, pauseMutation, resumeMutation, deleteMutation, useLocalMutation };
 }
 
 export function useAccountTrends(accountId: string | null) {

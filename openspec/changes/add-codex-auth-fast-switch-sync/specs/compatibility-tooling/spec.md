@@ -44,7 +44,29 @@ The project SHALL provide a CLI command `codex-lb-sync-all` that imports every `
 - **THEN** each snapshot is imported through `POST /api/accounts/import`
 - **AND** the command prints a summary with imported and failed counts
 
+#### Scenario: Include active codex login snapshot
+
+- **WHEN** `~/.codex/auth.json` exists from a recent `codex login`
+- **THEN** `codex-lb-sync-all` includes that snapshot in the import run
+- **AND** does not duplicate imports when `auth.json` points to an existing account snapshot file
+
 #### Scenario: No snapshots found
 
 - **WHEN** `codex-lb-sync-all` runs and no snapshot files exist in the source directory
 - **THEN** the command fails with an actionable message
+
+### Requirement: Dashboard per-account local codex-auth switch
+
+The dashboard SHALL expose a per-account action that switches the host's active Codex login using `codex-auth use <snapshot>`.
+
+#### Scenario: Use this action is enabled only with 5h quota and snapshot
+
+- **WHEN** an account has `primary_remaining_percent > 0` and a matched codex-auth snapshot
+- **THEN** the dashboard shows **Use this** as enabled/green for that account
+- **AND** clicking it triggers local `codex-auth use <snapshot>`
+
+#### Scenario: Use this action is disabled without 5h quota or snapshot
+
+- **WHEN** `primary_remaining_percent` is missing/zero OR no matched codex-auth snapshot exists
+- **THEN** the dashboard shows **Use this** as disabled/gray
+- **AND** provides an explanatory reason

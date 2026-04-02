@@ -41,6 +41,13 @@ class AccountAuthStatus(DashboardModel):
     id_token: AccountTokenStatus | None = None
 
 
+class AccountCodexAuthStatus(DashboardModel):
+    has_snapshot: bool = False
+    snapshot_name: str | None = None
+    active_snapshot_name: str | None = None
+    is_active_snapshot: bool = False
+
+
 class AccountAdditionalWindow(DashboardModel):
     used_percent: float
     reset_at: int | None = None
@@ -76,6 +83,7 @@ class AccountSummary(DashboardModel):
     additional_quotas: list[AccountAdditionalQuota] = Field(default_factory=list)
     deactivation_reason: str | None = None
     auth: AccountAuthStatus | None = None
+    codex_auth: AccountCodexAuthStatus | None = None
 
 
 class AccountsResponse(DashboardModel):
@@ -99,6 +107,12 @@ class AccountReactivateResponse(DashboardModel):
 
 class AccountDeleteResponse(DashboardModel):
     status: str
+
+
+class AccountUseLocalResponse(DashboardModel):
+    status: str
+    account_id: str
+    snapshot_name: str
 
 
 class AccountTrendsResponse(DashboardModel):

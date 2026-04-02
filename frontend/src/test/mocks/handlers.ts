@@ -373,6 +373,35 @@ export const handlers = [
 		return HttpResponse.json({ status: "reactivated" });
 	}),
 
+	http.post("/api/accounts/:accountId/use-local", ({ params }) => {
+		const accountId = String(params.accountId);
+		const account = findAccount(accountId);
+		if (!account) {
+			return HttpResponse.json(
+				{ error: { code: "account_not_found", message: "Account not found" } },
+				{ status: 404 },
+			);
+		}
+
+		const snapshotName = account.codexAuth?.snapshotName ?? "main";
+		state.accounts = state.accounts.map((entry) => ({
+			...entry,
+			codexAuth: entry.codexAuth
+				? {
+						...entry.codexAuth,
+						activeSnapshotName: snapshotName,
+						isActiveSnapshot: entry.accountId === accountId,
+					}
+				: entry.codexAuth,
+		}));
+
+		return HttpResponse.json({
+			status: "switched",
+			accountId: account.accountId,
+			snapshotName,
+		});
+	}),
+
 	http.get("/api/accounts/:accountId/trends", ({ params }) => {
 		const accountId = String(params.accountId);
 		const account = findAccount(accountId);

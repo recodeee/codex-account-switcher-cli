@@ -6,6 +6,11 @@ from app.core.audit.service import AuditService
 from app.core.auth.dependencies import set_dashboard_error_format, validate_dashboard_session
 from app.core.exceptions import DashboardBadRequestError, DashboardConflictError, DashboardNotFoundError
 from app.dependencies import AccountsContext, get_accounts_context
+from app.modules.accounts.codex_auth_switcher import (
+    CodexAuthNotInstalledError,
+    CodexAuthSnapshotNotFoundError,
+    CodexAuthSwitchFailedError,
+)
 from app.modules.accounts.repository import AccountIdentityConflictError
 from app.modules.accounts.schemas import (
     AccountDeleteResponse,
@@ -14,6 +19,7 @@ from app.modules.accounts.schemas import (
     AccountReactivateResponse,
     AccountsResponse,
     AccountTrendsResponse,
+    AccountUseLocalResponse,
 )
 from app.modules.accounts.service import InvalidAuthJsonError
 
@@ -101,3 +107,22 @@ async def delete_account(
         details={"account_id": account_id},
     )
     return AccountDeleteResponse(status="deleted")
+
+
+@router.post("/{account_id}/use-local", response_model=AccountUseLocalResponse)
+async def use_account_locally(
+    account_id: str,
+    context: AccountsContext = Depends(get_accounts_context),
+) -> AccountUseLocalResponse:
+    try:
+        result = await context.service.use_account_locally(account_id)
+    except CodexAuthSnapshotNotFoundError as exc:
+        raise DashboardBadRequestError(str(exc), code="codex_auth_snapshot_not_found") from exc
+    except CodexAuthNotInstalledError as exc:
+        raise DashboardBadRequestError(str(exc), code="codex_auth_not_installed") from exc
+    except CodexAuthSwitchFailedError as exc:
+        raise DashboardBadRequestError(str(exc), code="codex_auth_switch_failed") from exc
+
+    if result is None:
+        raise DashboardNotFoundError("Account not found", code="account_not_found")
+    return result

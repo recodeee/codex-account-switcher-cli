@@ -4,3 +4,5 @@
 - [x] 4. Add unit tests for command utility logic.
 - [x] 5. Document the fast-switch workflow for operators.
 - [x] 6. Add a bulk sync command to import all codex-auth snapshots in one run.
+- [x] 7. Extend bulk sync to include active `~/.codex/auth.json` from `codex login` when present.
+- [x] 8. Add dashboard per-account **Use this** action with 5h-quota gating and codex-auth snapshot matching.

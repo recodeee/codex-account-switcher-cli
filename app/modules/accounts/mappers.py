@@ -12,6 +12,7 @@ from app.db.models import Account, UsageHistory
 from app.modules.accounts.schemas import (
     AccountAdditionalQuota,
     AccountAuthStatus,
+    AccountCodexAuthStatus,
     AccountRequestUsage,
     AccountSummary,
     AccountTokenStatus,
@@ -28,6 +29,7 @@ def build_account_summaries(
     secondary_usage: dict[str, UsageHistory],
     request_usage_by_account: dict[str, AccountRequestUsage] | None = None,
     additional_quotas_by_account: dict[str, list[AccountAdditionalQuota]] | None = None,
+    codex_auth_by_account: dict[str, AccountCodexAuthStatus] | None = None,
     encryptor: TokenEncryptor,
     include_auth: bool = True,
 ) -> list[AccountSummary]:
@@ -38,6 +40,7 @@ def build_account_summaries(
             secondary_usage.get(account.id),
             request_usage_by_account.get(account.id) if request_usage_by_account else None,
             additional_quotas_by_account.get(account.id) if additional_quotas_by_account else None,
+            codex_auth_by_account.get(account.id) if codex_auth_by_account else None,
             encryptor,
             include_auth=include_auth,
         )
@@ -51,6 +54,7 @@ def _account_to_summary(
     secondary_usage: UsageHistory | None,
     request_usage: AccountRequestUsage | None,
     additional_quotas: list[AccountAdditionalQuota] | None,
+    codex_auth: AccountCodexAuthStatus | None,
     encryptor: TokenEncryptor,
     include_auth: bool = True,
 ) -> AccountSummary:
@@ -117,6 +121,7 @@ def _account_to_summary(
         additional_quotas=additional_quotas or [],
         deactivation_reason=account.deactivation_reason,
         auth=auth_status,
+        codex_auth=codex_auth,
     )
 
 

@@ -22,6 +22,8 @@ export type AccountListProps = {
   accounts: AccountSummary[];
   selectedAccountId: string | null;
   onSelect: (accountId: string) => void;
+  onUseLocal: (accountId: string) => void;
+  useLocalBusy: boolean;
   onOpenImport: () => void;
   onOpenOauth: () => void;
 };
@@ -30,6 +32,8 @@ export function AccountList({
   accounts,
   selectedAccountId,
   onSelect,
+  onUseLocal,
+  useLocalBusy,
   onOpenImport,
   onOpenOauth,
 }: AccountListProps) {
@@ -122,6 +126,8 @@ export function AccountList({
               selected={account.accountId === selectedAccountId}
               showAccountId={duplicateAccountIds.has(account.accountId)}
               onSelect={onSelect}
+              onUseLocal={onUseLocal}
+              useLocalBusy={useLocalBusy}
             />
           ))
         )}

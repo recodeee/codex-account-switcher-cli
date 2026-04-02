@@ -13,7 +13,9 @@ export function AuthGate({ children }: PropsWithChildren) {
   const loading = useAuthStore((state) => state.loading);
   const passwordRequired = useAuthStore((state) => state.passwordRequired);
   const authenticated = useAuthStore((state) => state.authenticated);
-  const totpRequiredOnLogin = useAuthStore((state) => state.totpRequiredOnLogin);
+  const totpRequiredOnLogin = useAuthStore(
+    (state) => state.totpRequiredOnLogin,
+  );
 
   useEffect(() => {
     void refreshSessionStable();
@@ -47,8 +49,12 @@ export function AuthGate({ children }: PropsWithChildren) {
               <CodexLogo size={28} className="text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight">Codex LB</h1>
-              <p className="mt-0.5 text-sm text-muted-foreground">API Load Balancer</p>
+              <h1 className="text-xl font-semibold tracking-tight">
+                Codexina Viktor Kedvence
+              </h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                API Load Balancer
+              </p>
             </div>
           </div>
           <LoginForm />

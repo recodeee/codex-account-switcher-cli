@@ -13,6 +13,8 @@ The friction discourages keeping codex-lb account entries fresh after token refr
 - Add new operator CLI commands: `codex-lb-switch` and `codex-lb-sync-all`.
 - `codex-lb-switch` runs `codex-auth use <name>` and immediately imports `~/.codex/accounts/<name>.json` into codex-lb.
 - `codex-lb-sync-all` imports all `~/.codex/accounts/*.json` snapshots in one run.
+- `codex-lb-sync-all` also imports the active `~/.codex/auth.json` snapshot from `codex login` when present.
+- Dashboard accounts UI adds a per-account **Use this** action that executes `codex-auth use <snapshot>` on the host.
 - Support dashboard-auth-protected environments by logging in via password and optional TOTP when needed.
 - Document the fast-switch flow in the README.
 

@@ -49,6 +49,19 @@ def _parse_args() -> argparse.Namespace:
         help="Override snapshot directory (default: ~/.codex/accounts)",
     )
     parser.add_argument(
+        "--active-auth-path",
+        default=os.environ.get("CODEX_AUTH_JSON_PATH"),
+        help=(
+            "Path to active Codex auth JSON from `codex login` "
+            "(default: ~/.codex/auth.json when it exists)"
+        ),
+    )
+    parser.add_argument(
+        "--skip-active-auth",
+        action="store_true",
+        help="Do not import the active ~/.codex/auth.json snapshot",
+    )
+    parser.add_argument(
         "--continue-on-error",
         action="store_true",
         help="Keep importing remaining snapshots even if one fails",
@@ -74,11 +87,46 @@ def _iter_snapshot_files(accounts_dir: Path) -> list[Path]:
         raise SwitchToolError(f"Accounts path is not a directory: {accounts_dir}")
 
     snapshots = sorted((p for p in accounts_dir.iterdir() if p.is_file() and p.suffix == ".json"), key=lambda p: p.name)
-    if not snapshots:
-        raise SwitchToolError(
-            f"No snapshots found in {accounts_dir}. Run `codex-auth save <name>` first."
-        )
     return snapshots
+
+
+def _iter_optional_snapshot_files(accounts_dir: Path) -> list[Path]:
+    if not accounts_dir.exists():
+        return []
+    return _iter_snapshot_files(accounts_dir)
+
+
+def _resolve_active_auth_path(raw: str | None, *, skip_active_auth: bool) -> Path | None:
+    if skip_active_auth:
+        return None
+
+    if raw:
+        path = Path(raw).expanduser().resolve()
+        if not path.exists():
+            raise SwitchToolError(f"Active auth file not found: {path}")
+        if not path.is_file():
+            raise SwitchToolError(f"Active auth path is not a file: {path}")
+        return path
+
+    default_path = (Path.home() / ".codex" / "auth.json").resolve()
+    if not default_path.exists():
+        return None
+    if not default_path.is_file():
+        raise SwitchToolError(f"Active auth path is not a file: {default_path}")
+    return default_path
+
+
+def _collect_import_sources(*, accounts_dir: Path, active_auth_path: Path | None) -> list[Path]:
+    snapshots = _iter_optional_snapshot_files(accounts_dir)
+    sources = list(snapshots)
+
+    if active_auth_path is not None:
+        snapshot_targets = {snapshot.resolve() for snapshot in snapshots}
+        active_target = active_auth_path.resolve()
+        if active_target not in snapshot_targets:
+            sources.append(active_auth_path)
+
+    return sources
 
 
 def main() -> int:
@@ -87,7 +135,16 @@ def main() -> int:
     try:
         lb_url = _validate_lb_url(args.lb_url)
         accounts_dir = _resolve_accounts_dir(args.accounts_dir)
-        snapshots = _iter_snapshot_files(accounts_dir)
+        active_auth_path = _resolve_active_auth_path(
+            args.active_auth_path,
+            skip_active_auth=args.skip_active_auth,
+        )
+        snapshots = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active_auth_path)
+
+        if not snapshots:
+            raise SwitchToolError(
+                "No account snapshots found. Run `codex-auth save <name>` or `codex login` first."
+            )
 
         if args.dry_run:
             print(f"Found {len(snapshots)} snapshot(s):")

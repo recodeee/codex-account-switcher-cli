@@ -13,9 +13,11 @@ export type AccountDetailProps = {
   account: AccountSummary | null;
   showAccountId?: boolean;
   busy: boolean;
+  useLocalBusy: boolean;
   onPause: (accountId: string) => void;
   onResume: (accountId: string) => void;
   onDelete: (accountId: string) => void;
+  onUseLocal: (accountId: string) => void;
   onReauth: () => void;
 };
 
@@ -23,9 +25,11 @@ export function AccountDetail({
   account,
   showAccountId = false,
   busy,
+  useLocalBusy,
   onPause,
   onResume,
   onDelete,
+  onUseLocal,
   onReauth,
 }: AccountDetailProps) {
   const { data: trends } = useAccountTrends(account?.accountId ?? null);
@@ -70,9 +74,11 @@ export function AccountDetail({
       <AccountActions
         account={account}
         busy={busy}
+        useLocalBusy={useLocalBusy}
         onPause={onPause}
         onResume={onResume}
         onDelete={onDelete}
+        onUseLocal={onUseLocal}
         onReauth={onReauth}
       />
     </div>

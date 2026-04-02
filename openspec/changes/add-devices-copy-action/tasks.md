@@ -1,0 +1,4 @@
+- [x] Add a devices table copy action that writes `{name}\\t{ipAddress}` to clipboard.
+- [x] Keep Delete action available in the same row without changing delete flow semantics.
+- [x] Add frontend integration coverage proving copy action writes expected text.
+- [ ] Validate specs with `openspec validate --specs` (CLI unavailable in this environment: `openspec: command not found`).

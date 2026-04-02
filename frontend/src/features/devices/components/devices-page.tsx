@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { HardDrive } from "lucide-react";
+import { Copy, HardDrive } from "lucide-react";
+import { toast } from "sonner";
 
 import { AlertMessage } from "@/components/alert-message";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -51,6 +52,15 @@ export function DevicesPage() {
 
     setDeviceName("");
     setDeviceIpAddress("");
+  };
+
+  const handleCopy = async (name: string, ipAddress: string) => {
+    try {
+      await navigator.clipboard.writeText(`${name}\t${ipAddress}`);
+      toast.success("Device name and IP copied");
+    } catch {
+      toast.error("Failed to copy device details");
+    }
   };
 
   return (
@@ -126,7 +136,7 @@ export function DevicesPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>IP Address</TableHead>
                   <TableHead>Added</TableHead>
-                  <TableHead className="w-[96px] text-right">Actions</TableHead>
+                  <TableHead className="w-[140px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -139,17 +149,33 @@ export function DevicesPage() {
                       <TableCell className="text-xs text-muted-foreground">
                         {created.date} {created.time}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          disabled={busy}
-                          onClick={() => deleteDialog.show({ id: entry.id, name: entry.name })}
-                        >
-                          Delete
-                        </Button>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            aria-label={`Copy ${entry.name} and ${entry.ipAddress}`}
+                            title="Copy device name and IP"
+                            disabled={busy}
+                            onClick={() => {
+                              void handleCopy(entry.name, entry.ipAddress);
+                            }}
+                          >
+                            <Copy className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            disabled={busy}
+                            onClick={() => deleteDialog.show({ id: entry.id, name: entry.name })}
+                          >
+                            Delete
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

@@ -9,7 +9,7 @@ const SAMPLE_TREND = [{ value: 1 }, { value: 2 }, { value: 3 }];
 
 describe("StatsGrid", () => {
   it("renders four metric cards with values", () => {
-    render(
+    const { container } = render(
       <StatsGrid
         stats={[
           { label: "Requests (7d)", value: "228", icon: Activity, trend: SAMPLE_TREND, trendColor: "#3b82f6" },
@@ -28,6 +28,7 @@ describe("StatsGrid", () => {
     expect(screen.getByText("Avg/hr $0.01")).toBeInTheDocument();
     expect(screen.getByText("Error rate")).toBeInTheDocument();
     expect(screen.getByText("Top: rate_limit_exceeded")).toBeInTheDocument();
+    expect(container.querySelector(".rounded-lg")).toBeNull();
   });
 
   it("renders without sparklines when trend is empty", () => {

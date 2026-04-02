@@ -4,7 +4,13 @@ import { NavLink } from "react-router-dom";
 
 import { CodexLogo } from "@/components/brand/codex-logo";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +52,9 @@ export function AppHeader({
             <CodexLogo size={20} className="text-primary" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-tight">Codex LB</p>
+            <p className="truncate text-sm font-semibold tracking-tight">
+              Codexina
+            </p>
           </div>
         </div>
 
@@ -98,7 +106,13 @@ export function AppHeader({
           {/* Mobile menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button type="button" size="icon" variant="ghost" aria-label="Open menu" className="h-8 w-8 rounded-lg sm:hidden">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="Open menu"
+                className="h-8 w-8 rounded-lg sm:hidden"
+              >
                 <Menu className="h-4 w-4" />
               </Button>
             </SheetTrigger>
@@ -108,12 +122,16 @@ export function AppHeader({
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
                     <CodexLogo size={16} className="text-primary" />
                   </div>
-                  <span className="text-sm font-semibold">Codex LB</span>
+                  <span className="text-sm font-semibold">Codexina</span>
                 </SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col gap-0.5 px-4 pt-2">
                 {NAV_ITEMS.map((item) => (
-                  <NavLink key={item.to} to={item.to} onClick={() => setMobileOpen(false)}>
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMobileOpen(false)}
+                  >
                     {({ isActive }) => (
                       <span
                         className={cn(

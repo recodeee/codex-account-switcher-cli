@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 
 from app.tools.codex_auth_switch import SwitchToolError
-from app.tools.codex_auth_sync_all import _iter_snapshot_files, _resolve_accounts_dir
+from app.tools.codex_auth_sync_all import (
+    _collect_import_sources,
+    _iter_optional_snapshot_files,
+    _iter_snapshot_files,
+    _resolve_accounts_dir,
+    _resolve_active_auth_path,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -32,3 +38,50 @@ def test_iter_snapshot_files_raises_when_directory_missing(tmp_path: Path) -> No
 def test_resolve_accounts_dir_expands_user_path() -> None:
     resolved = _resolve_accounts_dir("~/.codex/accounts")
     assert resolved == (Path.home() / ".codex" / "accounts").resolve()
+
+
+def test_iter_optional_snapshot_files_returns_empty_when_dir_missing(tmp_path: Path) -> None:
+    missing = tmp_path / "missing"
+    assert _iter_optional_snapshot_files(missing) == []
+
+
+def test_resolve_active_auth_path_skips_when_disabled() -> None:
+    assert _resolve_active_auth_path("~/.codex/auth.json", skip_active_auth=True) is None
+
+
+def test_resolve_active_auth_path_uses_default_when_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    codex_dir = home / ".codex"
+    codex_dir.mkdir(parents=True)
+    auth_path = codex_dir / "auth.json"
+    auth_path.write_text("{}")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    resolved = _resolve_active_auth_path(None, skip_active_auth=False)
+    assert resolved == auth_path.resolve()
+
+
+def test_collect_import_sources_adds_active_auth_when_not_in_accounts(tmp_path: Path) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    snapshot = accounts_dir / "work.json"
+    snapshot.write_text("{}")
+    active = tmp_path / "auth.json"
+    active.write_text("{}")
+
+    sources = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active)
+    assert [path.name for path in sources] == ["work.json", "auth.json"]
+
+
+def test_collect_import_sources_deduplicates_when_active_auth_points_to_snapshot(tmp_path: Path) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    snapshot = accounts_dir / "work.json"
+    snapshot.write_text("{}")
+    active_link = tmp_path / "auth.json"
+    active_link.symlink_to(snapshot)
+
+    sources = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active_link)
+    assert [path.name for path in sources] == ["work.json"]

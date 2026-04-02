@@ -89,6 +89,7 @@ Environment variable shortcuts are also supported:
 - `CODEX_LB_DASHBOARD_PASSWORD`
 - `CODEX_LB_DASHBOARD_TOTP_CODE`
 - `CODEX_LB_DASHBOARD_TOTP_COMMAND` (command that prints a code)
+- `CODEX_AUTH_JSON_PATH` (override active auth file path; default: `~/.codex/auth.json`)
 
 `codex-lb-switch` runs `codex-auth use <name>`, then imports `~/.codex/accounts/<name>.json` into codex-lb.
 
@@ -101,7 +102,22 @@ uv run codex-lb-sync-all --password "$CODEX_LB_DASHBOARD_PASSWORD"
 uv run codex-lb-sync-all \
   --password "$CODEX_LB_DASHBOARD_PASSWORD" \
   --continue-on-error
+
+# include current codex login state from a custom path
+uv run codex-lb-sync-all --active-auth-path ~/.codex/auth.json
 ```
+
+`codex-lb-sync-all` imports both:
+
+- saved snapshots in `~/.codex/accounts/*.json`
+- current `~/.codex/auth.json` (the file updated by `codex login`) when present
+
+If dashboard auth is enabled, you still need dashboard credentials (`--password` and optional TOTP).
+
+In the dashboard **Accounts** page, each account now has a **Use this** action:
+
+- enabled (green) when 5h quota is available and a matching `codex-auth` snapshot exists
+- disabled (gray) when 5h quota is depleted or no matching snapshot is found
 
 ## Client Setup
 

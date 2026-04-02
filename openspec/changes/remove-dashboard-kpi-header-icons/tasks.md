@@ -1,0 +1,4 @@
+- [x] Remove top-right icon rendering from dashboard KPI cards.
+- [x] Keep KPI value/meta/trend rendering unchanged.
+- [x] Add/update frontend test coverage for iconless KPI card headers.
+- [ ] Validate specs with `openspec validate --specs` (CLI unavailable in this environment: `openspec: command not found`).

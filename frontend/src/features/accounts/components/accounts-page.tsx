@@ -26,6 +26,7 @@ export function AccountsPage() {
     pauseMutation,
     resumeMutation,
     deleteMutation,
+    useLocalMutation,
   } = useAccounts();
   const oauth = useOauth();
 
@@ -65,13 +66,15 @@ export function AccountsPage() {
     importMutation.isPending ||
     pauseMutation.isPending ||
     resumeMutation.isPending ||
-    deleteMutation.isPending;
+    deleteMutation.isPending ||
+    useLocalMutation.isPending;
 
   const mutationError =
     getErrorMessageOrNull(importMutation.error) ||
     getErrorMessageOrNull(pauseMutation.error) ||
     getErrorMessageOrNull(resumeMutation.error) ||
-    getErrorMessageOrNull(deleteMutation.error);
+    getErrorMessageOrNull(deleteMutation.error) ||
+    getErrorMessageOrNull(useLocalMutation.error);
 
   return (
     <div className="animate-fade-in-up space-y-6">
@@ -94,6 +97,8 @@ export function AccountsPage() {
               accounts={accounts}
               selectedAccountId={resolvedSelectedAccountId}
               onSelect={handleSelectAccount}
+              onUseLocal={(accountId) => void useLocalMutation.mutateAsync(accountId)}
+              useLocalBusy={useLocalMutation.isPending}
               onOpenImport={() => importDialog.show()}
               onOpenOauth={() => oauthDialog.show()}
             />
@@ -106,6 +111,8 @@ export function AccountsPage() {
             onPause={(accountId) => void pauseMutation.mutateAsync(accountId)}
             onResume={(accountId) => void resumeMutation.mutateAsync(accountId)}
             onDelete={(accountId) => deleteDialog.show(accountId)}
+            onUseLocal={(accountId) => void useLocalMutation.mutateAsync(accountId)}
+            useLocalBusy={useLocalMutation.isPending}
             onReauth={() => oauthDialog.show()}
           />
         </div>

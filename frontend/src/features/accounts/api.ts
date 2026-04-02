@@ -3,6 +3,7 @@ import { del, get, post } from "@/lib/api-client";
 import {
   AccountActionResponseSchema,
   AccountImportResponseSchema,
+  AccountUseLocalResponseSchema,
   AccountsResponseSchema,
   AccountTrendsResponseSchema,
   ManualOauthCallbackRequestSchema,
@@ -55,6 +56,13 @@ export function deleteAccount(accountId: string) {
   return del(
     `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}`,
     AccountActionResponseSchema,
+  );
+}
+
+export function useAccountLocally(accountId: string) {
+  return post(
+    `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/use-local`,
+    AccountUseLocalResponseSchema,
   );
 }
 

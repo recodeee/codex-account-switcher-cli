@@ -17,15 +17,24 @@ from app.core.crypto import TokenEncryptor
 from app.core.plan_types import coerce_account_plan_type
 from app.core.utils.time import naive_utc_to_epoch, to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus
+from app.modules.accounts.codex_auth_switcher import (
+    CodexAuthSnapshotIndex,
+    CodexAuthSnapshotNotFoundError,
+    build_snapshot_index,
+    select_snapshot_name,
+    switch_snapshot,
+)
 from app.modules.accounts.mappers import build_account_summaries, build_account_usage_trends
 from app.modules.accounts.repository import AccountsRepository
 from app.modules.accounts.schemas import (
     AccountAdditionalQuota,
     AccountAdditionalWindow,
+    AccountCodexAuthStatus,
     AccountImportResponse,
     AccountRequestUsage,
     AccountSummary,
     AccountTrendsResponse,
+    AccountUseLocalResponse,
 )
 from app.modules.proxy.account_cache import get_account_selection_cache
 from app.modules.usage.additional_quota_keys import get_additional_display_label_for_quota_key
@@ -110,12 +119,22 @@ class AccountsService:
         for account_quota_list in additional_quotas_by_account.values():
             account_quota_list.sort(key=lambda quota: quota.display_label or quota.quota_key or quota.limit_name)
 
+        snapshot_index = build_snapshot_index()
+        codex_auth_by_account = {
+            account.id: self._build_codex_auth_status(
+                account_id=account.id,
+                snapshot_index=snapshot_index,
+            )
+            for account in accounts
+        }
+
         return build_account_summaries(
             accounts=accounts,
             primary_usage=primary_usage,
             secondary_usage=secondary_usage,
             request_usage_by_account=request_usage_by_account,
             additional_quotas_by_account=additional_quotas_by_account,
+            codex_auth_by_account=codex_auth_by_account,
             encryptor=self._encryptor,
         )
 
@@ -195,3 +214,39 @@ class AccountsService:
         if result:
             get_account_selection_cache().invalidate()
         return result
+
+    async def use_account_locally(self, account_id: str) -> AccountUseLocalResponse | None:
+        account = await self._repo.get_by_id(account_id)
+        if account is None:
+            return None
+
+        snapshot_index = build_snapshot_index()
+        snapshot_names = snapshot_index.snapshots_by_account_id.get(account.id, [])
+        selected_snapshot_name = select_snapshot_name(snapshot_names, snapshot_index.active_snapshot_name)
+        if selected_snapshot_name is None:
+            raise CodexAuthSnapshotNotFoundError(
+                f"No codex-auth snapshot found for account {account.email}. Run `codex-auth save <name>` first."
+            )
+
+        switch_snapshot(selected_snapshot_name)
+        return AccountUseLocalResponse(
+            status="switched",
+            account_id=account.id,
+            snapshot_name=selected_snapshot_name,
+        )
+
+    @staticmethod
+    def _build_codex_auth_status(
+        *,
+        account_id: str,
+        snapshot_index: CodexAuthSnapshotIndex,
+    ) -> AccountCodexAuthStatus:
+        snapshot_names = snapshot_index.snapshots_by_account_id.get(account_id, [])
+        selected_snapshot_name = select_snapshot_name(snapshot_names, snapshot_index.active_snapshot_name)
+        active_snapshot_name = snapshot_index.active_snapshot_name
+        return AccountCodexAuthStatus(
+            has_snapshot=bool(snapshot_names),
+            snapshot_name=selected_snapshot_name,
+            active_snapshot_name=active_snapshot_name,
+            is_active_snapshot=bool(active_snapshot_name and active_snapshot_name in snapshot_names),
+        )

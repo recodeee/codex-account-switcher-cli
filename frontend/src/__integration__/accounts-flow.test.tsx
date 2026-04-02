@@ -32,4 +32,19 @@ describe("accounts flow integration", () => {
       });
     }
   });
+
+  it("switches local codex account from use button", async () => {
+    const user = userEvent.setup({ delay: null });
+
+    window.history.pushState({}, "", "/accounts");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    const buttons = await screen.findAllByRole("button", { name: "Use this" });
+    const enabledButton = buttons.find((button) => !button.hasAttribute("disabled"));
+    expect(enabledButton).toBeDefined();
+
+    await user.click(enabledButton!);
+    expect(await screen.findByText(/Switched to/i)).toBeInTheDocument();
+  });
 });
