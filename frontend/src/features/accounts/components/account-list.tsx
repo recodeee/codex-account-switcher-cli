@@ -15,8 +15,46 @@ import { WindowsOauthHelp } from "@/features/accounts/components/windows-oauth-h
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { buildDuplicateAccountIdSet } from "@/utils/account-identifiers";
 import { formatSlug } from "@/utils/formatters";
+import { canUseLocalAccount } from "@/utils/use-local-account";
 
 const STATUS_FILTER_OPTIONS = ["all", "active", "paused", "rate_limited", "quota_exceeded", "deactivated"];
+
+function normalizeQuotaPercent(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : -1;
+}
+
+function compareAccountsForSidebar(a: AccountSummary, b: AccountSummary): number {
+  const aCanUseLocally = canUseLocalAccount({
+    status: a.status,
+    primaryRemainingPercent: a.usage?.primaryRemainingPercent,
+    isActiveSnapshot: a.codexAuth?.isActiveSnapshot,
+    hasLiveSession: a.codexAuth?.hasLiveSession,
+  });
+  const bCanUseLocally = canUseLocalAccount({
+    status: b.status,
+    primaryRemainingPercent: b.usage?.primaryRemainingPercent,
+    isActiveSnapshot: b.codexAuth?.isActiveSnapshot,
+    hasLiveSession: b.codexAuth?.hasLiveSession,
+  });
+
+  if (aCanUseLocally !== bCanUseLocally) {
+    return aCanUseLocally ? -1 : 1;
+  }
+
+  const aPrimary = normalizeQuotaPercent(a.usage?.primaryRemainingPercent);
+  const bPrimary = normalizeQuotaPercent(b.usage?.primaryRemainingPercent);
+  if (aPrimary !== bPrimary) {
+    return bPrimary - aPrimary;
+  }
+
+  const aSecondary = normalizeQuotaPercent(a.usage?.secondaryRemainingPercent);
+  const bSecondary = normalizeQuotaPercent(b.usage?.secondaryRemainingPercent);
+  if (aSecondary !== bSecondary) {
+    return bSecondary - aSecondary;
+  }
+
+  return a.email.localeCompare(b.email);
+}
 
 export type AccountListProps = {
   accounts: AccountSummary[];
@@ -43,7 +81,7 @@ export function AccountList({
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return accounts.filter((account) => {
+    const filteredAccounts = accounts.filter((account) => {
       if (statusFilter !== "all" && account.status !== statusFilter) {
         return false;
       }
@@ -56,6 +94,7 @@ export function AccountList({
         account.planType.toLowerCase().includes(needle)
       );
     });
+    return filteredAccounts.sort(compareAccountsForSidebar);
   }, [accounts, search, statusFilter]);
 
   const duplicateAccountIds = useMemo(() => buildDuplicateAccountIdSet(accounts), [accounts]);

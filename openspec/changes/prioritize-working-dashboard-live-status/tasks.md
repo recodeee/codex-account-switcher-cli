@@ -1,0 +1,5 @@
+- [x] Update dashboard account cards rendering to group `Working now` accounts in a dedicated top section.
+- [x] Add live-state visual affordances for active account token/5h quota status.
+- [x] Tune dashboard overview polling interval for active working accounts.
+- [x] Add/adjust component and hook tests to cover section ordering and polling behavior.
+- [x] Validate specs with `openspec validate --specs`.

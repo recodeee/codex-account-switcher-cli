@@ -1,0 +1,4 @@
+- [x] Update Accounts sidebar list ordering to prioritize usable accounts and highest 5h remaining.
+- [x] Update account sidebar row UI to render 5h and Weekly quota lines in that order.
+- [x] Add/adjust frontend component tests for ordering and quota-line rendering.
+- [x] Validate specs with `openspec validate --specs`.

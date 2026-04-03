@@ -31,6 +31,9 @@ codex-auth login <name> --device-auth
 # save the current logged-in token as a named account
 codex-auth save <name>
 
+# force overwrite a name even when it currently maps to a different email
+codex-auth save <name> --force
+
 # switch active account (symlinks on macOS/Linux; copies on Windows)
 codex-auth use <name>
 
@@ -69,7 +72,7 @@ codex-auth daemon --watch
 
 ### Command reference
 
-- `codex-auth save <name>` – Validates `<name>`, ensures `auth.json` exists, then snapshots it to `~/.codex/accounts/<name>.json`.
+- `codex-auth save <name> [--force]` – Validates `<name>`, ensures `auth.json` exists, then snapshots it to `~/.codex/accounts/<name>.json`. By default, it blocks overwriting a name when the existing snapshot email differs from current auth.
 - `codex-auth login <name> [--device-auth]` – Runs `codex login` (optionally with device auth) and automatically snapshots the resulting `auth.json` to `~/.codex/accounts/<name>.json`.
 - `codex-auth use [name]` – Accepts a name or launches an interactive selector with the current account pre-selected. Copies on Windows, creates a symlink elsewhere, and records the active name.
 - `codex-auth list` – Lists all saved snapshots alphabetically and marks the active one with `*`.

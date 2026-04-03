@@ -323,6 +323,16 @@ async def test_dashboard_overview_prefers_local_active_snapshot_usage_and_sessio
     assert account["usage"]["primaryRemainingPercent"] == pytest.approx(99.0)
     assert account["usage"]["secondaryRemainingPercent"] == pytest.approx(86.0)
 
+    async with SessionLocal() as session:
+        usage_repo = UsageRepository(session)
+        latest_primary = await usage_repo.latest_entry_for_account(expected_account_id, window="primary")
+        latest_secondary = await usage_repo.latest_entry_for_account(expected_account_id, window="secondary")
+
+    assert latest_primary is not None
+    assert latest_secondary is not None
+    assert latest_primary.used_percent == pytest.approx(1.0)
+    assert latest_secondary.used_percent == pytest.approx(14.0)
+
 
 @pytest.mark.asyncio
 async def test_dashboard_overview_uses_recent_known_usage_before_first_token_count(

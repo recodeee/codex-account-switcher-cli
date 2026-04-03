@@ -238,7 +238,7 @@ describe("dashboard flow integration", () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    expect(await screen.findByText("Working now")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Working now" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Sessions" })).toBeInTheDocument();
   });
 

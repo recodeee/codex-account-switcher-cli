@@ -6,14 +6,16 @@ from app.core import usage as usage_core
 from app.core.crypto import TokenEncryptor
 from app.core.usage.types import UsageWindowRow
 from app.core.utils.time import utcnow
-from app.db.models import UsageHistory
+from app.db.models import Account, UsageHistory
 from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     build_snapshot_index,
+    resolve_snapshot_names_for_account,
     select_snapshot_name,
 )
 from app.modules.accounts.live_usage_overrides import apply_local_live_usage_overrides
+from app.modules.accounts.live_usage_persistence import persist_live_usage_overrides
 from app.modules.accounts.mappers import build_account_summaries
 from app.modules.accounts.schemas import AccountCodexAuthStatus, AccountRequestUsage
 from app.modules.dashboard.repository import DashboardRepository
@@ -58,10 +60,10 @@ class DashboardService:
         codex_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(account_ids)
         snapshot_index = build_snapshot_index()
         codex_auth_by_account = {
-            account.id: _build_codex_auth_status(account_id=account.id, snapshot_index=snapshot_index)
+            account.id: _build_codex_auth_status(account=account, snapshot_index=snapshot_index)
             for account in accounts
         }
-        apply_local_live_usage_overrides(
+        persist_candidates = apply_local_live_usage_overrides(
             accounts=accounts,
             snapshot_index=snapshot_index,
             codex_auth_by_account=codex_auth_by_account,
@@ -69,6 +71,11 @@ class DashboardService:
             secondary_usage=secondary_usage,
             codex_session_counts_by_account=codex_session_counts_by_account,
         )
+        if persist_candidates:
+            await persist_live_usage_overrides(
+                usage_repo=self._repo.usage_repo,
+                candidates=persist_candidates,
+            )
 
         account_summaries = build_account_summaries(
             accounts=accounts,
@@ -319,8 +326,13 @@ def _latest_recorded_at(
     return max(timestamps) if timestamps else None
 
 
-def _build_codex_auth_status(*, account_id: str, snapshot_index: CodexAuthSnapshotIndex) -> AccountCodexAuthStatus:
-    snapshot_names = snapshot_index.snapshots_by_account_id.get(account_id, [])
+def _build_codex_auth_status(*, account: Account, snapshot_index: CodexAuthSnapshotIndex) -> AccountCodexAuthStatus:
+    snapshot_names = resolve_snapshot_names_for_account(
+        snapshot_index=snapshot_index,
+        account_id=account.id,
+        chatgpt_account_id=account.chatgpt_account_id,
+        email=account.email,
+    )
     selected_snapshot_name = select_snapshot_name(snapshot_names, snapshot_index.active_snapshot_name)
     active_snapshot_name = snapshot_index.active_snapshot_name
     return AccountCodexAuthStatus(

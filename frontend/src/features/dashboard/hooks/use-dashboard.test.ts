@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import { server } from "@/test/mocks/server";
+import { createAccountSummary, createDashboardOverview } from "@/test/mocks/factories";
 
 function createTestQueryClient(): QueryClient {
   return new QueryClient({
@@ -25,7 +26,7 @@ function createWrapper(queryClient: QueryClient) {
 }
 
 describe("useDashboard", () => {
-  it("loads dashboard overview via MSW and configures 30s refetch", async () => {
+  it("loads dashboard overview via MSW and configures fast polling for working accounts", async () => {
     const queryClient = createTestQueryClient();
     const { result } = renderHook(() => useDashboard(), {
       wrapper: createWrapper(queryClient),
@@ -37,9 +38,57 @@ describe("useDashboard", () => {
     expect(result.current.data?.accounts.length).toBeGreaterThan(0);
 
     const query = queryClient.getQueryCache().find({ queryKey: ["dashboard", "overview"] });
+    expect(query).toBeDefined();
     const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
       ?.refetchInterval;
-    expect(refetchInterval).toBe(30_000);
+    if (typeof refetchInterval === "function") {
+      expect(refetchInterval(query as never)).toBe(2_000);
+    } else {
+      expect(refetchInterval).toBe(2_000);
+    }
+  });
+
+  it("uses default polling when no account is currently working", async () => {
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_idle",
+                email: "idle@example.com",
+                displayName: "idle@example.com",
+                codexSessionCount: 0,
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "idle",
+                  activeSnapshotName: "different",
+                  isActiveSnapshot: false,
+                  hasLiveSession: false,
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useDashboard(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const query = queryClient.getQueryCache().find({ queryKey: ["dashboard", "overview"] });
+    expect(query).toBeDefined();
+    const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
+      ?.refetchInterval;
+    if (typeof refetchInterval === "function") {
+      expect(refetchInterval(query as never)).toBe(30_000);
+    } else {
+      expect(refetchInterval).toBe(30_000);
+    }
   });
 
   it("exposes error state on request failure", async () => {

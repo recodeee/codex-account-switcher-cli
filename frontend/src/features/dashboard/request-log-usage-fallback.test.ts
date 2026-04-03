@@ -81,6 +81,8 @@ describe("mergeRequestLogUsageSummaryWithLiveFallback", () => {
 
     expect(merged.usageSummary.last5h.totalTokens).toBe(640);
     expect(merged.usageSummary.last7d.totalTokens).toBe(3200);
+    expect(merged.usageSummary.last5h.totalCostEur).toBe(0);
+    expect(merged.usageSummary.last7d.totalCostEur).toBe(0);
     expect(merged.usageSummary.fxRateUsdToEur).toBe(0.92);
     expect(merged.fallback).toEqual({
       last5h: true,
@@ -97,6 +99,7 @@ describe("mergeRequestLogUsageSummaryWithLiveFallback", () => {
 
     expect(merged.usageSummary.last5h.totalTokens).toBe(420);
     expect(merged.usageSummary.last7d.totalTokens).toBe(9000);
+    expect(merged.usageSummary.last7d.totalCostEur).toBeCloseTo(19.7142857143, 6);
     expect(merged.usageSummary.fxRateUsdToEur).toBe(0.92);
     expect(merged.fallback).toEqual({
       last5h: false,

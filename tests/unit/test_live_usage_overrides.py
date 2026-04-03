@@ -8,7 +8,10 @@ from app.core.crypto import TokenEncryptor
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
 from app.modules.accounts.codex_live_usage import LocalCodexLiveUsage, LocalUsageWindow
-from app.modules.accounts.live_usage_overrides import _apply_local_default_session_fingerprint_overrides
+from app.modules.accounts.live_usage_overrides import (
+    _apply_local_default_session_fingerprint_overrides,
+    _match_sample_to_account,
+)
 from app.modules.accounts.schemas import AccountCodexAuthStatus
 
 def _make_account(account_id: str, email: str) -> Account:
@@ -160,3 +163,52 @@ def test_fallback_fingerprint_matching_updates_session_counts_without_overwritin
     assert primary_usage[account_b.id].used_percent == baseline_primary[account_b.id].used_percent
     assert secondary_usage[account_a.id].used_percent == baseline_secondary[account_a.id].used_percent
     assert secondary_usage[account_b.id].used_percent == baseline_secondary[account_b.id].used_percent
+
+
+def test_match_sample_uses_reset_fingerprint_when_percent_gap_is_ambiguous() -> None:
+    account_a = _make_account("acc-a", "a@example.com")
+    account_b = _make_account("acc-b", "b@example.com")
+    accounts = [account_a, account_b]
+
+    baseline_primary = {
+        account_a.id: _usage_entry(
+            account_id=account_a.id,
+            window="primary",
+            used_percent=52.0,
+            reset_at=1_717_000_100,
+            window_minutes=300,
+        ),
+        account_b.id: _usage_entry(
+            account_id=account_b.id,
+            window="primary",
+            used_percent=52.0,
+            reset_at=1_717_003_600,
+            window_minutes=300,
+        ),
+    }
+    baseline_secondary = {
+        account_a.id: _usage_entry(
+            account_id=account_a.id,
+            window="secondary",
+            used_percent=38.0,
+            reset_at=1_717_000_000,
+            window_minutes=10_080,
+        ),
+        account_b.id: _usage_entry(
+            account_id=account_b.id,
+            window="secondary",
+            used_percent=38.0,
+            reset_at=1_717_007_200,
+            window_minutes=10_080,
+        ),
+    }
+
+    sample = _sample(used_percent=52.0, reset_at=1_717_003_600)
+    matched = _match_sample_to_account(
+        sample=sample,
+        accounts=accounts,
+        baseline_primary_usage=baseline_primary,
+        baseline_secondary_usage=baseline_secondary,
+    )
+
+    assert matched == account_b.id

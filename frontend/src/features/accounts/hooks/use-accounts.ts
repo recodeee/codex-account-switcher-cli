@@ -11,6 +11,38 @@ import {
   reactivateAccount,
   useAccountLocally,
 } from "@/features/accounts/api";
+import type { AccountSummary } from "@/features/accounts/schemas";
+import { isAccountWorkingNow } from "@/utils/account-working";
+
+const DEFAULT_ACCOUNTS_POLL_MS = 30_000;
+const ACTIVE_ACCOUNTS_POLL_MS = 2_000;
+
+function extractAccounts(data: unknown): AccountSummary[] | undefined {
+  if (Array.isArray(data)) {
+    return data as AccountSummary[];
+  }
+  if (
+    data &&
+    typeof data === "object" &&
+    "accounts" in data &&
+    Array.isArray((data as { accounts?: unknown }).accounts)
+  ) {
+    return (data as { accounts: AccountSummary[] }).accounts;
+  }
+  return undefined;
+}
+
+export function hasWorkingAccounts(data: unknown): boolean {
+  const accounts = extractAccounts(data);
+  if (!accounts || accounts.length === 0) {
+    return false;
+  }
+  return accounts.some((account) => isAccountWorkingNow(account));
+}
+
+export function resolveAccountsPollInterval(data: unknown): number {
+  return hasWorkingAccounts(data) ? ACTIVE_ACCOUNTS_POLL_MS : DEFAULT_ACCOUNTS_POLL_MS;
+}
 
 function invalidateAccountRelatedQueries(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: ["accounts", "list"] });
@@ -114,8 +146,9 @@ export function useAccounts() {
     queryKey: ["accounts", "list"],
     queryFn: listAccounts,
     select: (data) => data.accounts,
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: false,
+    refetchInterval: (query) => resolveAccountsPollInterval(query.state.data),
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 
   const mutations = useAccountMutations();

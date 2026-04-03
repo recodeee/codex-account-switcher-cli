@@ -22,6 +22,13 @@ describe("AccountCard", () => {
         totalCostUsd: 1.23,
       },
       codexSessionCount: 3,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
     });
     render(<AccountCard account={account} />);
 
@@ -205,7 +212,16 @@ describe("AccountCard", () => {
 
   it("calls sessions action when sessions button is clicked", async () => {
     const user = userEvent.setup({ delay: null });
-    const account = createAccountSummary({ codexSessionCount: 6 });
+    const account = createAccountSummary({
+      codexSessionCount: 6,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
     const onAction = vi.fn();
 
     render(<AccountCard account={account} onAction={onAction} />);
@@ -228,6 +244,24 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.getByText("Working now")).toBeInTheDocument();
+  });
+
+  it("shows live token and 5h status affordances for working accounts", () => {
+    const account = createAccountSummary({
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getAllByText("Live token status").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/^live$/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it("hides working indicator when account snapshot is not active", () => {
@@ -278,7 +312,7 @@ describe("AccountCard", () => {
     expect(screen.getByText("Working now")).toBeInTheDocument();
   });
 
-  it("shows at least one codex session when account is working now", () => {
+  it("keeps card codex sessions at zero when only active snapshot is present without live telemetry", () => {
     const account = createAccountSummary({
       email: "working@example.com",
       displayName: "working@example.com",
@@ -288,6 +322,7 @@ describe("AccountCard", () => {
         snapshotName: "working",
         activeSnapshotName: "working",
         isActiveSnapshot: true,
+        hasLiveSession: false,
       },
     });
 
@@ -298,7 +333,7 @@ describe("AccountCard", () => {
     const sessionsLabel = within(card as HTMLElement).getByText("Codex CLI sessions");
     const sessionsValue = sessionsLabel.parentElement?.querySelector("p.mt-0\\.5.text-xs.font-semibold.tabular-nums");
     expect(sessionsValue).not.toBeNull();
-    expect(sessionsValue).toHaveTextContent(/^1$/);
+    expect(sessionsValue).toHaveTextContent(/^0$/);
   });
 
   it("shows at least one codex session when runtime reports a live session", () => {
@@ -345,6 +380,28 @@ describe("AccountCard", () => {
     vi.useRealTimers();
   });
 
+  it("shows per-window last-seen labels when telemetry is not currently live", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: "2025-12-31T23:30:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-31T23:00:00.000Z",
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("last seen 30m ago")).toBeInTheDocument();
+    expect(screen.getByText("last seen 1h ago")).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
   it("shows last-seen usage labels for deactivated accounts", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
@@ -362,9 +419,29 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("last seen 30m ago")).toBeInTheDocument();
-    expect(screen.getByText("last seen 1h ago")).toBeInTheDocument();
+    expect(screen.getAllByText("last seen 30m ago").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("last seen 1h ago").length).toBeGreaterThanOrEqual(1);
     vi.useRealTimers();
+  });
+
+  it("renders gray 5h quota visuals for deactivated accounts", () => {
+    const account = createAccountSummary({
+      status: "deactivated",
+      codexAuth: {
+        hasSnapshot: false,
+        snapshotName: null,
+        activeSnapshotName: null,
+        isActiveSnapshot: false,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const fiveHourCard = screen.getByText("5h").closest("div.space-y-2");
+    expect(fiveHourCard).not.toBeNull();
+    const progressTrack = (fiveHourCard as HTMLElement).querySelector(".relative.h-2.w-full");
+    expect(progressTrack).not.toBeNull();
+    expect(progressTrack).toHaveClass("bg-zinc-500/10");
   });
 
   it("keeps codex sessions at zero when account is not the active snapshot", () => {

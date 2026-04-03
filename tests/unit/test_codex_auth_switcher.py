@@ -10,9 +10,11 @@ import pytest
 
 from app.core.auth import generate_unique_account_id
 from app.modules.accounts.codex_auth_switcher import (
+    CodexAuthSnapshotIndex,
     CodexAuthNotInstalledError,
     CodexAuthSwitchFailedError,
     build_snapshot_index,
+    resolve_snapshot_names_for_account,
     select_snapshot_name,
     switch_snapshot,
 )
@@ -154,12 +156,84 @@ def test_select_snapshot_name_prefers_active() -> None:
     assert selected == "beta"
 
 
+def test_resolve_snapshot_names_for_account_supports_legacy_raw_account_ids(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    (tmp_path / "current").write_text("main")
+    _write_auth_snapshot(accounts_dir / "main.json", email="main@example.com", account_id="acc-main")
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    index = build_snapshot_index()
+
+    resolved = resolve_snapshot_names_for_account(
+        snapshot_index=index,
+        account_id="acc-main",  # legacy persisted id (without email hash)
+        chatgpt_account_id="acc-main",
+        email="main@example.com",
+    )
+
+    assert resolved == ["main"]
+
+
+def test_resolve_snapshot_names_for_account_handles_email_case_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    (tmp_path / "current").write_text("main")
+    _write_auth_snapshot(accounts_dir / "main.json", email="main@example.com", account_id="acc-main")
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    index = build_snapshot_index()
+
+    resolved = resolve_snapshot_names_for_account(
+        snapshot_index=index,
+        account_id="legacy-main",
+        chatgpt_account_id="acc-main",
+        email="Main@Example.com",
+    )
+
+    assert resolved == ["main"]
+
+
+def test_resolve_snapshot_names_for_account_prefers_canonical_id_over_stale_persisted_id() -> None:
+    canonical_id = generate_unique_account_id("acc-main", "main@example.com")
+    index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={
+            "stale-account-id": ["wrong-snapshot"],
+            canonical_id: ["main-snapshot"],
+        },
+        active_snapshot_name=None,
+    )
+
+    resolved = resolve_snapshot_names_for_account(
+        snapshot_index=index,
+        account_id="stale-account-id",
+        chatgpt_account_id="acc-main",
+        email="main@example.com",
+    )
+
+    assert resolved == ["main-snapshot"]
+
+
 def test_switch_snapshot_falls_back_without_codex_auth(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     accounts_dir = tmp_path / "accounts"
     accounts_dir.mkdir()
     _write_auth_snapshot(accounts_dir / "main.json", email="main@example.com", account_id="acc-main")
+    (accounts_dir / "registry.json").write_text(
+        json.dumps({"activeAccountName": "bia"}),
+        encoding="utf-8",
+    )
     current_path = tmp_path / "current"
     auth_path = tmp_path / "auth.json"
 
@@ -178,6 +252,8 @@ def test_switch_snapshot_falls_back_without_codex_auth(
     assert auth_path.exists()
     assert auth_path.is_symlink()
     assert auth_path.resolve() == (accounts_dir / "main.json").resolve()
+    registry_payload = json.loads((accounts_dir / "registry.json").read_text(encoding="utf-8"))
+    assert registry_payload["activeAccountName"] == "main"
 
 
 def test_switch_snapshot_raises_when_codex_auth_missing_and_fallback_fails(
@@ -220,6 +296,10 @@ def test_switch_snapshot_repairs_broken_pointer_after_cli_success(
     accounts_dir = tmp_path / "accounts"
     accounts_dir.mkdir()
     _write_auth_snapshot(accounts_dir / "main.json", email="main@example.com", account_id="acc-main")
+    (accounts_dir / "registry.json").write_text(
+        json.dumps({"activeAccountName": "bia"}),
+        encoding="utf-8",
+    )
     current_path = tmp_path / "current"
     auth_path = tmp_path / "auth.json"
     auth_path.symlink_to(Path("/home/app/.codex/accounts/main.json"))
@@ -244,6 +324,8 @@ def test_switch_snapshot_repairs_broken_pointer_after_cli_success(
     assert current_path.read_text(encoding="utf-8").strip() == "main"
     assert auth_path.resolve() == (accounts_dir / "main.json").resolve()
     assert not os.readlink(auth_path).startswith("/")
+    registry_payload = json.loads((accounts_dir / "registry.json").read_text(encoding="utf-8"))
+    assert registry_payload["activeAccountName"] == "main"
 
 
 def test_switch_snapshot_normalizes_absolute_pointer_after_cli_success(

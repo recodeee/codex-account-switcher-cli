@@ -14,6 +14,7 @@ import {
   AuthFileMissingError,
   AutoSwitchConfigError,
   InvalidAccountNameError,
+  SnapshotEmailMismatchError,
 } from "./errors";
 import { parseAuthSnapshotFile } from "./auth-parser";
 import {
@@ -51,6 +52,10 @@ export interface AccountChoice {
 export interface RemoveResult {
   removed: string[];
   activated?: string;
+}
+
+export interface SaveAccountOptions {
+  force?: boolean;
 }
 
 export class AccountService {
@@ -115,7 +120,7 @@ export class AccountService {
     return base.replace(/\.json$/i, "");
   }
 
-  public async saveAccount(rawName: string): Promise<string> {
+  public async saveAccount(rawName: string, options?: SaveAccountOptions): Promise<string> {
     const name = this.normalizeAccountName(rawName);
     const authPath = resolveAuthPath();
     const accountsDir = resolveAccountsDir();
@@ -123,6 +128,12 @@ export class AccountService {
     await this.ensureAuthFileExists(authPath);
     await this.ensureDir(accountsDir);
     const destination = this.accountFilePath(name);
+    await this.assertSafeSnapshotOverwrite({
+      authPath,
+      destinationPath: destination,
+      accountName: name,
+      force: Boolean(options?.force),
+    });
     await fsp.copyFile(authPath, destination);
 
     await this.writeCurrentName(name);
@@ -473,6 +484,33 @@ export class AccountService {
 
   private async ensureDir(dirPath: string): Promise<void> {
     await fsp.mkdir(dirPath, { recursive: true });
+  }
+
+  private async assertSafeSnapshotOverwrite(input: {
+    authPath: string;
+    destinationPath: string;
+    accountName: string;
+    force: boolean;
+  }): Promise<void> {
+    if (input.force || !(await this.pathExists(input.destinationPath))) {
+      return;
+    }
+
+    const [existingSnapshot, incomingSnapshot] = await Promise.all([
+      parseAuthSnapshotFile(input.destinationPath),
+      parseAuthSnapshotFile(input.authPath),
+    ]);
+
+    const existingEmail = existingSnapshot.email?.trim().toLowerCase();
+    const incomingEmail = incomingSnapshot.email?.trim().toLowerCase();
+
+    if (!existingEmail || !incomingEmail) {
+      return;
+    }
+
+    if (existingEmail !== incomingEmail) {
+      throw new SnapshotEmailMismatchError(input.accountName, existingEmail, incomingEmail);
+    }
   }
 
   private async replaceSymlink(target: string, linkPath: string): Promise<void> {

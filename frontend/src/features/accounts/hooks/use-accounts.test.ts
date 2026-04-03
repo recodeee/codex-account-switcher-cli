@@ -3,7 +3,11 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useAccounts } from "@/features/accounts/hooks/use-accounts";
+import {
+  resolveAccountsPollInterval,
+  useAccounts,
+} from "@/features/accounts/hooks/use-accounts";
+import { createAccountSummary } from "@/test/mocks/factories";
 
 function createTestQueryClient(): QueryClient {
   return new QueryClient({
@@ -23,6 +27,41 @@ function createWrapper(queryClient: QueryClient) {
 }
 
 describe("useAccounts", () => {
+  it("uses fast polling while any account is working now", () => {
+    const workingAccounts = [
+      createAccountSummary({
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "main",
+          activeSnapshotName: "main",
+          isActiveSnapshot: true,
+          hasLiveSession: false,
+        },
+        codexSessionCount: 0,
+      }),
+    ];
+
+    expect(resolveAccountsPollInterval(workingAccounts)).toBe(2_000);
+  });
+
+  it("uses default polling when no account is working now", () => {
+    const idleAccounts = [
+      createAccountSummary({
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "secondary",
+          activeSnapshotName: "main",
+          isActiveSnapshot: false,
+          hasLiveSession: false,
+        },
+        codexSessionCount: 0,
+      }),
+    ];
+
+    expect(resolveAccountsPollInterval(idleAccounts)).toBe(30_000);
+    expect(resolveAccountsPollInterval(undefined)).toBe(30_000);
+  });
+
   it("loads accounts and invalidates related queries after mutations", async () => {
     const queryClient = createTestQueryClient();
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");

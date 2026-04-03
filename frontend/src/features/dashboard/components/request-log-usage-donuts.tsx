@@ -159,6 +159,7 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
   const stats7d = useMemo(() => buildWindowStats(items7d, total7d), [items7d, total7d]);
   const recentWindowWeight = total7d > 0 ? Math.min(100, (total5h / total7d) * 100) : 0;
   const fxHint = `Fixed FX ${usageSummary.fxRateUsdToEur.toFixed(2)} USD/EUR`;
+  const fallbackHint = "Estimated from live fallback tokens";
 
   return (
     <div className="space-y-4">
@@ -175,13 +176,13 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
         />
         <StatCard
           label="5h EUR"
-          value={fallback.last5h ? "N/A" : formatEuro(totalCostEur5h)}
-          hint={fallback.last5h ? "Unavailable in live fallback" : fxHint}
+          value={formatEuro(totalCostEur5h)}
+          hint={fallback.last5h ? fallbackHint : fxHint}
         />
         <StatCard
           label="7d EUR"
-          value={fallback.last7d ? "N/A" : formatEuro(totalCostEur7d)}
-          hint={fallback.last7d ? "Unavailable in live fallback" : fxHint}
+          value={formatEuro(totalCostEur7d)}
+          hint={fallback.last7d ? fallbackHint : fxHint}
         />
         <StatCard
           label="Avg / active account"
@@ -201,8 +202,8 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
           centerLabel="Consumed"
           items={items5h}
           total={total5h}
-          centerSubvalue={fallback.last5h ? "€ N/A" : formatEuro(totalCostEur5h)}
-          legendSecondaryFormatter={(item) => (fallback.last5h ? "€ N/A" : formatEuro(item.costEur ?? 0))}
+          centerSubvalue={formatEuro(totalCostEur5h)}
+          legendSecondaryFormatter={(item) => formatEuro(item.costEur ?? 0)}
         />
         <DonutChart
           title="Weekly Consumed"
@@ -210,8 +211,8 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
           centerLabel="Consumed"
           items={items7d}
           total={total7d}
-          centerSubvalue={fallback.last7d ? "€ N/A" : formatEuro(totalCostEur7d)}
-          legendSecondaryFormatter={(item) => (fallback.last7d ? "€ N/A" : formatEuro(item.costEur ?? 0))}
+          centerSubvalue={formatEuro(totalCostEur7d)}
+          legendSecondaryFormatter={(item) => formatEuro(item.costEur ?? 0)}
         />
       </div>
       {fallback.active ? (

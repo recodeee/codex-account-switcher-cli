@@ -26,6 +26,10 @@ class DashboardRepository:
     def accounts_repo(self) -> AccountsRepository:
         return self._accounts_repo
 
+    @property
+    def usage_repo(self) -> UsageRepository:
+        return self._usage_repo
+
     async def latest_usage_by_account(self, window: str) -> dict[str, UsageHistory]:
         return await self._usage_repo.latest_by_account(window=window)
 

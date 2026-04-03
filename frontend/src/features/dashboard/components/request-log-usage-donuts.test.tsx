@@ -110,6 +110,8 @@ describe("RequestLogUsageDonuts", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("640").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("1.2K").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("N/A").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("€1.29").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Unavailable in live fallback")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Estimated from live fallback tokens").length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  Activity,
   Clock,
   ExternalLink,
   Play,
@@ -24,7 +25,6 @@ import {
   formatTokenCredits,
   formatSlug,
 } from "@/utils/formatters";
-import { resolveCodexSessionCount } from "@/utils/codex-sessions";
 import { isAccountWorkingNow } from "@/utils/account-working";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 import {
@@ -65,64 +65,98 @@ function QuotaBar({
   percent,
   resetLabel,
   lastSeenLabel,
+  deactivated = false,
+  isLive = false,
 }: {
   label: string;
   percent: number | null;
   resetLabel: string;
   lastSeenLabel?: string | null;
+  deactivated?: boolean;
+  isLive?: boolean;
 }) {
   const clamped = percent === null ? 0 : Math.max(0, Math.min(100, percent));
   const hasPercent = percent !== null;
-  const tone = !hasPercent
-    ? "unknown"
-    : clamped >= 70
-      ? "healthy"
-      : clamped >= 30
-        ? "warning"
-        : "critical";
+  const tone = deactivated
+    ? "deactivated"
+    : !hasPercent
+      ? "unknown"
+      : clamped >= 70
+        ? "healthy"
+        : clamped >= 30
+          ? "warning"
+          : "critical";
 
   const percentPillClass = cn(
     "rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+    isLive && !deactivated && "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
     tone === "healthy" &&
       "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
     tone === "warning" &&
       "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-300",
     tone === "critical" &&
       "border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-300",
+    tone === "deactivated" &&
+      "border-zinc-500/25 bg-zinc-500/10 text-zinc-600 dark:text-zinc-300",
     tone === "unknown" && "border-border/70 bg-muted/35 text-muted-foreground",
   );
 
   const fillClass = cn(
-    "h-full rounded-full transition-all duration-500 ease-out",
+    "h-full rounded-full transition-[width,opacity] duration-500 ease-out",
+    isLive && "duration-300",
     tone === "healthy" &&
       "bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 shadow-[0_0_12px_rgba(16,185,129,0.35)]",
     tone === "warning" &&
       "bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300 shadow-[0_0_12px_rgba(245,158,11,0.32)]",
     tone === "critical" &&
       "bg-gradient-to-r from-rose-600 via-red-500 to-orange-400 shadow-[0_0_12px_rgba(239,68,68,0.32)]",
+    tone === "deactivated" &&
+      "bg-gradient-to-r from-zinc-500/80 via-zinc-400/70 to-zinc-300/65 shadow-none",
     tone === "unknown" && "bg-muted-foreground/45",
   );
 
   return (
-    <div className="space-y-2 rounded-lg border border-border/60 bg-background/30 px-2.5 py-2.5">
+    <div
+      className={cn(
+        "space-y-2 rounded-lg border border-border/60 bg-background/30 px-2.5 py-2.5",
+        isLive && !deactivated && "border-cyan-500/35 bg-cyan-500/[0.08]",
+      )}
+    >
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="font-medium text-muted-foreground">{label}</span>
-        <span className={percentPillClass}>
-          {formatPercentNullable(percent)}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {isLive && !deactivated ? (
+            <span className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-700 dark:text-cyan-300">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+              Live
+            </span>
+          ) : null}
+          <span className={percentPillClass}>
+            {formatPercentNullable(percent)}
+          </span>
+        </div>
       </div>
       <div
         className={cn(
           "relative h-2 w-full overflow-hidden rounded-full ring-1 ring-white/5",
-          quotaBarTrack(clamped),
+          tone === "deactivated" ? "bg-zinc-500/10" : quotaBarTrack(clamped),
         )}
       >
         <div className={fillClass} style={{ width: `${clamped}%` }} />
+        {isLive && !deactivated ? (
+          <div className="absolute inset-y-0 right-0 w-2 animate-pulse bg-white/45" />
+        ) : null}
       </div>
       <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <Clock className="h-3 w-3 shrink-0" />
         <span>{resetLabel}</span>
       </div>
+      {isLive && !deactivated ? (
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-cyan-700 dark:text-cyan-300">
+          <Activity className="h-3 w-3 animate-pulse" />
+          <span>Live token status</span>
+        </div>
+      ) : null}
       {lastSeenLabel ? (
         <div className="text-[11px] text-muted-foreground">{lastSeenLabel}</div>
       ) : null}
@@ -173,13 +207,15 @@ export function AccountCard({
   const secondaryReset = formatQuotaResetLabel(
     account.resetAtSecondary ?? null,
   );
-  const showLastSeen = account.status === "deactivated";
-  const primaryLastSeen = showLastSeen
-    ? formatLastUsageLabel(account.lastUsageRecordedAtPrimary ?? null)
-    : null;
-  const secondaryLastSeen = showLastSeen
-    ? formatLastUsageLabel(account.lastUsageRecordedAtSecondary ?? null)
-    : null;
+  const isDeactivated = status === "deactivated";
+  const primaryLastSeen = formatLastUsageLabel(account.lastUsageRecordedAtPrimary ?? null);
+  const secondaryLastSeen = formatLastUsageLabel(account.lastUsageRecordedAtSecondary ?? null);
+  const stalePrimaryLastSeen = !hasLiveSession ? primaryLastSeen : null;
+  const staleSecondaryLastSeen = !hasLiveSession ? secondaryLastSeen : null;
+  const deactivatedLastSeenLabel =
+    isDeactivated && (primaryLastSeen || secondaryLastSeen)
+      ? primaryLastSeen ?? secondaryLastSeen
+      : null;
 
   const title = account.displayName || account.email;
   const compactId = formatCompactAccountId(account.accountId);
@@ -188,10 +224,9 @@ export function AccountCard({
     account.codexAuth?.snapshotName,
   );
   const totalTokensUsed = tokensUsed ?? account.requestUsage?.totalTokens ?? 0;
-  const codexSessionCount = resolveCodexSessionCount(
-    account.codexSessionCount,
-    isWorkingNow,
-  );
+  const codexSessionCount = hasLiveSession
+    ? Math.max(account.codexSessionCount ?? 0, 1)
+    : 0;
   const emailSubtitle =
     account.displayName && account.displayName !== account.email
       ? account.email
@@ -226,6 +261,16 @@ export function AccountCard({
         </div>
         <div className="flex items-center gap-1.5">
           <StatusBadge status={status} />
+          {deactivatedLastSeenLabel ? (
+            <Badge
+              variant="outline"
+              className="gap-1 border-zinc-500/25 bg-zinc-500/10 text-zinc-600 dark:text-zinc-300"
+              title={deactivatedLastSeenLabel}
+            >
+              <Clock className="h-3 w-3" />
+              {deactivatedLastSeenLabel}
+            </Badge>
+          ) : null}
           {isWorkingNow ? (
             <Badge
               variant="outline"
@@ -246,8 +291,13 @@ export function AccountCard({
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             Tokens used
           </p>
-          <p className="mt-0.5 text-xs font-semibold tabular-nums">
-            {formatTokenCredits(totalTokensUsed)}
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold tabular-nums">
+            <span>{formatTokenCredits(totalTokensUsed)}</span>
+            {isWorkingNow ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                live
+              </span>
+            ) : null}
           </p>
         </div>
         <div>
@@ -272,14 +322,17 @@ export function AccountCard({
             label="5h"
             percent={primaryRemaining}
             resetLabel={primaryReset}
-            lastSeenLabel={primaryLastSeen}
+            lastSeenLabel={stalePrimaryLastSeen}
+            deactivated={isDeactivated}
+            isLive={hasLiveSession}
           />
         )}
         <QuotaBar
           label="Weekly"
           percent={secondaryRemaining}
           resetLabel={secondaryReset}
-          lastSeenLabel={secondaryLastSeen}
+          lastSeenLabel={staleSecondaryLastSeen}
+          isLive={hasLiveSession}
         />
       </div>
 

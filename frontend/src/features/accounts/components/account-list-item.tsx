@@ -12,7 +12,8 @@ import {
   resolveEffectiveAccountStatus,
 } from "@/utils/account-status";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
-import { formatSlug } from "@/utils/formatters";
+import { formatPercentNullable, formatSlug } from "@/utils/formatters";
+import { isAccountWorkingNow } from "@/utils/account-working";
 import {
   canUseLocalAccount,
   getUseLocalAccountDisabledReason,
@@ -39,29 +40,49 @@ function formatPlanWithSnapshot(
   return `${planLabel} · ${normalizedSnapshotName}`;
 }
 
-function MiniQuotaBar({ percent }: { percent: number | null }) {
+function MiniQuotaRow({
+  label,
+  percent,
+  testIdPrefix,
+}: {
+  label: string;
+  percent: number | null;
+  testIdPrefix: string;
+}) {
   if (percent === null) {
     return (
-      <div
-        data-testid="mini-quota-track"
-        className="h-1 flex-1 overflow-hidden rounded-full bg-muted"
-      />
+      <div data-testid={`${testIdPrefix}-row`} className="space-y-1">
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+          <span>{label}</span>
+          <span className="tabular-nums font-medium">{formatPercentNullable(percent)}</span>
+        </div>
+        <div
+          data-testid={`${testIdPrefix}-track`}
+          className="h-1 flex-1 overflow-hidden rounded-full bg-muted"
+        />
+      </div>
     );
   }
   const clamped = Math.max(0, Math.min(100, percent));
   return (
-    <div
-      data-testid="mini-quota-track"
-      className={cn(
-        "h-1 flex-1 overflow-hidden rounded-full",
-        quotaBarTrack(clamped),
-      )}
-    >
+    <div data-testid={`${testIdPrefix}-row`} className="space-y-1">
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+        <span>{label}</span>
+        <span className="tabular-nums font-medium">{formatPercentNullable(percent)}</span>
+      </div>
       <div
-        data-testid="mini-quota-fill"
-        className={cn("h-full rounded-full", quotaBarColor(clamped))}
-        style={{ width: `${clamped}%` }}
-      />
+        data-testid={`${testIdPrefix}-track`}
+        className={cn(
+          "h-1 flex-1 overflow-hidden rounded-full",
+          quotaBarTrack(clamped),
+        )}
+      >
+        <div
+          data-testid={`${testIdPrefix}-fill`}
+          className={cn("h-full rounded-full", quotaBarColor(clamped))}
+          style={{ width: `${clamped}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -77,6 +98,7 @@ export function AccountListItem({
   const blurred = usePrivacyStore((s) => s.blurred);
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
   const hasLiveSession = account.codexAuth?.hasLiveSession ?? false;
+  const isWorkingNow = isAccountWorkingNow(account);
   const status = resolveEffectiveAccountStatus({
     status: account.status,
     isActiveSnapshot,
@@ -112,9 +134,13 @@ export function AccountListItem({
 
   return (
     <div
+      data-testid="account-list-item"
       className={cn(
         "w-full rounded-lg p-2 transition-colors",
-        selected ? "bg-primary/8 ring-1 ring-primary/25" : "hover:bg-muted/50",
+        selected && isWorkingNow && "bg-cyan-500/12 ring-1 ring-cyan-500/35",
+        selected && !isWorkingNow && "bg-primary/8 ring-1 ring-primary/25",
+        !selected && isWorkingNow && "bg-cyan-500/[0.06] ring-1 ring-cyan-500/25 hover:bg-cyan-500/[0.1]",
+        !selected && !isWorkingNow && "hover:bg-muted/50",
       )}
     >
       <div className="flex items-start gap-2">
@@ -155,6 +181,16 @@ export function AccountListItem({
             </div>
             <div className="flex items-center gap-1">
               <StatusBadge status={status} />
+              {isWorkingNow ? (
+                <Badge
+                  data-testid="live-status-badge"
+                  variant="outline"
+                  className="h-5 gap-1.5 border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0 text-[10px] font-semibold text-cyan-700 dark:text-cyan-300"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+                  Live
+                </Badge>
+              ) : null}
               {!hasResolvedSnapshot ? (
                 <Badge
                   data-testid="missing-snapshot-badge"
@@ -166,8 +202,9 @@ export function AccountListItem({
               ) : null}
             </div>
           </div>
-          <div className="mt-1.5">
-            <MiniQuotaBar percent={secondary} />
+          <div className="mt-1.5 space-y-1.5">
+            <MiniQuotaRow label="5h" percent={primaryRemaining ?? null} testIdPrefix="mini-quota-5h" />
+            <MiniQuotaRow label="Weekly" percent={secondary} testIdPrefix="mini-quota-weekly" />
           </div>
         </button>
         <div className="pt-0.5">

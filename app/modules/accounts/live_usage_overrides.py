@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from app.core.utils.time import to_utc_naive
 from app.db.models import Account, UsageHistory
@@ -15,6 +16,18 @@ from app.modules.accounts.codex_live_usage import (
 from app.modules.accounts.schemas import AccountCodexAuthStatus
 
 
+@dataclass(frozen=True)
+class LiveUsageOverridePersistCandidate:
+    account_id: str
+    window: Literal["primary", "secondary"]
+    used_percent: float
+    reset_at: int | None
+    window_minutes: int | None
+    recorded_at: datetime
+
+_RESET_FINGERPRINT_TIE_BREAK_SECONDS = 300
+
+
 def apply_local_live_usage_overrides(
     *,
     accounts: list[Account],
@@ -23,9 +36,10 @@ def apply_local_live_usage_overrides(
     primary_usage: dict[str, UsageHistory],
     secondary_usage: dict[str, UsageHistory],
     codex_session_counts_by_account: dict[str, int],
-) -> None:
+) -> list[LiveUsageOverridePersistCandidate]:
     baseline_primary_usage = dict(primary_usage)
     baseline_secondary_usage = dict(secondary_usage)
+    persist_candidates: list[LiveUsageOverridePersistCandidate] = []
     live_usage_by_snapshot = read_local_codex_live_usage_by_snapshot()
     should_defer_active_snapshot_usage = _should_defer_active_snapshot_usage_override(
         accounts=accounts,
@@ -69,12 +83,32 @@ def apply_local_live_usage_overrides(
                 recorded_at=recorded_at,
                 usage_window=live_usage.primary,
             )
+            persist_candidates.append(
+                LiveUsageOverridePersistCandidate(
+                    account_id=account_id,
+                    window="primary",
+                    used_percent=float(live_usage.primary.used_percent),
+                    reset_at=live_usage.primary.reset_at,
+                    window_minutes=live_usage.primary.window_minutes,
+                    recorded_at=recorded_at,
+                )
+            )
         if live_usage.secondary is not None:
             secondary_usage[account_id] = _usage_history_from_live_window(
                 account_id=account_id,
                 window="secondary",
                 recorded_at=recorded_at,
                 usage_window=live_usage.secondary,
+            )
+            persist_candidates.append(
+                LiveUsageOverridePersistCandidate(
+                    account_id=account_id,
+                    window="secondary",
+                    used_percent=float(live_usage.secondary.used_percent),
+                    reset_at=live_usage.secondary.reset_at,
+                    window_minutes=live_usage.secondary.window_minutes,
+                    recorded_at=recorded_at,
+                )
             )
 
     _apply_local_default_session_fingerprint_overrides(
@@ -88,6 +122,19 @@ def apply_local_live_usage_overrides(
         secondary_usage=secondary_usage,
         codex_session_counts_by_account=codex_session_counts_by_account,
     )
+    return _coalesce_persist_candidates(persist_candidates)
+
+
+def _coalesce_persist_candidates(
+    candidates: list[LiveUsageOverridePersistCandidate],
+) -> list[LiveUsageOverridePersistCandidate]:
+    latest_by_key: dict[tuple[str, str], LiveUsageOverridePersistCandidate] = {}
+    for candidate in candidates:
+        key = (candidate.account_id, candidate.window)
+        existing = latest_by_key.get(key)
+        if existing is None or candidate.recorded_at >= existing.recorded_at:
+            latest_by_key[key] = candidate
+    return list(latest_by_key.values())
 
 
 def _resolve_live_usage_for_account(
@@ -404,7 +451,13 @@ def _match_sample_to_account(
         )
         if comparable_shape:
             margin = second_metrics.percent_score - best_metrics.percent_score
-            if margin < 2.0:
+            reset_margin = second_metrics.reset_score - best_metrics.reset_score
+            reset_fingerprint_breaks_tie = (
+                best_metrics.reset_pairs > 0
+                and second_metrics.reset_pairs > 0
+                and reset_margin >= _RESET_FINGERPRINT_TIE_BREAK_SECONDS
+            )
+            if margin < 2.0 and not reset_fingerprint_breaks_tie:
                 return None
 
     if best_metrics.percent_pairs == 0:

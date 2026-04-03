@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from shutil import copy2
+from typing import Literal
 
 from app.core.auth import DEFAULT_EMAIL, claims_from_auth, generate_unique_account_id, parse_auth_json
 
@@ -21,10 +24,97 @@ class CodexAuthSwitchFailedError(RuntimeError):
     """Raised when codex-auth use fails for a resolved snapshot."""
 
 
+class CodexAuthSnapshotConflictError(RuntimeError):
+    """Raised when snapshot remediation would overwrite another account snapshot."""
+
+
+class CodexAuthSnapshotRepairFailedError(RuntimeError):
+    """Raised when snapshot remediation cannot complete safely."""
+
+
 @dataclass(slots=True, frozen=True)
 class CodexAuthSnapshotIndex:
     snapshots_by_account_id: dict[str, list[str]]
     active_snapshot_name: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class CodexAuthSnapshotRepairResult:
+    previous_snapshot_name: str
+    snapshot_name: str
+    mode: Literal["readd", "rename"]
+    changed: bool
+
+
+_INVALID_SNAPSHOT_CHARS = re.compile(r"[^a-z0-9._-]+")
+
+
+def build_email_snapshot_name(email: str) -> str:
+    normalized_email = email.strip().lower()
+    local_part, _, domain_part = normalized_email.partition("@")
+    domain_segment = domain_part.replace(".", "-") if domain_part else ""
+    source = "-".join(segment for segment in (local_part, domain_segment) if segment)
+    sanitized = _INVALID_SNAPSHOT_CHARS.sub("-", source).strip("._-")
+
+    if not sanitized:
+        sanitized = "account"
+    if not sanitized[0].isalnum():
+        sanitized = f"account-{sanitized}"
+
+    return sanitized
+
+
+def resolve_snapshot_names_for_account(
+    *,
+    snapshot_index: CodexAuthSnapshotIndex,
+    account_id: str,
+    chatgpt_account_id: str | None = None,
+    email: str | None = None,
+) -> list[str]:
+    """Resolve candidate codex-auth snapshots for an account.
+
+    When chatgpt_account_id + email are available, prefer lookup by their
+    canonical generated account id to avoid stale persisted account.id values
+    leaking snapshots from a different account after merge/overwrite flows.
+    Fallback to persisted account.id only when canonical lookup resolves no
+    snapshots.
+    """
+
+    resolved: list[str] = []
+    seen: set[str] = set()
+
+    def _add(snapshot_names: list[str] | None) -> None:
+        if not snapshot_names:
+            return
+        for snapshot_name in snapshot_names:
+            if snapshot_name in seen:
+                continue
+            seen.add(snapshot_name)
+            resolved.append(snapshot_name)
+
+    canonical_candidate_ids: list[str] = []
+    if chatgpt_account_id and email:
+        normalized_email = email.strip()
+        if normalized_email:
+            canonical_candidate_ids.append(generate_unique_account_id(chatgpt_account_id, normalized_email))
+            lowered_email = normalized_email.lower()
+            if lowered_email != normalized_email:
+                canonical_candidate_ids.append(generate_unique_account_id(chatgpt_account_id, lowered_email))
+
+    deduped_candidate_ids = list(dict.fromkeys(canonical_candidate_ids))
+    for candidate_account_id in deduped_candidate_ids:
+        _add(snapshot_index.snapshots_by_account_id.get(candidate_account_id))
+
+    # Compatibility fallback:
+    # - no canonical candidate ids available, or
+    # - canonical ids resolved no snapshots at all.
+    #
+    # In these cases, try persisted account.id to support legacy rows where id
+    # is raw ChatGPT account id or where canonical metadata is missing.
+    if not deduped_candidate_ids or not resolved:
+        _add(snapshot_index.snapshots_by_account_id.get(account_id))
+
+    return resolved
 
 
 def _resolve_accounts_dir() -> Path:
@@ -174,6 +264,7 @@ def _switch_snapshot_without_cli(snapshot_name: str) -> None:
     active_auth_path = _resolve_active_auth_path()
     active_auth_path.parent.mkdir(parents=True, exist_ok=True)
     _replace_auth_pointer(active_auth_path, snapshot_path)
+    _set_registry_active_snapshot(snapshot_name, accounts_dir=accounts_dir)
 
 
 def _replace_auth_pointer(active_auth_path: Path, snapshot_path: Path) -> None:
@@ -184,6 +275,24 @@ def _replace_auth_pointer(active_auth_path: Path, snapshot_path: Path) -> None:
         active_auth_path.symlink_to(relative_target)
     except (OSError, ValueError):
         active_auth_path.write_bytes(snapshot_path.read_bytes())
+
+
+def _set_registry_active_snapshot(snapshot_name: str, *, accounts_dir: Path) -> None:
+    registry_path = _resolve_registry_path(accounts_dir)
+    payload: dict[str, object]
+
+    if registry_path.exists() and registry_path.is_file():
+        try:
+            decoded = json.loads(registry_path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError, TypeError):
+            decoded = {}
+        payload = decoded if isinstance(decoded, dict) else {}
+    else:
+        payload = {}
+
+    payload["activeAccountName"] = snapshot_name
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(f"{json.dumps(payload, indent=2)}\n", encoding="utf-8")
 
 
 def switch_snapshot(snapshot_name: str) -> None:

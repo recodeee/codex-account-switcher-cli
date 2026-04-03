@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from app.core.auth import generate_unique_account_id
 from app.db.session import SessionLocal
+from app.modules.usage.repository import UsageRepository
 
 pytestmark = pytest.mark.integration
 
@@ -214,6 +215,16 @@ async def test_accounts_list_sets_has_live_session_from_runtime_telemetry(
     assert account["codexSessionCount"] == 1
     assert account["usage"]["primaryRemainingPercent"] == pytest.approx(75.0)
     assert account["usage"]["secondaryRemainingPercent"] == pytest.approx(55.0)
+
+    async with SessionLocal() as session:
+        usage_repo = UsageRepository(session)
+        latest_primary = await usage_repo.latest_entry_for_account(expected_account_id, window="primary")
+        latest_secondary = await usage_repo.latest_entry_for_account(expected_account_id, window="secondary")
+
+    assert latest_primary is not None
+    assert latest_secondary is not None
+    assert latest_primary.used_percent == pytest.approx(25.0)
+    assert latest_secondary.used_percent == pytest.approx(45.0)
 
 
 @pytest.mark.asyncio

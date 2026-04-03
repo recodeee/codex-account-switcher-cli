@@ -126,4 +126,65 @@ describe("AccountList", () => {
     expect(screen.getByText("unique@example.com")).toBeInTheDocument();
     expect(screen.queryByText((_content, el) => el?.tagName === "P" && !!el.textContent?.match(/unique@example\.com \| ID/))).not.toBeInTheDocument();
   });
+
+  it("prioritizes usable accounts first, then orders by 5h remaining", () => {
+    render(
+      <AccountList
+        accounts={[
+          {
+            accountId: "acc-low",
+            email: "low@example.com",
+            displayName: "low@example.com",
+            planType: "plus",
+            status: "active",
+            usage: {
+              primaryRemainingPercent: 20,
+              secondaryRemainingPercent: 50,
+            },
+            codexSessionCount: 0,
+            additionalQuotas: [],
+          },
+          {
+            accountId: "acc-high",
+            email: "high@example.com",
+            displayName: "high@example.com",
+            planType: "plus",
+            status: "active",
+            usage: {
+              primaryRemainingPercent: 88,
+              secondaryRemainingPercent: 40,
+            },
+            codexSessionCount: 0,
+            additionalQuotas: [],
+          },
+          {
+            accountId: "acc-unusable",
+            email: "unusable@example.com",
+            displayName: "unusable@example.com",
+            planType: "plus",
+            status: "active",
+            usage: {
+              primaryRemainingPercent: 0,
+              secondaryRemainingPercent: 99,
+            },
+            codexSessionCount: 0,
+            additionalQuotas: [],
+          },
+        ]}
+        selectedAccountId={null}
+        onSelect={() => {}}
+        onUseLocal={() => {}}
+        useLocalBusy={false}
+        onOpenImport={() => {}}
+        onOpenOauth={() => {}}
+      />,
+    );
+
+    const renderedEmails = screen.getAllByText(/@example\.com$/).map((node) => node.textContent);
+    expect(renderedEmails).toEqual([
+      "high@example.com",
+      "low@example.com",
+      "unusable@example.com",
+    ]);
+  });
 });

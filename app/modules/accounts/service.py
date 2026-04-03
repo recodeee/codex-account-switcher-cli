@@ -22,10 +22,12 @@ from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     CodexAuthSnapshotNotFoundError,
     build_snapshot_index,
+    resolve_snapshot_names_for_account,
     select_snapshot_name,
     switch_snapshot,
 )
 from app.modules.accounts.live_usage_overrides import apply_local_live_usage_overrides
+from app.modules.accounts.live_usage_persistence import persist_live_usage_overrides
 from app.modules.accounts.mappers import build_account_summaries, build_account_usage_trends
 from app.modules.accounts.repository import AccountsRepository
 from app.modules.accounts.schemas import (
@@ -127,12 +129,12 @@ class AccountsService:
         snapshot_index = build_snapshot_index()
         codex_auth_by_account = {
             account.id: self._build_codex_auth_status(
-                account_id=account.id,
+                account=account,
                 snapshot_index=snapshot_index,
             )
             for account in accounts
         }
-        apply_local_live_usage_overrides(
+        persist_candidates = apply_local_live_usage_overrides(
             accounts=accounts,
             snapshot_index=snapshot_index,
             codex_auth_by_account=codex_auth_by_account,
@@ -140,6 +142,11 @@ class AccountsService:
             secondary_usage=secondary_usage,
             codex_session_counts_by_account=codex_session_counts_by_account,
         )
+        if self._usage_repo and persist_candidates:
+            await persist_live_usage_overrides(
+                usage_repo=self._usage_repo,
+                candidates=persist_candidates,
+            )
 
         return build_account_summaries(
             accounts=accounts,
@@ -212,7 +219,12 @@ class AccountsService:
             return None
 
         snapshot_index = build_snapshot_index()
-        snapshot_names = snapshot_index.snapshots_by_account_id.get(account.id, [])
+        snapshot_names = resolve_snapshot_names_for_account(
+            snapshot_index=snapshot_index,
+            account_id=account.id,
+            chatgpt_account_id=account.chatgpt_account_id,
+            email=account.email,
+        )
         selected_snapshot_name = select_snapshot_name(snapshot_names, snapshot_index.active_snapshot_name)
         if selected_snapshot_name is None:
             raise CodexAuthSnapshotNotFoundError(
@@ -229,10 +241,15 @@ class AccountsService:
     @staticmethod
     def _build_codex_auth_status(
         *,
-        account_id: str,
+        account: Account,
         snapshot_index: CodexAuthSnapshotIndex,
     ) -> AccountCodexAuthStatus:
-        snapshot_names = snapshot_index.snapshots_by_account_id.get(account_id, [])
+        snapshot_names = resolve_snapshot_names_for_account(
+            snapshot_index=snapshot_index,
+            account_id=account.id,
+            chatgpt_account_id=account.chatgpt_account_id,
+            email=account.email,
+        )
         selected_snapshot_name = select_snapshot_name(snapshot_names, snapshot_index.active_snapshot_name)
         active_snapshot_name = snapshot_index.active_snapshot_name
         return AccountCodexAuthStatus(

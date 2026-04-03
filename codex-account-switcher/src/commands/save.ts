@@ -1,4 +1,4 @@
-import { Args } from "@oclif/core";
+import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../lib/base-command";
 
 export default class SaveCommand extends BaseCommand {
@@ -13,12 +13,23 @@ export default class SaveCommand extends BaseCommand {
     }),
   } as const;
 
+  static flags = {
+    force: Flags.boolean({
+      char: "f",
+      description:
+        "Force overwrite when the existing snapshot name belongs to a different email account",
+      default: false,
+    }),
+  } as const;
+
   async run(): Promise<void> {
     await this.runSafe(async () => {
-      const { args } = await this.parse(SaveCommand);
+      const { args, flags } = await this.parse(SaveCommand);
       const providedName = args.name as string | undefined;
       const accountName = providedName ?? (await this.accounts.inferAccountNameFromCurrentAuth());
-      const savedName = await this.accounts.saveAccount(accountName);
+      const savedName = await this.accounts.saveAccount(accountName, {
+        force: Boolean(flags.force),
+      });
       const suffix = providedName ? "" : " (inferred from auth email)";
       this.log(`Saved current Codex auth tokens as "${savedName}"${suffix}.`);
     });
