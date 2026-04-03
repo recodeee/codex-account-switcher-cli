@@ -21,7 +21,9 @@ from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_sn
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     CodexAuthSnapshotNotFoundError,
+    build_email_snapshot_name,
     build_snapshot_index,
+    repair_snapshot_for_account,
     resolve_snapshot_names_for_account,
     select_snapshot_name,
     switch_snapshot,
@@ -38,6 +40,7 @@ from app.modules.accounts.schemas import (
     AccountRequestUsage,
     AccountSummary,
     AccountTrendsResponse,
+    AccountSnapshotRepairResponse,
     AccountUseLocalResponse,
 )
 from app.modules.proxy.account_cache import get_account_selection_cache
@@ -225,7 +228,11 @@ class AccountsService:
             chatgpt_account_id=account.chatgpt_account_id,
             email=account.email,
         )
-        selected_snapshot_name = select_snapshot_name(snapshot_names, snapshot_index.active_snapshot_name)
+        selected_snapshot_name = select_snapshot_name(
+            snapshot_names,
+            snapshot_index.active_snapshot_name,
+            email=account.email,
+        )
         if selected_snapshot_name is None:
             raise CodexAuthSnapshotNotFoundError(
                 f"No codex-auth snapshot found for account {account.email}. Run `codex-auth save <name>` first."
@@ -236,6 +243,32 @@ class AccountsService:
             status="switched",
             account_id=account.id,
             snapshot_name=selected_snapshot_name,
+        )
+
+    async def repair_account_snapshot(
+        self,
+        account_id: str,
+        *,
+        mode: str = "readd",
+    ) -> AccountSnapshotRepairResponse | None:
+        account = await self._repo.get_by_id(account_id)
+        if account is None:
+            return None
+
+        normalized_mode = "rename" if mode == "rename" else "readd"
+        repair = repair_snapshot_for_account(
+            account_id=account.id,
+            chatgpt_account_id=account.chatgpt_account_id,
+            email=account.email,
+            mode=normalized_mode,
+        )
+        return AccountSnapshotRepairResponse(
+            status="repaired",
+            account_id=account.id,
+            previous_snapshot_name=repair.previous_snapshot_name,
+            snapshot_name=repair.snapshot_name,
+            mode=repair.mode,
+            changed=repair.changed,
         )
 
     @staticmethod
@@ -250,13 +283,22 @@ class AccountsService:
             chatgpt_account_id=account.chatgpt_account_id,
             email=account.email,
         )
-        selected_snapshot_name = select_snapshot_name(snapshot_names, snapshot_index.active_snapshot_name)
+        selected_snapshot_name = select_snapshot_name(
+            snapshot_names,
+            snapshot_index.active_snapshot_name,
+            email=account.email,
+        )
         active_snapshot_name = snapshot_index.active_snapshot_name
+        expected_snapshot_name = build_email_snapshot_name(account.email)
         return AccountCodexAuthStatus(
             has_snapshot=bool(snapshot_names),
             snapshot_name=selected_snapshot_name,
             active_snapshot_name=active_snapshot_name,
             is_active_snapshot=bool(active_snapshot_name and active_snapshot_name in snapshot_names),
+            expected_snapshot_name=expected_snapshot_name,
+            snapshot_name_matches_email=bool(
+                selected_snapshot_name and selected_snapshot_name == expected_snapshot_name
+            ),
         )
 
     def _account_from_auth_bytes(self, raw: bytes) -> Account:

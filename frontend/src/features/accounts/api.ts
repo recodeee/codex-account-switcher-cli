@@ -4,6 +4,7 @@ import {
   AccountActionResponseSchema,
   AccountImportResponseSchema,
   AccountOpenTerminalResponseSchema,
+  AccountSnapshotRepairResponseSchema,
   AccountUseLocalResponseSchema,
   AccountsResponseSchema,
   AccountTrendsResponseSchema,
@@ -71,6 +72,13 @@ export function openAccountTerminal(accountId: string) {
   return post(
     `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/open-terminal`,
     AccountOpenTerminalResponseSchema,
+  );
+}
+
+export function repairAccountSnapshot(accountId: string, mode: "readd" | "rename") {
+  return post(
+    `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/repair-snapshot?mode=${encodeURIComponent(mode)}`,
+    AccountSnapshotRepairResponseSchema,
   );
 }
 

@@ -616,6 +616,95 @@ async def test_use_account_locally_falls_back_when_codex_auth_missing(
 
 
 @pytest.mark.asyncio
+async def test_repair_snapshot_readd_aligns_snapshot_name_to_email(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    email = "nagyviktordp@edixai.com"
+    raw_account_id = "acc_snapshot_repair_readd"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": raw_account_id,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "work.json", email=email, account_id=raw_account_id)
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    repair_response = await async_client.post(
+        f"/api/accounts/{expected_account_id}/repair-snapshot?mode=readd"
+    )
+    assert repair_response.status_code == 200
+    payload = repair_response.json()
+    assert payload["status"] == "repaired"
+    assert payload["mode"] == "readd"
+    assert payload["changed"] is True
+    assert payload["previousSnapshotName"] == "work"
+    assert payload["snapshotName"] == "nagyviktordp-edixai-com"
+    assert (accounts_dir / "work.json").exists()
+    assert (accounts_dir / "nagyviktordp-edixai-com.json").exists()
+    assert (tmp_path / "current").read_text(encoding="utf-8").strip() == "nagyviktordp-edixai-com"
+
+
+@pytest.mark.asyncio
+async def test_repair_snapshot_rename_returns_conflict_when_target_exists(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    email = "nagyviktordp@edixai.com"
+    raw_account_id = "acc_snapshot_repair_rename"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": raw_account_id,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "work.json", email=email, account_id=raw_account_id)
+    _write_auth_snapshot(
+        accounts_dir / "nagyviktordp-edixai-com.json",
+        email="other@example.com",
+        account_id="acc_other",
+    )
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    repair_response = await async_client.post(
+        f"/api/accounts/{expected_account_id}/repair-snapshot?mode=rename"
+    )
+    assert repair_response.status_code == 409
+    assert repair_response.json()["error"]["code"] == "codex_auth_snapshot_conflict"
+
+
+@pytest.mark.asyncio
 async def test_open_account_terminal_switches_snapshot_and_launches(
     async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):

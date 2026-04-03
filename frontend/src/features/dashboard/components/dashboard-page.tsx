@@ -30,7 +30,12 @@ export function DashboardPage() {
   const isDark = useThemeStore((s) => s.theme === "dark");
   const dashboardQuery = useDashboard();
   const { filters, logsQuery, optionsQuery, usageSummaryQuery, updateFilters } = useRequestLogs();
-  const { resumeMutation, useLocalMutation, openTerminalMutation } = useAccountMutations();
+  const {
+    resumeMutation,
+    useLocalMutation,
+    openTerminalMutation,
+    repairSnapshotMutation,
+  } = useAccountMutations();
 
   const isRefreshing = dashboardQuery.isFetching || logsQuery.isFetching || usageSummaryQuery.isFetching;
 
@@ -69,9 +74,27 @@ export function DashboardPage() {
         case "sessions":
           navigate(`/sessions?accountId=${encodeURIComponent(account.accountId)}`);
           break;
+        case "repairSnapshotReadd":
+          repairSnapshotMutation.mutate({
+            accountId: account.accountId,
+            mode: "readd",
+          });
+          break;
+        case "repairSnapshotRename":
+          repairSnapshotMutation.mutate({
+            accountId: account.accountId,
+            mode: "rename",
+          });
+          break;
       }
     },
-    [navigate, openTerminalMutation, resumeMutation, useLocalMutation],
+    [
+      navigate,
+      openTerminalMutation,
+      repairSnapshotMutation,
+      resumeMutation,
+      useLocalMutation,
+    ],
   );
 
   const overview = dashboardQuery.data;

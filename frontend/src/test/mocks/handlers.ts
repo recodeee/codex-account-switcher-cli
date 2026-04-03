@@ -470,6 +470,47 @@ export const handlers = [
 		});
 	}),
 
+	http.post("/api/accounts/:accountId/repair-snapshot", ({ params, request }) => {
+		const accountId = String(params.accountId);
+		const account = findAccount(accountId);
+		if (!account) {
+			return HttpResponse.json(
+				{ error: { code: "account_not_found", message: "Account not found" } },
+				{ status: 404 },
+			);
+		}
+		const url = new URL(request.url);
+		const mode = url.searchParams.get("mode") === "rename" ? "rename" : "readd";
+		const previousSnapshotName = account.codexAuth?.snapshotName ?? "main";
+		const expectedSnapshotName = account.codexAuth?.expectedSnapshotName ?? account.email.replace("@", "-").replace(/\./g, "-");
+		state.accounts = state.accounts.map((entry) =>
+			entry.accountId === accountId
+				? {
+						...entry,
+						codexAuth: entry.codexAuth
+							? {
+									...entry.codexAuth,
+									hasSnapshot: true,
+									snapshotName: expectedSnapshotName,
+									activeSnapshotName: expectedSnapshotName,
+									isActiveSnapshot: true,
+									expectedSnapshotName,
+									snapshotNameMatchesEmail: true,
+								}
+							: entry.codexAuth,
+				  }
+				: entry,
+		);
+		return HttpResponse.json({
+			status: "repaired",
+			accountId,
+			previousSnapshotName,
+			snapshotName: expectedSnapshotName,
+			mode,
+			changed: previousSnapshotName !== expectedSnapshotName,
+		});
+	}),
+
 	http.get("/api/accounts/:accountId/trends", ({ params }) => {
 		const accountId = String(params.accountId);
 		const account = findAccount(accountId);

@@ -9,10 +9,12 @@ export type AccountActionsProps = {
   account: AccountSummary;
   busy: boolean;
   useLocalBusy: boolean;
+  repairSnapshotBusy?: boolean;
   onPause: (accountId: string) => void;
   onResume: (accountId: string) => void;
   onDelete: (accountId: string) => void;
   onUseLocal: (accountId: string) => void;
+  onRepairSnapshot: (accountId: string, mode: "readd" | "rename") => void;
   onReauth: () => void;
 };
 
@@ -20,10 +22,12 @@ export function AccountActions({
   account,
   busy,
   useLocalBusy,
+  repairSnapshotBusy = false,
   onPause,
   onResume,
   onDelete,
   onUseLocal,
+  onRepairSnapshot,
   onReauth,
 }: AccountActionsProps) {
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
@@ -45,6 +49,11 @@ export function AccountActions({
     isActiveSnapshot,
     hasLiveSession,
   });
+  const snapshotName = account.codexAuth?.snapshotName?.trim() ?? null;
+  const expectedSnapshotName = account.codexAuth?.expectedSnapshotName?.trim() ?? null;
+  const hasSnapshotMismatch = Boolean(
+    snapshotName && expectedSnapshotName && snapshotName !== expectedSnapshotName,
+  );
 
   return (
     <div className="flex flex-wrap gap-2 border-t pt-4">
@@ -63,6 +72,30 @@ export function AccountActions({
       >
         Use this
       </Button>
+      {hasSnapshotMismatch ? (
+        <>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs"
+            disabled={repairSnapshotBusy}
+            onClick={() => onRepairSnapshot(account.accountId, "readd")}
+          >
+            Re-add snapshot
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs"
+            disabled={repairSnapshotBusy}
+            onClick={() => onRepairSnapshot(account.accountId, "rename")}
+          >
+            Rename snapshot
+          </Button>
+        </>
+      ) : null}
 
       {account.status === "paused" ? (
         <Button

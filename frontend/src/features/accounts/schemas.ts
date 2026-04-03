@@ -39,6 +39,8 @@ export const AccountCodexAuthSchema = z.object({
   activeSnapshotName: z.string().nullable().optional(),
   isActiveSnapshot: z.boolean().optional(),
   hasLiveSession: z.boolean().optional(),
+  expectedSnapshotName: z.string().nullable().optional(),
+  snapshotNameMatchesEmail: z.boolean().optional(),
 });
 
 export const AccountAdditionalWindowSchema = z.object({
@@ -109,6 +111,15 @@ export const AccountOpenTerminalResponseSchema = z.object({
   snapshotName: z.string(),
 });
 
+export const AccountSnapshotRepairResponseSchema = z.object({
+  status: z.string(),
+  accountId: z.string(),
+  previousSnapshotName: z.string(),
+  snapshotName: z.string(),
+  mode: z.enum(["readd", "rename"]),
+  changed: z.boolean(),
+});
+
 export const OauthStartRequestSchema = z.object({
   forceMethod: z.string().optional(),
 });
@@ -177,6 +188,7 @@ export type AccountAdditionalQuota = z.infer<typeof AccountAdditionalQuotaSchema
 export type AccountTrendsResponse = z.infer<typeof AccountTrendsResponseSchema>;
 export type AccountUseLocalResponse = z.infer<typeof AccountUseLocalResponseSchema>;
 export type AccountOpenTerminalResponse = z.infer<typeof AccountOpenTerminalResponseSchema>;
+export type AccountSnapshotRepairResponse = z.infer<typeof AccountSnapshotRepairResponseSchema>;
 export type OauthStartResponse = z.infer<typeof OauthStartResponseSchema>;
 export type OauthStatusResponse = z.infer<typeof OauthStatusResponseSchema>;
 export type ManualOauthCallbackResponse = z.infer<typeof ManualOauthCallbackResponseSchema>;

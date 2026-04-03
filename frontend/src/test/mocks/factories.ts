@@ -101,6 +101,8 @@ export function createAccountSummary(
 			snapshotName: "main",
 			activeSnapshotName: "main",
 			isActiveSnapshot: true,
+			expectedSnapshotName: "main",
+			snapshotNameMatchesEmail: true,
 		},
 		...overrides,
 	});
@@ -119,6 +121,8 @@ export function createDefaultAccounts(): AccountSummary[] {
 				snapshotName: "secondary",
 				activeSnapshotName: "main",
 				isActiveSnapshot: false,
+				expectedSnapshotName: "secondary",
+				snapshotNameMatchesEmail: true,
 			},
 			usage: {
 				primaryRemainingPercent: 45,

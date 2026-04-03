@@ -47,6 +47,8 @@ class AccountCodexAuthStatus(DashboardModel):
     active_snapshot_name: str | None = None
     is_active_snapshot: bool = False
     has_live_session: bool = False
+    expected_snapshot_name: str | None = None
+    snapshot_name_matches_email: bool = False
 
 
 class AccountAdditionalWindow(DashboardModel):
@@ -123,6 +125,15 @@ class AccountOpenTerminalResponse(DashboardModel):
     status: str
     account_id: str
     snapshot_name: str
+
+
+class AccountSnapshotRepairResponse(DashboardModel):
+    status: str
+    account_id: str
+    previous_snapshot_name: str
+    snapshot_name: str
+    mode: str
+    changed: bool
 
 
 class AccountTrendsResponse(DashboardModel):

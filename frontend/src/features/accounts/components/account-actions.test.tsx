@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AccountActions } from "@/features/accounts/components/account-actions";
@@ -15,6 +16,7 @@ function renderAccountActions(accountOverrides: Parameters<typeof createAccountS
       onResume={vi.fn()}
       onDelete={vi.fn()}
       onUseLocal={vi.fn()}
+      onRepairSnapshot={vi.fn()}
       onReauth={vi.fn()}
     />,
   );
@@ -88,5 +90,40 @@ describe("AccountActions", () => {
     });
 
     expect(screen.getByRole("button", { name: "Use this" })).toBeDisabled();
+  });
+
+  it("shows snapshot repair actions when snapshot name differs from expected email snapshot", async () => {
+    const user = userEvent.setup({ delay: null });
+    const onRepairSnapshot = vi.fn();
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "work",
+        activeSnapshotName: "work",
+        isActiveSnapshot: true,
+        expectedSnapshotName: "nagyviktordp-edixai-com",
+        snapshotNameMatchesEmail: false,
+      },
+    });
+
+    render(
+      <AccountActions
+        account={account}
+        busy={false}
+        useLocalBusy={false}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onDelete={vi.fn()}
+        onUseLocal={vi.fn()}
+        onRepairSnapshot={onRepairSnapshot}
+        onReauth={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Re-add snapshot" }));
+    await user.click(screen.getByRole("button", { name: "Rename snapshot" }));
+
+    expect(onRepairSnapshot).toHaveBeenNthCalledWith(1, account.accountId, "readd");
+    expect(onRepairSnapshot).toHaveBeenNthCalledWith(2, account.accountId, "rename");
   });
 });

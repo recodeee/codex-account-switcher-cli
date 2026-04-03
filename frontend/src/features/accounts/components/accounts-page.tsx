@@ -28,6 +28,7 @@ export function AccountsPage() {
     resumeMutation,
     deleteMutation,
     useLocalMutation,
+    repairSnapshotMutation,
   } = useAccounts();
   const oauth = useOauth();
 
@@ -84,14 +85,16 @@ export function AccountsPage() {
     pauseMutation.isPending ||
     resumeMutation.isPending ||
     deleteMutation.isPending ||
-    useLocalMutation.isPending;
+    useLocalMutation.isPending ||
+    repairSnapshotMutation.isPending;
 
   const mutationError =
     getErrorMessageOrNull(importMutation.error) ||
     getErrorMessageOrNull(pauseMutation.error) ||
     getErrorMessageOrNull(resumeMutation.error) ||
     getErrorMessageOrNull(deleteMutation.error) ||
-    getErrorMessageOrNull(useLocalMutation.error);
+    getErrorMessageOrNull(useLocalMutation.error) ||
+    getErrorMessageOrNull(repairSnapshotMutation.error);
 
   return (
     <div className="animate-fade-in-up space-y-6">
@@ -129,7 +132,11 @@ export function AccountsPage() {
             onResume={(accountId) => resumeMutation.mutate(accountId)}
             onDelete={(accountId) => deleteDialog.show(accountId)}
             onUseLocal={handleUseLocal}
+            onRepairSnapshot={(accountId, mode) =>
+              repairSnapshotMutation.mutate({ accountId, mode })
+            }
             useLocalBusy={useLocalMutation.isPending}
+            repairSnapshotBusy={repairSnapshotMutation.isPending}
             onReauth={() => oauthDialog.show()}
           />
         </div>

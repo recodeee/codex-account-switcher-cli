@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile, WebSocket
+from typing import Literal
+
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, WebSocket
 
 from app.core.audit.service import AuditService
 from app.core.auth.dependencies import set_dashboard_error_format, validate_dashboard_session
@@ -8,8 +10,10 @@ from app.core.config.settings_cache import get_settings_cache
 from app.core.exceptions import DashboardBadRequestError, DashboardConflictError, DashboardNotFoundError
 from app.dependencies import AccountsContext, get_accounts_context
 from app.modules.accounts.codex_auth_switcher import (
+    CodexAuthSnapshotConflictError,
     CodexAuthNotInstalledError,
     CodexAuthSnapshotNotFoundError,
+    CodexAuthSnapshotRepairFailedError,
     CodexAuthSwitchFailedError,
 )
 from app.modules.accounts.repository import AccountIdentityConflictError
@@ -19,6 +23,7 @@ from app.modules.accounts.schemas import (
     AccountOpenTerminalResponse,
     AccountPauseResponse,
     AccountReactivateResponse,
+    AccountSnapshotRepairResponse,
     AccountsResponse,
     AccountTrendsResponse,
     AccountUseLocalResponse,
@@ -133,6 +138,26 @@ async def use_account_locally(
         raise DashboardBadRequestError(str(exc), code="codex_auth_not_installed") from exc
     except CodexAuthSwitchFailedError as exc:
         raise DashboardBadRequestError(str(exc), code="codex_auth_switch_failed") from exc
+
+    if result is None:
+        raise DashboardNotFoundError("Account not found", code="account_not_found")
+    return result
+
+
+@router.post("/{account_id}/repair-snapshot", response_model=AccountSnapshotRepairResponse)
+async def repair_account_snapshot(
+    account_id: str,
+    mode: Literal["readd", "rename"] = Query(default="readd"),
+    context: AccountsContext = Depends(get_accounts_context),
+) -> AccountSnapshotRepairResponse:
+    try:
+        result = await context.service.repair_account_snapshot(account_id, mode=mode)
+    except CodexAuthSnapshotNotFoundError as exc:
+        raise DashboardBadRequestError(str(exc), code="codex_auth_snapshot_not_found") from exc
+    except CodexAuthSnapshotConflictError as exc:
+        raise DashboardConflictError(str(exc), code="codex_auth_snapshot_conflict") from exc
+    except CodexAuthSnapshotRepairFailedError as exc:
+        raise DashboardBadRequestError(str(exc), code="codex_auth_snapshot_repair_failed") from exc
 
     if result is None:
         raise DashboardNotFoundError("Account not found", code="account_not_found")

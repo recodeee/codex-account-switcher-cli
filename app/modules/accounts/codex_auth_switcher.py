@@ -241,12 +241,106 @@ def build_snapshot_index() -> CodexAuthSnapshotIndex:
     )
 
 
-def select_snapshot_name(snapshot_names: list[str], active_snapshot_name: str | None) -> str | None:
+def select_snapshot_name(
+    snapshot_names: list[str],
+    active_snapshot_name: str | None,
+    *,
+    email: str | None = None,
+) -> str | None:
     if not snapshot_names:
         return None
     if active_snapshot_name and active_snapshot_name in snapshot_names:
         return active_snapshot_name
+    canonical_name = _canonical_snapshot_name_from_email(email)
+    if canonical_name and canonical_name in snapshot_names:
+        return canonical_name
     return snapshot_names[0]
+
+
+def _canonical_snapshot_name_from_email(email: str | None) -> str | None:
+    if not email:
+        return None
+    local_part = email.split("@", 1)[0].strip().lower()
+    if not local_part:
+        return None
+    sanitized = "".join(
+        char if (char.isalnum() or char in {".", "_", "-"}) else "-"
+        for char in local_part
+    ).strip("._-")
+    return sanitized or None
+
+
+def repair_snapshot_for_account(
+    *,
+    account_id: str,
+    chatgpt_account_id: str | None,
+    email: str,
+    mode: Literal["readd", "rename"] = "readd",
+) -> CodexAuthSnapshotRepairResult:
+    accounts_dir = _resolve_accounts_dir()
+    snapshot_index = build_snapshot_index()
+    snapshot_names = resolve_snapshot_names_for_account(
+        snapshot_index=snapshot_index,
+        account_id=account_id,
+        chatgpt_account_id=chatgpt_account_id,
+        email=email,
+    )
+    selected_snapshot_name = select_snapshot_name(snapshot_names, snapshot_index.active_snapshot_name)
+    if selected_snapshot_name is None:
+        raise CodexAuthSnapshotNotFoundError(
+            f"No codex-auth snapshot found for {email}. Run `codex-auth save <snapshot-name>` first."
+        )
+
+    source_path = accounts_dir / f"{selected_snapshot_name}.json"
+    if not source_path.exists():
+        raise CodexAuthSnapshotNotFoundError(
+            f"Resolved snapshot {selected_snapshot_name!r} for {email} is missing on disk."
+        )
+
+    target_snapshot_name = build_email_snapshot_name(email)
+    if target_snapshot_name == selected_snapshot_name:
+        try:
+            _switch_snapshot_without_cli(target_snapshot_name)
+        except Exception as exc:
+            raise CodexAuthSnapshotRepairFailedError(
+                f"Snapshot {target_snapshot_name!r} is already aligned but pointer refresh failed: {exc}"
+            ) from exc
+        return CodexAuthSnapshotRepairResult(
+            previous_snapshot_name=selected_snapshot_name,
+            snapshot_name=target_snapshot_name,
+            mode=mode,
+            changed=False,
+        )
+
+    target_path = accounts_dir / f"{target_snapshot_name}.json"
+    if target_path.exists():
+        raise CodexAuthSnapshotConflictError(
+            f"Cannot {mode} snapshot {selected_snapshot_name!r} to {target_snapshot_name!r}: target already exists."
+        )
+
+    try:
+        if mode == "readd":
+            copy2(source_path, target_path)
+        else:
+            source_path.rename(target_path)
+    except OSError as exc:
+        raise CodexAuthSnapshotRepairFailedError(
+            f"Failed to {mode} snapshot {selected_snapshot_name!r} to {target_snapshot_name!r}: {exc}"
+        ) from exc
+
+    try:
+        _switch_snapshot_without_cli(target_snapshot_name)
+    except Exception as exc:
+        raise CodexAuthSnapshotRepairFailedError(
+            f"Snapshot {target_snapshot_name!r} {mode} succeeded but activation failed: {exc}"
+        ) from exc
+
+    return CodexAuthSnapshotRepairResult(
+        previous_snapshot_name=selected_snapshot_name,
+        snapshot_name=target_snapshot_name,
+        mode=mode,
+        changed=True,
+    )
 
 
 def _switch_snapshot_without_cli(snapshot_name: str) -> None:

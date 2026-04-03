@@ -1,0 +1,6 @@
+- [x] Add backend snapshot repair logic with `readd` and `rename` modes using email-derived canonical snapshot names.
+- [x] Add `/api/accounts/{account_id}/repair-snapshot` API endpoint and response schema.
+- [x] Extend account codex-auth payload with email-name mismatch metadata.
+- [x] Add Accounts and Dashboard UI actions to trigger snapshot `readd` or `rename` repair.
+- [x] Add/adjust backend and frontend tests for repair success, conflict handling, and UI actions.
+- [ ] Validate OpenSpec with `openspec validate --specs`.

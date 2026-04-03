@@ -11,9 +11,12 @@ import pytest
 from app.core.auth import generate_unique_account_id
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
+    CodexAuthSnapshotConflictError,
     CodexAuthNotInstalledError,
+    build_email_snapshot_name,
     CodexAuthSwitchFailedError,
     build_snapshot_index,
+    repair_snapshot_for_account,
     resolve_snapshot_names_for_account,
     select_snapshot_name,
     switch_snapshot,
@@ -154,6 +157,24 @@ def test_build_snapshot_index_falls_back_to_current_when_auth_pointer_is_invalid
 def test_select_snapshot_name_prefers_active() -> None:
     selected = select_snapshot_name(["alpha", "beta"], "beta")
     assert selected == "beta"
+
+
+def test_select_snapshot_name_prefers_email_canonical_name_when_active_missing() -> None:
+    selected = select_snapshot_name(
+        ["main", "codexina"],
+        None,
+        email="codexina@edixai.com",
+    )
+    assert selected == "codexina"
+
+
+def test_select_snapshot_name_falls_back_to_first_when_no_canonical_match() -> None:
+    selected = select_snapshot_name(
+        ["main", "runtime"],
+        None,
+        email="codexina@edixai.com",
+    )
+    assert selected == "main"
 
 
 def test_resolve_snapshot_names_for_account_supports_legacy_raw_account_ids(
@@ -361,3 +382,97 @@ def test_switch_snapshot_normalizes_absolute_pointer_after_cli_success(
     assert current_path.read_text(encoding="utf-8").strip() == "main"
     assert auth_path.resolve() == snapshot_path.resolve()
     assert not os.readlink(auth_path).startswith("/")
+
+
+def test_build_email_snapshot_name_normalizes_email() -> None:
+    assert build_email_snapshot_name("Viktor+Biz@EdiXAI.com") == "viktor-biz-edixai-com"
+
+
+def test_repair_snapshot_for_account_readd_copies_snapshot_to_email_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    email = "nagy.viktordp@gmail.com"
+    account_id = "acc-work"
+    canonical_account_id = generate_unique_account_id(account_id, email)
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    old_snapshot_path = accounts_dir / "work.json"
+    _write_auth_snapshot(old_snapshot_path, email=email, account_id=account_id)
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    result = repair_snapshot_for_account(
+        account_id=canonical_account_id,
+        chatgpt_account_id=account_id,
+        email=email,
+        mode="readd",
+    )
+
+    expected_snapshot_name = "nagy.viktordp-gmail-com"
+    expected_snapshot_path = accounts_dir / f"{expected_snapshot_name}.json"
+    assert result.mode == "readd"
+    assert result.changed is True
+    assert result.previous_snapshot_name == "work"
+    assert result.snapshot_name == expected_snapshot_name
+    assert old_snapshot_path.exists()
+    assert expected_snapshot_path.exists()
+    assert expected_snapshot_path.read_text(encoding="utf-8") == old_snapshot_path.read_text(encoding="utf-8")
+    assert (tmp_path / "current").read_text(encoding="utf-8").strip() == expected_snapshot_name
+    assert (tmp_path / "auth.json").resolve() == expected_snapshot_path.resolve()
+
+
+def test_repair_snapshot_for_account_rename_moves_snapshot_to_email_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    email = "nagyviktordp@edixai.com"
+    account_id = "acc-work"
+    canonical_account_id = generate_unique_account_id(account_id, email)
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    old_snapshot_path = accounts_dir / "work.json"
+    _write_auth_snapshot(old_snapshot_path, email=email, account_id=account_id)
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    result = repair_snapshot_for_account(
+        account_id=canonical_account_id,
+        chatgpt_account_id=account_id,
+        email=email,
+        mode="rename",
+    )
+
+    expected_snapshot_name = "nagyviktordp-edixai-com"
+    expected_snapshot_path = accounts_dir / f"{expected_snapshot_name}.json"
+    assert result.mode == "rename"
+    assert result.changed is True
+    assert result.previous_snapshot_name == "work"
+    assert result.snapshot_name == expected_snapshot_name
+    assert not old_snapshot_path.exists()
+    assert expected_snapshot_path.exists()
+    assert (tmp_path / "current").read_text(encoding="utf-8").strip() == expected_snapshot_name
+    assert (tmp_path / "auth.json").resolve() == expected_snapshot_path.resolve()
+
+
+def test_repair_snapshot_for_account_raises_on_target_conflict(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    email = "nagyviktordp@edixai.com"
+    account_id = "acc-work"
+    canonical_account_id = generate_unique_account_id(account_id, email)
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "work.json", email=email, account_id=account_id)
+    _write_auth_snapshot(accounts_dir / "nagyviktordp-edixai-com.json", email="other@example.com", account_id="acc-other")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    with pytest.raises(CodexAuthSnapshotConflictError):
+        repair_snapshot_for_account(
+            account_id=canonical_account_id,
+            chatgpt_account_id=account_id,
+            email=email,
+            mode="rename",
+        )

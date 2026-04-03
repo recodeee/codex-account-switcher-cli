@@ -6,6 +6,7 @@ import {
   getAccountTrends,
   importAccount,
   openAccountTerminal,
+  repairAccountSnapshot,
   listAccounts,
   pauseAccount,
   reactivateAccount,
@@ -120,6 +121,22 @@ export function useAccountMutations() {
     },
   });
 
+  const repairSnapshotMutation = useMutation({
+    mutationFn: (params: { accountId: string; mode: "readd" | "rename" }) =>
+      repairAccountSnapshot(params.accountId, params.mode),
+    onSuccess: (response) => {
+      const verb = response.mode === "rename" ? "Renamed" : "Re-added";
+      const detail = response.changed
+        ? `${response.previousSnapshotName} → ${response.snapshotName}`
+        : response.snapshotName;
+      toast.success(`${verb} snapshot ${detail}`);
+      invalidateAccountRelatedQueries(queryClient);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Snapshot repair failed");
+    },
+  });
+
   return {
     importMutation,
     pauseMutation,
@@ -127,6 +144,7 @@ export function useAccountMutations() {
     deleteMutation,
     useLocalMutation,
     openTerminalMutation,
+    repairSnapshotMutation,
   };
 }
 

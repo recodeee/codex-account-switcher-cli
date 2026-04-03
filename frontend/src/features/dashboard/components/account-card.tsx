@@ -38,7 +38,9 @@ type AccountAction =
   | "reauth"
   | "terminal"
   | "useLocal"
-  | "sessions";
+  | "sessions"
+  | "repairSnapshotReadd"
+  | "repairSnapshotRename";
 
 export type AccountCardProps = {
   account: AccountSummary;
@@ -65,6 +67,7 @@ function QuotaBar({
   percent,
   resetLabel,
   lastSeenLabel,
+  lastSeenUpToDate = false,
   deactivated = false,
   isLive = false,
 }: {
@@ -72,6 +75,7 @@ function QuotaBar({
   percent: number | null;
   resetLabel: string;
   lastSeenLabel?: string | null;
+  lastSeenUpToDate?: boolean;
   deactivated?: boolean;
   isLive?: boolean;
 }) {
@@ -158,10 +162,33 @@ function QuotaBar({
         </div>
       ) : null}
       {lastSeenLabel ? (
-        <div className="text-[11px] text-muted-foreground">{lastSeenLabel}</div>
+        <div
+          className={cn(
+            "text-[11px]",
+            lastSeenUpToDate
+              ? "font-medium text-emerald-600 dark:text-emerald-300"
+              : "text-muted-foreground",
+          )}
+        >
+          {lastSeenLabel}
+        </div>
       ) : null}
     </div>
   );
+}
+
+function resolveLastSeenDisplay(
+  label: string | null | undefined,
+): { label: string | null; upToDate: boolean } {
+  if (!label) {
+    return { label: null, upToDate: false };
+  }
+  const normalized = label.trim().toLowerCase();
+  const upToDate = normalized === "last seen now" || /\b0m ago$/.test(normalized);
+  if (upToDate) {
+    return { label: "Up to date", upToDate: true };
+  }
+  return { label, upToDate: false };
 }
 
 export function AccountCard({
@@ -210,11 +237,15 @@ export function AccountCard({
   const isDeactivated = status === "deactivated";
   const primaryLastSeen = formatLastUsageLabel(account.lastUsageRecordedAtPrimary ?? null);
   const secondaryLastSeen = formatLastUsageLabel(account.lastUsageRecordedAtSecondary ?? null);
-  const stalePrimaryLastSeen = !hasLiveSession ? primaryLastSeen : null;
-  const staleSecondaryLastSeen = !hasLiveSession ? secondaryLastSeen : null;
-  const deactivatedLastSeenLabel =
-    isDeactivated && (primaryLastSeen || secondaryLastSeen)
-      ? primaryLastSeen ?? secondaryLastSeen
+  const primaryLastSeenDisplay = resolveLastSeenDisplay(primaryLastSeen);
+  const secondaryLastSeenDisplay = resolveLastSeenDisplay(secondaryLastSeen);
+  const stalePrimaryLastSeen = !hasLiveSession ? primaryLastSeenDisplay : { label: null, upToDate: false };
+  const staleSecondaryLastSeen = !hasLiveSession
+    ? secondaryLastSeenDisplay
+    : { label: null, upToDate: false };
+  const deactivatedLastSeenDisplay =
+    isDeactivated && (primaryLastSeenDisplay.label || secondaryLastSeenDisplay.label)
+      ? (primaryLastSeenDisplay.label ? primaryLastSeenDisplay : secondaryLastSeenDisplay)
       : null;
 
   const title = account.displayName || account.email;
@@ -222,6 +253,11 @@ export function AccountCard({
   const planWithSnapshot = formatPlanWithSnapshot(
     account.planType,
     account.codexAuth?.snapshotName,
+  );
+  const snapshotName = account.codexAuth?.snapshotName?.trim() ?? null;
+  const expectedSnapshotName = account.codexAuth?.expectedSnapshotName?.trim() ?? null;
+  const hasSnapshotMismatch = Boolean(
+    snapshotName && expectedSnapshotName && snapshotName !== expectedSnapshotName,
   );
   const totalTokensUsed = tokensUsed ?? account.requestUsage?.totalTokens ?? 0;
   const codexSessionCount = hasLiveSession
@@ -261,14 +297,19 @@ export function AccountCard({
         </div>
         <div className="flex items-center gap-1.5">
           <StatusBadge status={status} />
-          {deactivatedLastSeenLabel ? (
+          {deactivatedLastSeenDisplay ? (
             <Badge
               variant="outline"
-              className="gap-1 border-zinc-500/25 bg-zinc-500/10 text-zinc-600 dark:text-zinc-300"
-              title={deactivatedLastSeenLabel}
+              className={cn(
+                "gap-1",
+                deactivatedLastSeenDisplay.upToDate
+                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                  : "border-zinc-500/25 bg-zinc-500/10 text-zinc-600 dark:text-zinc-300",
+              )}
+              title={deactivatedLastSeenDisplay.label ?? undefined}
             >
               <Clock className="h-3 w-3" />
-              {deactivatedLastSeenLabel}
+              {deactivatedLastSeenDisplay.label}
             </Badge>
           ) : null}
           {isWorkingNow ? (
@@ -322,7 +363,8 @@ export function AccountCard({
             label="5h"
             percent={primaryRemaining}
             resetLabel={primaryReset}
-            lastSeenLabel={stalePrimaryLastSeen}
+            lastSeenLabel={stalePrimaryLastSeen.label}
+            lastSeenUpToDate={stalePrimaryLastSeen.upToDate}
             deactivated={isDeactivated}
             isLive={hasLiveSession}
           />
@@ -331,7 +373,8 @@ export function AccountCard({
           label="Weekly"
           percent={secondaryRemaining}
           resetLabel={secondaryReset}
-          lastSeenLabel={staleSecondaryLastSeen}
+          lastSeenLabel={staleSecondaryLastSeen.label}
+          lastSeenUpToDate={staleSecondaryLastSeen.upToDate}
           isLive={hasLiveSession}
         />
       </div>
@@ -354,6 +397,28 @@ export function AccountCard({
         >
           Use this account
         </Button>
+        {hasSnapshotMismatch ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => onAction?.(account, "repairSnapshotReadd")}
+            >
+              Re-add snapshot
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => onAction?.(account, "repairSnapshotRename")}
+            >
+              Rename snapshot
+            </Button>
+          </>
+        ) : null}
         <Button
           type="button"
           size="sm"

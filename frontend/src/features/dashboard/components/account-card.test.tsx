@@ -231,6 +231,29 @@ describe("AccountCard", () => {
     expect(onAction).toHaveBeenCalledWith(account, "sessions");
   });
 
+  it("shows snapshot repair actions for mismatched snapshot names", async () => {
+    const user = userEvent.setup({ delay: null });
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "work",
+        activeSnapshotName: "work",
+        isActiveSnapshot: true,
+        expectedSnapshotName: "nagyviktordp-edixai-com",
+        snapshotNameMatchesEmail: false,
+      },
+    });
+    const onAction = vi.fn();
+
+    render(<AccountCard account={account} onAction={onAction} />);
+
+    await user.click(screen.getByRole("button", { name: "Re-add snapshot" }));
+    await user.click(screen.getByRole("button", { name: "Rename snapshot" }));
+
+    expect(onAction).toHaveBeenNthCalledWith(1, account, "repairSnapshotReadd");
+    expect(onAction).toHaveBeenNthCalledWith(2, account, "repairSnapshotRename");
+  });
+
   it("shows working indicator when account snapshot is active", () => {
     const account = createAccountSummary({
       codexAuth: {
@@ -402,6 +425,30 @@ describe("AccountCard", () => {
     vi.useRealTimers();
   });
 
+  it("renders up-to-date in green when the last-seen timestamp is within the current minute", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: "2026-01-01T00:00:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-31T23:55:00.000Z",
+    });
+
+    const { container } = render(<AccountCard account={account} />);
+
+    const upToDate = screen.getByText("Up to date");
+    expect(upToDate).toBeInTheDocument();
+    expect(upToDate).toHaveClass("text-emerald-600");
+    expect(container.textContent).not.toContain("last seen 0m ago");
+    vi.useRealTimers();
+  });
+
   it("shows last-seen usage labels for deactivated accounts", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
@@ -421,6 +468,29 @@ describe("AccountCard", () => {
 
     expect(screen.getAllByText("last seen 30m ago").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("last seen 1h ago").length).toBeGreaterThanOrEqual(1);
+    vi.useRealTimers();
+  });
+
+  it("uses a green up-to-date badge for deactivated accounts when usage was seen this minute", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const account = createAccountSummary({
+      status: "deactivated",
+      codexAuth: {
+        hasSnapshot: false,
+        snapshotName: null,
+        activeSnapshotName: null,
+        isActiveSnapshot: false,
+      },
+      lastUsageRecordedAtPrimary: "2026-01-01T00:00:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-31T23:00:00.000Z",
+    });
+
+    render(<AccountCard account={account} />);
+
+    const upToDateBadges = screen.getAllByText("Up to date");
+    expect(upToDateBadges.length).toBeGreaterThanOrEqual(1);
+    expect(upToDateBadges[0]).toHaveClass("text-emerald-600");
     vi.useRealTimers();
   });
 

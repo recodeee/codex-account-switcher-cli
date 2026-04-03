@@ -1,4 +1,4 @@
-- [ ] Update request-log live fallback merger to estimate fallback USD/EUR values from available request-log cost density.
-- [ ] Update Request Logs usage cards/donuts to render fallback EUR estimates instead of `N/A` placeholders.
-- [ ] Add/adjust frontend tests for fallback cost estimation and fallback EUR rendering.
-- [ ] Validate specs with `openspec validate --specs`.
+- [x] Update request-log live fallback merger to estimate fallback USD/EUR values from available request-log cost density.
+- [x] Update Request Logs usage cards/donuts to render fallback EUR estimates instead of `N/A` placeholders.
+- [x] Add/adjust frontend tests for fallback cost estimation and fallback EUR rendering.
+- [x] Validate specs with `openspec validate --specs`.
