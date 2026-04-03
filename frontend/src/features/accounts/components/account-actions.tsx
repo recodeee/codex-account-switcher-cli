@@ -27,19 +27,23 @@ export function AccountActions({
   onReauth,
 }: AccountActionsProps) {
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
+  const hasLiveSession = account.codexAuth?.hasLiveSession ?? false;
   const effectiveStatus = resolveEffectiveAccountStatus({
     status: account.status,
     isActiveSnapshot,
+    hasLiveSession,
   });
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: account.usage?.primaryRemainingPercent,
     isActiveSnapshot,
+    hasLiveSession,
   });
   const disabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: account.usage?.primaryRemainingPercent,
     isActiveSnapshot,
+    hasLiveSession,
   });
 
   return (

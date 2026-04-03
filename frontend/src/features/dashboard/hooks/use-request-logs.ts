@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 
 import {
   getRequestLogOptions,
+  getRequestLogUsageSummary,
   getRequestLogs,
   type RequestLogFacetFilters,
   type RequestLogsListFilters,
@@ -123,6 +124,14 @@ export function useRequestLogs() {
     refetchOnWindowFocus: true,
   });
 
+  const usageSummaryQuery = useQuery({
+    queryKey: ["dashboard", "request-log-usage-summary"],
+    queryFn: () => getRequestLogUsageSummary(),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+
   const updateFilters = (patch: Partial<FilterState>) => {
     const nextState: FilterState = {
       ...filters,
@@ -137,6 +146,7 @@ export function useRequestLogs() {
     facetFilters,
     logsQuery,
     optionsQuery,
+    usageSummaryQuery,
     updateFilters,
   };
 }

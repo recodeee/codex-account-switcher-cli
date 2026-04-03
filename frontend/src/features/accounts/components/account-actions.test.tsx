@@ -58,6 +58,26 @@ describe("AccountActions", () => {
     expect(screen.queryByRole("button", { name: "Re-authenticate" })).not.toBeInTheDocument();
   });
 
+  it("treats deactivated accounts with live sessions as active", () => {
+    renderAccountActions({
+      status: "deactivated",
+      usage: {
+        primaryRemainingPercent: 44,
+        secondaryRemainingPercent: 73,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "secondary",
+        activeSnapshotName: "main",
+        isActiveSnapshot: false,
+        hasLiveSession: true,
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Re-authenticate" })).not.toBeInTheDocument();
+  });
+
   it("disables Use this when 5h quota is unavailable", () => {
     renderAccountActions({
       status: "active",

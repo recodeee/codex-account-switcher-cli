@@ -24,6 +24,22 @@ from app.core.config.settings import BASE_DIR
 DEFAULT_TERMINAL_COLS = 120
 DEFAULT_TERMINAL_ROWS = 36
 _DEFAULT_CHUNK_SIZE = 4096
+_LINUX_TERMINAL_SEARCH_DIRS: tuple[str, ...] = (
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/local/sbin",
+    "/usr/sbin",
+    "/sbin",
+    "/snap/bin",
+    "/var/lib/flatpak/exports/bin",
+)
+_LINUX_DESKTOP_ENTRY_FALLBACKS: tuple[str, ...] = (
+    "org.gnome.Console",
+    "org.gnome.Terminal",
+    "org.kde.konsole",
+    "xfce4-terminal",
+)
 
 
 @dataclass(slots=True)
@@ -90,30 +106,77 @@ def _open_linux_terminal(shell: str, command: str) -> None:
     candidates: list[list[str]] = [
         ["x-terminal-emulator", "-e", shell, "-lc", command],
         ["gnome-terminal", "--", shell, "-lc", command],
+        ["gnome-terminal.wrapper", "--", shell, "-lc", command],
         ["kgx", "--", shell, "-lc", command],
         ["gnome-console", "--", shell, "-lc", command],
         ["ptyxis", "--", shell, "-lc", command],
         ["xfce4-terminal", "-e", f"{shell} -lc {shlex.quote(command)}"],
         ["tilix", "-e", f"{shell} -lc {shlex.quote(command)}"],
         ["konsole", "-e", shell, "-lc", command],
+        ["mate-terminal", "-e", f"{shell} -lc {shlex.quote(command)}"],
+        ["terminator", "-x", shell, "-lc", command],
+        ["lxterminal", "-e", f"{shell} -lc {shlex.quote(command)}"],
+        ["qterminal", "-e", f"{shell} -lc {shlex.quote(command)}"],
         ["alacritty", "-e", shell, "-lc", command],
         ["kitty", shell, "-lc", command],
         ["wezterm", "start", "--", shell, "-lc", command],
+        ["foot", shell, "-lc", command],
+        ["footclient", shell, "-lc", command],
         ["xterm", "-e", shell, "-lc", command],
     ]
 
     errors: list[str] = []
     for argv in candidates:
-        if shutil.which(argv[0]) is None:
+        executable = _resolve_executable(argv[0])
+        if executable is None:
             continue
+        launch_argv = [executable, *argv[1:]]
         try:
-            _spawn_detached(argv)
+            _spawn_detached(launch_argv)
             return
         except Exception as exc:  # pragma: no cover - platform specific
             errors.append(f"{argv[0]}: {exc}")
 
+    gtk_launch = _resolve_executable("gtk-launch")
+    if gtk_launch is not None:
+        for desktop_entry in _LINUX_DESKTOP_ENTRY_FALLBACKS:
+            try:
+                _spawn_detached([gtk_launch, desktop_entry])
+                return
+            except Exception as exc:  # pragma: no cover - platform specific
+                errors.append(f"gtk-launch {desktop_entry}: {exc}")
+
     detail = "; ".join(errors) if errors else "No supported terminal app found in PATH."
+    if _is_containerized_runtime():
+        detail += (
+            " Detected containerized runtime; host terminal apps may be unavailable in this environment."
+        )
     raise TerminalLaunchError(f"Failed to open host terminal. {detail}")
+
+
+def _resolve_executable(name: str) -> str | None:
+    if not name:
+        return None
+    if os.path.isabs(name):
+        return name if os.path.exists(name) and os.access(name, os.X_OK) else None
+
+    resolved = shutil.which(name)
+    if resolved:
+        return resolved
+
+    home_local_bin = str(Path.home() / ".local" / "bin")
+    for directory in (*_LINUX_TERMINAL_SEARCH_DIRS, home_local_bin):
+        candidate = Path(directory) / name
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def _is_containerized_runtime() -> bool:
+    if Path("/.dockerenv").exists():
+        return True
+    container_hint = os.environ.get("container", "").strip().lower()
+    return bool(container_hint and container_hint != "0")
 
 
 def _open_macos_terminal(command: str) -> None:

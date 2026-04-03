@@ -8,6 +8,7 @@ import { useAccountMutations } from "@/features/accounts/hooks/use-accounts";
 import { AccountCards } from "@/features/dashboard/components/account-cards";
 import { DashboardSkeleton } from "@/features/dashboard/components/dashboard-skeleton";
 import { RequestFilters } from "@/features/dashboard/components/filters/request-filters";
+import { RequestLogUsageDonuts } from "@/features/dashboard/components/request-log-usage-donuts";
 import { RecentRequestsTable } from "@/features/dashboard/components/recent-requests-table";
 import { UsageDonuts } from "@/features/dashboard/components/usage-donuts";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
@@ -26,10 +27,10 @@ export function DashboardPage() {
   const queryClient = useQueryClient();
   const isDark = useThemeStore((s) => s.theme === "dark");
   const dashboardQuery = useDashboard();
-  const { filters, logsQuery, optionsQuery, updateFilters } = useRequestLogs();
+  const { filters, logsQuery, optionsQuery, usageSummaryQuery, updateFilters } = useRequestLogs();
   const { resumeMutation, useLocalMutation, openTerminalMutation } = useAccountMutations();
 
-  const isRefreshing = dashboardQuery.isFetching || logsQuery.isFetching;
+  const isRefreshing = dashboardQuery.isFetching || logsQuery.isFetching || usageSummaryQuery.isFetching;
 
   const handleRefresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -116,6 +117,7 @@ export function DashboardPage() {
     (dashboardQuery.error instanceof Error && dashboardQuery.error.message) ||
     (logsQuery.error instanceof Error && logsQuery.error.message) ||
     (optionsQuery.error instanceof Error && optionsQuery.error.message) ||
+    (usageSummaryQuery.error instanceof Error && usageSummaryQuery.error.message) ||
     null;
 
   return (
@@ -173,6 +175,15 @@ export function DashboardPage() {
               <h2 className="text-[13px] font-medium uppercase tracking-wider text-muted-foreground">Request Logs</h2>
               <div className="h-px flex-1 bg-border" />
             </div>
+            <RequestLogUsageDonuts
+              accounts={overview?.accounts ?? []}
+              usageSummary={
+                usageSummaryQuery.data ?? {
+                  last5h: { totalTokens: 0, accounts: [] },
+                  last7d: { totalTokens: 0, accounts: [] },
+                }
+              }
+            />
             <RequestFilters
               filters={filters}
               accountOptions={accountOptions}

@@ -8,8 +8,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from sqlalchemy import text
 
 from app.core.auth import generate_unique_account_id
+from app.db.session import SessionLocal
 
 pytestmark = pytest.mark.integration
 
@@ -173,8 +175,59 @@ async def test_accounts_list_sets_has_live_session_from_runtime_telemetry(
     assert len(accounts) == 1
     account = accounts[0]
     assert account["codexAuth"]["hasLiveSession"] is True
+    assert account["codexSessionCount"] == 1
     assert account["usage"]["primaryRemainingPercent"] == pytest.approx(75.0)
     assert account["usage"]["secondaryRemainingPercent"] == pytest.approx(55.0)
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_sets_has_live_session_from_sticky_sessions(async_client):
+    email = "sticky@example.com"
+    raw_account_id = "acc_sticky"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": raw_account_id,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    now = datetime.now(timezone.utc)
+    async with SessionLocal() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO sticky_sessions (key, account_id, kind, created_at, updated_at)
+                VALUES (:key, :account_id, :kind, :timestamp, :timestamp)
+                """
+            ),
+            {
+                "key": "sticky-session-1",
+                "account_id": expected_account_id,
+                "kind": "codex_session",
+                "timestamp": now - timedelta(minutes=1),
+            },
+        )
+        await session.commit()
+
+    list_response = await async_client.get("/api/accounts")
+    assert list_response.status_code == 200
+    account = next(
+        entry for entry in list_response.json()["accounts"] if entry["accountId"] == expected_account_id
+    )
+    assert account["codexSessionCount"] == 1
+    assert account["codexAuth"]["hasLiveSession"] is True
 
 
 @pytest.mark.asyncio

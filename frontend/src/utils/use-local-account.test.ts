@@ -17,6 +17,13 @@ describe("use-local account gating", () => {
         isActiveSnapshot: true,
       }),
     ).toBe(true);
+    expect(
+      canUseLocalAccount({
+        status: "deactivated",
+        primaryRemainingPercent: 44,
+        hasLiveSession: true,
+      }),
+    ).toBe(true);
     expect(canUseLocalAccount({ status: "active", primaryRemainingPercent: 0 })).toBe(false);
     expect(canUseLocalAccount({ status: "active", primaryRemainingPercent: null })).toBe(false);
   });
@@ -30,6 +37,13 @@ describe("use-local account gating", () => {
         status: "deactivated",
         primaryRemainingPercent: 44,
         isActiveSnapshot: true,
+      }),
+    ).toBeNull();
+    expect(
+      getUseLocalAccountDisabledReason({
+        status: "deactivated",
+        primaryRemainingPercent: 44,
+        hasLiveSession: true,
       }),
     ).toBeNull();
     expect(

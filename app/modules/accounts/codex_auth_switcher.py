@@ -101,9 +101,17 @@ def _snapshot_account_id(snapshot_path: Path) -> str | None:
 
 
 def _resolve_active_snapshot_name(accounts_dir: Path) -> str | None:
-    registry_active = _resolve_active_snapshot_name_from_registry(accounts_dir)
-    if registry_active:
-        return registry_active
+    active_auth_path = _resolve_active_auth_path()
+    if active_auth_path.exists() and active_auth_path.is_symlink():
+        try:
+            target = active_auth_path.resolve()
+        except OSError:
+            target = None
+
+        if target is not None and target.suffix == ".json":
+            resolved = _validate_snapshot_name(target.stem, accounts_dir=accounts_dir)
+            if resolved:
+                return resolved
 
     current_path = _resolve_current_path()
     if current_path.exists() and current_path.is_file():
@@ -115,17 +123,9 @@ def _resolve_active_snapshot_name(accounts_dir: Path) -> str | None:
         if resolved:
             return resolved
 
-    active_auth_path = _resolve_active_auth_path()
-    if active_auth_path.exists() and active_auth_path.is_symlink():
-        try:
-            target = active_auth_path.resolve()
-        except OSError:
-            return None
-
-        if target.suffix == ".json":
-            resolved = _validate_snapshot_name(target.stem, accounts_dir=accounts_dir)
-            if resolved:
-                return resolved
+    registry_active = _resolve_active_snapshot_name_from_registry(accounts_dir)
+    if registry_active:
+        return registry_active
 
     return None
 

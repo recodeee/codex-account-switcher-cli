@@ -101,11 +101,13 @@ export function AccountListItem({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
     isActiveSnapshot,
+    hasLiveSession,
   });
   const disabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
     isActiveSnapshot,
+    hasLiveSession,
   });
 
   return (

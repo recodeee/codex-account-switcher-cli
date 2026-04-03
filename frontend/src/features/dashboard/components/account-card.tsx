@@ -114,11 +114,13 @@ export function AccountCard({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
     isActiveSnapshot,
+    hasLiveSession,
   });
   const useLocalDisabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
     isActiveSnapshot,
+    hasLiveSession,
   });
 
   const primaryReset = formatQuotaResetLabel(account.resetAtPrimary ?? null);

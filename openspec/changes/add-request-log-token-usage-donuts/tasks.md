@@ -1,0 +1,7 @@
+- [x] Add request-log usage-summary response schemas and endpoint under `/api/request-logs/usage-summary`.
+- [x] Implement repository/service aggregation for rolling 5h and rolling 7d consumed tokens grouped by account.
+- [x] Add backend integration test coverage for usage-summary totals and per-account buckets.
+- [x] Add frontend schemas/api/hook support for request-log usage summary.
+- [x] Add Request Logs consumed-token donut UI block (5h + weekly) with per-account legends.
+- [x] Add frontend unit/integration test coverage for the new usage-summary UI/data flow.
+- [x] Validate specs with `openspec validate --specs`.

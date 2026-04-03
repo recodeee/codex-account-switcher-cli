@@ -23,6 +23,7 @@ export type DonutChartProps = {
   total: number;
   title: string;
   subtitle?: string;
+  centerLabel?: string;
   safeLine?: { safePercent: number; riskLevel: "safe" | "warning" | "danger" | "critical" } | null;
 };
 
@@ -75,7 +76,7 @@ const PIE_CY = 71;
 const INNER_R = 53;
 const OUTER_R = 71;
 
-export function DonutChart({ items, total, title, subtitle, safeLine }: DonutChartProps) {
+export function DonutChart({ items, total, title, subtitle, centerLabel = "Remaining", safeLine }: DonutChartProps) {
   const isDark = useThemeStore((s) => s.theme === "dark");
   const blurred = usePrivacyStore((s) => s.blurred);
   const reducedMotion = useReducedMotion();
@@ -151,7 +152,7 @@ export function DonutChart({ items, total, title, subtitle, safeLine }: DonutCha
           ) : null}
           <div className="absolute inset-[18px] flex items-center justify-center rounded-full text-center pointer-events-none">
             <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Remaining</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{centerLabel}</p>
               <p className="text-base font-semibold tabular-nums">{formatCompactNumber(safeTotal)}</p>
             </div>
           </div>

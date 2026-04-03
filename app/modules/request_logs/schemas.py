@@ -43,3 +43,18 @@ class RequestLogFilterOptionsResponse(DashboardModel):
     account_ids: list[str] = Field(default_factory=list)
     model_options: list[RequestLogModelOption] = Field(default_factory=list)
     statuses: list[str] = Field(default_factory=list)
+
+
+class RequestLogUsageSummaryAccountTokens(DashboardModel):
+    account_id: str | None = None
+    tokens: int
+
+
+class RequestLogUsageSummaryWindow(DashboardModel):
+    total_tokens: int
+    accounts: list[RequestLogUsageSummaryAccountTokens] = Field(default_factory=list)
+
+
+class RequestLogUsageSummaryResponse(DashboardModel):
+    last_5h: RequestLogUsageSummaryWindow = Field(alias="last5h")
+    last_7d: RequestLogUsageSummaryWindow = Field(alias="last7d")

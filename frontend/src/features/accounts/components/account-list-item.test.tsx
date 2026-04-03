@@ -229,4 +229,34 @@ describe("AccountListItem", () => {
     expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
     expect(screen.queryByText("Deactivated")).not.toBeInTheDocument();
   });
+
+  it("treats deactivated accounts with live sessions as active in list rows", () => {
+    const account = createAccountSummary({
+      status: "deactivated",
+      usage: {
+        primaryRemainingPercent: 44,
+        secondaryRemainingPercent: 73,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "secondary",
+        activeSnapshotName: "main",
+        isActiveSnapshot: false,
+        hasLiveSession: true,
+      },
+    });
+
+    render(
+      <AccountListItem
+        account={account}
+        selected={false}
+        onSelect={vi.fn()}
+        onUseLocal={vi.fn()}
+        useLocalBusy={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
+    expect(screen.queryByText("Deactivated")).not.toBeInTheDocument();
+  });
 });

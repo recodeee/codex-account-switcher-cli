@@ -51,6 +51,8 @@ describe("dashboard flow integration", () => {
 
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(await screen.findByText("Request Logs")).toBeInTheDocument();
+    expect(await screen.findByText("5h Consumed")).toBeInTheDocument();
+    expect(await screen.findByText("Weekly Consumed")).toBeInTheDocument();
     expect(screen.queryByText("Requests (7d)")).not.toBeInTheDocument();
 
     await waitFor(() => {

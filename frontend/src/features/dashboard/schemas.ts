@@ -118,6 +118,21 @@ export const RequestLogFilterOptionsSchema = z.object({
   statuses: z.array(z.string()),
 });
 
+export const RequestLogUsageSummaryAccountSchema = z.object({
+  accountId: z.string().nullable(),
+  tokens: z.number().int().nonnegative(),
+});
+
+export const RequestLogUsageSummaryWindowSchema = z.object({
+  totalTokens: z.number().int().nonnegative(),
+  accounts: z.array(RequestLogUsageSummaryAccountSchema),
+});
+
+export const RequestLogUsageSummarySchema = z.object({
+  last5h: RequestLogUsageSummaryWindowSchema,
+  last7d: RequestLogUsageSummaryWindowSchema,
+});
+
 export const FilterStateSchema = z.object({
   search: z.string(),
   timeframe: z.enum(["all", "1h", "24h", "7d"]),
@@ -136,5 +151,6 @@ export type UsageWindow = z.infer<typeof UsageWindowSchema>;
 export type RequestLog = z.infer<typeof RequestLogSchema>;
 export type RequestLogsResponse = z.infer<typeof RequestLogsResponseSchema>;
 export type RequestLogFilterOptions = z.infer<typeof RequestLogFilterOptionsSchema>;
+export type RequestLogUsageSummary = z.infer<typeof RequestLogUsageSummarySchema>;
 export type FilterState = z.infer<typeof FilterStateSchema>;
 export type Depletion = z.infer<typeof DepletionSchema>;

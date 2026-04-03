@@ -31,11 +31,13 @@ import type {
 	DashboardOverview,
 	RequestLog,
 	RequestLogFilterOptions,
+	RequestLogUsageSummary,
 	RequestLogsResponse,
 } from "@/features/dashboard/schemas";
 import {
 	DashboardOverviewSchema,
 	RequestLogFilterOptionsSchema,
+	RequestLogUsageSummarySchema,
 	RequestLogSchema,
 	RequestLogsResponseSchema,
 } from "@/features/dashboard/schemas";
@@ -53,6 +55,7 @@ export type {
 	DashboardOverview,
 	RequestLogsResponse,
 	RequestLogFilterOptions,
+	RequestLogUsageSummary,
 	DashboardSettings,
 	OauthStartResponse,
 	OauthStatusResponse,
@@ -296,6 +299,28 @@ export function createRequestLogFilterOptions(
 			{ model: "gpt-5.1", reasoningEffort: "high" },
 		],
 		statuses: ["ok", "rate_limit", "quota"],
+		...overrides,
+	});
+}
+
+export function createRequestLogUsageSummary(
+	overrides: Partial<RequestLogUsageSummary> = {},
+): RequestLogUsageSummary {
+	return RequestLogUsageSummarySchema.parse({
+		last5h: {
+			totalTokens: 1800,
+			accounts: [
+				{ accountId: "acc_primary", tokens: 1200 },
+				{ accountId: "acc_secondary", tokens: 600 },
+			],
+		},
+		last7d: {
+			totalTokens: 45_000,
+			accounts: [
+				{ accountId: "acc_primary", tokens: 28_000 },
+				{ accountId: "acc_secondary", tokens: 17_000 },
+			],
+		},
 		...overrides,
 	});
 }

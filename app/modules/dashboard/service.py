@@ -345,8 +345,6 @@ def _apply_local_live_usage_overrides(
     codex_session_counts_by_account: dict[str, int],
 ) -> None:
     live_usage_by_snapshot = read_local_codex_live_usage_by_snapshot()
-    if not live_usage_by_snapshot:
-        return
 
     for account in accounts:
         codex_auth_status = codex_auth_by_account.get(account.id)
@@ -359,7 +357,10 @@ def _apply_local_live_usage_overrides(
             selected_snapshot_name=codex_auth_status.snapshot_name,
             live_usage_by_snapshot=live_usage_by_snapshot,
         )
-        codex_auth_status.has_live_session = bool(live_usage and live_usage.active_session_count > 0)
+        has_tracked_sessions = codex_session_counts_by_account.get(account.id, 0) > 0
+        codex_auth_status.has_live_session = has_tracked_sessions or bool(
+            live_usage and live_usage.active_session_count > 0
+        )
         if live_usage is None:
             continue
 

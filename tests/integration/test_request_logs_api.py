@@ -94,3 +94,87 @@ async def test_request_logs_api_returns_recent(async_client, db_setup):
     assert older["tokens"] == 300
     assert older["cachedInputTokens"] is None
     assert older["transport"] == "http"
+
+
+@pytest.mark.asyncio
+async def test_request_logs_usage_summary_returns_rolling_5h_and_7d_totals(async_client, db_setup):
+    now = utcnow()
+    async with SessionLocal() as session:
+        accounts_repo = AccountsRepository(session)
+        logs_repo = RequestLogsRepository(session)
+        await accounts_repo.upsert(_make_account("acc_usage_a", "usage-a@example.com"))
+        await accounts_repo.upsert(_make_account("acc_usage_b", "usage-b@example.com"))
+
+        await logs_repo.add_log(
+            account_id="acc_usage_a",
+            request_id="req_usage_1",
+            model="gpt-5.1",
+            input_tokens=100,
+            output_tokens=50,
+            latency_ms=100,
+            status="success",
+            error_code=None,
+            requested_at=now - timedelta(hours=2),
+        )
+        await logs_repo.add_log(
+            account_id="acc_usage_a",
+            request_id="req_usage_2",
+            model="gpt-5.1",
+            input_tokens=20,
+            output_tokens=None,
+            reasoning_tokens=40,
+            latency_ms=100,
+            status="success",
+            error_code=None,
+            requested_at=now - timedelta(hours=6),
+        )
+        await logs_repo.add_log(
+            account_id="acc_usage_b",
+            request_id="req_usage_3",
+            model="gpt-5.1",
+            input_tokens=30,
+            output_tokens=10,
+            latency_ms=100,
+            status="success",
+            error_code=None,
+            requested_at=now - timedelta(hours=1),
+        )
+        await logs_repo.add_log(
+            account_id=None,
+            request_id="req_usage_4",
+            model="gpt-5.1",
+            input_tokens=5,
+            output_tokens=5,
+            latency_ms=100,
+            status="success",
+            error_code=None,
+            requested_at=now - timedelta(minutes=30),
+        )
+        await logs_repo.add_log(
+            account_id="acc_usage_b",
+            request_id="req_usage_5",
+            model="gpt-5.1",
+            input_tokens=1000,
+            output_tokens=1000,
+            latency_ms=100,
+            status="success",
+            error_code=None,
+            requested_at=now - timedelta(days=8),
+        )
+
+    response = await async_client.get("/api/request-logs/usage-summary")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["last5h"]["totalTokens"] == 200
+    assert payload["last7d"]["totalTokens"] == 260
+
+    last5h_accounts = payload["last5h"]["accounts"]
+    assert last5h_accounts[0] == {"accountId": "acc_usage_a", "tokens": 150}
+    assert last5h_accounts[1] == {"accountId": "acc_usage_b", "tokens": 40}
+    assert last5h_accounts[2] == {"accountId": None, "tokens": 10}
+
+    last7d_accounts = payload["last7d"]["accounts"]
+    assert last7d_accounts[0] == {"accountId": "acc_usage_a", "tokens": 210}
+    assert last7d_accounts[1] == {"accountId": "acc_usage_b", "tokens": 40}
+    assert last7d_accounts[2] == {"accountId": None, "tokens": 10}

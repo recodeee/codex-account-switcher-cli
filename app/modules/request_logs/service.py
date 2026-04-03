@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from app.core.utils.time import utcnow
 from app.modules.request_logs.mappers import (
     QUOTA_CODES,
     RATE_LIMIT_CODES,
     normalize_log_status,
     to_request_log_entry,
 )
-from app.modules.request_logs.repository import RequestLogsRepository
+from app.modules.request_logs.repository import RequestLogTokenUsageRow, RequestLogsRepository
 from app.modules.request_logs.schemas import RequestLogEntry
 
 
@@ -39,6 +40,24 @@ class RequestLogsPage:
     requests: list[RequestLogEntry]
     total: int
     has_more: bool
+
+
+@dataclass(frozen=True, slots=True)
+class RequestLogUsageAccountTokens:
+    account_id: str | None
+    tokens: int
+
+
+@dataclass(frozen=True, slots=True)
+class RequestLogUsageSummaryWindow:
+    total_tokens: int
+    accounts: list[RequestLogUsageAccountTokens]
+
+
+@dataclass(frozen=True, slots=True)
+class RequestLogUsageSummary:
+    last_5h: RequestLogUsageSummaryWindow
+    last_7d: RequestLogUsageSummaryWindow
 
 
 class RequestLogsService:
@@ -121,6 +140,17 @@ class RequestLogsService:
             statuses=_normalize_status_values(status_values),
         )
 
+    async def get_usage_summary(self, *, now: datetime | None = None) -> RequestLogUsageSummary:
+        effective_now = now or utcnow()
+        since_5h = effective_now - timedelta(hours=5)
+        since_7d = effective_now - timedelta(days=7)
+        rows = await self._repo.aggregate_token_usage_by_account(since_7d=since_7d, since_5h=since_5h)
+
+        return RequestLogUsageSummary(
+            last_5h=_build_usage_window(rows, window="5h"),
+            last_7d=_build_usage_window(rows, window="7d"),
+        )
+
 
 def _map_status_filter(status: list[str] | None) -> RequestLogStatusFilter:
     if not status:
@@ -162,3 +192,22 @@ def _normalize_status_values(values: list[tuple[str, str | None]]) -> list[str]:
     normalized = {normalize_log_status(status, error_code) for status, error_code in values}
     ordered = ["ok", "rate_limit", "quota", "error"]
     return [status for status in ordered if status in normalized]
+
+
+def _build_usage_window(
+    rows: list[RequestLogTokenUsageRow],
+    *,
+    window: str,
+) -> RequestLogUsageSummaryWindow:
+    accounts = [
+        RequestLogUsageAccountTokens(
+            account_id=row.account_id,
+            tokens=max(0, row.tokens_5h if window == "5h" else row.tokens_7d),
+        )
+        for row in rows
+    ]
+    accounts.sort(key=lambda row: (-row.tokens, row.account_id is None, row.account_id or ""))
+    return RequestLogUsageSummaryWindow(
+        total_tokens=sum(item.tokens for item in accounts),
+        accounts=accounts,
+    )

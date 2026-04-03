@@ -145,6 +145,7 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
     assert payload["accounts"][0]["requestUsage"] is not None
     assert payload["accounts"][0]["requestUsage"]["totalTokens"] == 150
     assert payload["accounts"][0]["codexSessionCount"] == 1
+    assert payload["accounts"][0]["codexAuth"]["hasLiveSession"] is True
     assert payload["summary"]["primaryWindow"]["capacityCredits"] == pytest.approx(225.0)
     assert payload["windows"]["primary"]["windowKey"] == "primary"
     assert payload["windows"]["secondary"]["windowKey"] == "secondary"

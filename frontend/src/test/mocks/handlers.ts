@@ -21,6 +21,7 @@ import {
 	createOauthStartResponse,
 	createOauthStatusResponse,
 	createRequestLogFilterOptions,
+	createRequestLogUsageSummary,
 	createRequestLogsResponse,
 	type DashboardAuthSession,
 	type DashboardSettings,
@@ -332,6 +333,44 @@ export const handlers = [
 			includeStatuses: false,
 		});
 		return HttpResponse.json(requestLogOptionsFromEntries(filtered));
+	}),
+
+	http.get("/api/request-logs/usage-summary", ({ request }) => {
+		const url = new URL(request.url);
+		const now = new Date();
+		const since5h = now.getTime() - 5 * 60 * 60 * 1000;
+		const since7d = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+		const filtered = filterRequestLogs(url, { includeStatuses: false });
+
+		const sumByAccount = (
+			entries: RequestLogEntry[],
+		): { totalTokens: number; accounts: Array<{ accountId: string | null; tokens: number }> } => {
+			const byAccount = new Map<string | null, number>();
+			for (const entry of entries) {
+				const tokens = entry.tokens ?? 0;
+				const key = entry.accountId ?? null;
+				byAccount.set(key, (byAccount.get(key) ?? 0) + tokens);
+			}
+
+			const accounts = [...byAccount.entries()]
+				.map(([accountId, tokens]) => ({ accountId, tokens }))
+				.sort((left, right) => right.tokens - left.tokens);
+
+			return {
+				totalTokens: accounts.reduce((total, row) => total + row.tokens, 0),
+				accounts,
+			};
+		};
+
+		const last5hEntries = filtered.filter((entry) => new Date(entry.requestedAt).getTime() >= since5h);
+		const last7dEntries = filtered.filter((entry) => new Date(entry.requestedAt).getTime() >= since7d);
+
+		return HttpResponse.json(
+			createRequestLogUsageSummary({
+				last5h: sumByAccount(last5hEntries),
+				last7d: sumByAccount(last7dEntries),
+			}),
+		);
 	}),
 
 	http.get("/api/accounts", () => {

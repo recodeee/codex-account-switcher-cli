@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import cast as typing_cast
 
 import anyio
-from sqlalchemy import Integer, String, and_, cast, func, literal_column, or_, select
+from sqlalchemy import Integer, String, and_, case, cast, func, literal_column, or_, select
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,13 @@ class _RequestLogFilters:
     needs_related_search_joins: bool
 
 
+@dataclass(frozen=True, slots=True)
+class RequestLogTokenUsageRow:
+    account_id: str | None
+    tokens_5h: int
+    tokens_7d: int
+
+
 class RequestLogsRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -29,6 +36,38 @@ class RequestLogsRepository:
     async def list_since(self, since: datetime) -> list[RequestLog]:
         result = await self._session.execute(select(RequestLog).where(RequestLog.requested_at >= since))
         return list(result.scalars().all())
+
+    async def aggregate_token_usage_by_account(
+        self,
+        *,
+        since_7d: datetime,
+        since_5h: datetime,
+    ) -> list[RequestLogTokenUsageRow]:
+        output_tokens_expr = func.coalesce(RequestLog.output_tokens, RequestLog.reasoning_tokens, 0)
+        token_expr = func.coalesce(RequestLog.input_tokens, 0) + output_tokens_expr
+
+        stmt = (
+            select(
+                RequestLog.account_id,
+                func.coalesce(
+                    func.sum(case((RequestLog.requested_at >= since_5h, token_expr), else_=0)),
+                    0,
+                ).label("tokens_5h"),
+                func.coalesce(func.sum(token_expr), 0).label("tokens_7d"),
+            )
+            .where(RequestLog.requested_at >= since_7d)
+            .group_by(RequestLog.account_id)
+            .order_by(RequestLog.account_id.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [
+            RequestLogTokenUsageRow(
+                account_id=account_id,
+                tokens_5h=int(tokens_5h or 0),
+                tokens_7d=int(tokens_7d or 0),
+            )
+            for account_id, tokens_5h, tokens_7d in result.all()
+        ]
 
     async def aggregate_by_bucket(
         self,

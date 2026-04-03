@@ -8,6 +8,9 @@ from app.core.auth.dependencies import set_dashboard_error_format, validate_dash
 from app.dependencies import RequestLogsContext, get_request_logs_context
 from app.modules.request_logs.schemas import (
     RequestLogFilterOptionsResponse,
+    RequestLogUsageSummaryAccountTokens,
+    RequestLogUsageSummaryResponse,
+    RequestLogUsageSummaryWindow,
     RequestLogModelOption,
     RequestLogsResponse,
 )
@@ -104,4 +107,27 @@ async def list_request_log_filter_options(
             for option in options.model_options
         ],
         statuses=options.statuses,
+    )
+
+
+@router.get("/usage-summary", response_model=RequestLogUsageSummaryResponse)
+async def get_request_log_usage_summary(
+    context: RequestLogsContext = Depends(get_request_logs_context),
+) -> RequestLogUsageSummaryResponse:
+    summary = await context.service.get_usage_summary()
+    return RequestLogUsageSummaryResponse(
+        last_5h=RequestLogUsageSummaryWindow(
+            total_tokens=summary.last_5h.total_tokens,
+            accounts=[
+                RequestLogUsageSummaryAccountTokens(account_id=row.account_id, tokens=row.tokens)
+                for row in summary.last_5h.accounts
+            ],
+        ),
+        last_7d=RequestLogUsageSummaryWindow(
+            total_tokens=summary.last_7d.total_tokens,
+            accounts=[
+                RequestLogUsageSummaryAccountTokens(account_id=row.account_id, tokens=row.tokens)
+                for row in summary.last_7d.accounts
+            ],
+        ),
     )
