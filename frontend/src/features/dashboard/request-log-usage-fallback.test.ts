@@ -57,6 +57,17 @@ function createRequestSummary(
   };
 }
 
+function createRequestSummaryWithWindows(
+  last5h: RequestLogUsageSummary["last5h"],
+  last7d: RequestLogUsageSummary["last7d"],
+): RequestLogUsageSummary {
+  return {
+    last5h,
+    last7d,
+    fxRateUsdToEur: 0.92,
+  };
+}
+
 describe("mergeRequestLogUsageSummaryWithLiveFallback", () => {
   it("keeps request-log totals when request summary windows are non-zero", () => {
     const merged = mergeRequestLogUsageSummaryWithLiveFallback(
@@ -135,5 +146,71 @@ describe("mergeRequestLogUsageSummaryWithLiveFallback", () => {
       last7d: true,
       active: true,
     });
+  });
+
+  it("clamps fallback EUR to baseline when resolved density is below minimum floor", () => {
+    const merged = mergeRequestLogUsageSummaryWithLiveFallback(
+      createRequestSummaryWithWindows(
+        { totalTokens: 0, totalCostUsd: 0, totalCostEur: 0, accounts: [] },
+        {
+          totalTokens: 1_000_000,
+          totalCostUsd: 1,
+          totalCostEur: 0.92,
+          accounts: [{ accountId: "acc-1", tokens: 1_000_000, costUsd: 1, costEur: 0.92 }],
+        },
+      ),
+      createWindows(640, 3200),
+    );
+
+    expect(merged.fallback).toEqual({
+      last5h: true,
+      last7d: false,
+      active: true,
+    });
+    expect(merged.usageSummary.last5h.totalCostUsd).toBeCloseTo(0.00192, 8);
+    expect(merged.usageSummary.last5h.totalCostEur).toBeCloseTo(0.0017664, 8);
+    expect(merged.usageSummary.last7d.totalCostUsd).toBe(1);
+    expect(merged.usageSummary.last7d.totalCostEur).toBe(0.92);
+  });
+
+  it("preserves higher fallback density when resolved density is above baseline", () => {
+    const merged = mergeRequestLogUsageSummaryWithLiveFallback(
+      createRequestSummaryWithWindows(
+        { totalTokens: 0, totalCostUsd: 0, totalCostEur: 0, accounts: [] },
+        {
+          totalTokens: 1_000_000,
+          totalCostUsd: 6,
+          totalCostEur: 5.52,
+          accounts: [{ accountId: "acc-1", tokens: 1_000_000, costUsd: 6, costEur: 5.52 }],
+        },
+      ),
+      createWindows(640, 3200),
+    );
+
+    expect(merged.fallback).toEqual({
+      last5h: true,
+      last7d: false,
+      active: true,
+    });
+    expect(merged.usageSummary.last5h.totalCostUsd).toBeCloseTo(0.00384, 8);
+    expect(merged.usageSummary.last5h.totalCostEur).toBeCloseTo(0.0035328, 8);
+  });
+
+  it("keeps fallback replacement window-scoped for last5h and last7d", () => {
+    const merged = mergeRequestLogUsageSummaryWithLiveFallback(
+      createRequestSummaryWithWindows(
+        { totalTokens: 0, totalCostUsd: 0, totalCostEur: 0, accounts: [] },
+        { totalTokens: 0, totalCostUsd: 0, totalCostEur: 0, accounts: [] },
+      ),
+      createWindows(640, 3200),
+    );
+
+    expect(merged.fallback).toEqual({
+      last5h: true,
+      last7d: true,
+      active: true,
+    });
+    expect(merged.usageSummary.last5h.totalCostUsd).toBeCloseTo(0.00192, 8);
+    expect(merged.usageSummary.last7d.totalCostUsd).toBeCloseTo(0.0096, 8);
   });
 });

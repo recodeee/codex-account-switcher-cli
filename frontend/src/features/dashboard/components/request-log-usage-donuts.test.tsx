@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { RequestLogUsageDonuts } from "@/features/dashboard/components/request-log-usage-donuts";
+import { mergeRequestLogUsageSummaryWithLiveFallback } from "@/features/dashboard/request-log-usage-fallback";
 import { createAccountSummary } from "@/test/mocks/factories";
 
 describe("RequestLogUsageDonuts", () => {
@@ -112,6 +113,63 @@ describe("RequestLogUsageDonuts", () => {
     expect(screen.getAllByText("1.2M").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("€1.29").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Unavailable in live fallback")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Estimated from live fallback tokens").length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText("Estimated from live fallback tokens with a minimum-rate guardrail").length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders deterministic non-zero fallback EUR values for low-density fallback scenarios", () => {
+    const merged = mergeRequestLogUsageSummaryWithLiveFallback(
+      {
+        last5h: { totalTokens: 0, totalCostUsd: 0, totalCostEur: 0, accounts: [] },
+        last7d: {
+          totalTokens: 1_000_000,
+          totalCostUsd: 1,
+          totalCostEur: 0.92,
+          accounts: [{ accountId: "acc-1", tokens: 1_000_000, costUsd: 1, costEur: 0.92 }],
+        },
+        fxRateUsdToEur: 0.92,
+      },
+      {
+        primary: {
+          windowKey: "primary",
+          windowMinutes: 300,
+          accounts: [
+            {
+              accountId: "acc-1",
+              remainingPercentAvg: 50,
+              capacityCredits: 5_000_100,
+              remainingCredits: 100,
+            },
+          ],
+        },
+        secondary: {
+          windowKey: "secondary",
+          windowMinutes: 10_080,
+          accounts: [
+            {
+              accountId: "acc-1",
+              remainingPercentAvg: 50,
+              capacityCredits: 1_000_250,
+              remainingCredits: 250,
+            },
+          ],
+        },
+      },
+      [createAccountSummary({ accountId: "acc-1", email: "alpha@example.com", displayName: "alpha@example.com" })],
+    );
+
+    render(
+      <RequestLogUsageDonuts
+        accounts={[createAccountSummary({ accountId: "acc-1", email: "alpha@example.com", displayName: "alpha@example.com" })]}
+        usageSummary={merged.usageSummary}
+        fallback={merged.fallback}
+      />,
+    );
+
+    expect(merged.fallback).toEqual({ last5h: true, last7d: false, active: true });
+    expect(merged.usageSummary.last5h.totalCostEur).toBeCloseTo(13.8, 6);
+    expect(screen.getAllByText("€13.80").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Unavailable in live fallback")).not.toBeInTheDocument();
   });
 });

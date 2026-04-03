@@ -167,7 +167,7 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
   const stats7d = useMemo(() => buildWindowStats(items7d, total7d), [items7d, total7d]);
   const recentWindowWeight = total7d > 0 ? Math.min(100, (total5h / total7d) * 100) : 0;
   const fxHint = `Fixed FX ${usageSummary.fxRateUsdToEur.toFixed(2)} USD/EUR`;
-  const fallbackHint = "Estimated from live fallback tokens";
+  const fallbackHint = "Estimated from live fallback tokens with a minimum-rate guardrail";
 
   return (
     <div className="space-y-4">

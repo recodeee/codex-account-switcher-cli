@@ -100,6 +100,24 @@ function resolveBaselineDensity(fxRateUsdToEur: number): CostDensity {
   };
 }
 
+function applyDensityFloor(
+  resolvedDensity: CostDensity | null,
+  baselineDensity: CostDensity,
+  fxRateUsdToEur: number,
+): CostDensity {
+  const resolvedUsdPerToken = resolvedDensity
+    ? Math.max(
+      resolvedDensity.usdPerToken,
+      fxRateUsdToEur > 0 ? resolvedDensity.eurPerToken / fxRateUsdToEur : 0,
+    )
+    : 0;
+  const effectiveUsdPerToken = Math.max(resolvedUsdPerToken, baselineDensity.usdPerToken);
+  return {
+    usdPerToken: effectiveUsdPerToken,
+    eurPerToken: effectiveUsdPerToken * fxRateUsdToEur,
+  };
+}
+
 function pickDensity(candidates: Array<CostDensity | null | undefined>): CostDensity | null {
   for (const candidate of candidates) {
     if (hasPositiveDensity(candidate)) {
@@ -123,23 +141,22 @@ function resolveFallbackCostDensity(
   const accountUsageDensity = resolveAccountUsageDensity(accounts, fxRateUsdToEur);
   const baselineDensity = resolveBaselineDensity(fxRateUsdToEur);
 
+  const resolvedPrimaryDensity = pickDensity([
+    primaryDensity,
+    secondaryDensity,
+    aggregateDensity,
+    accountUsageDensity,
+  ]);
+  const resolvedSecondaryDensity = pickDensity([
+    secondaryDensity,
+    primaryDensity,
+    aggregateDensity,
+    accountUsageDensity,
+  ]);
+
   return {
-    primary:
-      pickDensity([
-        primaryDensity,
-        secondaryDensity,
-        aggregateDensity,
-        accountUsageDensity,
-        baselineDensity,
-      ]) ?? { usdPerToken: 0, eurPerToken: 0 },
-    secondary:
-      pickDensity([
-        secondaryDensity,
-        primaryDensity,
-        aggregateDensity,
-        accountUsageDensity,
-        baselineDensity,
-      ]) ?? { usdPerToken: 0, eurPerToken: 0 },
+    primary: applyDensityFloor(resolvedPrimaryDensity, baselineDensity, fxRateUsdToEur),
+    secondary: applyDensityFloor(resolvedSecondaryDensity, baselineDensity, fxRateUsdToEur),
   };
 }
 
