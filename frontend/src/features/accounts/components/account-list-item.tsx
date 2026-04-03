@@ -14,6 +14,7 @@ import {
 import { formatCompactAccountId } from "@/utils/account-identifiers";
 import { formatPercentNullable, formatSlug } from "@/utils/formatters";
 import { isAccountWorkingNow } from "@/utils/account-working";
+import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 import {
   canUseLocalAccount,
   getUseLocalAccountDisabledReason,
@@ -117,19 +118,26 @@ export function AccountListItem({
     ? ` | ID ${formatCompactAccountId(account.accountId)}`
     : "";
   const secondary = account.usage?.secondaryRemainingPercent ?? null;
-  const primaryRemaining = account.usage?.primaryRemainingPercent;
+  const primaryRemainingRaw = account.usage?.primaryRemainingPercent ?? null;
+  const primaryRemaining = normalizeRemainingPercentForDisplay({
+    windowKey: "primary",
+    remainingPercent: primaryRemainingRaw,
+    resetAt: account.resetAtPrimary ?? null,
+  });
   const hasResolvedSnapshot = Boolean(account.codexAuth?.snapshotName?.trim());
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
     isActiveSnapshot,
     hasLiveSession,
+    codexSessionCount: account.codexSessionCount,
   });
   const disabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
     isActiveSnapshot,
     hasLiveSession,
+    codexSessionCount: account.codexSessionCount,
   });
 
   return (

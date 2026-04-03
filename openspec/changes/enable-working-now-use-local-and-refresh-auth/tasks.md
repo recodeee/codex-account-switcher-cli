@@ -1,0 +1,7 @@
+- [x] Add backend account refresh endpoint and service method that performs refresh-token auth update.
+- [x] Map refresh failures to dashboard errors and keep existing account-not-found behavior.
+- [x] Extend frontend accounts API + mutations with `refresh-auth` support.
+- [x] Route re-auth actions to `refresh-auth` first, then fallback to existing UX paths.
+- [x] Update local switch gating logic to always allow working-now accounts.
+- [x] Add/update frontend and backend regression tests for working-now gating and refresh-auth flow.
+- [x] Validate OpenSpec artifacts and run relevant test suites.

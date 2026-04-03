@@ -6,13 +6,23 @@ type UseLocalAccountInput = {
   primaryRemainingPercent: number | null | undefined;
   isActiveSnapshot?: boolean;
   hasLiveSession?: boolean;
+  codexSessionCount?: number | null;
 };
 
 function hasFiveHourQuota(primaryRemainingPercent: number | null | undefined): boolean {
   return typeof primaryRemainingPercent === "number" && primaryRemainingPercent >= 1;
 }
 
+function isWorkingNow(input: UseLocalAccountInput): boolean {
+  const hasLiveSession = input.hasLiveSession ?? false;
+  const hasTrackedSession = (input.codexSessionCount ?? 0) > 0;
+  return hasLiveSession || hasTrackedSession;
+}
+
 export function canUseLocalAccount(input: UseLocalAccountInput): boolean {
+  if (isWorkingNow(input)) {
+    return true;
+  }
   return (
     resolveEffectiveAccountStatus({
       status: input.status,
@@ -23,6 +33,9 @@ export function canUseLocalAccount(input: UseLocalAccountInput): boolean {
 }
 
 export function getUseLocalAccountDisabledReason(input: UseLocalAccountInput): string | null {
+  if (isWorkingNow(input)) {
+    return null;
+  }
   if (
     resolveEffectiveAccountStatus({
       status: input.status,

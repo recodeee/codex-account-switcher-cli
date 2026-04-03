@@ -65,15 +65,16 @@ def apply_local_live_usage_overrides(
             continue
 
         account_id = account.id
-        codex_session_counts_by_account[account_id] = max(0, live_usage.active_session_count)
-
         if should_defer_active_snapshot_usage and codex_auth_status.is_active_snapshot:
             # The default sessions directory can include active sessions from
             # multiple snapshots. When that mixed telemetry cannot be reliably
             # split yet, keep quota windows on their baseline account values
             # instead of attributing another snapshot's limits to the active
-            # account. We still expose session presence/count immediately.
+            # account. Also clamp to presence-only to avoid inflating counts
+            # from stale or cross-account default-session files.
+            codex_session_counts_by_account[account_id] = 1
             continue
+        codex_session_counts_by_account[account_id] = max(0, live_usage.active_session_count)
 
         recorded_at = to_utc_naive(live_usage.recorded_at)
         if live_usage.primary is not None:
@@ -111,17 +112,18 @@ def apply_local_live_usage_overrides(
                 )
             )
 
-    _apply_local_default_session_fingerprint_overrides(
-        accounts=accounts,
-        snapshot_index=snapshot_index,
-        live_usage_by_snapshot=live_usage_by_snapshot,
-        codex_auth_by_account=codex_auth_by_account,
-        baseline_primary_usage=baseline_primary_usage,
-        baseline_secondary_usage=baseline_secondary_usage,
-        primary_usage=primary_usage,
-        secondary_usage=secondary_usage,
-        codex_session_counts_by_account=codex_session_counts_by_account,
-    )
+    if not should_defer_active_snapshot_usage:
+        _apply_local_default_session_fingerprint_overrides(
+            accounts=accounts,
+            snapshot_index=snapshot_index,
+            live_usage_by_snapshot=live_usage_by_snapshot,
+            codex_auth_by_account=codex_auth_by_account,
+            baseline_primary_usage=baseline_primary_usage,
+            baseline_secondary_usage=baseline_secondary_usage,
+            primary_usage=primary_usage,
+            secondary_usage=secondary_usage,
+            codex_session_counts_by_account=codex_session_counts_by_account,
+        )
     return _coalesce_persist_candidates(persist_candidates)
 
 

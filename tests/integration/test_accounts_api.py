@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
+import app.modules.accounts.auth_manager as auth_manager_module
 from app.core.auth import generate_unique_account_id
+from app.core.auth.refresh import RefreshError, TokenRefreshResult
 from app.db.session import SessionLocal
 from app.modules.usage.repository import UsageRepository
 
@@ -319,7 +321,7 @@ async def test_accounts_list_sets_has_live_session_from_runtime_telemetry(
 
 
 @pytest.mark.asyncio
-async def test_accounts_list_maps_multiple_default_sessions_to_multiple_accounts(
+async def test_accounts_list_limits_default_mixed_sessions_to_active_snapshot_presence(
     async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -407,8 +409,8 @@ async def test_accounts_list_maps_multiple_default_sessions_to_multiple_accounts
     assert accounts[work_account_id]["usage"]["primaryRemainingPercent"] == pytest.approx(80.0)
     assert accounts[work_account_id]["usage"]["secondaryRemainingPercent"] == pytest.approx(70.0)
 
-    assert accounts[personal_account_id]["codexAuth"]["hasLiveSession"] is True
-    assert accounts[personal_account_id]["codexSessionCount"] == 1
+    assert accounts[personal_account_id]["codexAuth"]["hasLiveSession"] is False
+    assert accounts[personal_account_id]["codexSessionCount"] == 0
     assert accounts[personal_account_id]["usage"]["primaryRemainingPercent"] == pytest.approx(60.0)
     assert accounts[personal_account_id]["usage"]["secondaryRemainingPercent"] == pytest.approx(50.0)
 
@@ -704,6 +706,93 @@ async def test_use_account_locally_falls_back_when_codex_auth_missing(
     assert use_response.json()["snapshotName"] == "work"
     assert (tmp_path / "current").read_text(encoding="utf-8").strip() == "work"
     assert (tmp_path / "auth.json").resolve() == (accounts_dir / "work.json").resolve()
+
+
+@pytest.mark.asyncio
+async def test_refresh_account_auth_updates_tokens_without_oauth_login(
+    async_client, monkeypatch: pytest.MonkeyPatch
+):
+    email = "reauth-refresh@example.com"
+    raw_account_id = "acc_refresh_auth_success"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": raw_account_id,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    async def _fake_refresh(_: str) -> TokenRefreshResult:
+        refreshed_payload = {
+            "email": email,
+            "chatgpt_account_id": raw_account_id,
+            "https://api.openai.com/auth": {"chatgpt_plan_type": "team"},
+        }
+        return TokenRefreshResult(
+            access_token="new-access",
+            refresh_token="new-refresh",
+            id_token=_encode_jwt(refreshed_payload),
+            account_id=raw_account_id,
+            plan_type="team",
+            email=email,
+        )
+
+    monkeypatch.setattr(auth_manager_module, "refresh_access_token", _fake_refresh)
+
+    refresh_response = await async_client.post(f"/api/accounts/{expected_account_id}/refresh-auth")
+    assert refresh_response.status_code == 200
+    assert refresh_response.json() == {
+        "status": "refreshed",
+        "accountId": expected_account_id,
+        "email": email,
+        "planType": "team",
+    }
+
+
+@pytest.mark.asyncio
+async def test_refresh_account_auth_returns_stable_error_code_on_refresh_failure(
+    async_client, monkeypatch: pytest.MonkeyPatch
+):
+    email = "reauth-failure@example.com"
+    raw_account_id = "acc_refresh_auth_failure"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": raw_account_id,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    async def _raise_refresh(_: str) -> TokenRefreshResult:
+        raise RefreshError("refresh_token_expired", "Refresh token expired", True)
+
+    monkeypatch.setattr(auth_manager_module, "refresh_access_token", _raise_refresh)
+
+    refresh_response = await async_client.post(f"/api/accounts/{expected_account_id}/refresh-auth")
+    assert refresh_response.status_code == 400
+    payload = refresh_response.json()
+    assert payload["error"]["code"] == "account_refresh_failed"
+    assert payload["error"]["message"] == "Refresh token expired"
 
 
 @pytest.mark.asyncio

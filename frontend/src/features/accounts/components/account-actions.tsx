@@ -42,12 +42,14 @@ export function AccountActions({
     primaryRemainingPercent: account.usage?.primaryRemainingPercent,
     isActiveSnapshot,
     hasLiveSession,
+    codexSessionCount: account.codexSessionCount,
   });
   const disabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: account.usage?.primaryRemainingPercent,
     isActiveSnapshot,
     hasLiveSession,
+    codexSessionCount: account.codexSessionCount,
   });
   const snapshotName = account.codexAuth?.snapshotName?.trim() ?? null;
   const expectedSnapshotName = account.codexAuth?.expectedSnapshotName?.trim() ?? null;

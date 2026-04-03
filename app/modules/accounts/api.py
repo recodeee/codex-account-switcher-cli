@@ -4,6 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, WebSocket
 
+from app.core.auth.refresh import RefreshError
 from app.core.audit.service import AuditService
 from app.core.auth.dependencies import set_dashboard_error_format, validate_dashboard_session
 from app.core.config.settings_cache import get_settings_cache
@@ -22,6 +23,7 @@ from app.modules.accounts.schemas import (
     AccountImportResponse,
     AccountOpenTerminalResponse,
     AccountPauseResponse,
+    AccountRefreshAuthResponse,
     AccountReactivateResponse,
     AccountSnapshotRepairResponse,
     AccountsResponse,
@@ -138,6 +140,21 @@ async def use_account_locally(
         raise DashboardBadRequestError(str(exc), code="codex_auth_not_installed") from exc
     except CodexAuthSwitchFailedError as exc:
         raise DashboardBadRequestError(str(exc), code="codex_auth_switch_failed") from exc
+
+    if result is None:
+        raise DashboardNotFoundError("Account not found", code="account_not_found")
+    return result
+
+
+@router.post("/{account_id}/refresh-auth", response_model=AccountRefreshAuthResponse)
+async def refresh_account_auth(
+    account_id: str,
+    context: AccountsContext = Depends(get_accounts_context),
+) -> AccountRefreshAuthResponse:
+    try:
+        result = await context.service.refresh_account_auth(account_id)
+    except RefreshError as exc:
+        raise DashboardBadRequestError(exc.message, code="account_refresh_failed") from exc
 
     if result is None:
         raise DashboardNotFoundError("Account not found", code="account_not_found")

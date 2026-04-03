@@ -62,6 +62,21 @@ describe("UsageDonuts", () => {
     expect(screen.getAllByText("Remaining").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("uses the configured primary window duration in the donut title", () => {
+    render(
+      <UsageDonuts
+        primaryItems={[]}
+        secondaryItems={[]}
+        primaryTotal={0}
+        secondaryTotal={0}
+        primaryWindowMinutes={480}
+      />,
+    );
+
+    expect(screen.getByText("8h Remaining")).toBeInTheDocument();
+    expect(screen.queryByText("5h Remaining")).not.toBeInTheDocument();
+  });
+
   it("renders safe line only for the primary donut", () => {
     render(
       <UsageDonuts

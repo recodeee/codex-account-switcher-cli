@@ -15,6 +15,7 @@ import { WindowsOauthHelp } from "@/features/accounts/components/windows-oauth-h
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { buildDuplicateAccountIdSet } from "@/utils/account-identifiers";
 import { formatSlug } from "@/utils/formatters";
+import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 import { canUseLocalAccount } from "@/utils/use-local-account";
 
 const STATUS_FILTER_OPTIONS = ["all", "active", "paused", "rate_limited", "quota_exceeded", "deactivated"];
@@ -23,26 +24,38 @@ function normalizeQuotaPercent(value: number | null | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : -1;
 }
 
+function resolvePrimaryRemainingForDisplay(account: AccountSummary): number | null {
+  return normalizeRemainingPercentForDisplay({
+    windowKey: "primary",
+    remainingPercent: account.usage?.primaryRemainingPercent ?? null,
+    resetAt: account.resetAtPrimary ?? null,
+  });
+}
+
 function compareAccountsForSidebar(a: AccountSummary, b: AccountSummary): number {
+  const aPrimaryRemaining = resolvePrimaryRemainingForDisplay(a);
+  const bPrimaryRemaining = resolvePrimaryRemainingForDisplay(b);
   const aCanUseLocally = canUseLocalAccount({
     status: a.status,
-    primaryRemainingPercent: a.usage?.primaryRemainingPercent,
+    primaryRemainingPercent: aPrimaryRemaining,
     isActiveSnapshot: a.codexAuth?.isActiveSnapshot,
     hasLiveSession: a.codexAuth?.hasLiveSession,
+    codexSessionCount: a.codexSessionCount,
   });
   const bCanUseLocally = canUseLocalAccount({
     status: b.status,
-    primaryRemainingPercent: b.usage?.primaryRemainingPercent,
+    primaryRemainingPercent: bPrimaryRemaining,
     isActiveSnapshot: b.codexAuth?.isActiveSnapshot,
     hasLiveSession: b.codexAuth?.hasLiveSession,
+    codexSessionCount: b.codexSessionCount,
   });
 
   if (aCanUseLocally !== bCanUseLocally) {
     return aCanUseLocally ? -1 : 1;
   }
 
-  const aPrimary = normalizeQuotaPercent(a.usage?.primaryRemainingPercent);
-  const bPrimary = normalizeQuotaPercent(b.usage?.primaryRemainingPercent);
+  const aPrimary = normalizeQuotaPercent(aPrimaryRemaining);
+  const bPrimary = normalizeQuotaPercent(bPrimaryRemaining);
   if (aPrimary !== bPrimary) {
     return bPrimary - aPrimary;
   }

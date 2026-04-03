@@ -4,12 +4,13 @@ import { DonutChart } from "@/components/donut-chart";
 import type { RequestLogUsageFallbackState } from "@/features/dashboard/request-log-usage-fallback";
 import type { AccountSummary, RequestLogUsageSummary } from "@/features/dashboard/schemas";
 import { buildDuplicateAccountIdSet, formatCompactAccountId } from "@/utils/account-identifiers";
-import { formatCompactNumber, formatEuro } from "@/utils/formatters";
+import { formatCompactNumber, formatEuro, formatWindowLabel } from "@/utils/formatters";
 
 export type RequestLogUsageDonutsProps = {
   accounts: AccountSummary[];
   usageSummary: RequestLogUsageSummary;
   fallback: RequestLogUsageFallbackState;
+  primaryWindowMinutes?: number | null;
 };
 
 type DonutLegendItem = {
@@ -136,7 +137,13 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint: 
   );
 }
 
-export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: RequestLogUsageDonutsProps) {
+export function RequestLogUsageDonuts({
+  accounts,
+  usageSummary,
+  fallback,
+  primaryWindowMinutes = null,
+}: RequestLogUsageDonutsProps) {
+  const primaryWindowLabel = formatWindowLabel("primary", primaryWindowMinutes);
   const items5h = useMemo(
     () => buildDonutItems(accounts, usageSummary.last5h),
     [accounts, usageSummary.last5h],
@@ -173,7 +180,7 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard
-          label="5h Tokens"
+          label={`${primaryWindowLabel} Tokens`}
           value={formatTokensAsThousands(total5h)}
           hint={`${stats5h.activeAccounts} active accounts`}
         />
@@ -183,7 +190,7 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
           hint={`${stats7d.activeAccounts} active accounts`}
         />
         <StatCard
-          label="5h EUR"
+          label={`${primaryWindowLabel} EUR`}
           value={formatEuro(totalCostEur5h)}
           hint={fallback.last5h ? fallbackHint : fxHint}
         />
@@ -200,12 +207,12 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
         <StatCard
           label="Recent intensity"
           value={`${Math.round(recentWindowWeight)}%`}
-          hint="5h share of 7d volume"
+          hint={`${primaryWindowLabel} share of 7d volume`}
         />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <DonutChart
-          title="5h Consumed"
+          title={`${primaryWindowLabel} Consumed`}
           subtitle={`Top: ${stats5h.topAccountLabel} · ${Math.round(stats5h.topAccountShare)}%`}
           centerLabel="Consumed"
           centerValue={formatTokensAsThousands(total5h)}

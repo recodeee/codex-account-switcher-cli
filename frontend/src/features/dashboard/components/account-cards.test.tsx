@@ -11,10 +11,11 @@ function buildWindow(
   capacity: number,
   remaining: number,
   remainingPercentAvg: number | null = 50,
+  windowMinutes?: number,
 ): UsageWindow {
   return {
     windowKey,
-    windowMinutes: windowKey === "primary" ? 300 : 10080,
+    windowMinutes: windowMinutes ?? (windowKey === "primary" ? 300 : 10080),
     accounts: [
       {
         accountId,
@@ -104,6 +105,65 @@ describe("AccountCards", () => {
     const card = screen.getByText("regular@example.com").closest(".card-hover");
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).getByText("100k")).toBeInTheDocument();
+  });
+
+  it("uses the primary window duration label in working summary chips", () => {
+    const working = createAccountSummary({
+      accountId: "acc_working",
+      email: "working@example.com",
+      displayName: "working@example.com",
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working",
+        activeSnapshotName: "working",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(
+      <AccountCards
+        accounts={[working]}
+        primaryWindow={buildWindow("primary", "acc_working", 1000, 900, 50, 480)}
+        secondaryWindow={null}
+      />,
+    );
+
+    expect(screen.getByText(/8h avg \d+%/i)).toBeInTheDocument();
+    expect(screen.queryByText(/5h avg \d+%/i)).not.toBeInTheDocument();
+  });
+
+  it("normalizes working primary avg to 100% when primary window is already reset", () => {
+    const working = createAccountSummary({
+      accountId: "acc_reset",
+      email: "reset@example.com",
+      displayName: "reset@example.com",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      resetAtPrimary: new Date(Date.now() - 60_000).toISOString(),
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "reset",
+        activeSnapshotName: "reset",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(
+      <AccountCards
+        accounts={[working]}
+        primaryWindow={buildWindow("primary", "acc_reset", 1000, 0)}
+        secondaryWindow={buildWindow("secondary", "acc_reset", 1000, 880)}
+      />,
+    );
+
+    expect(screen.getByText("5h avg 100%")).toBeInTheDocument();
+    expect(screen.getByText("Weekly avg 88%")).toBeInTheDocument();
   });
 
   it("uses secondary window consumption for weekly-only-account tokens used", () => {

@@ -510,7 +510,7 @@ async def test_dashboard_overview_applies_runtime_live_usage_per_snapshot(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_overview_maps_multiple_default_sessions_to_multiple_accounts(
+async def test_dashboard_overview_limits_default_mixed_sessions_to_active_snapshot_presence(
     async_client,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -606,14 +606,14 @@ async def test_dashboard_overview_maps_multiple_default_sessions_to_multiple_acc
     assert accounts[work_account_id]["usage"]["primaryRemainingPercent"] == pytest.approx(80.0)
     assert accounts[work_account_id]["usage"]["secondaryRemainingPercent"] == pytest.approx(70.0)
 
-    assert accounts[personal_account_id]["codexAuth"]["hasLiveSession"] is True
-    assert accounts[personal_account_id]["codexSessionCount"] == 1
+    assert accounts[personal_account_id]["codexAuth"]["hasLiveSession"] is False
+    assert accounts[personal_account_id]["codexSessionCount"] == 0
     assert accounts[personal_account_id]["usage"]["primaryRemainingPercent"] == pytest.approx(60.0)
     assert accounts[personal_account_id]["usage"]["secondaryRemainingPercent"] == pytest.approx(50.0)
 
 
 @pytest.mark.asyncio
-async def test_dashboard_overview_maps_multiple_default_sessions_without_reset_timestamps(
+async def test_dashboard_overview_limits_default_mixed_sessions_without_reset_timestamps(
     async_client,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -702,8 +702,8 @@ async def test_dashboard_overview_maps_multiple_default_sessions_without_reset_t
     assert accounts[work_account_id]["usage"]["primaryRemainingPercent"] == pytest.approx(80.0)
     assert accounts[work_account_id]["usage"]["secondaryRemainingPercent"] == pytest.approx(70.0)
 
-    assert accounts[personal_account_id]["codexAuth"]["hasLiveSession"] is True
-    assert accounts[personal_account_id]["codexSessionCount"] == 1
+    assert accounts[personal_account_id]["codexAuth"]["hasLiveSession"] is False
+    assert accounts[personal_account_id]["codexSessionCount"] == 0
     assert accounts[personal_account_id]["usage"]["primaryRemainingPercent"] == pytest.approx(60.0)
     assert accounts[personal_account_id]["usage"]["secondaryRemainingPercent"] == pytest.approx(50.0)
 

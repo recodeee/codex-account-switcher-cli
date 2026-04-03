@@ -122,6 +122,13 @@ class AccountUseLocalResponse(DashboardModel):
     snapshot_name: str
 
 
+class AccountRefreshAuthResponse(DashboardModel):
+    status: str
+    account_id: str
+    email: str
+    plan_type: str
+
+
 class AccountOpenTerminalResponse(DashboardModel):
     status: str
     account_id: str

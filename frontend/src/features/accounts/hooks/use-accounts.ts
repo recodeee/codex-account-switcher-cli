@@ -7,6 +7,7 @@ import {
   importAccount,
   openAccountTerminal,
   repairAccountSnapshot,
+  refreshAccountAuth,
   listAccounts,
   pauseAccount,
   reactivateAccount,
@@ -113,6 +114,17 @@ export function useAccountMutations() {
     },
   });
 
+  const refreshAuthMutation = useMutation({
+    mutationFn: refreshAccountAuth,
+    onSuccess: (response) => {
+      toast.success(`Re-authenticated ${response.email}`);
+      invalidateAccountRelatedQueries(queryClient);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Re-authentication failed");
+    },
+  });
+
   const openTerminalMutation = useMutation({
     mutationFn: openAccountTerminal,
     onSuccess: (response) => {
@@ -143,6 +155,7 @@ export function useAccountMutations() {
     resumeMutation,
     deleteMutation,
     useLocalMutation,
+    refreshAuthMutation,
     openTerminalMutation,
     repairSnapshotMutation,
   };

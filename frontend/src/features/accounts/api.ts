@@ -4,6 +4,7 @@ import {
   AccountActionResponseSchema,
   AccountImportResponseSchema,
   AccountOpenTerminalResponseSchema,
+  AccountRefreshAuthResponseSchema,
   AccountSnapshotRepairResponseSchema,
   AccountUseLocalResponseSchema,
   AccountsResponseSchema,
@@ -65,6 +66,13 @@ export function useAccountLocally(accountId: string) {
   return post(
     `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/use-local`,
     AccountUseLocalResponseSchema,
+  );
+}
+
+export function refreshAccountAuth(accountId: string) {
+  return post(
+    `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/refresh-auth`,
+    AccountRefreshAuthResponseSchema,
   );
 }
 

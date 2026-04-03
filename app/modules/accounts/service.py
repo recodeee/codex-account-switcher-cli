@@ -32,6 +32,7 @@ from app.modules.accounts.codex_auth_switcher import (
     select_snapshot_name,
     switch_snapshot,
 )
+from app.modules.accounts.auth_manager import AuthManager
 from app.modules.accounts.live_usage_overrides import apply_local_live_usage_overrides
 from app.modules.accounts.live_usage_persistence import persist_live_usage_overrides
 from app.modules.accounts.mappers import build_account_summaries, build_account_usage_trends
@@ -41,6 +42,7 @@ from app.modules.accounts.schemas import (
     AccountAdditionalWindow,
     AccountCodexAuthStatus,
     AccountImportResponse,
+    AccountRefreshAuthResponse,
     AccountRequestUsage,
     AccountSummary,
     AccountTrendsResponse,
@@ -73,6 +75,7 @@ class AccountsService:
         self._additional_usage_repo = additional_usage_repo
         self._usage_updater = UsageUpdater(usage_repo, repo, additional_usage_repo) if usage_repo else None
         self._encryptor = TokenEncryptor()
+        self._auth_manager = AuthManager(repo)
 
     async def list_accounts(self) -> list[AccountSummary]:
         await sync_local_codex_auth_snapshots(repo=self._repo, encryptor=self._encryptor)
@@ -258,6 +261,24 @@ class AccountsService:
             status="switched",
             account_id=account.id,
             snapshot_name=selected_snapshot_name,
+        )
+
+    async def refresh_account_auth(self, account_id: str) -> AccountRefreshAuthResponse | None:
+        account = await self._repo.get_by_id(account_id)
+        if account is None:
+            return None
+
+        refreshed = await self._auth_manager.refresh_account(account)
+        if account.status == AccountStatus.DEACTIVATED:
+            await self._repo.update_status(account.id, AccountStatus.ACTIVE, None)
+            refreshed.status = AccountStatus.ACTIVE
+            refreshed.deactivation_reason = None
+        get_account_selection_cache().invalidate()
+        return AccountRefreshAuthResponse(
+            status="refreshed",
+            account_id=refreshed.id,
+            email=refreshed.email,
+            plan_type=refreshed.plan_type,
         )
 
     async def repair_account_snapshot(

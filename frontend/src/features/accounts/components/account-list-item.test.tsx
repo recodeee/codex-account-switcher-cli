@@ -77,6 +77,7 @@ describe("AccountListItem", () => {
         primaryRemainingPercent: 0,
         secondaryRemainingPercent: 73,
       },
+      resetAtPrimary: "2030-01-01T00:00:00.000Z",
       codexAuth: {
         hasSnapshot: true,
         snapshotName: "main",
@@ -96,6 +97,41 @@ describe("AccountListItem", () => {
     );
 
     expect(screen.getByRole("button", { name: "Use this" })).toBeDisabled();
+  });
+
+  it("treats 5h quota as reset when reset time has passed", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    try {
+      const account = createAccountSummary({
+        usage: {
+          primaryRemainingPercent: 2,
+          secondaryRemainingPercent: 73,
+        },
+        resetAtPrimary: "2025-12-31T23:00:00.000Z",
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "main",
+          activeSnapshotName: "main",
+          isActiveSnapshot: true,
+        },
+      });
+
+      render(
+        <AccountListItem
+          account={account}
+          selected={false}
+          onSelect={vi.fn()}
+          onUseLocal={vi.fn()}
+          useLocalBusy={false}
+        />,
+      );
+
+      expect(screen.getByTestId("mini-quota-5h-fill")).toHaveStyle({ width: "100%" });
+      expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("enables use button when quota and snapshot are available", () => {
@@ -136,6 +172,35 @@ describe("AccountListItem", () => {
         snapshotName: null,
         activeSnapshotName: null,
         isActiveSnapshot: false,
+      },
+    });
+
+    render(
+      <AccountListItem
+        account={account}
+        selected={false}
+        onSelect={vi.fn()}
+        onUseLocal={vi.fn()}
+        useLocalBusy={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
+  });
+
+  it("enables use button for working-now accounts even when 5h quota is depleted", () => {
+    const account = createAccountSummary({
+      status: "paused",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 73,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "different",
+        isActiveSnapshot: false,
+        hasLiveSession: true,
       },
     });
 

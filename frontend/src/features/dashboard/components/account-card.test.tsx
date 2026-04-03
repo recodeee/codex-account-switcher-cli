@@ -60,6 +60,17 @@ describe("AccountCard", () => {
     expect(screen.getByText("Weekly")).toBeInTheDocument();
   });
 
+  it("uses the configured primary window label when it is not 5h", () => {
+    const account = createAccountSummary({
+      windowMinutesPrimary: 480,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("8h")).toBeInTheDocument();
+    expect(screen.queryByText("5h")).not.toBeInTheDocument();
+  });
+
   it("blurs the dashboard card title when privacy mode is enabled", () => {
     act(() => {
       usePrivacyStore.setState({ blurred: true });
@@ -157,6 +168,28 @@ describe("AccountCard", () => {
         activeSnapshotName: null,
         isActiveSnapshot: false,
       },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
+  });
+
+  it("enables use this account button for working-now accounts even with depleted 5h quota", () => {
+    const account = createAccountSummary({
+      status: "paused",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 40,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "different",
+        isActiveSnapshot: false,
+        hasLiveSession: true,
+      },
+      codexSessionCount: 0,
     });
 
     render(<AccountCard account={account} />);

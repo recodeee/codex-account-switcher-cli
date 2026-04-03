@@ -7,6 +7,8 @@ import type { AccountSummary, UsageWindow } from "@/features/dashboard/schemas";
 import { buildDuplicateAccountIdSet } from "@/utils/account-identifiers";
 import { isAccountWorkingNow } from "@/utils/account-working";
 import { resolveEffectiveAccountStatus } from "@/utils/account-status";
+import { formatWindowLabel } from "@/utils/formatters";
+import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 
 function roundAveragePercent(values: Array<number | null | undefined>): number | null {
   const normalized = values
@@ -74,6 +76,10 @@ export function AccountCards({
   useLocalBusy = false,
   onAction,
 }: AccountCardsProps) {
+  const primaryWindowLabel = formatWindowLabel(
+    "primary",
+    primaryWindow?.windowMinutes ?? null,
+  );
   const duplicateAccountIds = useMemo(() => buildDuplicateAccountIdSet(accounts), [accounts]);
   const primaryConsumedByAccount = useMemo(() => buildConsumedByAccount(primaryWindow), [primaryWindow]);
   const secondaryConsumedByAccount = useMemo(() => buildConsumedByAccount(secondaryWindow), [secondaryWindow]);
@@ -115,10 +121,22 @@ export function AccountCards({
     return {
       liveSessions,
       avgPrimaryRemaining: roundAveragePercent(
-        groupedAccounts.working.map((account) => account.usage?.primaryRemainingPercent),
+        groupedAccounts.working.map((account) =>
+          normalizeRemainingPercentForDisplay({
+            windowKey: "primary",
+            remainingPercent: account.usage?.primaryRemainingPercent ?? null,
+            resetAt: account.resetAtPrimary ?? null,
+          }),
+        ),
       ),
       avgSecondaryRemaining: roundAveragePercent(
-        groupedAccounts.working.map((account) => account.usage?.secondaryRemainingPercent),
+        groupedAccounts.working.map((account) =>
+          normalizeRemainingPercentForDisplay({
+            windowKey: "secondary",
+            remainingPercent: account.usage?.secondaryRemainingPercent ?? null,
+            resetAt: account.resetAtSecondary ?? null,
+          }),
+        ),
       ),
     };
   }, [groupedAccounts.working]);
@@ -180,7 +198,7 @@ export function AccountCards({
             ) : null}
             {workingSummary.avgPrimaryRemaining !== null ? (
               <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-emerald-700 dark:text-emerald-300">
-                5h avg {workingSummary.avgPrimaryRemaining}%
+                {primaryWindowLabel} avg {workingSummary.avgPrimaryRemaining}%
               </span>
             ) : null}
             {workingSummary.avgSecondaryRemaining !== null ? (

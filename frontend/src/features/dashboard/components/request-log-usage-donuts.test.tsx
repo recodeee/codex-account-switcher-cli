@@ -172,4 +172,36 @@ describe("RequestLogUsageDonuts", () => {
     expect(screen.getAllByText("€13.80").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Unavailable in live fallback")).not.toBeInTheDocument();
   });
+
+  it("uses the configured primary window label in usage summary cards and donut title", () => {
+    render(
+      <RequestLogUsageDonuts
+        accounts={[createAccountSummary({ accountId: "acc-1", email: "alpha@example.com", displayName: "alpha@example.com" })]}
+        usageSummary={{
+          last5h: {
+            totalTokens: 100,
+            totalCostUsd: 0.2,
+            totalCostEur: 0.18,
+            accounts: [{ accountId: "acc-1", tokens: 100, costUsd: 0.2, costEur: 0.18 }],
+          },
+          last7d: {
+            totalTokens: 300,
+            totalCostUsd: 0.7,
+            totalCostEur: 0.64,
+            accounts: [{ accountId: "acc-1", tokens: 300, costUsd: 0.7, costEur: 0.64 }],
+          },
+          fxRateUsdToEur: 0.92,
+        }}
+        fallback={{ last5h: false, last7d: false, active: false }}
+        primaryWindowMinutes={480}
+      />,
+    );
+
+    expect(screen.getByText("8h Tokens")).toBeInTheDocument();
+    expect(screen.getByText("8h EUR")).toBeInTheDocument();
+    expect(screen.getByText("8h Consumed")).toBeInTheDocument();
+    expect(screen.queryByText("5h Tokens")).not.toBeInTheDocument();
+    expect(screen.queryByText("5h EUR")).not.toBeInTheDocument();
+    expect(screen.queryByText("5h Consumed")).not.toBeInTheDocument();
+  });
 });

@@ -2,12 +2,14 @@ import { useMemo } from "react";
 
 import { DonutChart } from "@/components/donut-chart";
 import type { RemainingItem, SafeLineView } from "@/features/dashboard/utils";
+import { formatWindowLabel } from "@/utils/formatters";
 
 export type UsageDonutsProps = {
 	primaryItems: RemainingItem[];
 	secondaryItems: RemainingItem[];
 	primaryTotal: number;
 	secondaryTotal: number;
+	primaryWindowMinutes?: number | null;
 	safeLinePrimary?: SafeLineView | null;
 	safeLineSecondary?: SafeLineView | null;
 };
@@ -17,9 +19,11 @@ export function UsageDonuts({
 	secondaryItems,
 	primaryTotal,
 	secondaryTotal,
+	primaryWindowMinutes = null,
 	safeLinePrimary,
 	safeLineSecondary,
 }: UsageDonutsProps) {
+	const primaryTitle = `${formatWindowLabel("primary", primaryWindowMinutes)} Remaining`;
 	const primaryChartItems = useMemo(
 		() =>
 			primaryItems.map((item) => ({
@@ -48,7 +52,7 @@ export function UsageDonuts({
 	return (
 		<div className="grid gap-4 lg:grid-cols-2">
 			<DonutChart
-				title="5h Remaining"
+				title={primaryTitle}
 				items={primaryChartItems}
 				total={primaryTotal}
 				safeLine={safeLinePrimary}

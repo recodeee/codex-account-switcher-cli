@@ -470,6 +470,28 @@ export const handlers = [
 		});
 	}),
 
+	http.post("/api/accounts/:accountId/refresh-auth", ({ params }) => {
+		const accountId = String(params.accountId);
+		const account = findAccount(accountId);
+		if (!account) {
+			return HttpResponse.json(
+				{ error: { code: "account_not_found", message: "Account not found" } },
+				{ status: 404 },
+			);
+		}
+
+		if (account.status === "deactivated") {
+			account.status = "active";
+		}
+
+		return HttpResponse.json({
+			status: "refreshed",
+			accountId: account.accountId,
+			email: account.email,
+			planType: account.planType,
+		});
+	}),
+
 	http.post("/api/accounts/:accountId/repair-snapshot", ({ params, request }) => {
 		const accountId = String(params.accountId);
 		const account = findAccount(accountId);

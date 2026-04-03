@@ -33,6 +33,7 @@ export function DashboardPage() {
   const {
     resumeMutation,
     useLocalMutation,
+    refreshAuthMutation,
     openTerminalMutation,
     repairSnapshotMutation,
   } = useAccountMutations();
@@ -53,7 +54,11 @@ export function DashboardPage() {
           resumeMutation.mutate(account.accountId);
           break;
         case "reauth":
-          navigate(`/accounts?selected=${account.accountId}`);
+          refreshAuthMutation.mutate(account.accountId, {
+            onError: () => {
+              navigate(`/accounts?selected=${account.accountId}`);
+            },
+          });
           break;
         case "useLocal":
           useLocalMutation.mutate(account.accountId, {
@@ -92,6 +97,7 @@ export function DashboardPage() {
       navigate,
       openTerminalMutation,
       repairSnapshotMutation,
+      refreshAuthMutation,
       resumeMutation,
       useLocalMutation,
     ],
@@ -190,6 +196,7 @@ export function DashboardPage() {
               secondaryItems={view.secondaryUsageItems}
               primaryTotal={overview?.summary.primaryWindow.capacityCredits ?? 0}
               secondaryTotal={overview?.summary.secondaryWindow?.capacityCredits ?? 0}
+              primaryWindowMinutes={overview?.summary.primaryWindow.windowMinutes ?? null}
               safeLinePrimary={view.safeLinePrimary}
               safeLineSecondary={view.safeLineSecondary}
             />
@@ -217,6 +224,7 @@ export function DashboardPage() {
               accounts={overview?.accounts ?? []}
               usageSummary={mergedUsageSummary.usageSummary}
               fallback={mergedUsageSummary.fallback}
+              primaryWindowMinutes={overview?.summary.primaryWindow.windowMinutes ?? null}
             />
             <RequestFilters
               filters={filters}

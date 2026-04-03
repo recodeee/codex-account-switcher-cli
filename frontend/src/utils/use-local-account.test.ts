@@ -28,6 +28,30 @@ describe("use-local account gating", () => {
     expect(canUseLocalAccount({ status: "active", primaryRemainingPercent: null })).toBe(false);
   });
 
+  it("always allows working-now accounts regardless of status or 5h quota", () => {
+    expect(
+      canUseLocalAccount({
+        status: "paused",
+        primaryRemainingPercent: 0,
+        codexSessionCount: 1,
+      }),
+    ).toBe(true);
+    expect(
+      canUseLocalAccount({
+        status: "quota_exceeded",
+        primaryRemainingPercent: 0,
+        hasLiveSession: true,
+      }),
+    ).toBe(true);
+    expect(
+      getUseLocalAccountDisabledReason({
+        status: "deactivated",
+        primaryRemainingPercent: 0,
+        codexSessionCount: 4,
+      }),
+    ).toBeNull();
+  });
+
   it("returns status-first disabled reasons", () => {
     expect(
       getUseLocalAccountDisabledReason({ status: "deactivated", primaryRemainingPercent: 44 }),

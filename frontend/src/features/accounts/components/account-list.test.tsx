@@ -187,4 +187,58 @@ describe("AccountList", () => {
       "unusable@example.com",
     ]);
   });
+
+  it("uses reset-adjusted 5h quota when ordering sidebar accounts", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    try {
+      render(
+        <AccountList
+          accounts={[
+            {
+              accountId: "acc-stale",
+              email: "stale@example.com",
+              displayName: "stale@example.com",
+              planType: "plus",
+              status: "active",
+              usage: {
+                primaryRemainingPercent: 2,
+                secondaryRemainingPercent: 50,
+              },
+              resetAtPrimary: "2025-12-31T23:00:00.000Z",
+              codexSessionCount: 0,
+              additionalQuotas: [],
+            },
+            {
+              accountId: "acc-fresh",
+              email: "fresh@example.com",
+              displayName: "fresh@example.com",
+              planType: "plus",
+              status: "active",
+              usage: {
+                primaryRemainingPercent: 88,
+                secondaryRemainingPercent: 40,
+              },
+              codexSessionCount: 0,
+              additionalQuotas: [],
+            },
+          ]}
+          selectedAccountId={null}
+          onSelect={() => {}}
+          onUseLocal={() => {}}
+          useLocalBusy={false}
+          onOpenImport={() => {}}
+          onOpenOauth={() => {}}
+        />,
+      );
+
+      const renderedEmails = screen.getAllByText(/@example\.com$/).map((node) => node.textContent);
+      expect(renderedEmails).toEqual([
+        "stale@example.com",
+        "fresh@example.com",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

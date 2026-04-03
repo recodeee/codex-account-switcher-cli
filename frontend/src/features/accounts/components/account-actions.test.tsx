@@ -92,6 +92,25 @@ describe("AccountActions", () => {
     expect(screen.getByRole("button", { name: "Use this" })).toBeDisabled();
   });
 
+  it("enables Use this for working-now accounts even when 5h quota is unavailable", () => {
+    renderAccountActions({
+      status: "paused",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 73,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "secondary",
+        activeSnapshotName: "main",
+        isActiveSnapshot: false,
+        hasLiveSession: true,
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
+  });
+
   it("shows snapshot repair actions when snapshot name differs from expected email snapshot", async () => {
     const user = userEvent.setup({ delay: null });
     const onRepairSnapshot = vi.fn();

@@ -108,4 +108,53 @@ describe("accounts flow integration", () => {
       expect(window.location.search).toContain("selected=acc_no_snapshot");
     });
   });
+
+  it("falls back to OAuth dialog when re-auth refresh fails on accounts page", async () => {
+    const user = userEvent.setup({ delay: null });
+
+    server.use(
+      http.get("/api/accounts", () =>
+        HttpResponse.json({
+          accounts: [
+            createAccountSummary({
+              accountId: "acc_reauth_accounts",
+              email: "reauth-accounts@example.com",
+              displayName: "reauth-accounts@example.com",
+              status: "deactivated",
+              usage: {
+                primaryRemainingPercent: 44,
+                secondaryRemainingPercent: 73,
+              },
+              codexAuth: {
+                hasSnapshot: true,
+                snapshotName: "reauth-accounts",
+                activeSnapshotName: "other",
+                isActiveSnapshot: false,
+                hasLiveSession: false,
+              },
+            }),
+          ],
+        }),
+      ),
+      http.post("/api/accounts/:accountId/refresh-auth", () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: "account_refresh_failed",
+              message: "Refresh failed",
+            },
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/accounts");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Re-authenticate" }));
+
+    expect(await screen.findByRole("heading", { name: "Add account with OAuth" })).toBeInTheDocument();
+  });
 });

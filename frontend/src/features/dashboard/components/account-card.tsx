@@ -23,6 +23,7 @@ import {
   formatPercentNullable,
   formatQuotaResetLabel,
   formatTokenCredits,
+  formatWindowLabel,
   formatSlug,
 } from "@/utils/formatters";
 import { isAccountWorkingNow } from "@/utils/account-working";
@@ -218,17 +219,23 @@ export function AccountCard({
     primaryRemainingPercent: primaryRemainingRaw,
     isActiveSnapshot,
     hasLiveSession,
+    codexSessionCount: account.codexSessionCount,
   });
   const useLocalDisabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: primaryRemainingRaw,
     isActiveSnapshot,
     hasLiveSession,
+    codexSessionCount: account.codexSessionCount,
   });
 
   const primaryReset = formatQuotaResetLabel(account.resetAtPrimary ?? null);
   const secondaryReset = formatQuotaResetLabel(
     account.resetAtSecondary ?? null,
+  );
+  const primaryWindowLabel = formatWindowLabel(
+    "primary",
+    account.windowMinutesPrimary ?? null,
   );
   const isDeactivated = status === "deactivated";
   const primaryLastSeen = formatLastUsageLabel(account.lastUsageRecordedAtPrimary ?? null);
@@ -366,7 +373,7 @@ export function AccountCard({
       <div className={cn("mt-3.5 grid gap-2.5", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
         {!weeklyOnly && (
           <QuotaBar
-            label="5h"
+            label={primaryWindowLabel}
             percent={primaryRemaining}
             resetLabel={primaryReset}
             lastSeenLabel={stalePrimaryLastSeen.label}

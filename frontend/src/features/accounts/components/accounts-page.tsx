@@ -28,6 +28,7 @@ export function AccountsPage() {
     resumeMutation,
     deleteMutation,
     useLocalMutation,
+    refreshAuthMutation,
     repairSnapshotMutation,
   } = useAccounts();
   const oauth = useOauth();
@@ -86,6 +87,7 @@ export function AccountsPage() {
     resumeMutation.isPending ||
     deleteMutation.isPending ||
     useLocalMutation.isPending ||
+    refreshAuthMutation.isPending ||
     repairSnapshotMutation.isPending;
 
   const mutationError =
@@ -94,6 +96,7 @@ export function AccountsPage() {
     getErrorMessageOrNull(resumeMutation.error) ||
     getErrorMessageOrNull(deleteMutation.error) ||
     getErrorMessageOrNull(useLocalMutation.error) ||
+    getErrorMessageOrNull(refreshAuthMutation.error) ||
     getErrorMessageOrNull(repairSnapshotMutation.error);
 
   return (
@@ -138,7 +141,7 @@ export function AccountsPage() {
             useLocalBusy={useLocalMutation.isPending}
             repairSnapshotBusy={repairSnapshotMutation.isPending}
             onReauth={(accountId) => {
-              useLocalMutation.mutate(accountId, {
+              refreshAuthMutation.mutate(accountId, {
                 onError: () => {
                   oauthDialog.show();
                 },
