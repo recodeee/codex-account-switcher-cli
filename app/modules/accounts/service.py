@@ -18,7 +18,11 @@ from app.core.plan_types import coerce_account_plan_type
 from app.core.utils.time import naive_utc_to_epoch, to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
-from app.modules.accounts.codex_live_usage import LocalUsageWindow, read_local_codex_live_usage
+from app.modules.accounts.codex_live_usage import (
+    LocalCodexLiveUsage,
+    LocalUsageWindow,
+    read_local_codex_live_usage_by_snapshot,
+)
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     CodexAuthSnapshotNotFoundError,
@@ -133,6 +137,7 @@ class AccountsService:
         }
         self._apply_local_live_usage_overrides(
             accounts=accounts,
+            snapshot_index=snapshot_index,
             codex_auth_by_account=codex_auth_by_account,
             primary_usage=primary_usage,
             secondary_usage=secondary_usage,
@@ -242,25 +247,32 @@ class AccountsService:
         self,
         *,
         accounts: list[Account],
+        snapshot_index: CodexAuthSnapshotIndex,
         codex_auth_by_account: dict[str, AccountCodexAuthStatus],
         primary_usage: dict[str, UsageHistory],
         secondary_usage: dict[str, UsageHistory],
     ) -> None:
-        live_usage = read_local_codex_live_usage()
-        if live_usage is None:
+        live_usage_by_snapshot = read_local_codex_live_usage_by_snapshot()
+        if not live_usage_by_snapshot:
             return
 
-        active_account_ids = [
-            account.id
-            for account in accounts
-            if codex_auth_by_account.get(account.id) is not None
-            and codex_auth_by_account[account.id].is_active_snapshot
-        ]
-        if not active_account_ids:
-            return
+        for account in accounts:
+            codex_auth_status = codex_auth_by_account.get(account.id)
+            if codex_auth_status is None:
+                continue
 
-        recorded_at = to_utc_naive(live_usage.recorded_at)
-        for account_id in active_account_ids:
+            snapshot_names = snapshot_index.snapshots_by_account_id.get(account.id, [])
+            live_usage = _resolve_live_usage_for_account(
+                snapshot_names=snapshot_names,
+                selected_snapshot_name=codex_auth_status.snapshot_name,
+                live_usage_by_snapshot=live_usage_by_snapshot,
+            )
+            codex_auth_status.has_live_session = bool(live_usage and live_usage.active_session_count > 0)
+            if live_usage is None:
+                continue
+
+            account_id = account.id
+            recorded_at = to_utc_naive(live_usage.recorded_at)
             if live_usage.primary is not None:
                 primary_usage[account_id] = _usage_history_from_live_window(
                     account_id=account_id,
@@ -275,6 +287,42 @@ class AccountsService:
                     recorded_at=recorded_at,
                     usage_window=live_usage.secondary,
                 )
+
+
+def _resolve_live_usage_for_account(
+    *,
+    snapshot_names: list[str],
+    selected_snapshot_name: str | None,
+    live_usage_by_snapshot: dict[str, LocalCodexLiveUsage],
+) -> LocalCodexLiveUsage | None:
+    candidate_names = [name for name in [selected_snapshot_name, *snapshot_names] if name]
+    merged: LocalCodexLiveUsage | None = None
+    seen: set[str] = set()
+    for snapshot_name in candidate_names:
+        if snapshot_name in seen:
+            continue
+        seen.add(snapshot_name)
+        usage = live_usage_by_snapshot.get(snapshot_name)
+        if usage is None:
+            continue
+        merged = _merge_live_usage(merged, usage)
+    return merged
+
+
+def _merge_live_usage(previous: LocalCodexLiveUsage | None, current: LocalCodexLiveUsage) -> LocalCodexLiveUsage:
+    if previous is None:
+        return current
+
+    prefer_current = current.recorded_at >= previous.recorded_at
+    preferred = current if prefer_current else previous
+    fallback = previous if prefer_current else current
+
+    return LocalCodexLiveUsage(
+        recorded_at=max(previous.recorded_at, current.recorded_at),
+        active_session_count=max(0, previous.active_session_count) + max(0, current.active_session_count),
+        primary=preferred.primary if preferred.primary is not None else fallback.primary,
+        secondary=preferred.secondary if preferred.secondary is not None else fallback.secondary,
+    )
 
     def _account_from_auth_bytes(self, raw: bytes) -> Account:
         try:

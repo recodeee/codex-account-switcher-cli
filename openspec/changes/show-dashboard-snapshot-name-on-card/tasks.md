@@ -1,0 +1,4 @@
+- [x] Update dashboard account card subtitle to include snapshot mapping label.
+- [x] Show explicit `No snapshot` text when `codexAuth.snapshotName` is missing.
+- [x] Add frontend unit/integration tests for mapped and missing snapshot subtitle rendering.
+- [x] Validate specs with `openspec validate --specs`.

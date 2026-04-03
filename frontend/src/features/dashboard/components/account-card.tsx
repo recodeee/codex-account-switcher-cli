@@ -32,6 +32,18 @@ export type AccountCardProps = {
   onAction?: (account: AccountSummary, action: AccountAction) => void;
 };
 
+function formatPlanWithSnapshot(
+  planType: string,
+  snapshotName?: string | null,
+): string {
+  const planLabel = formatSlug(planType);
+  const normalizedSnapshotName = snapshotName?.trim();
+  if (!normalizedSnapshotName) {
+    return `${planLabel} · No snapshot`;
+  }
+  return `${planLabel} · ${normalizedSnapshotName}`;
+}
+
 function QuotaBar({
   label,
   percent,
@@ -87,10 +99,13 @@ export function AccountCard({
   onAction,
 }: AccountCardProps) {
   const blurred = usePrivacyStore((s) => s.blurred);
-  const isWorkingNow = account.codexAuth?.isActiveSnapshot ?? false;
+  const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
+  const hasLiveSession = account.codexAuth?.hasLiveSession ?? false;
+  const isWorkingNow = hasLiveSession || isActiveSnapshot;
   const status = resolveEffectiveAccountStatus({
     status: account.status,
-    isActiveSnapshot: isWorkingNow,
+    isActiveSnapshot,
+    hasLiveSession,
   });
   const primaryRemaining = account.usage?.primaryRemainingPercent ?? null;
   const secondaryRemaining = account.usage?.secondaryRemainingPercent ?? null;
@@ -98,12 +113,12 @@ export function AccountCard({
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
-    isActiveSnapshot: isWorkingNow,
+    isActiveSnapshot,
   });
   const useLocalDisabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
-    isActiveSnapshot: isWorkingNow,
+    isActiveSnapshot,
   });
 
   const primaryReset = formatQuotaResetLabel(account.resetAtPrimary ?? null);
@@ -118,7 +133,10 @@ export function AccountCard({
 
   const title = account.displayName || account.email;
   const compactId = formatCompactAccountId(account.accountId);
-  const planLabel = formatSlug(account.planType);
+  const planWithSnapshot = formatPlanWithSnapshot(
+    account.planType,
+    account.codexAuth?.snapshotName,
+  );
   const totalTokensUsed = tokensUsed ?? account.requestUsage?.totalTokens ?? 0;
   const codexSessionCount = resolveCodexSessionCount(account.codexSessionCount, isWorkingNow);
   const emailSubtitle =
@@ -138,7 +156,7 @@ export function AccountCard({
               : title}
           </p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {planLabel}
+            {planWithSnapshot}
             {!emailSubtitle ? idSuffix : ""}
           </p>
           {emailSubtitle ? (

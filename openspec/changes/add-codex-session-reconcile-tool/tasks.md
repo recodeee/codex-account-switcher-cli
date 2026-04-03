@@ -1,0 +1,8 @@
+- [x] 1. Add OpenSpec delta for safe session reconciliation tooling.
+- [x] 2. Implement `app.tools.codex_session_reconcile` with:
+  - keep-session fingerprint matching
+  - repo/default scope filtering
+  - dry-run-by-default behavior with `--apply`
+  - TERM->KILL restart flow with grace timeout
+- [x] 3. Add unit tests for rollout parsing, mapping, selection, and restart flow safety.
+- [x] 4. Run lint, unit tests, and OpenSpec validation.

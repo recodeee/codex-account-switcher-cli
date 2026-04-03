@@ -38,6 +38,7 @@ export const AccountCodexAuthSchema = z.object({
   snapshotName: z.string().nullable().optional(),
   activeSnapshotName: z.string().nullable().optional(),
   isActiveSnapshot: z.boolean().optional(),
+  hasLiveSession: z.boolean().optional(),
 });
 
 export const AccountAdditionalWindowSchema = z.object({

@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from app.modules.accounts.codex_auth_switcher import build_snapshot_index
+
 
 _DEFAULT_ACTIVE_WINDOW_SECONDS = 1800
 _TAIL_LINE_LIMIT = 400
@@ -33,16 +35,62 @@ class LocalCodexLiveUsage:
 
 def read_local_codex_live_usage(*, now: datetime | None = None) -> LocalCodexLiveUsage | None:
     current = now or datetime.now(timezone.utc)
-    active_window_seconds = _active_window_seconds()
     sessions_dir = _resolve_sessions_dir()
+    return _read_local_codex_live_usage_for_sessions_dir(sessions_dir=sessions_dir, now=current)
+
+
+def read_local_codex_live_usage_by_snapshot(*, now: datetime | None = None) -> dict[str, LocalCodexLiveUsage]:
+    current = now or datetime.now(timezone.utc)
+    usage_by_snapshot: dict[str, LocalCodexLiveUsage] = {}
+
+    active_snapshot_name = build_snapshot_index().active_snapshot_name
+    if active_snapshot_name:
+        default_usage = _read_local_codex_live_usage_for_sessions_dir(
+            sessions_dir=_resolve_sessions_dir(),
+            now=current,
+        )
+        if default_usage is not None:
+            usage_by_snapshot[active_snapshot_name] = default_usage
+
+    runtime_root = _resolve_runtime_root()
+    if not runtime_root.exists() or not runtime_root.is_dir():
+        return usage_by_snapshot
+
+    for runtime_dir in runtime_root.iterdir():
+        if not runtime_dir.is_dir():
+            continue
+
+        snapshot_name = _read_runtime_current_snapshot(runtime_dir)
+        if not snapshot_name:
+            continue
+
+        runtime_usage = _read_local_codex_live_usage_for_sessions_dir(
+            sessions_dir=runtime_dir / "sessions",
+            now=current,
+        )
+        if runtime_usage is None:
+            continue
+
+        previous = usage_by_snapshot.get(snapshot_name)
+        usage_by_snapshot[snapshot_name] = _merge_live_usage(previous, runtime_usage)
+
+    return usage_by_snapshot
+
+
+def _read_local_codex_live_usage_for_sessions_dir(
+    *,
+    sessions_dir: Path,
+    now: datetime,
+) -> LocalCodexLiveUsage | None:
+    active_window_seconds = _active_window_seconds()
     if not sessions_dir.exists() or not sessions_dir.is_dir():
         return None
 
-    candidates = _candidate_rollout_files(sessions_dir, current)
+    candidates = _candidate_rollout_files(sessions_dir, now)
     if not candidates:
         return None
 
-    cutoff_ts = (current - timedelta(seconds=active_window_seconds)).timestamp()
+    cutoff_ts = (now - timedelta(seconds=active_window_seconds)).timestamp()
     active_files = [path for path in candidates if _safe_mtime(path) >= cutoff_ts]
     if not active_files:
         return None
@@ -64,6 +112,25 @@ def read_local_codex_live_usage(*, now: datetime | None = None) -> LocalCodexLiv
         active_session_count=len(active_files),
         primary=primary,
         secondary=secondary,
+    )
+
+
+def _merge_live_usage(
+    previous: LocalCodexLiveUsage | None,
+    current: LocalCodexLiveUsage,
+) -> LocalCodexLiveUsage:
+    if previous is None:
+        return current
+
+    prefer_current = current.recorded_at >= previous.recorded_at
+    preferred = current if prefer_current else previous
+    fallback = previous if prefer_current else current
+
+    return LocalCodexLiveUsage(
+        recorded_at=max(previous.recorded_at, current.recorded_at),
+        active_session_count=max(0, previous.active_session_count) + max(0, current.active_session_count),
+        primary=preferred.primary if preferred.primary is not None else fallback.primary,
+        secondary=preferred.secondary if preferred.secondary is not None else fallback.secondary,
     )
 
 
@@ -112,6 +179,24 @@ def _resolve_sessions_dir() -> Path:
         return auth_path.parent / "sessions"
 
     return (Path.home() / ".codex" / "sessions").resolve()
+
+
+def _resolve_runtime_root() -> Path:
+    raw = os.environ.get("CODEX_AUTH_RUNTIME_ROOT")
+    if raw:
+        return _resolve_path(raw)
+    return (Path.home() / ".codex" / "runtimes").resolve()
+
+
+def _read_runtime_current_snapshot(runtime_dir: Path) -> str | None:
+    current_path = runtime_dir / "current"
+    if not current_path.exists() or not current_path.is_file():
+        return None
+    try:
+        value = current_path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    return value or None
 
 
 def _resolve_path(raw: str) -> Path:

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -33,6 +35,37 @@ def _write_auth_snapshot(path: Path, *, email: str, account_id: str) -> None:
         },
     }
     path.write_text(json.dumps(auth_json))
+
+
+def _write_rollout_snapshot(
+    path: Path,
+    *,
+    timestamp: datetime,
+    primary_used: float,
+    secondary_used: float,
+) -> None:
+    payload = {
+        "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "rate_limits": {
+                "primary": {
+                    "used_percent": primary_used,
+                    "window_minutes": 300,
+                    "resets_at": int((timestamp + timedelta(minutes=30)).timestamp()),
+                },
+                "secondary": {
+                    "used_percent": secondary_used,
+                    "window_minutes": 10080,
+                    "resets_at": int((timestamp + timedelta(days=7)).timestamp()),
+                },
+            },
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ts = timestamp.timestamp()
+    os.utime(path, (ts, ts))
 
 
 @pytest.mark.asyncio
@@ -101,6 +134,47 @@ async def test_accounts_list_auto_imports_codex_auth_snapshots(
     second = await async_client.get("/api/accounts")
     assert second.status_code == 200
     assert len(second.json()["accounts"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_sets_has_live_session_from_runtime_telemetry(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    now = datetime.now(timezone.utc)
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    _write_auth_snapshot(accounts_dir / "tokio.json", email="tokio@example.com", account_id="acc_tokio")
+    (tmp_path / "current").write_text("tokio")
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+
+    runtime_root = tmp_path / "runtimes"
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(runtime_root))
+    runtime_dir = runtime_root / "terminal-tokio"
+    day_dir = runtime_dir / "sessions" / f"{now.year:04d}" / f"{now.month:02d}" / f"{now.day:02d}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "current").write_text("tokio")
+    _write_rollout_snapshot(
+        day_dir / "rollout-1.jsonl",
+        timestamp=now - timedelta(minutes=1),
+        primary_used=25.0,
+        secondary_used=45.0,
+    )
+
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    response = await async_client.get("/api/accounts")
+    assert response.status_code == 200
+    accounts = response.json()["accounts"]
+    assert len(accounts) == 1
+    account = accounts[0]
+    assert account["codexAuth"]["hasLiveSession"] is True
+    assert account["usage"]["primaryRemainingPercent"] == pytest.approx(75.0)
+    assert account["usage"]["secondaryRemainingPercent"] == pytest.approx(55.0)
 
 
 @pytest.mark.asyncio

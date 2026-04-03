@@ -25,7 +25,7 @@ describe("AccountCard", () => {
     });
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Plus")).toBeInTheDocument();
+    expect(screen.getByText("Plus · main")).toBeInTheDocument();
     expect(screen.getByText("5h")).toBeInTheDocument();
     expect(screen.getByText("Weekly")).toBeInTheDocument();
     expect(screen.getByText("Tokens used")).toBeInTheDocument();
@@ -48,7 +48,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Free")).toBeInTheDocument();
+    expect(screen.getByText("Free · main")).toBeInTheDocument();
     expect(screen.queryByText("5h")).not.toBeInTheDocument();
     expect(screen.getByText("Weekly")).toBeInTheDocument();
   });
@@ -66,6 +66,38 @@ describe("AccountCard", () => {
 
     expect(screen.getByText("AWS Account MSP")).toBeInTheDocument();
     expect(container.querySelector(".privacy-blur")).not.toBeNull();
+  });
+
+  it("shows plan subtitle with mapped snapshot name", () => {
+    const account = createAccountSummary({
+      planType: "team",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "zeus",
+        activeSnapshotName: "zeus",
+        isActiveSnapshot: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Team · zeus")).toBeInTheDocument();
+  });
+
+  it("shows no-snapshot subtitle when mapping is missing", () => {
+    const account = createAccountSummary({
+      planType: "team",
+      codexAuth: {
+        hasSnapshot: false,
+        snapshotName: null,
+        activeSnapshotName: null,
+        isActiveSnapshot: false,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Team · No snapshot")).toBeInTheDocument();
   });
 
   it("enables use this account button when snapshot exists and 5h quota is available", () => {
@@ -213,6 +245,22 @@ describe("AccountCard", () => {
     expect(screen.queryByText("Working now")).not.toBeInTheDocument();
   });
 
+  it("shows working indicator when runtime session is live even if snapshot is not globally active", () => {
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "secondary",
+        activeSnapshotName: "main",
+        isActiveSnapshot: false,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Working now")).toBeInTheDocument();
+  });
+
   it("shows at least one codex session when account is working now", () => {
     const account = createAccountSummary({
       email: "working@example.com",
@@ -229,6 +277,30 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     const card = screen.getByText("working@example.com").closest(".card-hover");
+    expect(card).not.toBeNull();
+    const sessionsLabel = within(card as HTMLElement).getByText("Codex sessions");
+    const sessionsValue = sessionsLabel.parentElement?.querySelector("p.mt-0\\.5.text-xs.font-semibold.tabular-nums");
+    expect(sessionsValue).not.toBeNull();
+    expect(sessionsValue).toHaveTextContent(/^1$/);
+  });
+
+  it("shows at least one codex session when runtime reports a live session", () => {
+    const account = createAccountSummary({
+      email: "runtime@example.com",
+      displayName: "runtime@example.com",
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "runtime",
+        activeSnapshotName: "main",
+        isActiveSnapshot: false,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const card = screen.getByText("runtime@example.com").closest(".card-hover");
     expect(card).not.toBeNull();
     const sessionsLabel = within(card as HTMLElement).getByText("Codex sessions");
     const sessionsValue = sessionsLabel.parentElement?.querySelector("p.mt-0\\.5.text-xs.font-semibold.tabular-nums");

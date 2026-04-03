@@ -90,6 +90,11 @@ def _open_linux_terminal(shell: str, command: str) -> None:
     candidates: list[list[str]] = [
         ["x-terminal-emulator", "-e", shell, "-lc", command],
         ["gnome-terminal", "--", shell, "-lc", command],
+        ["kgx", "--", shell, "-lc", command],
+        ["gnome-console", "--", shell, "-lc", command],
+        ["ptyxis", "--", shell, "-lc", command],
+        ["xfce4-terminal", "-e", f"{shell} -lc {shlex.quote(command)}"],
+        ["tilix", "-e", f"{shell} -lc {shlex.quote(command)}"],
         ["konsole", "-e", shell, "-lc", command],
         ["alacritty", "-e", shell, "-lc", command],
         ["kitty", shell, "-lc", command],

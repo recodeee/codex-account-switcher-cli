@@ -46,6 +46,7 @@ class AccountCodexAuthStatus(DashboardModel):
     snapshot_name: str | None = None
     active_snapshot_name: str | None = None
     is_active_snapshot: bool = False
+    has_live_session: bool = False
 
 
 class AccountAdditionalWindow(DashboardModel):

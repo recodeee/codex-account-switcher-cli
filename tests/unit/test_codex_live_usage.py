@@ -5,7 +5,10 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.modules.accounts.codex_live_usage import read_local_codex_live_usage
+from app.modules.accounts.codex_live_usage import (
+    read_local_codex_live_usage,
+    read_local_codex_live_usage_by_snapshot,
+)
 
 
 def _sessions_day_dir(root: Path, now: datetime) -> Path:
@@ -132,3 +135,97 @@ def test_read_local_codex_live_usage_prefers_newest_session_file_over_older_acti
     assert usage.secondary is not None
     assert usage.primary.used_percent == 0.0
     assert usage.secondary.used_percent == 0.0
+
+
+def test_read_local_codex_live_usage_by_snapshot_reads_multiple_runtime_profiles(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    runtime_root = tmp_path / "runtimes"
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(runtime_root))
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    work_runtime = runtime_root / "terminal-work"
+    work_runtime.mkdir(parents=True, exist_ok=True)
+    (work_runtime / "current").write_text("work", encoding="utf-8")
+    work_day_dir = _sessions_day_dir(work_runtime / "sessions", now)
+    _write_rollout(
+        work_day_dir / "rollout-work.jsonl",
+        timestamp=now - timedelta(minutes=2),
+        primary_used=10.0,
+        secondary_used=20.0,
+    )
+
+    personal_runtime = runtime_root / "terminal-personal"
+    personal_runtime.mkdir(parents=True, exist_ok=True)
+    (personal_runtime / "current").write_text("personal", encoding="utf-8")
+    personal_day_dir = _sessions_day_dir(personal_runtime / "sessions", now)
+    _write_rollout(
+        personal_day_dir / "rollout-personal.jsonl",
+        timestamp=now - timedelta(minutes=1),
+        primary_used=30.0,
+        secondary_used=40.0,
+    )
+
+    usage_by_snapshot = read_local_codex_live_usage_by_snapshot(now=now)
+
+    assert set(usage_by_snapshot.keys()) == {"work", "personal"}
+    assert usage_by_snapshot["work"].active_session_count == 1
+    assert usage_by_snapshot["work"].primary is not None
+    assert usage_by_snapshot["work"].primary.used_percent == 10.0
+    assert usage_by_snapshot["personal"].active_session_count == 1
+    assert usage_by_snapshot["personal"].secondary is not None
+    assert usage_by_snapshot["personal"].secondary.used_percent == 40.0
+
+
+def test_read_local_codex_live_usage_by_snapshot_merges_same_snapshot_across_runtimes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    runtime_root = tmp_path / "runtimes"
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(runtime_root))
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    runtime_a = runtime_root / "terminal-a"
+    runtime_a.mkdir(parents=True, exist_ok=True)
+    (runtime_a / "current").write_text("work", encoding="utf-8")
+    day_dir_a = _sessions_day_dir(runtime_a / "sessions", now)
+    _write_rollout(
+        day_dir_a / "rollout-a.jsonl",
+        timestamp=now - timedelta(minutes=3),
+        primary_used=11.0,
+        secondary_used=22.0,
+    )
+
+    runtime_b = runtime_root / "terminal-b"
+    runtime_b.mkdir(parents=True, exist_ok=True)
+    (runtime_b / "current").write_text("work", encoding="utf-8")
+    day_dir_b = _sessions_day_dir(runtime_b / "sessions", now)
+    _write_rollout(
+        day_dir_b / "rollout-b.jsonl",
+        timestamp=now - timedelta(minutes=1),
+        primary_used=33.0,
+        secondary_used=44.0,
+    )
+
+    usage_by_snapshot = read_local_codex_live_usage_by_snapshot(now=now)
+
+    assert set(usage_by_snapshot.keys()) == {"work"}
+    merged = usage_by_snapshot["work"]
+    assert merged.active_session_count == 2
+    assert merged.primary is not None
+    assert merged.secondary is not None
+    assert merged.primary.used_percent == 33.0
+    assert merged.secondary.used_percent == 44.0

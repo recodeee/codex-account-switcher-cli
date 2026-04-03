@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 MODE="turbo"
 TARGET_SERVICES=("server" "frontend")
 INSTALL_CODEX_AUTH="${CODEX_LB_INSTALL_CODEX_AUTH:-true}"
-BUMP_FRONTEND_VERSION="${CODEX_LB_BUMP_FRONTEND_VERSION:-false}"
+BUMP_FRONTEND_VERSION="${CODEX_LB_BUMP_FRONTEND_VERSION:-true}"
 FORCE_CODEX_AUTH_INSTALL="false"
 FORCE_SERIAL_BUILD="${CODEX_LB_FORCE_SERIAL_BUILD:-false}"
 FORCE_PARALLEL_BUILD="${CODEX_LB_FORCE_PARALLEL_BUILD:-false}"
@@ -18,7 +18,7 @@ MEMINFO_PATH="${CODEX_LB_MEMINFO_PATH:-/proc/meminfo}"
 
 usage() {
   cat <<'EOF'
-Usage: ./redeploy.sh [--turbo|--full] [--skip-codex-auth-install] [--force-codex-auth-install] [--bump-frontend-version] [--serial-build|--parallel-build] [service...]
+Usage: ./redeploy.sh [--turbo|--full] [--skip-codex-auth-install] [--force-codex-auth-install] [--bump-frontend-version|--no-bump-frontend-version] [--serial-build|--parallel-build] [service...]
 
 Modes:
   --turbo  Build in parallel and restart only selected services (default, faster)
@@ -28,12 +28,13 @@ Flags:
   --skip-codex-auth-install  Skip global codex-auth install/update step
   --force-codex-auth-install Force global codex-auth install/update step
   --bump-frontend-version    Increment frontend/package.json patch version
+  --no-bump-frontend-version Keep frontend/package.json version unchanged
   --serial-build             Build services sequentially (safer for low-memory hosts)
   --parallel-build           Force parallel docker builds
 
 Env:
   CODEX_LB_INSTALL_CODEX_AUTH=true|false (default: true)
-  CODEX_LB_BUMP_FRONTEND_VERSION=true|false (default: false)
+  CODEX_LB_BUMP_FRONTEND_VERSION=true|false (default: true)
   CODEX_LB_FORCE_SERIAL_BUILD=true|false (default: false)
   CODEX_LB_FORCE_PARALLEL_BUILD=true|false (default: false)
   CODEX_LB_PARALLEL_BUILD_MIN_MEM_MB=4096 (auto-switch to serial below this MemAvailable)
@@ -46,6 +47,7 @@ Examples:
   ./redeploy.sh --turbo server frontend
   ./redeploy.sh --force-codex-auth-install
   ./redeploy.sh --bump-frontend-version
+  ./redeploy.sh --no-bump-frontend-version
   ./redeploy.sh --serial-build
   ./redeploy.sh --skip-codex-auth-install --full
   ./redeploy.sh --full
@@ -72,6 +74,10 @@ while (($#)); do
       ;;
     --bump-frontend-version)
       BUMP_FRONTEND_VERSION="true"
+      shift
+      ;;
+    --no-bump-frontend-version)
+      BUMP_FRONTEND_VERSION="false"
       shift
       ;;
     --serial-build)

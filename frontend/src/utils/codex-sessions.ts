@@ -1,6 +1,6 @@
 export function resolveCodexSessionCount(
   codexSessionCount: number | null | undefined,
-  isActiveSnapshot: boolean,
+  hasLiveSession: boolean,
 ): number {
-  return Math.max(codexSessionCount ?? 0, isActiveSnapshot ? 1 : 0);
+  return Math.max(codexSessionCount ?? 0, hasLiveSession ? 1 : 0);
 }

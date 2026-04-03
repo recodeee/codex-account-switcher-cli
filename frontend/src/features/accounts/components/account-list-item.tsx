@@ -76,9 +76,11 @@ export function AccountListItem({
 }: AccountListItemProps) {
   const blurred = usePrivacyStore((s) => s.blurred);
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
+  const hasLiveSession = account.codexAuth?.hasLiveSession ?? false;
   const status = resolveEffectiveAccountStatus({
     status: account.status,
     isActiveSnapshot,
+    hasLiveSession,
   });
   const title = account.displayName || account.email;
   const titleIsEmail = isEmailLabel(title, account.email);

@@ -106,6 +106,70 @@ describe("dashboard flow integration", () => {
     });
   });
 
+  it("shows snapshot names on dashboard account cards", async () => {
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_snapshot",
+                email: "snapshot@example.com",
+                displayName: "snapshot@example.com",
+                planType: "team",
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "zeus",
+                  activeSnapshotName: "zeus",
+                  isActiveSnapshot: true,
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/dashboard");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByText("Team · zeus")).toBeInTheDocument();
+  });
+
+  it("shows Working now when runtime telemetry marks account as live", async () => {
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_runtime_live",
+                email: "runtime-live@example.com",
+                displayName: "runtime-live@example.com",
+                codexSessionCount: 0,
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "runtime-live",
+                  activeSnapshotName: "different-snapshot",
+                  isActiveSnapshot: false,
+                  hasLiveSession: true,
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/dashboard");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByText("Working now")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Sessions" })).toBeInTheDocument();
+  });
+
   it("routes to account details when local snapshot is missing", async () => {
     const user = userEvent.setup({ delay: null });
 
@@ -199,22 +263,18 @@ describe("dashboard flow integration", () => {
     expect(window.location.search).toContain("accountId=acc_with_sessions");
   });
 
-  it("opens embedded terminal workspace instead of host-terminal launch endpoint", async () => {
+  it("opens a host terminal by calling the launch endpoint", async () => {
     const user = userEvent.setup({ delay: null });
     let openTerminalEndpointCalls = 0;
 
     server.use(
       http.post("/api/accounts/:accountId/open-terminal", () => {
         openTerminalEndpointCalls += 1;
-        return HttpResponse.json(
-          {
-            error: {
-              code: "terminal_launch_failed",
-              message: "Failed to open host terminal. No supported terminal app found in PATH.",
-            },
-          },
-          { status: 400 },
-        );
+        return HttpResponse.json({
+          status: "opened",
+          accountId: "acc_primary",
+          snapshotName: "acc_primary",
+        });
       }),
     );
 
@@ -231,8 +291,8 @@ describe("dashboard flow integration", () => {
 
     await user.click(targetButton);
 
-    expect(await screen.findByTestId("terminal-window-acc_primary")).toBeInTheDocument();
-    expect(openTerminalEndpointCalls).toBe(0);
-    expect(screen.queryByText(/No supported terminal app found in PATH/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/Opened terminal for acc_primary/i)).toBeInTheDocument();
+    expect(openTerminalEndpointCalls).toBe(1);
+    expect(screen.queryByTestId("terminal-window-acc_primary")).not.toBeInTheDocument();
   });
 });

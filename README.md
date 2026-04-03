@@ -144,6 +144,31 @@ uv run codex-lb-sync-all --active-auth-path ~/.codex/auth.json
 
 If dashboard auth is enabled, you still need dashboard credentials (`--password` and optional TOTP).
 
+### Reconcile mixed live sessions after switching accounts
+
+When you switch accounts, some already-running Codex sessions may still use the old quota/account context.
+
+Use the reconcile tool to keep one known-good session and restart only non-matching sessions:
+
+```bash
+# dry-run first (safe default)
+uv run python -m app.tools.codex_session_reconcile \
+  --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211
+
+# apply restarts for mismatched sessions in this repo scope
+uv run python -m app.tools.codex_session_reconcile \
+  --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211 \
+  --apply
+
+# optional: include all local codex sessions (not only current repo)
+uv run python -m app.tools.codex_session_reconcile \
+  --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211 \
+  --scope all \
+  --apply
+```
+
+The keep session ID is shown in `codex` session status output (`Session: ...`).
+
 In the dashboard **Accounts** page, each account now has a **Use this** action:
 
 - enabled (green) when 5h quota is available and a matching `codex-auth` snapshot exists
@@ -159,7 +184,8 @@ When `CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST=true` (default), loading 
 > `./redeploy.sh` checks whether bundled `codex-auth` is already up to date, and only reinstalls when missing/outdated/changed.
 > Use `--force-codex-auth-install` to force reinstall, or `--skip-codex-auth-install` (or `CODEX_LB_INSTALL_CODEX_AUTH=false`) to disable that step.
 >
-> Frontend version no longer auto-increments on every redeploy. Use `--bump-frontend-version` (or `CODEX_LB_BUMP_FRONTEND_VERSION=true`) when you explicitly want a patch bump.
+> Frontend version now auto-increments patch (`+1`) on every redeploy by default.
+> Use `--no-bump-frontend-version` (or `CODEX_LB_BUMP_FRONTEND_VERSION=false`) to keep it unchanged.
 >
 > Redeploy now also protects low-memory hosts from freezes:
 > - auto-switches to serial Docker builds when available memory is low

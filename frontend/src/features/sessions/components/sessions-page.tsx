@@ -103,7 +103,7 @@ export function SessionsPage() {
         displayName: account.displayName,
         codexSessionCount: resolveCodexSessionCount(
           account.codexSessionCount,
-          account.codexAuth?.isActiveSnapshot ?? false,
+          (account.codexAuth?.hasLiveSession ?? false) || (account.codexAuth?.isActiveSnapshot ?? false),
         ),
       }))
       .filter((row) => row.codexSessionCount > 0);

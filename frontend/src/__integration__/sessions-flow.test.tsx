@@ -112,4 +112,46 @@ describe("sessions flow integration", () => {
     expect(screen.getByText("zeus@example.com")).toBeInTheDocument();
     expect(screen.getAllByText("6").length).toBeGreaterThan(0);
   });
+
+  it("fallback counters include runtime-live accounts even when persisted session count is zero", async () => {
+    server.use(
+      http.get("/api/sticky-sessions", () =>
+        HttpResponse.json({
+          entries: [],
+          stalePromptCacheCount: 0,
+          total: 0,
+          hasMore: false,
+        }),
+      ),
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_runtime",
+                email: "runtime@example.com",
+                displayName: "runtime@example.com",
+                codexSessionCount: 0,
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "runtime",
+                  activeSnapshotName: "main",
+                  isActiveSnapshot: false,
+                  hasLiveSession: true,
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/sessions?accountId=acc_runtime");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(await screen.findByText("Live Codex session counters")).toBeInTheDocument();
+    expect(screen.getByText("runtime@example.com")).toBeInTheDocument();
+    expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+  });
 });
