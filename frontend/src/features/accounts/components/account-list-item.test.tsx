@@ -201,12 +201,18 @@ describe("AccountListItem", () => {
     expect(screen.queryByTestId("missing-snapshot-badge")).not.toBeInTheDocument();
   });
 
-  it("disables use button when account status is not active", () => {
+  it("treats deactivated accounts with active snapshots as active in list rows", () => {
     const account = createAccountSummary({
       status: "deactivated",
       usage: {
         primaryRemainingPercent: 44,
         secondaryRemainingPercent: 73,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "deadpool",
+        activeSnapshotName: "deadpool",
+        isActiveSnapshot: true,
       },
     });
 
@@ -220,6 +226,7 @@ describe("AccountListItem", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Use this" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
+    expect(screen.queryByText("Deactivated")).not.toBeInTheDocument();
   });
 });

@@ -39,16 +39,23 @@ describe("AccountActions", () => {
     expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
   });
 
-  it("disables Use this when account is not active", () => {
+  it("treats deactivated accounts with active snapshots as active", () => {
     renderAccountActions({
       status: "deactivated",
       usage: {
         primaryRemainingPercent: 44,
         secondaryRemainingPercent: 73,
       },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "deadpool",
+        activeSnapshotName: "deadpool",
+        isActiveSnapshot: true,
+      },
     });
 
-    expect(screen.getByRole("button", { name: "Use this" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Re-authenticate" })).not.toBeInTheDocument();
   });
 
   it("disables Use this when 5h quota is unavailable", () => {

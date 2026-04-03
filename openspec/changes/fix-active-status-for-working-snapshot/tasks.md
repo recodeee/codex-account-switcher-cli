@@ -1,0 +1,5 @@
+- [x] Add a shared effective-status helper for account UI.
+- [x] Update local account gating helpers to use effective status.
+- [x] Update Dashboard account card status/actions to use effective status.
+- [x] Update Accounts list/action components to use effective status.
+- [x] Add/adjust frontend tests for deactivated + active snapshot behavior.

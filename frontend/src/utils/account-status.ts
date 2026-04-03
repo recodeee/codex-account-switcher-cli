@@ -41,3 +41,13 @@ export function normalizeStatus(status: string): DashboardAccountStatus {
   }
   return "active";
 }
+
+export function resolveEffectiveAccountStatus(input: {
+  status: string;
+  isActiveSnapshot?: boolean;
+}): DashboardAccountStatus {
+  if (input.isActiveSnapshot && input.status === "deactivated") {
+    return "active";
+  }
+  return normalizeStatus(input.status);
+}

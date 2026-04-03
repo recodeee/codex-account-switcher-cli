@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 import type { AccountSummary } from "@/features/dashboard/schemas";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
 import {
-  normalizeStatus,
   quotaBarColor,
   quotaBarTrack,
+  resolveEffectiveAccountStatus,
 } from "@/utils/account-status";
 import { formatCompactNumber, formatPercentNullable, formatQuotaResetLabel, formatSlug } from "@/utils/formatters";
 import { canUseLocalAccount, getUseLocalAccountDisabledReason } from "@/utils/use-local-account";
@@ -77,18 +77,23 @@ export function AccountCard({
   onAction,
 }: AccountCardProps) {
   const blurred = usePrivacyStore((s) => s.blurred);
-  const status = normalizeStatus(account.status);
+  const isWorkingNow = account.codexAuth?.isActiveSnapshot ?? false;
+  const status = resolveEffectiveAccountStatus({
+    status: account.status,
+    isActiveSnapshot: isWorkingNow,
+  });
   const primaryRemaining = account.usage?.primaryRemainingPercent ?? null;
   const secondaryRemaining = account.usage?.secondaryRemainingPercent ?? null;
-  const isWorkingNow = account.codexAuth?.isActiveSnapshot ?? false;
   const weeklyOnly = account.windowMinutesPrimary == null && account.windowMinutesSecondary != null;
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
+    isActiveSnapshot: isWorkingNow,
   });
   const useLocalDisabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
+    isActiveSnapshot: isWorkingNow,
   });
 
   const primaryReset = formatQuotaResetLabel(account.resetAtPrimary ?? null);

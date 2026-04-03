@@ -124,7 +124,7 @@ describe("AccountCard", () => {
     expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
   });
 
-  it("disables use this account button when account status is not active", () => {
+  it("treats deactivated accounts with active snapshots as active in card actions", () => {
     const account = createAccountSummary({
       status: "deactivated",
       usage: {
@@ -141,7 +141,9 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
+    expect(screen.queryByText("Deactivated")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
   });
 
   it("calls useLocal action when use this account button is clicked", async () => {

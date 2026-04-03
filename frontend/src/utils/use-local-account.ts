@@ -1,9 +1,10 @@
-import { normalizeStatus } from "@/utils/account-status";
+import { resolveEffectiveAccountStatus } from "@/utils/account-status";
 import { ApiError } from "@/lib/api-client";
 
 type UseLocalAccountInput = {
   status: string;
   primaryRemainingPercent: number | null | undefined;
+  isActiveSnapshot?: boolean;
 };
 
 function hasFiveHourQuota(primaryRemainingPercent: number | null | undefined): boolean {
@@ -11,11 +12,21 @@ function hasFiveHourQuota(primaryRemainingPercent: number | null | undefined): b
 }
 
 export function canUseLocalAccount(input: UseLocalAccountInput): boolean {
-  return normalizeStatus(input.status) === "active" && hasFiveHourQuota(input.primaryRemainingPercent);
+  return (
+    resolveEffectiveAccountStatus({
+      status: input.status,
+      isActiveSnapshot: input.isActiveSnapshot,
+    }) === "active" && hasFiveHourQuota(input.primaryRemainingPercent)
+  );
 }
 
 export function getUseLocalAccountDisabledReason(input: UseLocalAccountInput): string | null {
-  if (normalizeStatus(input.status) !== "active") {
+  if (
+    resolveEffectiveAccountStatus({
+      status: input.status,
+      isActiveSnapshot: input.isActiveSnapshot,
+    }) !== "active"
+  ) {
     return "Account must be active.";
   }
   if (!hasFiveHourQuota(input.primaryRemainingPercent)) {

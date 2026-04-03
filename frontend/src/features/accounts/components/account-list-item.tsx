@@ -5,7 +5,11 @@ import { isEmailLabel } from "@/components/blur-email";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { StatusBadge } from "@/components/status-badge";
 import type { AccountSummary } from "@/features/accounts/schemas";
-import { normalizeStatus, quotaBarColor, quotaBarTrack } from "@/utils/account-status";
+import {
+  quotaBarColor,
+  quotaBarTrack,
+  resolveEffectiveAccountStatus,
+} from "@/utils/account-status";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
 import { formatSlug } from "@/utils/formatters";
 import { canUseLocalAccount, getUseLocalAccountDisabledReason } from "@/utils/use-local-account";
@@ -53,7 +57,11 @@ export function AccountListItem({
   useLocalBusy,
 }: AccountListItemProps) {
   const blurred = usePrivacyStore((s) => s.blurred);
-  const status = normalizeStatus(account.status);
+  const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
+  const status = resolveEffectiveAccountStatus({
+    status: account.status,
+    isActiveSnapshot,
+  });
   const title = account.displayName || account.email;
   const titleIsEmail = isEmailLabel(title, account.email);
   const emailSubtitle = account.displayName && account.displayName !== account.email
@@ -67,10 +75,12 @@ export function AccountListItem({
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
+    isActiveSnapshot,
   });
   const disabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
+    isActiveSnapshot,
   });
 
   return (

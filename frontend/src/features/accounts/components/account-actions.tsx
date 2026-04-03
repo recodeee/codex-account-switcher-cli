@@ -3,6 +3,7 @@ import { Pause, Play, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { canUseLocalAccount, getUseLocalAccountDisabledReason } from "@/utils/use-local-account";
+import { resolveEffectiveAccountStatus } from "@/utils/account-status";
 
 export type AccountActionsProps = {
   account: AccountSummary;
@@ -25,13 +26,20 @@ export function AccountActions({
   onUseLocal,
   onReauth,
 }: AccountActionsProps) {
+  const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
+  const effectiveStatus = resolveEffectiveAccountStatus({
+    status: account.status,
+    isActiveSnapshot,
+  });
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: account.usage?.primaryRemainingPercent,
+    isActiveSnapshot,
   });
   const disabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: account.usage?.primaryRemainingPercent,
+    isActiveSnapshot,
   });
 
   return (
@@ -77,7 +85,7 @@ export function AccountActions({
         </Button>
       )}
 
-      {account.status === "deactivated" ? (
+      {effectiveStatus === "deactivated" ? (
         <Button
           type="button"
           size="sm"
