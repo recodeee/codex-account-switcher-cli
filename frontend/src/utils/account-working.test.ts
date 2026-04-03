@@ -18,7 +18,7 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account)).toBe(true);
   });
 
-  it("returns true when account is active snapshot", () => {
+  it("returns false when account is active snapshot without live sessions", () => {
     const account = createAccountSummary({
       codexAuth: {
         hasSnapshot: true,
@@ -29,7 +29,7 @@ describe("isAccountWorkingNow", () => {
       },
       codexSessionCount: 0,
     });
-    expect(isAccountWorkingNow(account)).toBe(true);
+    expect(isAccountWorkingNow(account)).toBe(false);
   });
 
   it("returns true when account has tracked codex sessions", () => {
@@ -60,4 +60,3 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account)).toBe(false);
   });
 });
-

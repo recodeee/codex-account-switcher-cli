@@ -95,6 +95,8 @@ class AccountsRepository:
     async def list_codex_session_counts_by_account(
         self,
         account_ids: list[str] | None = None,
+        *,
+        active_since: datetime | None = None,
     ) -> dict[str, int]:
         stmt = (
             select(
@@ -106,12 +108,55 @@ class AccountsRepository:
         )
         if account_ids:
             stmt = stmt.where(StickySession.account_id.in_(account_ids))
+        if active_since is not None:
+            stmt = stmt.where(StickySession.updated_at >= active_since)
 
         result = await self._session.execute(stmt)
         return {
             str(account_id): int(session_count or 0)
             for account_id, session_count in result.all()
             if account_id
+        }
+
+    async def list_codex_current_task_preview_by_account(
+        self,
+        account_ids: list[str] | None = None,
+        *,
+        active_since: datetime | None = None,
+    ) -> dict[str, str]:
+        task_timestamp = func.coalesce(StickySession.task_updated_at, StickySession.updated_at).label("task_timestamp")
+        ranked_sessions = (
+            select(
+                StickySession.account_id.label("account_id"),
+                StickySession.task_preview.label("task_preview"),
+                func.row_number()
+                .over(
+                    partition_by=StickySession.account_id,
+                    order_by=(
+                        task_timestamp.desc(),
+                        StickySession.updated_at.desc(),
+                        StickySession.key.asc(),
+                    ),
+                )
+                .label("row_number"),
+            )
+            .where(StickySession.kind == StickySessionKind.CODEX_SESSION)
+            .where(StickySession.task_preview.is_not(None))
+            .where(StickySession.task_preview != "")
+        )
+        if account_ids:
+            ranked_sessions = ranked_sessions.where(StickySession.account_id.in_(account_ids))
+        if active_since is not None:
+            ranked_sessions = ranked_sessions.where(StickySession.updated_at >= active_since)
+
+        ranked_subquery = ranked_sessions.subquery()
+        result = await self._session.execute(
+            select(ranked_subquery.c.account_id, ranked_subquery.c.task_preview).where(ranked_subquery.c.row_number == 1)
+        )
+        return {
+            str(account_id): str(task_preview)
+            for account_id, task_preview in result.all()
+            if account_id and task_preview
         }
 
     async def exists_active_chatgpt_account_id(self, chatgpt_account_id: str) -> bool:

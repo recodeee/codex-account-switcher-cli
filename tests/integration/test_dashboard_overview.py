@@ -166,8 +166,12 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
         await session.execute(
             text(
                 """
-                INSERT INTO sticky_sessions (key, account_id, kind, created_at, updated_at)
-                VALUES (:key, :account_id, :kind, :timestamp, :timestamp)
+                INSERT INTO sticky_sessions (
+                    key, account_id, kind, created_at, updated_at, task_preview, task_updated_at
+                )
+                VALUES (
+                    :key, :account_id, :kind, :timestamp, :timestamp, :task_preview, :timestamp
+                )
                 """
             ),
             {
@@ -175,6 +179,7 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
                 "account_id": "acc_dash",
                 "kind": "codex_session",
                 "timestamp": now - timedelta(minutes=1),
+                "task_preview": "Investigate dashboard quota drift",
             },
         )
         await session.commit()
@@ -187,6 +192,7 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
     assert payload["accounts"][0]["requestUsage"] is not None
     assert payload["accounts"][0]["requestUsage"]["totalTokens"] == 150
     assert payload["accounts"][0]["codexSessionCount"] == 1
+    assert payload["accounts"][0]["codexCurrentTaskPreview"] == "Investigate dashboard quota drift"
     assert payload["accounts"][0]["codexAuth"]["hasLiveSession"] is False
     assert payload["accounts"][0]["usage"]["primaryRemainingPercent"] == pytest.approx(80.0)
     assert payload["accounts"][0]["usage"]["secondaryRemainingPercent"] == pytest.approx(60.0)

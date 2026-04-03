@@ -80,6 +80,7 @@ describe("useStickySessions", () => {
     expect(result.current.stickySessionsQuery.data?.entries).toHaveLength(1);
     expect(seenUrl).toContain("offset=0");
     expect(seenUrl).toContain("limit=10");
+    expect(seenUrl).toContain("activeOnly=false");
 
     await result.current.deleteMutation.mutateAsync([{ key: "thread_123", kind: "prompt_cache" }]);
     expect(deletePayload).toEqual({ sessions: [{ key: "thread_123", kind: "prompt_cache" }] });

@@ -254,19 +254,21 @@ describe("AccountCard", () => {
     expect(onAction).toHaveBeenNthCalledWith(2, account, "repairSnapshotRename");
   });
 
-  it("shows working indicator when account snapshot is active", () => {
+  it("does not show working indicator when account snapshot is active without live sessions", () => {
     const account = createAccountSummary({
       codexAuth: {
         hasSnapshot: true,
         snapshotName: "main",
         activeSnapshotName: "main",
         isActiveSnapshot: true,
+        hasLiveSession: false,
       },
+      codexSessionCount: 0,
     });
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Working now")).toBeInTheDocument();
+    expect(screen.queryByText("Working now")).not.toBeInTheDocument();
   });
 
   it("shows live token and 5h status affordances for working accounts", () => {
@@ -285,6 +287,27 @@ describe("AccountCard", () => {
 
     expect(screen.getAllByText("Live token status").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/^live$/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders current task preview for working accounts when provided", () => {
+    const account = createAccountSummary({
+      codexSessionCount: 2,
+      codexCurrentTaskPreview: "Trace session-affinity fallback for codex websocket flow",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Current task")).toBeInTheDocument();
+    expect(
+      screen.getByText("Trace session-affinity fallback for codex websocket flow"),
+    ).toBeInTheDocument();
   });
 
   it("hides working indicator when account snapshot is not active", () => {

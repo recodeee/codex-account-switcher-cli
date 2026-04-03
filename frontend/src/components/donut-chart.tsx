@@ -178,31 +178,43 @@ export function DonutChart({
           </div>
         </div>
 
-        <div className="flex-1 space-y-2.5">
-          {normalizedItems.map((item, i) => (
-            <div key={item.id ?? item.label} className="animate-fade-in-up flex items-center justify-between gap-3 text-xs" style={{ animationDelay: `${i * 75}ms` }}>
-              <div className="flex min-w-0 items-center gap-2">
-                <span
-                  aria-hidden
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="truncate font-medium">
-                  {item.isEmail && blurred
-                    ? <><span className="privacy-blur">{item.label}</span>{item.labelSuffix}</>
-                    : <>{item.label}{item.labelSuffix}</>}
-                </span>
+        <div className="flex-1 space-y-2 overflow-hidden">
+          {normalizedItems.map((item, i) => {
+            const secondaryValue = legendSecondaryFormatter
+              ? legendSecondaryFormatter(item)
+              : null;
+
+            return (
+              <div
+                key={item.id ?? item.label}
+                className="animate-fade-in-up flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/35 px-2.5 py-1.5 text-xs"
+                style={{ animationDelay: `${i * 75}ms` }}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="truncate font-medium">
+                    {item.isEmail && blurred
+                      ? <><span className="privacy-blur">{item.label}</span>{item.labelSuffix}</>
+                      : <>{item.label}{item.labelSuffix}</>}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2 tabular-nums">
+                  <span className="font-semibold text-foreground/90">
+                    {legendValueFormatter ? legendValueFormatter(item) : formatCompactNumber(item.value)}
+                  </span>
+                  {secondaryValue ? (
+                    <span className="text-[10px] text-muted-foreground/85">
+                      {secondaryValue}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              <span className="tabular-nums text-muted-foreground">
-                {legendValueFormatter ? legendValueFormatter(item) : formatCompactNumber(item.value)}
-              </span>
-              {legendSecondaryFormatter ? (
-                <span className="tabular-nums text-[10px] text-muted-foreground/80">
-                  {legendSecondaryFormatter(item)}
-                </span>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

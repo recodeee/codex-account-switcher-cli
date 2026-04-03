@@ -4,7 +4,7 @@ import { DonutChart } from "@/components/donut-chart";
 import type { RequestLogUsageFallbackState } from "@/features/dashboard/request-log-usage-fallback";
 import type { AccountSummary, RequestLogUsageSummary } from "@/features/dashboard/schemas";
 import { buildDuplicateAccountIdSet, formatCompactAccountId } from "@/utils/account-identifiers";
-import { formatCompactNumber, formatEuro } from "@/utils/formatters";
+import { formatEuro } from "@/utils/formatters";
 
 export type RequestLogUsageDonutsProps = {
   accounts: AccountSummary[];
@@ -29,6 +29,18 @@ type UsageWindowStats = {
   topAccountLabel: string;
   topAccountShare: number;
 };
+
+const thousandUnitFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 2,
+});
+
+function formatTokensAsThousands(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  const normalized = Math.max(0, value) / 1000;
+  return `${thousandUnitFormatter.format(normalized)}K`;
+}
 
 function buildDonutItems(accounts: AccountSummary[], window: UsageSummaryWindow): DonutLegendItem[] {
   const duplicateAccountIds = buildDuplicateAccountIdSet(accounts);
@@ -166,12 +178,12 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard
           label="5h Tokens"
-          value={formatCompactNumber(total5h)}
+          value={formatTokensAsThousands(total5h)}
           hint={`${stats5h.activeAccounts} active accounts`}
         />
         <StatCard
           label="7d Tokens"
-          value={formatCompactNumber(total7d)}
+          value={formatTokensAsThousands(total7d)}
           hint={`${stats7d.activeAccounts} active accounts`}
         />
         <StatCard
@@ -186,7 +198,7 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
         />
         <StatCard
           label="Avg / active account"
-          value={formatCompactNumber(stats7d.avgTokensPerAccount)}
+          value={formatTokensAsThousands(stats7d.avgTokensPerAccount)}
           hint="Based on 7d consumption"
         />
         <StatCard
@@ -200,8 +212,10 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
           title="5h Consumed"
           subtitle={`Top: ${stats5h.topAccountLabel} · ${Math.round(stats5h.topAccountShare)}%`}
           centerLabel="Consumed"
+          centerValue={formatTokensAsThousands(total5h)}
           items={items5h}
           total={total5h}
+          legendValueFormatter={(item) => formatTokensAsThousands(item.value)}
           centerSubvalue={formatEuro(totalCostEur5h)}
           legendSecondaryFormatter={(item) => formatEuro(item.costEur ?? 0)}
         />
@@ -209,8 +223,10 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
           title="Weekly Consumed"
           subtitle={`Top: ${stats7d.topAccountLabel} · ${Math.round(stats7d.topAccountShare)}%`}
           centerLabel="Consumed"
+          centerValue={formatTokensAsThousands(total7d)}
           items={items7d}
           total={total7d}
+          legendValueFormatter={(item) => formatTokensAsThousands(item.value)}
           centerSubvalue={formatEuro(totalCostEur7d)}
           legendSecondaryFormatter={(item) => formatEuro(item.costEur ?? 0)}
         />

@@ -513,10 +513,18 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
             sticky_columns_rows = (await session.execute(text("PRAGMA table_info(sticky_sessions)"))).fetchall()
             sticky_columns = {str(row[1]) for row in sticky_columns_rows if len(row) > 1}
             assert "kind" in sticky_columns
+            assert "task_preview" in sticky_columns
+            assert "task_updated_at" in sticky_columns
             sticky_kind = (
                 await session.execute(text("SELECT kind FROM sticky_sessions WHERE key='sticky_1'"))
             ).scalar_one()
             assert sticky_kind == "sticky_thread"
+            legacy_task_preview = (
+                await session.execute(
+                    text("SELECT task_preview FROM sticky_sessions WHERE key='sticky_1' AND kind='sticky_thread'")
+                )
+            ).scalar_one()
+            assert legacy_task_preview is None
             await session.execute(
                 text(
                     """

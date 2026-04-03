@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import json
 import logging
+import re
 import time
 from collections import deque
 from collections.abc import Sequence
@@ -336,6 +337,8 @@ class ProxyService:
             api_key_reservation=api_key_reservation,
             request_id=request_id,
         )
+        if affinity.kind == StickySessionKind.CODEX_SESSION:
+            request_state.sticky_task_preview = _derive_codex_session_task_preview(payload)
         request_state.transport = _REQUEST_TRANSPORT_HTTP
         session = await self._get_or_create_http_bridge_session(
             bridge_session_key,
@@ -352,6 +355,12 @@ class ProxyService:
             max_sessions=max_sessions,
             previous_response_id=request_state.previous_response_id,
         )
+        if affinity.kind == StickySessionKind.CODEX_SESSION:
+            await self._refresh_codex_session_task_preview(
+                sticky_key=affinity.key,
+                account_id=session.account.id,
+                task_preview=request_state.sticky_task_preview,
+            )
         await self._submit_http_bridge_request(
             session,
             request_state=request_state,
@@ -415,6 +424,11 @@ class ProxyService:
             sticky_threads_enabled=settings.sticky_threads_enabled,
             api_key=api_key,
         )
+        sticky_task_preview = (
+            _derive_codex_session_task_preview(payload)
+            if affinity.kind == StickySessionKind.CODEX_SESSION
+            else None
+        )
         sticky_key_source = "none"
         if affinity.kind == StickySessionKind.CODEX_SESSION:
             sticky_key_source = "session_header"
@@ -464,6 +478,7 @@ class ProxyService:
                     kind="compact",
                     sticky_key=affinity.key,
                     sticky_kind=affinity.kind,
+                    sticky_task_preview=sticky_task_preview,
                     reallocate_sticky=affinity.reallocate_sticky,
                     sticky_max_age_seconds=affinity.max_age_seconds,
                     prefer_earlier_reset_accounts=prefer_earlier_reset,
@@ -1009,6 +1024,13 @@ class ProxyService:
                         )
                     )
 
+                if request_state is not None and request_affinity.kind == StickySessionKind.CODEX_SESSION:
+                    await self._refresh_codex_session_task_preview(
+                        sticky_key=request_affinity.key,
+                        account_id=account.id if account is not None else None,
+                        task_preview=request_state.sticky_task_preview,
+                    )
+
                 try:
                     if text_data is not None:
                         await upstream.send_text(text_data)
@@ -1099,6 +1121,8 @@ class ProxyService:
             sticky_threads_enabled=sticky_threads_enabled,
             api_key=api_key,
         )
+        if affinity_policy.kind == StickySessionKind.CODEX_SESSION:
+            request_state.sticky_task_preview = _derive_codex_session_task_preview(responses_payload)
         sticky_key_source = "none"
         if affinity_policy.kind == StickySessionKind.CODEX_SESSION:
             sticky_key_source = (
@@ -1202,6 +1226,7 @@ class ProxyService:
                 kind="websocket",
                 sticky_key=sticky_key,
                 sticky_kind=sticky_kind,
+                sticky_task_preview=request_state.sticky_task_preview,
                 reallocate_sticky=reallocate_sticky,
                 sticky_max_age_seconds=sticky_max_age_seconds,
                 prefer_earlier_reset_accounts=prefer_earlier_reset,
@@ -1874,6 +1899,7 @@ class ProxyService:
             kind="http_bridge",
             sticky_key=affinity.key,
             sticky_kind=affinity.kind,
+            sticky_task_preview=request_state.sticky_task_preview,
             reallocate_sticky=affinity.reallocate_sticky,
             sticky_max_age_seconds=affinity.max_age_seconds,
             prefer_earlier_reset_accounts=settings.prefer_earlier_reset_accounts,
@@ -2351,6 +2377,7 @@ class ProxyService:
             kind="http_bridge",
             sticky_key=session.affinity.key,
             sticky_kind=session.affinity.kind,
+            sticky_task_preview=request_state.sticky_task_preview,
             reallocate_sticky=session.affinity.reallocate_sticky,
             sticky_max_age_seconds=session.affinity.max_age_seconds,
             prefer_earlier_reset_accounts=settings.prefer_earlier_reset_accounts,
@@ -3251,6 +3278,11 @@ class ProxyService:
             sticky_threads_enabled=settings.sticky_threads_enabled,
             api_key=api_key,
         )
+        sticky_task_preview = (
+            _derive_codex_session_task_preview(payload)
+            if affinity.kind == StickySessionKind.CODEX_SESSION
+            else None
+        )
         sticky_key_source = "none"
         if affinity.kind == StickySessionKind.CODEX_SESSION:
             sticky_key_source = "session_header"
@@ -3300,6 +3332,7 @@ class ProxyService:
                         kind="stream",
                         sticky_key=affinity.key,
                         sticky_kind=affinity.kind,
+                        sticky_task_preview=sticky_task_preview,
                         reallocate_sticky=affinity.reallocate_sticky,
                         sticky_max_age_seconds=affinity.max_age_seconds,
                         prefer_earlier_reset_accounts=prefer_earlier_reset,
@@ -4223,6 +4256,26 @@ class ProxyService:
             return await self._ensure_fresh(account, force=force, timeout_seconds=timeout_seconds)
         return await self._ensure_fresh(account, force=force)
 
+    async def _refresh_codex_session_task_preview(
+        self,
+        *,
+        sticky_key: str | None,
+        account_id: str | None,
+        task_preview: str | None,
+    ) -> None:
+        if sticky_key is None or account_id is None or task_preview is None:
+            return
+        try:
+            async with self._repo_factory() as repos:
+                await repos.sticky_sessions.upsert(
+                    sticky_key,
+                    account_id,
+                    kind=StickySessionKind.CODEX_SESSION,
+                    task_preview=task_preview,
+                )
+        except Exception:
+            logger.warning("Failed to persist codex-session task preview", exc_info=True)
+
     async def _select_account_with_budget(
         self,
         deadline: float,
@@ -4231,6 +4284,7 @@ class ProxyService:
         kind: str,
         sticky_key: str | None = None,
         sticky_kind: StickySessionKind | None = None,
+        sticky_task_preview: str | None = None,
         reallocate_sticky: bool = False,
         sticky_max_age_seconds: int | None = None,
         prefer_earlier_reset_accounts: bool = False,
@@ -4250,6 +4304,7 @@ class ProxyService:
                 return await self._load_balancer.select_account(
                     sticky_key=sticky_key,
                     sticky_kind=sticky_kind,
+                    sticky_task_preview=sticky_task_preview,
                     reallocate_sticky=reallocate_sticky,
                     sticky_max_age_seconds=sticky_max_age_seconds,
                     prefer_earlier_reset_accounts=prefer_earlier_reset_accounts,
@@ -4380,6 +4435,7 @@ class _WebSocketRequestState:
     error_message_override: str | None = None
     error_type_override: str | None = None
     error_param_override: str | None = None
+    sticky_task_preview: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -4904,6 +4960,66 @@ def _derive_prompt_cache_key(
         return f"{model_class}-{random_suffix}" if model_class is not None else random_suffix
 
     return "-".join([model_class, *parts]) if model_class is not None else "-".join(parts)
+
+
+_TASK_PREVIEW_MAX_LENGTH = 120
+_TASK_PREVIEW_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+_TASK_PREVIEW_BEARER_RE = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._-]+")
+_TASK_PREVIEW_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(api[_-]?key|token|password|secret)\b\s*[:=]\s*([^\s,;]+)"
+)
+
+
+def _derive_codex_session_task_preview(payload: ResponsesRequest | ResponsesCompactRequest) -> str | None:
+    preview_source = _extract_first_user_text_for_task_preview(payload)
+    if preview_source is None:
+        instructions = getattr(payload, "instructions", None)
+        if isinstance(instructions, str):
+            preview_source = instructions
+    if preview_source is None:
+        return None
+    return _sanitize_codex_task_preview(preview_source)
+
+
+def _extract_first_user_text_for_task_preview(payload: ResponsesRequest | ResponsesCompactRequest) -> str | None:
+    input_value = getattr(payload, "input", None)
+    if isinstance(input_value, str):
+        return input_value
+    if not isinstance(input_value, list):
+        return None
+    for item in input_value:
+        if not isinstance(item, dict) or item.get("role") != "user":
+            continue
+        content = item.get("content")
+        if isinstance(content, str):
+            return content
+        if not isinstance(content, list):
+            continue
+        text_parts: list[str] = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            text_value = part.get("text")
+            if isinstance(text_value, str):
+                text_parts.append(text_value)
+        if text_parts:
+            return " ".join(text_parts)
+    return None
+
+
+def _sanitize_codex_task_preview(text: str) -> str | None:
+    normalized = " ".join(text.split())
+    if not normalized:
+        return None
+    redacted = _TASK_PREVIEW_EMAIL_RE.sub("[redacted-email]", normalized)
+    redacted = _TASK_PREVIEW_BEARER_RE.sub("bearer [redacted]", redacted)
+    redacted = _TASK_PREVIEW_SECRET_ASSIGNMENT_RE.sub(r"\1=[redacted]", redacted)
+    trimmed = redacted.strip()
+    if not trimmed:
+        return None
+    if len(trimmed) <= _TASK_PREVIEW_MAX_LENGTH:
+        return trimmed
+    return trimmed[: _TASK_PREVIEW_MAX_LENGTH - 1].rstrip() + "…"
 
 
 def _extract_first_user_input(payload: ResponsesRequest | ResponsesCompactRequest) -> str | None:

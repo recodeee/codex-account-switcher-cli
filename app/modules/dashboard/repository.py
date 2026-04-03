@@ -42,8 +42,24 @@ class DashboardRepository:
     async def list_codex_session_counts_by_account(
         self,
         account_ids: list[str] | None = None,
+        *,
+        active_since: datetime | None = None,
     ) -> dict[str, int]:
-        return await self._accounts_repo.list_codex_session_counts_by_account(account_ids)
+        return await self._accounts_repo.list_codex_session_counts_by_account(
+            account_ids,
+            active_since=active_since,
+        )
+
+    async def list_codex_current_task_preview_by_account(
+        self,
+        account_ids: list[str] | None = None,
+        *,
+        active_since: datetime | None = None,
+    ) -> dict[str, str]:
+        return await self._accounts_repo.list_codex_current_task_preview_by_account(
+            account_ids,
+            active_since=active_since,
+        )
 
     async def usage_history_since(
         self,

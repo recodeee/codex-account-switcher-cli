@@ -10,8 +10,10 @@ import { renderWithProviders } from "@/test/utils";
 
 describe("sessions flow integration", () => {
   it("loads sessions page and renders codex sessions grouped by account", async () => {
+    let requestUrl = "";
     server.use(
       http.get("/api/sticky-sessions", ({ request }) => {
+        requestUrl = request.url;
         const url = new URL(request.url);
         if (url.searchParams.get("kind") !== "codex_session") {
           return HttpResponse.json({ entries: [], stalePromptCacheCount: 0, total: 0, hasMore: false });
@@ -25,6 +27,9 @@ describe("sessions flow integration", () => {
               kind: "codex_session",
               createdAt: "2026-03-10T12:00:00Z",
               updatedAt: "2026-03-10T12:05:00Z",
+              taskPreview: "Investigate alpha session stream retry bug",
+              taskUpdatedAt: "2026-03-10T12:05:00Z",
+              isActive: true,
               expiresAt: null,
               isStale: false,
             },
@@ -35,6 +40,9 @@ describe("sessions flow integration", () => {
               kind: "codex_session",
               createdAt: "2026-03-10T13:00:00Z",
               updatedAt: "2026-03-10T13:02:00Z",
+              taskPreview: "Review beta account quota depletion warnings",
+              taskUpdatedAt: "2026-03-10T13:02:00Z",
+              isActive: true,
               expiresAt: null,
               isStale: false,
             },
@@ -54,6 +62,9 @@ describe("sessions flow integration", () => {
     expect(await screen.findByText("beta@example.com")).toBeInTheDocument();
     expect(screen.getByText("session-alpha")).toBeInTheDocument();
     expect(screen.getByText("session-beta")).toBeInTheDocument();
+    expect(screen.getByText("Investigate alpha session stream retry bug")).toBeInTheDocument();
+    expect(screen.getByText("Review beta account quota depletion warnings")).toBeInTheDocument();
+    expect(requestUrl).toContain("activeOnly=true");
   });
 
   it("navigates to sessions from header tab", async () => {

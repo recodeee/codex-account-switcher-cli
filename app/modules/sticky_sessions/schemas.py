@@ -16,6 +16,9 @@ class StickySessionEntryResponse(DashboardModel):
     kind: StickySessionKind
     created_at: datetime
     updated_at: datetime
+    task_preview: str | None = None
+    task_updated_at: datetime | None = None
+    is_active: bool = False
     expires_at: datetime | None = None
     is_stale: bool
 

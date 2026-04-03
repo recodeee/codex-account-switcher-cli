@@ -34,6 +34,8 @@ from app.modules.usage.depletion_service import (
     compute_depletion_for_account,
 )
 
+_ACTIVE_CODEX_TASK_WINDOW = timedelta(minutes=30)
+
 
 class DashboardService:
     def __init__(self, repo: DashboardRepository) -> None:
@@ -57,7 +59,14 @@ class DashboardService:
             )
             for account_id, row in request_usage_rows.items()
         }
-        codex_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(account_ids)
+        codex_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(
+            account_ids,
+            active_since=utcnow() - _ACTIVE_CODEX_TASK_WINDOW,
+        )
+        codex_current_task_preview_by_account = await self._repo.list_codex_current_task_preview_by_account(
+            account_ids,
+            active_since=utcnow() - _ACTIVE_CODEX_TASK_WINDOW,
+        )
         snapshot_index = build_snapshot_index()
         codex_auth_by_account = {
             account.id: _build_codex_auth_status(account=account, snapshot_index=snapshot_index)
@@ -83,6 +92,7 @@ class DashboardService:
             secondary_usage=secondary_usage,
             request_usage_by_account=request_usage_by_account,
             codex_session_counts_by_account=codex_session_counts_by_account,
+            codex_current_task_preview_by_account=codex_current_task_preview_by_account,
             codex_auth_by_account=codex_auth_by_account,
             encryptor=self._encryptor,
             include_auth=False,

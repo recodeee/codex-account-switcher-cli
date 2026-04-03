@@ -17,6 +17,9 @@ describe("StickySessionEntrySchema", () => {
       kind: "prompt_cache",
       createdAt: "2026-03-10T12:00:00Z",
       updatedAt: "2026-03-10T12:05:00Z",
+      taskPreview: "Investigate prompt-cache freshness",
+      taskUpdatedAt: "2026-03-10T12:05:00Z",
+      isActive: true,
       expiresAt: "2026-03-10T12:10:00Z",
       isStale: false,
     });
@@ -24,6 +27,8 @@ describe("StickySessionEntrySchema", () => {
     expect(parsed.kind).toBe("prompt_cache");
     expect(parsed.displayName).toBe("sticky-a@example.com");
     expect(parsed.expiresAt).toBe("2026-03-10T12:10:00Z");
+    expect(parsed.taskPreview).toBe("Investigate prompt-cache freshness");
+    expect(parsed.isActive).toBe(true);
   });
 });
 
@@ -40,7 +45,7 @@ describe("StickySessionsListResponseSchema", () => {
 describe("StickySessionsListParamsSchema", () => {
   it("defaults pagination parameters", () => {
     const parsed = StickySessionsListParamsSchema.parse({});
-    expect(parsed).toEqual({ staleOnly: false, offset: 0, limit: 10 });
+    expect(parsed).toEqual({ staleOnly: false, activeOnly: false, offset: 0, limit: 10 });
   });
 });
 

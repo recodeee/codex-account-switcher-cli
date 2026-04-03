@@ -118,6 +118,64 @@ async def test_import_and_list_accounts(async_client):
 
 
 @pytest.mark.asyncio
+async def test_accounts_list_exposes_latest_active_codex_task_preview(async_client):
+    email = "preview@example.com"
+    raw_account_id = "acc_preview"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": "acc_preview_payload",
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    now = datetime.now(timezone.utc)
+    async with SessionLocal() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO sticky_sessions (
+                    key, account_id, kind, created_at, updated_at, task_preview, task_updated_at
+                )
+                VALUES
+                    (
+                        'preview-active', :account_id, 'codex_session',
+                        :active_timestamp, :active_timestamp, :active_preview, :active_timestamp
+                    ),
+                    (
+                        'preview-stale', :account_id, 'codex_session',
+                        :stale_timestamp, :stale_timestamp, :stale_preview, :stale_timestamp
+                    )
+                """
+            ),
+            {
+                "account_id": expected_account_id,
+                "active_timestamp": now - timedelta(minutes=2),
+                "stale_timestamp": now - timedelta(hours=2),
+                "active_preview": "Ship active session preview to dashboard",
+                "stale_preview": "This stale preview should not appear",
+            },
+        )
+        await session.commit()
+
+    list_response = await async_client.get("/api/accounts")
+    assert list_response.status_code == 200
+    accounts = {item["accountId"]: item for item in list_response.json()["accounts"]}
+    assert accounts[expected_account_id]["codexCurrentTaskPreview"] == "Ship active session preview to dashboard"
+    assert accounts[expected_account_id]["codexSessionCount"] == 1
+
+
+@pytest.mark.asyncio
 async def test_accounts_list_auto_imports_codex_auth_snapshots(
     async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):

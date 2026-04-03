@@ -100,8 +100,13 @@ export function DashboardPage() {
   const overview = dashboardQuery.data;
   const logPage = logsQuery.data;
   const mergedUsageSummary = useMemo(
-    () => mergeRequestLogUsageSummaryWithLiveFallback(usageSummaryQuery.data, overview?.windows),
-    [overview?.windows, usageSummaryQuery.data],
+    () =>
+      mergeRequestLogUsageSummaryWithLiveFallback(
+        usageSummaryQuery.data,
+        overview?.windows,
+        overview?.accounts,
+      ),
+    [overview?.accounts, overview?.windows, usageSummaryQuery.data],
   );
 
   const view = useMemo(() => {

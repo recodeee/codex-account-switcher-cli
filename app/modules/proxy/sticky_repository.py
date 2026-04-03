@@ -53,8 +53,22 @@ class StickySessionsRepository:
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def upsert(self, key: str, account_id: str, *, kind: StickySessionKind) -> StickySession:
-        statement = self._build_upsert_statement(key, account_id, kind)
+    async def upsert(
+        self,
+        key: str,
+        account_id: str,
+        *,
+        kind: StickySessionKind,
+        task_preview: str | None = None,
+        task_updated_at: datetime | None = None,
+    ) -> StickySession:
+        statement = self._build_upsert_statement(
+            key,
+            account_id,
+            kind,
+            task_preview=task_preview,
+            task_updated_at=task_updated_at,
+        )
         await self._session.execute(statement)
         await self._session.commit()
         row = await self.get_entry(key, kind=kind)
@@ -90,6 +104,7 @@ class StickySessionsRepository:
         self,
         *,
         kind: StickySessionKind | None = None,
+        updated_after: datetime | None = None,
         updated_before: datetime | None = None,
         offset: int = 0,
         limit: int | None = None,
@@ -98,6 +113,7 @@ class StickySessionsRepository:
             self._apply_filters(
                 select(StickySession, Account.email),
                 kind=kind,
+                updated_after=updated_after,
                 updated_before=updated_before,
             )
             .join(Account, Account.id == StickySession.account_id)
@@ -121,11 +137,13 @@ class StickySessionsRepository:
         self,
         *,
         kind: StickySessionKind | None = None,
+        updated_after: datetime | None = None,
         updated_before: datetime | None = None,
     ) -> int:
         statement = self._apply_filters(
             select(func.count()).select_from(StickySession),
             kind=kind,
+            updated_after=updated_after,
             updated_before=updated_before,
         )
         result = await self._session.execute(statement)
@@ -143,7 +161,15 @@ class StickySessionsRepository:
         await self._session.commit()
         return deleted
 
-    def _build_upsert_statement(self, key: str, account_id: str, kind: StickySessionKind) -> Insert:
+    def _build_upsert_statement(
+        self,
+        key: str,
+        account_id: str,
+        kind: StickySessionKind,
+        *,
+        task_preview: str | None = None,
+        task_updated_at: datetime | None = None,
+    ) -> Insert:
         dialect = self._session.get_bind().dialect.name
         if dialect == "postgresql":
             insert_fn = pg_insert
@@ -151,13 +177,18 @@ class StickySessionsRepository:
             insert_fn = sqlite_insert
         else:
             raise RuntimeError(f"StickySession upsert unsupported for dialect={dialect!r}")
-        statement = insert_fn(StickySession).values(key=key, account_id=account_id, kind=kind)
+        insert_values: dict[str, object] = {"key": key, "account_id": account_id, "kind": kind}
+        update_values: dict[str, object] = {"account_id": account_id, "updated_at": func.now()}
+        if kind == StickySessionKind.CODEX_SESSION and task_preview is not None:
+            normalized_task_updated_at = to_utc_naive(task_updated_at) if task_updated_at is not None else func.now()
+            insert_values["task_preview"] = task_preview
+            insert_values["task_updated_at"] = normalized_task_updated_at
+            update_values["task_preview"] = task_preview
+            update_values["task_updated_at"] = normalized_task_updated_at
+        statement = insert_fn(StickySession).values(**insert_values)
         return statement.on_conflict_do_update(
             index_elements=[StickySession.key, StickySession.kind],
-            set_={
-                "account_id": account_id,
-                "updated_at": func.now(),
-            },
+            set_=update_values,
         )
 
     @staticmethod
@@ -165,10 +196,13 @@ class StickySessionsRepository:
         statement,
         *,
         kind: StickySessionKind | None,
+        updated_after: datetime | None,
         updated_before: datetime | None,
     ):
         if kind is not None:
             statement = statement.where(StickySession.kind == kind)
+        if updated_after is not None:
+            statement = statement.where(StickySession.updated_at >= to_utc_naive(updated_after))
         if updated_before is not None:
             statement = statement.where(StickySession.updated_at < to_utc_naive(updated_before))
         return statement

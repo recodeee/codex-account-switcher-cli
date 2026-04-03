@@ -16,6 +16,7 @@ export function listStickySessions(params: unknown) {
   const validated = StickySessionsListParamsSchema.parse(params);
   const searchParams = new URLSearchParams();
   searchParams.set("staleOnly", String(validated.staleOnly));
+  searchParams.set("activeOnly", String(validated.activeOnly));
   searchParams.set("offset", String(validated.offset));
   searchParams.set("limit", String(validated.limit));
   if (validated.kind) {

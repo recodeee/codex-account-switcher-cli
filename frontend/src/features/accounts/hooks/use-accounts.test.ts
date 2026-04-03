@@ -35,7 +35,7 @@ describe("useAccounts", () => {
           snapshotName: "main",
           activeSnapshotName: "main",
           isActiveSnapshot: true,
-          hasLiveSession: false,
+          hasLiveSession: true,
         },
         codexSessionCount: 0,
       }),

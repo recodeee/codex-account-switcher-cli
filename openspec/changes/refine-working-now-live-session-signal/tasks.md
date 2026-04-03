@@ -1,0 +1,5 @@
+- [x] Refine frontend `isAccountWorkingNow` logic to require live telemetry or tracked codex sessions.
+- [x] Update dashboard/account-list integration and unit tests to remove active-snapshot-only live assumptions.
+- [x] Restrict backend `codexSessionCount` aggregation to active (recent) codex-session mappings.
+- [x] Add/extend backend integration assertions for active-only codex session counting.
+- [x] Validate specs with `openspec validate --specs`.

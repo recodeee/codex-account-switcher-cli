@@ -28,6 +28,7 @@ type AccountSessionGroup = {
   displayName: string;
   entries: Array<{
     key: string;
+    taskPreview: string | null;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -41,11 +42,12 @@ export function SessionsPage() {
   const selectedAccountId = searchParams.get("accountId");
 
   const sessionsQuery = useQuery({
-    queryKey: ["sticky-sessions", "codex-sessions", { offset, limit }],
+    queryKey: ["sticky-sessions", "codex-sessions", { offset, limit, activeOnly: true }],
     queryFn: () =>
       listStickySessions({
         kind: "codex_session",
         staleOnly: false,
+        activeOnly: true,
         offset,
         limit,
       }),
@@ -71,6 +73,7 @@ export function SessionsPage() {
       if (existing) {
         existing.entries.push({
           key: entry.key,
+          taskPreview: entry.taskPreview,
           createdAt: entry.createdAt,
           updatedAt: entry.updatedAt,
         });
@@ -83,6 +86,7 @@ export function SessionsPage() {
         entries: [
           {
             key: entry.key,
+            taskPreview: entry.taskPreview,
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt,
           },
@@ -213,6 +217,7 @@ export function SessionsPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground/80">Session key</TableHead>
+                            <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground/80">Current task</TableHead>
                             <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground/80">Updated</TableHead>
                             <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground/80">Created</TableHead>
                           </TableRow>
@@ -226,6 +231,12 @@ export function SessionsPage() {
                               <TableRow key={entry.key}>
                                 <TableCell className="max-w-[26rem] truncate font-mono text-xs" title={entry.key}>
                                   {entry.key}
+                                </TableCell>
+                                <TableCell
+                                  className="max-w-[30rem] truncate text-xs text-muted-foreground"
+                                  title={entry.taskPreview ?? undefined}
+                                >
+                                  {entry.taskPreview ?? "—"}
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">
                                   {updated.date} {updated.time}

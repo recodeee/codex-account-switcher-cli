@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { mergeRequestLogUsageSummaryWithLiveFallback } from "@/features/dashboard/request-log-usage-fallback";
 import type { DashboardOverview, RequestLogUsageSummary } from "@/features/dashboard/schemas";
+import { createAccountSummary } from "@/test/mocks/factories";
 
 function createWindows(
   primaryConsumed: number,
@@ -81,8 +82,8 @@ describe("mergeRequestLogUsageSummaryWithLiveFallback", () => {
 
     expect(merged.usageSummary.last5h.totalTokens).toBe(640);
     expect(merged.usageSummary.last7d.totalTokens).toBe(3200);
-    expect(merged.usageSummary.last5h.totalCostEur).toBe(0);
-    expect(merged.usageSummary.last7d.totalCostEur).toBe(0);
+    expect(merged.usageSummary.last5h.totalCostEur).toBeGreaterThan(0);
+    expect(merged.usageSummary.last7d.totalCostEur).toBeGreaterThan(0);
     expect(merged.usageSummary.fxRateUsdToEur).toBe(0.92);
     expect(merged.fallback).toEqual({
       last5h: true,
@@ -103,6 +104,34 @@ describe("mergeRequestLogUsageSummaryWithLiveFallback", () => {
     expect(merged.usageSummary.fxRateUsdToEur).toBe(0.92);
     expect(merged.fallback).toEqual({
       last5h: false,
+      last7d: true,
+      active: true,
+    });
+  });
+
+  it("derives fallback EUR estimates from account request usage when request logs are empty", () => {
+    const merged = mergeRequestLogUsageSummaryWithLiveFallback(
+      createRequestSummary(0, 0),
+      createWindows(640, 3200),
+      [
+        createAccountSummary({
+          accountId: "acc-1",
+          requestUsage: {
+            requestCount: 12,
+            totalTokens: 10_000,
+            cachedInputTokens: 0,
+            totalCostUsd: 5,
+          },
+        }),
+      ],
+    );
+
+    expect(merged.usageSummary.last5h.totalCostUsd).toBeCloseTo(0.32, 6);
+    expect(merged.usageSummary.last5h.totalCostEur).toBeCloseTo(0.2944, 6);
+    expect(merged.usageSummary.last7d.totalCostUsd).toBeCloseTo(1.6, 6);
+    expect(merged.usageSummary.last7d.totalCostEur).toBeCloseTo(1.472, 6);
+    expect(merged.fallback).toEqual({
+      last5h: true,
       last7d: true,
       active: true,
     });

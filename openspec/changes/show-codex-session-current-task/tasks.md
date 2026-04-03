@@ -1,0 +1,7 @@
+- [x] Add sticky-session persistence fields for codex task preview metadata.
+- [x] Capture and sanitize current task preview text when codex-session affinity is used in stream/compact/websocket request flows.
+- [x] Extend sticky-session list API payload/filtering to expose task preview metadata and `activeOnly` behavior.
+- [x] Extend account summary payloads with latest active codex task preview per account.
+- [x] Update Sessions page and dashboard account cards to display task previews.
+- [x] Add/extend backend and frontend tests for preview capture, filtering, and UI rendering.
+- [x] Validate specs with `openspec validate --specs`.

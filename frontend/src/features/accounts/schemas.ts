@@ -73,6 +73,7 @@ export const AccountSummarySchema = z.object({
   windowMinutesSecondary: z.number().nullable().optional(),
   requestUsage: AccountRequestUsageSchema.nullable().optional(),
   codexSessionCount: z.number().int().nonnegative().optional(),
+  codexCurrentTaskPreview: z.string().nullable().optional(),
   auth: AccountAuthSchema.nullable().optional(),
   codexAuth: AccountCodexAuthSchema.nullable().optional(),
   additionalQuotas: z.array(AccountAdditionalQuotaSchema).default([]),

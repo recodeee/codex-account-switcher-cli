@@ -50,6 +50,7 @@ from app.modules.usage.updater import AdditionalUsageRepositoryPort, UsageUpdate
 
 _SPARKLINE_DAYS = 7
 _DETAIL_BUCKET_SECONDS = 3600  # 1h → 168 points
+_ACTIVE_CODEX_TASK_WINDOW = timedelta(minutes=30)
 
 
 class InvalidAuthJsonError(Exception):
@@ -79,7 +80,14 @@ class AccountsService:
         account_id_set = set(account_ids)
         primary_usage = await self._usage_repo.latest_by_account(window="primary") if self._usage_repo else {}
         secondary_usage = await self._usage_repo.latest_by_account(window="secondary") if self._usage_repo else {}
-        codex_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(account_ids)
+        codex_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(
+            account_ids,
+            active_since=utcnow() - _ACTIVE_CODEX_TASK_WINDOW,
+        )
+        codex_current_task_preview_by_account = await self._repo.list_codex_current_task_preview_by_account(
+            account_ids,
+            active_since=utcnow() - _ACTIVE_CODEX_TASK_WINDOW,
+        )
         request_usage_rows = await self._repo.list_request_usage_summary_by_account(account_ids)
         request_usage_by_account = {
             account_id: AccountRequestUsage(
@@ -157,6 +165,7 @@ class AccountsService:
             secondary_usage=secondary_usage,
             request_usage_by_account=request_usage_by_account,
             codex_session_counts_by_account=codex_session_counts_by_account,
+            codex_current_task_preview_by_account=codex_current_task_preview_by_account,
             additional_quotas_by_account=additional_quotas_by_account,
             codex_auth_by_account=codex_auth_by_account,
             encryptor=self._encryptor,

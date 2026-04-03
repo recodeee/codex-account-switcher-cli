@@ -27,6 +27,30 @@ function createWrapper(queryClient: QueryClient) {
 
 describe("useDashboard", () => {
   it("loads dashboard overview via MSW and configures fast polling for working accounts", async () => {
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_live",
+                email: "live@example.com",
+                displayName: "live@example.com",
+                codexSessionCount: 0,
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "main",
+                  activeSnapshotName: "main",
+                  isActiveSnapshot: true,
+                  hasLiveSession: true,
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
     const queryClient = createTestQueryClient();
     const { result } = renderHook(() => useDashboard(), {
       wrapper: createWrapper(queryClient),

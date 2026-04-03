@@ -11,6 +11,9 @@ export const StickySessionEntrySchema = z.object({
   kind: StickySessionKindSchema,
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
+  taskPreview: z.string().nullable().optional().default(null),
+  taskUpdatedAt: z.string().datetime({ offset: true }).nullable().optional().default(null),
+  isActive: z.boolean().optional().default(false),
   expiresAt: z.string().datetime({ offset: true }).nullable(),
   isStale: z.boolean(),
 });
@@ -34,6 +37,7 @@ export const StickySessionsListResponseSchema = z.object({
 export const StickySessionsListParamsSchema = z.object({
   kind: StickySessionKindSchema.optional(),
   staleOnly: z.boolean().default(false),
+  activeOnly: z.boolean().default(false),
   offset: z.number().int().nonnegative().default(0),
   limit: z.number().int().positive().max(500).default(10),
 });

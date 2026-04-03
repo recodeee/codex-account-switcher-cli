@@ -290,7 +290,7 @@ describe("AccountListItem", () => {
         snapshotName: "main",
         activeSnapshotName: "main",
         isActiveSnapshot: true,
-        hasLiveSession: false,
+        hasLiveSession: true,
       },
       codexSessionCount: 0,
     });

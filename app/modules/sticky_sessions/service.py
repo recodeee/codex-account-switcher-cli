@@ -9,6 +9,8 @@ from app.db.models import StickySessionKind
 from app.modules.proxy.sticky_repository import StickySessionListEntryRecord, StickySessionsRepository
 from app.modules.settings.repository import SettingsRepository
 
+_ACTIVE_SESSION_WINDOW_SECONDS = 30 * 60
+
 
 @dataclass(frozen=True, slots=True)
 class StickySessionEntryData:
@@ -18,6 +20,9 @@ class StickySessionEntryData:
     kind: StickySessionKind
     created_at: datetime
     updated_at: datetime
+    task_preview: str | None
+    task_updated_at: datetime | None
+    is_active: bool
     expires_at: datetime | None
     is_stale: bool
 
@@ -44,12 +49,14 @@ class StickySessionsService:
         *,
         kind: StickySessionKind | None = None,
         stale_only: bool = False,
+        active_only: bool = False,
         offset: int = 0,
         limit: int = 100,
     ) -> StickySessionListData:
         settings = await self._settings_repository.get_or_create()
         ttl_seconds = settings.openai_cache_affinity_max_age_seconds
         stale_cutoff = utcnow() - timedelta(seconds=ttl_seconds)
+        active_cutoff = utcnow() - timedelta(seconds=_ACTIVE_SESSION_WINDOW_SECONDS) if active_only else None
         stale_prompt_cache_count = await self._count_stale_prompt_cache_entries(kind=kind, stale_cutoff=stale_cutoff)
         if stale_only and kind not in (None, StickySessionKind.PROMPT_CACHE):
             return StickySessionListData(
@@ -61,10 +68,12 @@ class StickySessionsService:
         effective_kind = StickySessionKind.PROMPT_CACHE if stale_only else kind
         total = await self._repository.count_entries(
             kind=effective_kind,
+            updated_after=active_cutoff,
             updated_before=stale_cutoff if stale_only else None,
         )
         rows = await self._repository.list_entries(
             kind=effective_kind,
+            updated_after=active_cutoff,
             updated_before=stale_cutoff if stale_only else None,
             offset=offset,
             limit=limit,
@@ -95,6 +104,7 @@ class StickySessionsService:
         if sticky_session.kind == StickySessionKind.PROMPT_CACHE:
             expires_at = to_utc_naive(sticky_session.updated_at) + timedelta(seconds=ttl_seconds)
             is_stale = expires_at <= utcnow()
+        is_active = to_utc_naive(sticky_session.updated_at) >= utcnow() - timedelta(seconds=_ACTIVE_SESSION_WINDOW_SECONDS)
         return StickySessionEntryData(
             key=sticky_session.key,
             account_id=sticky_session.account_id,
@@ -102,6 +112,9 @@ class StickySessionsService:
             kind=sticky_session.kind,
             created_at=sticky_session.created_at,
             updated_at=sticky_session.updated_at,
+            task_preview=sticky_session.task_preview,
+            task_updated_at=sticky_session.task_updated_at,
+            is_active=is_active,
             expires_at=expires_at,
             is_stale=is_stale,
         )

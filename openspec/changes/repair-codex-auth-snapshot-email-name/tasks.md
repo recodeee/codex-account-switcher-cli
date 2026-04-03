@@ -3,4 +3,4 @@
 - [x] Extend account codex-auth payload with email-name mismatch metadata.
 - [x] Add Accounts and Dashboard UI actions to trigger snapshot `readd` or `rename` repair.
 - [x] Add/adjust backend and frontend tests for repair success, conflict handling, and UI actions.
-- [ ] Validate OpenSpec with `openspec validate --specs`.
+- [x] Validate OpenSpec with `openspec validate --specs`.

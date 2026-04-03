@@ -3169,6 +3169,44 @@ def test_sticky_key_for_responses_request_derives_when_payload_key_is_whitespace
     assert payload.prompt_cache_key == policy.key
 
 
+def test_derive_codex_session_task_preview_redacts_and_truncates():
+    payload = ResponsesRequest.model_validate(
+        {
+            "model": "gpt-5.1",
+            "instructions": "ignored",
+            "input": (
+                "Investigate alice@example.com bearer sk-abc123TOKEN and "
+                "token=super-secret-value-" + "x" * 180
+            ),
+            "stream": True,
+        }
+    )
+
+    preview = proxy_service._derive_codex_session_task_preview(payload)
+
+    assert preview is not None
+    assert "[redacted-email]" in preview
+    assert "bearer [redacted]" in preview.lower()
+    assert "token=[redacted]" in preview.lower()
+    assert "alice@example.com" not in preview
+    assert len(preview) <= 120
+
+
+def test_derive_codex_session_task_preview_falls_back_to_instructions():
+    payload = ResponsesRequest.model_validate(
+        {
+            "model": "gpt-5.1",
+            "instructions": "Debug websocket reconnect path",
+            "input": [],
+            "stream": True,
+        }
+    )
+
+    preview = proxy_service._derive_codex_session_task_preview(payload)
+
+    assert preview == "Debug websocket reconnect path"
+
+
 @pytest.mark.asyncio
 async def test_service_compact_budget_does_not_override_unbounded_read_timeout(monkeypatch):
     settings = _make_proxy_settings(log_proxy_service_tier_trace=False)

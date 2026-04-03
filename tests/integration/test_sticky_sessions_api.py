@@ -65,14 +65,25 @@ async def _insert_sticky_session(
     account_id: str,
     kind: StickySessionKind,
     updated_at_offset_seconds: int,
+    task_preview: str | None = None,
+    task_updated_at_offset_seconds: int | None = None,
 ) -> None:
     timestamp = utcnow() - timedelta(seconds=updated_at_offset_seconds)
+    task_timestamp = (
+        utcnow() - timedelta(seconds=task_updated_at_offset_seconds)
+        if task_updated_at_offset_seconds is not None
+        else timestamp
+    )
     async with SessionLocal() as session:
         await session.execute(
             text(
                 """
-                INSERT INTO sticky_sessions (key, account_id, kind, created_at, updated_at)
-                VALUES (:key, :account_id, :kind, :timestamp, :timestamp)
+                INSERT INTO sticky_sessions (
+                    key, account_id, kind, created_at, updated_at, task_preview, task_updated_at
+                )
+                VALUES (
+                    :key, :account_id, :kind, :timestamp, :timestamp, :task_preview, :task_updated_at
+                )
                 """
             ),
             {
@@ -80,6 +91,8 @@ async def _insert_sticky_session(
                 "account_id": account_id,
                 "kind": kind.value,
                 "timestamp": timestamp,
+                "task_preview": task_preview,
+                "task_updated_at": task_timestamp if task_preview is not None else None,
             },
         )
         await session.commit()
@@ -143,6 +156,40 @@ async def test_sticky_sessions_api_lists_metadata_and_purges_stale(async_client)
     assert response.status_code == 200
     remaining_keys = {entry["key"] for entry in response.json()["entries"]}
     assert remaining_keys == {"prompt-cache-fresh", "codex-session-old"}
+
+
+@pytest.mark.asyncio
+async def test_sticky_sessions_api_active_only_filters_codex_sessions_and_returns_task_preview(async_client):
+    accounts = await _create_accounts()
+    await _set_affinity_ttl(60)
+    await _insert_sticky_session(
+        key="codex-session-active",
+        account_id=accounts[0].id,
+        kind=StickySessionKind.CODEX_SESSION,
+        updated_at_offset_seconds=30,
+        task_preview="Review websocket reconnect regression",
+    )
+    await _insert_sticky_session(
+        key="codex-session-stale",
+        account_id=accounts[1].id,
+        kind=StickySessionKind.CODEX_SESSION,
+        updated_at_offset_seconds=3600,
+        task_preview="Old task should be hidden",
+    )
+
+    response = await async_client.get(
+        "/api/sticky-sessions",
+        params={"kind": "codex_session", "activeOnly": "true"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["hasMore"] is False
+    assert [entry["key"] for entry in payload["entries"]] == ["codex-session-active"]
+    active_entry = payload["entries"][0]
+    assert active_entry["taskPreview"] == "Review websocket reconnect regression"
+    assert active_entry["taskUpdatedAt"] is not None
+    assert active_entry["isActive"] is True
 
 
 @pytest.mark.asyncio

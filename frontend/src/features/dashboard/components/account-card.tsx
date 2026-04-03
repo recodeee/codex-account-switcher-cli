@@ -122,8 +122,7 @@ function QuotaBar({
   return (
     <div
       className={cn(
-        "space-y-2 rounded-lg border border-border/60 bg-background/30 px-2.5 py-2.5",
-        isLive && !deactivated && "border-cyan-500/35 bg-cyan-500/[0.08]",
+        "space-y-2 px-2.5 py-2.5",
       )}
     >
       <div className="flex items-center justify-between gap-2 text-xs">
@@ -263,6 +262,7 @@ export function AccountCard({
   const codexSessionCount = hasLiveSession
     ? Math.max(account.codexSessionCount ?? 0, 1)
     : 0;
+  const codexCurrentTaskPreview = account.codexCurrentTaskPreview?.trim() || null;
   const emailSubtitle =
     account.displayName && account.displayName !== account.email
       ? account.email
@@ -350,6 +350,20 @@ export function AccountCard({
           </p>
         </div>
       </div>
+
+      {isWorkingNow && codexCurrentTaskPreview ? (
+        <div className="mt-2.5 rounded-lg border border-cyan-500/25 bg-cyan-500/[0.08] px-2.5 py-2">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
+            Current task
+          </p>
+          <p
+            className="mt-1 truncate text-xs text-cyan-800 dark:text-cyan-200"
+            title={codexCurrentTaskPreview}
+          >
+            {codexCurrentTaskPreview}
+          </p>
+        </div>
+      ) : null}
 
       {/* Quota bars */}
       <div

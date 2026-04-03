@@ -84,8 +84,6 @@ describe("dashboard flow integration", () => {
   });
 
   it("uses live usage fallback for consumed donuts when request-log usage summary is empty", async () => {
-    const livePrimaryConsumed = 900;
-
     server.use(
       http.get("/api/dashboard/overview", () =>
         HttpResponse.json(
@@ -146,13 +144,13 @@ describe("dashboard flow integration", () => {
     expect(
       await screen.findByText("Using live usage fallback because recent request logs are empty."),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(String(livePrimaryConsumed)).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("0.9K").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("1.5K").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Top: fallback@example.com · 100%").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("fallback@example.com").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("switches local codex account from dashboard account card", async () => {
+  it("switches local codex account from dashboard account card without forcing a working badge", async () => {
     const user = userEvent.setup({ delay: null });
 
     window.history.pushState({}, "", "/dashboard");
@@ -174,7 +172,7 @@ describe("dashboard flow integration", () => {
     expect(await screen.findByText(/Switched to/i)).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(within(targetCard).getByText("Working now")).toBeInTheDocument();
+      expect(within(targetCard).queryByText("Working now")).not.toBeInTheDocument();
     });
   });
 
@@ -316,6 +314,7 @@ describe("dashboard flow integration", () => {
                   snapshotName: "sessions",
                   activeSnapshotName: "sessions",
                   isActiveSnapshot: true,
+                  hasLiveSession: true,
                 },
               }),
             ],

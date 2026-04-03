@@ -178,6 +178,8 @@ class StickySession(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    task_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    task_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class DashboardSettings(Base):

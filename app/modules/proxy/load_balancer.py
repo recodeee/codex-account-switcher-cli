@@ -99,6 +99,7 @@ class LoadBalancer:
         sticky_key: str | None = None,
         *,
         sticky_kind: StickySessionKind | None = None,
+        sticky_task_preview: str | None = None,
         reallocate_sticky: bool = False,
         sticky_max_age_seconds: int | None = None,
         prefer_earlier_reset_accounts: bool = False,
@@ -291,6 +292,7 @@ class LoadBalancer:
                         account_map=account_map,
                         sticky_key=sticky_key,
                         sticky_kind=sticky_kind,
+                        sticky_task_preview=sticky_task_preview,
                         reallocate_sticky=reallocate_sticky,
                         sticky_max_age_seconds=sticky_max_age_seconds,
                         budget_threshold_pct=budget_threshold_pct,
@@ -599,6 +601,7 @@ class LoadBalancer:
         account_map: dict[str, Account],
         sticky_key: str | None,
         sticky_kind: StickySessionKind | None,
+        sticky_task_preview: str | None,
         reallocate_sticky: bool,
         sticky_max_age_seconds: int | None,
         budget_threshold_pct: float = 95.0,
@@ -650,7 +653,13 @@ class LoadBalancer:
                     )
                     if pinned_result.account is not None:
                         if sticky_max_age_seconds is not None:
-                            await sticky_repo.upsert(sticky_key, pinned.account_id, kind=sticky_kind)
+                            await self._upsert_sticky_mapping(
+                                sticky_repo=sticky_repo,
+                                sticky_key=sticky_key,
+                                sticky_kind=sticky_kind,
+                                account_id=pinned.account_id,
+                                sticky_task_preview=sticky_task_preview,
+                            )
                         return pinned_result
                 else:
                     # Existing prompt-cache mappings stay stable even when
@@ -674,7 +683,13 @@ class LoadBalancer:
                     )
                     if grace_result.account is not None:
                         if sticky_max_age_seconds is not None:
-                            await sticky_repo.upsert(sticky_key, pinned.account_id, kind=sticky_kind)
+                            await self._upsert_sticky_mapping(
+                                sticky_repo=sticky_repo,
+                                sticky_key=sticky_key,
+                                sticky_kind=sticky_kind,
+                                account_id=pinned.account_id,
+                                sticky_task_preview=sticky_task_preview,
+                            )
                         return grace_result
                 if reallocate_sticky:
                     await sticky_repo.delete(sticky_key, kind=sticky_kind)
@@ -712,8 +727,33 @@ class LoadBalancer:
             routing_strategy=routing_strategy,
         )
         if persist_fallback and chosen.account is not None and chosen.account.account_id in account_map:
-            await sticky_repo.upsert(sticky_key, chosen.account.account_id, kind=sticky_kind)
+            await self._upsert_sticky_mapping(
+                sticky_repo=sticky_repo,
+                sticky_key=sticky_key,
+                sticky_kind=sticky_kind,
+                account_id=chosen.account.account_id,
+                sticky_task_preview=sticky_task_preview,
+            )
         return chosen
+
+    @staticmethod
+    async def _upsert_sticky_mapping(
+        *,
+        sticky_repo: StickySessionsRepository,
+        sticky_key: str,
+        sticky_kind: StickySessionKind,
+        account_id: str,
+        sticky_task_preview: str | None,
+    ) -> None:
+        if sticky_kind == StickySessionKind.CODEX_SESSION and sticky_task_preview is not None:
+            await sticky_repo.upsert(
+                sticky_key,
+                account_id,
+                kind=sticky_kind,
+                task_preview=sticky_task_preview,
+            )
+            return
+        await sticky_repo.upsert(sticky_key, account_id, kind=sticky_kind)
 
     async def mark_rate_limit(self, account: Account, error: UpstreamError) -> None:
         lock = await self._get_account_lock(account.id)

@@ -29,6 +29,7 @@ def build_account_summaries(
     secondary_usage: dict[str, UsageHistory],
     request_usage_by_account: dict[str, AccountRequestUsage] | None = None,
     codex_session_counts_by_account: dict[str, int] | None = None,
+    codex_current_task_preview_by_account: dict[str, str] | None = None,
     additional_quotas_by_account: dict[str, list[AccountAdditionalQuota]] | None = None,
     codex_auth_by_account: dict[str, AccountCodexAuthStatus] | None = None,
     encryptor: TokenEncryptor,
@@ -41,6 +42,9 @@ def build_account_summaries(
             secondary_usage.get(account.id),
             request_usage_by_account.get(account.id) if request_usage_by_account else None,
             codex_session_counts_by_account.get(account.id, 0) if codex_session_counts_by_account else 0,
+            codex_current_task_preview_by_account.get(account.id)
+            if codex_current_task_preview_by_account
+            else None,
             additional_quotas_by_account.get(account.id) if additional_quotas_by_account else None,
             codex_auth_by_account.get(account.id) if codex_auth_by_account else None,
             encryptor,
@@ -56,6 +60,7 @@ def _account_to_summary(
     secondary_usage: UsageHistory | None,
     request_usage: AccountRequestUsage | None,
     codex_session_count: int,
+    codex_current_task_preview: str | None,
     additional_quotas: list[AccountAdditionalQuota] | None,
     codex_auth: AccountCodexAuthStatus | None,
     encryptor: TokenEncryptor,
@@ -128,6 +133,7 @@ def _account_to_summary(
         remaining_credits_secondary=remaining_credits_secondary,
         request_usage=request_usage,
         codex_session_count=max(0, int(codex_session_count)),
+        codex_current_task_preview=codex_current_task_preview,
         additional_quotas=additional_quotas or [],
         deactivation_reason=account.deactivation_reason,
         auth=auth_status,

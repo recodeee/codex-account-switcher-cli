@@ -15,6 +15,7 @@ export function useStickySessions() {
   const queryClient = useQueryClient();
   const [params, setParams] = useState<StickySessionsListParams>({
     staleOnly: false,
+    activeOnly: false,
     offset: 0,
     limit: DEFAULT_STICKY_SESSIONS_LIMIT,
   });
