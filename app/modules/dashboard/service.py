@@ -5,19 +5,15 @@ from datetime import datetime, timedelta
 from app.core import usage as usage_core
 from app.core.crypto import TokenEncryptor
 from app.core.usage.types import UsageWindowRow
-from app.core.utils.time import to_utc_naive, utcnow
-from app.db.models import Account, UsageHistory
+from app.core.utils.time import utcnow
+from app.db.models import UsageHistory
 from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
-from app.modules.accounts.codex_live_usage import (
-    LocalCodexLiveUsage,
-    LocalUsageWindow,
-    read_local_codex_live_usage_by_snapshot,
-)
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     build_snapshot_index,
     select_snapshot_name,
 )
+from app.modules.accounts.live_usage_overrides import apply_local_live_usage_overrides
 from app.modules.accounts.mappers import build_account_summaries
 from app.modules.accounts.schemas import AccountCodexAuthStatus, AccountRequestUsage
 from app.modules.dashboard.repository import DashboardRepository
@@ -65,7 +61,7 @@ class DashboardService:
             account.id: _build_codex_auth_status(account_id=account.id, snapshot_index=snapshot_index)
             for account in accounts
         }
-        _apply_local_live_usage_overrides(
+        apply_local_live_usage_overrides(
             accounts=accounts,
             snapshot_index=snapshot_index,
             codex_auth_by_account=codex_auth_by_account,
@@ -332,108 +328,4 @@ def _build_codex_auth_status(*, account_id: str, snapshot_index: CodexAuthSnapsh
         snapshot_name=selected_snapshot_name,
         active_snapshot_name=active_snapshot_name,
         is_active_snapshot=bool(active_snapshot_name and active_snapshot_name in snapshot_names),
-    )
-
-
-def _apply_local_live_usage_overrides(
-    *,
-    accounts: list[Account],
-    snapshot_index: CodexAuthSnapshotIndex,
-    codex_auth_by_account: dict[str, AccountCodexAuthStatus],
-    primary_usage: dict[str, UsageHistory],
-    secondary_usage: dict[str, UsageHistory],
-    codex_session_counts_by_account: dict[str, int],
-) -> None:
-    live_usage_by_snapshot = read_local_codex_live_usage_by_snapshot()
-
-    for account in accounts:
-        codex_auth_status = codex_auth_by_account.get(account.id)
-        if codex_auth_status is None:
-            continue
-
-        snapshot_names = snapshot_index.snapshots_by_account_id.get(account.id, [])
-        live_usage = _resolve_live_usage_for_account(
-            snapshot_names=snapshot_names,
-            selected_snapshot_name=codex_auth_status.snapshot_name,
-            live_usage_by_snapshot=live_usage_by_snapshot,
-        )
-        has_tracked_sessions = codex_session_counts_by_account.get(account.id, 0) > 0
-        codex_auth_status.has_live_session = has_tracked_sessions or bool(
-            live_usage and live_usage.active_session_count > 0
-        )
-        if live_usage is None:
-            continue
-
-        account_id = account.id
-        codex_session_counts_by_account[account_id] = max(
-            codex_session_counts_by_account.get(account_id, 0),
-            live_usage.active_session_count,
-        )
-        recorded_at = to_utc_naive(live_usage.recorded_at)
-        if live_usage.primary is not None:
-            primary_usage[account_id] = _usage_history_from_live_window(
-                account_id=account_id,
-                window="primary",
-                recorded_at=recorded_at,
-                usage_window=live_usage.primary,
-            )
-        if live_usage.secondary is not None:
-            secondary_usage[account_id] = _usage_history_from_live_window(
-                account_id=account_id,
-                window="secondary",
-                recorded_at=recorded_at,
-                usage_window=live_usage.secondary,
-            )
-
-
-def _resolve_live_usage_for_account(
-    *,
-    snapshot_names: list[str],
-    selected_snapshot_name: str | None,
-    live_usage_by_snapshot: dict[str, LocalCodexLiveUsage],
-) -> LocalCodexLiveUsage | None:
-    candidate_names = [name for name in [selected_snapshot_name, *snapshot_names] if name]
-    merged: LocalCodexLiveUsage | None = None
-    seen: set[str] = set()
-    for snapshot_name in candidate_names:
-        if snapshot_name in seen:
-            continue
-        seen.add(snapshot_name)
-        usage = live_usage_by_snapshot.get(snapshot_name)
-        if usage is None:
-            continue
-        merged = _merge_live_usage(merged, usage)
-    return merged
-
-
-def _merge_live_usage(previous: LocalCodexLiveUsage | None, current: LocalCodexLiveUsage) -> LocalCodexLiveUsage:
-    if previous is None:
-        return current
-
-    prefer_current = current.recorded_at >= previous.recorded_at
-    preferred = current if prefer_current else previous
-    fallback = previous if prefer_current else current
-
-    return LocalCodexLiveUsage(
-        recorded_at=max(previous.recorded_at, current.recorded_at),
-        active_session_count=max(0, previous.active_session_count) + max(0, current.active_session_count),
-        primary=preferred.primary if preferred.primary is not None else fallback.primary,
-        secondary=preferred.secondary if preferred.secondary is not None else fallback.secondary,
-    )
-
-
-def _usage_history_from_live_window(
-    *,
-    account_id: str,
-    window: str,
-    recorded_at: datetime,
-    usage_window: LocalUsageWindow,
-) -> UsageHistory:
-    return UsageHistory(
-        account_id=account_id,
-        window=window,
-        used_percent=float(usage_window.used_percent),
-        reset_at=usage_window.reset_at,
-        window_minutes=usage_window.window_minutes,
-        recorded_at=recorded_at,
     )

@@ -39,6 +39,12 @@ def read_local_codex_live_usage(*, now: datetime | None = None) -> LocalCodexLiv
     return _read_local_codex_live_usage_for_sessions_dir(sessions_dir=sessions_dir, now=current)
 
 
+def read_local_codex_live_usage_samples(*, now: datetime | None = None) -> list[LocalCodexLiveUsage]:
+    current = now or datetime.now(timezone.utc)
+    sessions_dir = _resolve_sessions_dir()
+    return _read_local_codex_live_usage_samples_for_sessions_dir(sessions_dir=sessions_dir, now=current)
+
+
 def read_local_codex_live_usage_by_snapshot(*, now: datetime | None = None) -> dict[str, LocalCodexLiveUsage]:
     current = now or datetime.now(timezone.utc)
     usage_by_snapshot: dict[str, LocalCodexLiveUsage] = {}
@@ -95,16 +101,21 @@ def _read_local_codex_live_usage_for_sessions_dir(
     if not active_files:
         return None
 
-    latest: tuple[datetime, LocalUsageWindow | None, LocalUsageWindow | None] | None = None
-    for path in _prefer_newest_sessions(active_files):
-        snapshot = _extract_latest_rate_limit_from_file(path)
-        if snapshot is None:
-            continue
-        latest = snapshot
-        break
+    latest = _extract_latest_rate_limit_from_paths(_prefer_newest_sessions(active_files))
+    if latest is None:
+        # A newly started session can be active before it emits its first token_count
+        # event. In that case, fall back to the most recent known rate-limit payload
+        # from nearby rollout files so the dashboard does not remain stuck at stale
+        # values until the first prompt is sent.
+        latest = _extract_latest_rate_limit_from_paths(_prefer_newest_sessions(candidates))
 
     if latest is None:
-        return None
+        return LocalCodexLiveUsage(
+            recorded_at=now,
+            active_session_count=len(active_files),
+            primary=None,
+            secondary=None,
+        )
 
     recorded_at, primary, secondary = latest
     return LocalCodexLiveUsage(
@@ -113,6 +124,53 @@ def _read_local_codex_live_usage_for_sessions_dir(
         primary=primary,
         secondary=secondary,
     )
+
+
+def _read_local_codex_live_usage_samples_for_sessions_dir(
+    *,
+    sessions_dir: Path,
+    now: datetime,
+) -> list[LocalCodexLiveUsage]:
+    active_window_seconds = _active_window_seconds()
+    if not sessions_dir.exists() or not sessions_dir.is_dir():
+        return []
+
+    candidates = _candidate_rollout_files(sessions_dir, now)
+    if not candidates:
+        return []
+
+    cutoff_ts = (now - timedelta(seconds=active_window_seconds)).timestamp()
+    active_files = [path for path in candidates if _safe_mtime(path) >= cutoff_ts]
+    if not active_files:
+        return []
+
+    samples: list[LocalCodexLiveUsage] = []
+    for path in _prefer_newest_sessions(active_files):
+        snapshot = _extract_latest_rate_limit_from_file(path)
+        if snapshot is None:
+            mtime = _safe_mtime(path)
+            recorded_at = datetime.fromtimestamp(mtime, tz=timezone.utc) if mtime > 0 else now
+            samples.append(
+                LocalCodexLiveUsage(
+                    recorded_at=recorded_at,
+                    active_session_count=1,
+                    primary=None,
+                    secondary=None,
+                )
+            )
+            continue
+
+        recorded_at, primary, secondary = snapshot
+        samples.append(
+            LocalCodexLiveUsage(
+                recorded_at=recorded_at,
+                active_session_count=1,
+                primary=primary,
+                secondary=secondary,
+            )
+        )
+
+    return samples
 
 
 def _merge_live_usage(
@@ -231,6 +289,16 @@ def _safe_mtime(path: Path) -> float:
         return path.stat().st_mtime
     except OSError:
         return 0.0
+
+
+def _extract_latest_rate_limit_from_paths(
+    paths: list[Path],
+) -> tuple[datetime, LocalUsageWindow | None, LocalUsageWindow | None] | None:
+    for path in paths:
+        snapshot = _extract_latest_rate_limit_from_file(path)
+        if snapshot is not None:
+            return snapshot
+    return None
 
 
 def _extract_latest_rate_limit_from_file(

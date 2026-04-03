@@ -2,14 +2,18 @@ import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 import { AlertMessage } from "@/components/alert-message";
+import { ApiError } from "@/lib/api-client";
 import { useAccountMutations } from "@/features/accounts/hooks/use-accounts";
 import { AccountCards } from "@/features/dashboard/components/account-cards";
 import { DashboardSkeleton } from "@/features/dashboard/components/dashboard-skeleton";
 import { RequestFilters } from "@/features/dashboard/components/filters/request-filters";
 import { RequestLogUsageDonuts } from "@/features/dashboard/components/request-log-usage-donuts";
 import { RecentRequestsTable } from "@/features/dashboard/components/recent-requests-table";
+import { useTerminalWorkspace } from "@/features/dashboard/components/terminal-workspace-context";
+import { mergeRequestLogUsageSummaryWithLiveFallback } from "@/features/dashboard/request-log-usage-fallback";
 import { UsageDonuts } from "@/features/dashboard/components/usage-donuts";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import { useRequestLogs } from "@/features/dashboard/hooks/use-request-logs";
@@ -25,6 +29,7 @@ const MODEL_OPTION_DELIMITER = ":::";
 export function DashboardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { openTerminal } = useTerminalWorkspace();
   const isDark = useThemeStore((s) => s.theme === "dark");
   const dashboardQuery = useDashboard();
   const { filters, logsQuery, optionsQuery, usageSummaryQuery, updateFilters } = useRequestLogs();
@@ -58,18 +63,31 @@ export function DashboardPage() {
           });
           break;
         case "terminal":
-          openTerminalMutation.mutate(account.accountId);
+          openTerminalMutation.mutate(account.accountId, {
+            onError: (error) => {
+              if (error instanceof ApiError && error.code === "terminal_launch_failed") {
+                openTerminal({ accountId: account.accountId, email: account.email });
+                toast.info("Host terminal unavailable. Opened in-app terminal.");
+                return;
+              }
+              toast.error(error instanceof Error ? error.message : "Terminal launch failed");
+            },
+          });
           break;
         case "sessions":
           navigate(`/sessions?accountId=${encodeURIComponent(account.accountId)}`);
           break;
       }
     },
-    [navigate, openTerminalMutation, resumeMutation, useLocalMutation],
+    [navigate, openTerminal, openTerminalMutation, resumeMutation, useLocalMutation],
   );
 
   const overview = dashboardQuery.data;
   const logPage = logsQuery.data;
+  const mergedUsageSummary = useMemo(
+    () => mergeRequestLogUsageSummaryWithLiveFallback(usageSummaryQuery.data, overview?.windows),
+    [overview?.windows, usageSummaryQuery.data],
+  );
 
   const view = useMemo(() => {
     if (!overview || !logPage) {
@@ -177,12 +195,8 @@ export function DashboardPage() {
             </div>
             <RequestLogUsageDonuts
               accounts={overview?.accounts ?? []}
-              usageSummary={
-                usageSummaryQuery.data ?? {
-                  last5h: { totalTokens: 0, accounts: [] },
-                  last7d: { totalTokens: 0, accounts: [] },
-                }
-              }
+              usageSummary={mergedUsageSummary.usageSummary}
+              fallback={mergedUsageSummary.fallback}
             />
             <RequestFilters
               filters={filters}

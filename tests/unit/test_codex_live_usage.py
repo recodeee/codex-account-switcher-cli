@@ -49,6 +49,19 @@ def _write_rollout(
     os.utime(path, (ts, ts))
 
 
+def _write_rollout_without_usage(path: Path, *, timestamp: datetime) -> None:
+    payload = {
+        "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+        "type": "event_msg",
+        "payload": {
+            "type": "task_started",
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ts = timestamp.timestamp()
+    os.utime(path, (ts, ts))
+
+
 def test_read_local_codex_live_usage_uses_latest_rate_limit_and_counts_active_sessions(
     monkeypatch,
     tmp_path: Path,
@@ -135,6 +148,61 @@ def test_read_local_codex_live_usage_prefers_newest_session_file_over_older_acti
     assert usage.secondary is not None
     assert usage.primary.used_percent == 0.0
     assert usage.secondary.used_percent == 0.0
+
+
+def test_read_local_codex_live_usage_falls_back_to_recent_known_usage_before_first_token_count(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_LB_LOCAL_SESSION_ACTIVE_SECONDS", "120")
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    recent_known = day_dir / "rollout-recent-known.jsonl"
+    new_active_without_usage = day_dir / "rollout-new-active.jsonl"
+    _write_rollout(
+        recent_known,
+        timestamp=now - timedelta(minutes=8),
+        primary_used=45.0,
+        secondary_used=62.0,
+    )
+    _write_rollout_without_usage(
+        new_active_without_usage,
+        timestamp=now - timedelta(seconds=20),
+    )
+
+    usage = read_local_codex_live_usage(now=now)
+    assert usage is not None
+    assert usage.active_session_count == 1
+    assert usage.primary is not None
+    assert usage.secondary is not None
+    assert usage.primary.used_percent == 45.0
+    assert usage.secondary.used_percent == 62.0
+
+
+def test_read_local_codex_live_usage_reports_live_session_even_without_rate_limits(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_LB_LOCAL_SESSION_ACTIVE_SECONDS", "120")
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    new_active_without_usage = day_dir / "rollout-new-active.jsonl"
+    _write_rollout_without_usage(
+        new_active_without_usage,
+        timestamp=now - timedelta(seconds=10),
+    )
+
+    usage = read_local_codex_live_usage(now=now)
+    assert usage is not None
+    assert usage.active_session_count == 1
+    assert usage.primary is None
+    assert usage.secondary is None
 
 
 def test_read_local_codex_live_usage_by_snapshot_reads_multiple_runtime_profiles(

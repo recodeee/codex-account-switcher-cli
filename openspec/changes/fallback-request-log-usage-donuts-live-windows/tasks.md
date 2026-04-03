@@ -1,0 +1,6 @@
+- [x] Add frontend merge utility to compose request-log usage summary with per-window live fallback from dashboard windows.
+- [x] Extend request-log usage donut component inputs with fallback metadata and render fallback note when active.
+- [x] Wire dashboard page composition to pass merged summary + fallback metadata to request-log donuts.
+- [x] Add/extend tests for request-only, live-fallback-only, and mixed-window merge behavior.
+- [x] Add component/integration coverage for fallback note and non-zero donut totals when request logs are empty and live windows are non-zero.
+- [x] Validate specs and frontend tests.

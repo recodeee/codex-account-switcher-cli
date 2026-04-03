@@ -261,6 +261,23 @@ describe("AccountCard", () => {
     expect(screen.getByText("Working now")).toBeInTheDocument();
   });
 
+  it("shows working indicator when tracked codex sessions exist", () => {
+    const account = createAccountSummary({
+      codexSessionCount: 2,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "secondary",
+        activeSnapshotName: "main",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Working now")).toBeInTheDocument();
+  });
+
   it("shows at least one codex session when account is working now", () => {
     const account = createAccountSummary({
       email: "working@example.com",

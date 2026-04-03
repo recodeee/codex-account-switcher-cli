@@ -28,11 +28,18 @@ describe("RequestLogUsageDonuts", () => {
             ],
           },
         }}
+        fallback={{ last5h: false, last7d: false, active: false }}
       />,
     );
 
     expect(screen.getByText("5h Consumed")).toBeInTheDocument();
     expect(screen.getByText("Weekly Consumed")).toBeInTheDocument();
+    expect(screen.getByText("5h Tokens")).toBeInTheDocument();
+    expect(screen.getByText("7d Tokens")).toBeInTheDocument();
+    expect(screen.getByText("Recent intensity")).toBeInTheDocument();
+    expect(screen.getAllByText("300").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("1.5K").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Top: alpha@example.com · 67%")).toBeInTheDocument();
     expect(screen.getAllByText("alpha@example.com").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("beta@example.com").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("Consumed").length).toBeGreaterThanOrEqual(2);
@@ -52,9 +59,37 @@ describe("RequestLogUsageDonuts", () => {
             accounts: [{ accountId: null, tokens: 100 }],
           },
         }}
+        fallback={{ last5h: false, last7d: false, active: false }}
       />,
     );
 
     expect(screen.getAllByText("Unassigned").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders fallback note when live-usage fallback is active", () => {
+    render(
+      <RequestLogUsageDonuts
+        accounts={[
+          createAccountSummary({ accountId: "acc-1", email: "alpha@example.com", displayName: "alpha@example.com" }),
+        ]}
+        usageSummary={{
+          last5h: {
+            totalTokens: 640,
+            accounts: [{ accountId: "acc-1", tokens: 640 }],
+          },
+          last7d: {
+            totalTokens: 1200,
+            accounts: [{ accountId: "acc-1", tokens: 1200 }],
+          },
+        }}
+        fallback={{ last5h: true, last7d: false, active: true }}
+      />,
+    );
+
+    expect(
+      screen.getByText("Using live usage fallback because recent request logs are empty."),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("640").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("1.2K").length).toBeGreaterThanOrEqual(1);
   });
 });

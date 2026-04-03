@@ -1,0 +1,4 @@
+- [x] Update Dashboard terminal action to try host launch first and fallback to in-app terminal on `terminal_launch_failed`.
+- [x] Adjust account terminal mutation error handling to avoid duplicate toasts and allow caller-level fallback decisions.
+- [x] Add integration test coverage for fallback behavior while preserving host-launch success test.
+- [x] Run targeted frontend tests and `openspec validate --specs`.

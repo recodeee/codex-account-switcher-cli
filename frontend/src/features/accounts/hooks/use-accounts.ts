@@ -86,9 +86,6 @@ export function useAccountMutations() {
       toast.success(`Opened terminal for ${response.snapshotName}`);
       invalidateAccountRelatedQueries(queryClient);
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Terminal launch failed");
-    },
   });
 
   return {

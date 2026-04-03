@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import type { AccountSummary } from "@/features/dashboard/schemas";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
 import {
-  quotaBarColor,
   quotaBarTrack,
   resolveEffectiveAccountStatus,
 } from "@/utils/account-status";
@@ -20,6 +19,7 @@ import {
   formatSlug,
 } from "@/utils/formatters";
 import { resolveCodexSessionCount } from "@/utils/codex-sessions";
+import { isAccountWorkingNow } from "@/utils/account-working";
 import { canUseLocalAccount, getUseLocalAccountDisabledReason } from "@/utils/use-local-account";
 
 type AccountAction = "details" | "resume" | "reauth" | "terminal" | "useLocal" | "sessions";
@@ -57,32 +57,48 @@ function QuotaBar({
 }) {
   const clamped = percent === null ? 0 : Math.max(0, Math.min(100, percent));
   const hasPercent = percent !== null;
+  const tone = !hasPercent
+    ? "unknown"
+    : clamped >= 70
+      ? "healthy"
+      : clamped >= 30
+        ? "warning"
+        : "critical";
+
+  const percentPillClass = cn(
+    "rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+    tone === "healthy" && "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+    tone === "warning" && "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-300",
+    tone === "critical" && "border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-300",
+    tone === "unknown" && "border-border/70 bg-muted/35 text-muted-foreground",
+  );
+
+  const fillClass = cn(
+    "h-full rounded-full transition-all duration-500 ease-out",
+    tone === "healthy" && "bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 shadow-[0_0_12px_rgba(16,185,129,0.35)]",
+    tone === "warning" && "bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300 shadow-[0_0_12px_rgba(245,158,11,0.32)]",
+    tone === "critical" && "bg-gradient-to-r from-rose-600 via-red-500 to-orange-400 shadow-[0_0_12px_rgba(239,68,68,0.32)]",
+    tone === "unknown" && "bg-muted-foreground/45",
+  );
+
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">{label}</span>
-        <span
-          className={cn(
-            "tabular-nums font-medium",
-            !hasPercent
-              ? "text-muted-foreground"
-              : clamped >= 70
-                ? "text-emerald-600 dark:text-emerald-400"
-                : clamped >= 30
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-red-600 dark:text-red-400",
-          )}
-        >
-          {formatPercentNullable(percent)}
-        </span>
+    <div className="space-y-2 rounded-lg border border-border/60 bg-background/30 px-2.5 py-2.5">
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="font-medium text-muted-foreground">{label}</span>
+        <span className={percentPillClass}>{formatPercentNullable(percent)}</span>
       </div>
-      <div className={cn("h-1.5 w-full overflow-hidden rounded-full", quotaBarTrack(clamped))}>
+      <div
+        className={cn(
+          "relative h-2 w-full overflow-hidden rounded-full ring-1 ring-white/5",
+          quotaBarTrack(clamped),
+        )}
+      >
         <div
-          className={cn("h-full rounded-full transition-all duration-500 ease-out", quotaBarColor(clamped))}
+          className={fillClass}
           style={{ width: `${clamped}%` }}
         />
       </div>
-      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <Clock className="h-3 w-3 shrink-0" />
         <span>{resetLabel}</span>
       </div>
@@ -101,7 +117,7 @@ export function AccountCard({
   const blurred = usePrivacyStore((s) => s.blurred);
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
   const hasLiveSession = account.codexAuth?.hasLiveSession ?? false;
-  const isWorkingNow = hasLiveSession || isActiveSnapshot;
+  const isWorkingNow = isAccountWorkingNow(account);
   const status = resolveEffectiveAccountStatus({
     status: account.status,
     isActiveSnapshot,
@@ -148,7 +164,7 @@ export function AccountCard({
   const idSuffix = showAccountId ? ` | ID ${compactId}` : "";
 
   return (
-    <div className="card-hover rounded-xl border bg-card p-4">
+    <div className="card-hover rounded-xl border border-border/70 bg-gradient-to-b from-card to-card/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -181,7 +197,7 @@ export function AccountCard({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+      <div className="mt-3 grid grid-cols-2 gap-2.5 rounded-lg border border-border/60 bg-background/35 px-2.5 py-2">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tokens used</p>
           <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatTokenCredits(totalTokensUsed)}</p>
@@ -193,7 +209,7 @@ export function AccountCard({
       </div>
 
       {/* Quota bars */}
-      <div className={cn("mt-3.5 grid gap-3", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
+      <div className={cn("mt-3.5 grid gap-2.5", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
         {!weeklyOnly && (
           <QuotaBar
             label="5h"

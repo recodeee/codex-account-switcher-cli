@@ -9,6 +9,7 @@ import {
   createDashboardOverview,
   createDefaultRequestLogs,
   createRequestLogFilterOptions,
+  createRequestLogUsageSummary,
   createRequestLogsResponse,
 } from "@/test/mocks/factories";
 import { server } from "@/test/mocks/server";
@@ -80,6 +81,75 @@ describe("dashboard flow integration", () => {
       expect(requestLogCalls).toBeGreaterThan(logsAfterFilter);
     });
     expect(overviewCalls).toBe(overviewAfterLoad);
+  });
+
+  it("uses live usage fallback for consumed donuts when request-log usage summary is empty", async () => {
+    const livePrimaryConsumed = 900;
+
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_fallback",
+                email: "fallback@example.com",
+                displayName: "fallback@example.com",
+              }),
+            ],
+            windows: {
+              primary: {
+                windowKey: "primary",
+                windowMinutes: 300,
+                accounts: [
+                  {
+                    accountId: "acc_fallback",
+                    remainingPercentAvg: 10,
+                    capacityCredits: 1000,
+                    remainingCredits: 100,
+                  },
+                ],
+              },
+              secondary: {
+                windowKey: "secondary",
+                windowMinutes: 10_080,
+                accounts: [
+                  {
+                    accountId: "acc_fallback",
+                    remainingPercentAvg: 70,
+                    capacityCredits: 5000,
+                    remainingCredits: 3500,
+                  },
+                ],
+              },
+            },
+          }),
+        ),
+      ),
+      http.get("/api/request-logs/usage-summary", () =>
+        HttpResponse.json(
+          createRequestLogUsageSummary({
+            last5h: { totalTokens: 0, accounts: [] },
+            last7d: { totalTokens: 0, accounts: [] },
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/dashboard");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByText("5h Consumed")).toBeInTheDocument();
+    expect(await screen.findByText("Weekly Consumed")).toBeInTheDocument();
+
+    expect(
+      await screen.findByText("Using live usage fallback because recent request logs are empty."),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(String(livePrimaryConsumed)).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("1.5K").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Top: fallback@example.com · 100%").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("fallback@example.com").length).toBeGreaterThanOrEqual(2);
   });
 
   it("switches local codex account from dashboard account card", async () => {
@@ -296,5 +366,42 @@ describe("dashboard flow integration", () => {
     expect(await screen.findByText(/Opened terminal for acc_primary/i)).toBeInTheDocument();
     expect(openTerminalEndpointCalls).toBe(1);
     expect(screen.queryByTestId("terminal-window-acc_primary")).not.toBeInTheDocument();
+  });
+
+  it("falls back to in-app terminal when host launch is unavailable", async () => {
+    const user = userEvent.setup({ delay: null });
+    let openTerminalEndpointCalls = 0;
+
+    server.use(
+      http.post("/api/accounts/:accountId/open-terminal", () => {
+        openTerminalEndpointCalls += 1;
+        return HttpResponse.json(
+          {
+            error: {
+              code: "terminal_launch_failed",
+              message: "Failed to open host terminal. No supported terminal app found in PATH.",
+            },
+          },
+          { status: 400 },
+        );
+      }),
+    );
+
+    window.history.pushState({}, "", "/dashboard");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+
+    const terminalButtons = await screen.findAllByRole("button", { name: "Terminal" });
+    const targetButton = terminalButtons.find((button) => !button.hasAttribute("disabled"));
+    if (!targetButton) {
+      throw new Error("Expected an enabled terminal action button");
+    }
+
+    await user.click(targetButton);
+
+    expect(await screen.findByText(/Host terminal unavailable\. Opened in-app terminal\./i)).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-window-acc_primary")).toBeInTheDocument();
+    expect(openTerminalEndpointCalls).toBe(1);
   });
 });

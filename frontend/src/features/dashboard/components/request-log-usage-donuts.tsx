@@ -1,12 +1,15 @@
 import { useMemo } from "react";
 
 import { DonutChart } from "@/components/donut-chart";
+import type { RequestLogUsageFallbackState } from "@/features/dashboard/request-log-usage-fallback";
 import type { AccountSummary, RequestLogUsageSummary } from "@/features/dashboard/schemas";
 import { buildDuplicateAccountIdSet, formatCompactAccountId } from "@/utils/account-identifiers";
+import { formatCompactNumber } from "@/utils/formatters";
 
 export type RequestLogUsageDonutsProps = {
   accounts: AccountSummary[];
   usageSummary: RequestLogUsageSummary;
+  fallback: RequestLogUsageFallbackState;
 };
 
 type DonutLegendItem = {
@@ -18,6 +21,13 @@ type DonutLegendItem = {
 };
 
 type UsageSummaryWindow = RequestLogUsageSummary["last5h"];
+
+type UsageWindowStats = {
+  activeAccounts: number;
+  avgTokensPerAccount: number;
+  topAccountLabel: string;
+  topAccountShare: number;
+};
 
 function buildDonutItems(accounts: AccountSummary[], window: UsageSummaryWindow): DonutLegendItem[] {
   const duplicateAccountIds = buildDuplicateAccountIdSet(accounts);
@@ -77,7 +87,40 @@ function buildDonutItems(accounts: AccountSummary[], window: UsageSummaryWindow)
   return items;
 }
 
-export function RequestLogUsageDonuts({ accounts, usageSummary }: RequestLogUsageDonutsProps) {
+function buildWindowStats(items: DonutLegendItem[], totalTokens: number): UsageWindowStats {
+  const assignedItems = items.filter((item) => item.id !== "__unassigned__");
+  const activeAssigned = assignedItems.filter((item) => item.value > 0);
+  const topItem = [...items]
+    .sort((left, right) => right.value - left.value)
+    .find((item) => item.value > 0);
+
+  const activeAccounts = activeAssigned.length;
+  const avgTokensPerAccount = activeAccounts > 0
+    ? Math.round(totalTokens / activeAccounts)
+    : 0;
+  const topAccountShare = totalTokens > 0 && topItem
+    ? (topItem.value / totalTokens) * 100
+    : 0;
+
+  return {
+    activeAccounts,
+    avgTokensPerAccount,
+    topAccountLabel: topItem?.label ?? "No activity",
+    topAccountShare,
+  };
+}
+
+function StatCard({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="rounded-xl border border-border/70 bg-card/65 px-4 py-3 shadow-sm backdrop-blur">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-semibold tracking-tight">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: RequestLogUsageDonutsProps) {
   const items5h = useMemo(
     () => buildDonutItems(accounts, usageSummary.last5h),
     [accounts, usageSummary.last5h],
@@ -96,21 +139,55 @@ export function RequestLogUsageDonuts({ accounts, usageSummary }: RequestLogUsag
     usageSummary.last7d.totalTokens,
     items7d.reduce((total, item) => total + item.value, 0),
   );
+  const stats5h = useMemo(() => buildWindowStats(items5h, total5h), [items5h, total5h]);
+  const stats7d = useMemo(() => buildWindowStats(items7d, total7d), [items7d, total7d]);
+  const recentWindowWeight = total7d > 0 ? Math.min(100, (total5h / total7d) * 100) : 0;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <DonutChart
-        title="5h Consumed"
-        centerLabel="Consumed"
-        items={items5h}
-        total={total5h}
-      />
-      <DonutChart
-        title="Weekly Consumed"
-        centerLabel="Consumed"
-        items={items7d}
-        total={total7d}
-      />
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="5h Tokens"
+          value={formatCompactNumber(total5h)}
+          hint={`${stats5h.activeAccounts} active accounts`}
+        />
+        <StatCard
+          label="7d Tokens"
+          value={formatCompactNumber(total7d)}
+          hint={`${stats7d.activeAccounts} active accounts`}
+        />
+        <StatCard
+          label="Avg / active account"
+          value={formatCompactNumber(stats7d.avgTokensPerAccount)}
+          hint="Based on 7d consumption"
+        />
+        <StatCard
+          label="Recent intensity"
+          value={`${Math.round(recentWindowWeight)}%`}
+          hint="5h share of 7d volume"
+        />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <DonutChart
+          title="5h Consumed"
+          subtitle={`Top: ${stats5h.topAccountLabel} · ${Math.round(stats5h.topAccountShare)}%`}
+          centerLabel="Consumed"
+          items={items5h}
+          total={total5h}
+        />
+        <DonutChart
+          title="Weekly Consumed"
+          subtitle={`Top: ${stats7d.topAccountLabel} · ${Math.round(stats7d.topAccountShare)}%`}
+          centerLabel="Consumed"
+          items={items7d}
+          total={total7d}
+        />
+      </div>
+      {fallback.active ? (
+        <p className="text-xs text-muted-foreground">
+          Using live usage fallback because recent request logs are empty.
+        </p>
+      ) : null}
     </div>
   );
 }

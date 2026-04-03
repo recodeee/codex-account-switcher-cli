@@ -70,6 +70,19 @@ def _write_rollout_snapshot(
     os.utime(path, (ts, ts))
 
 
+def _write_rollout_without_usage(path: Path, *, timestamp: datetime) -> None:
+    payload = {
+        "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+        "type": "event_msg",
+        "payload": {
+            "type": "task_started",
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ts = timestamp.timestamp()
+    os.utime(path, (ts, ts))
+
+
 @pytest.mark.asyncio
 async def test_import_and_list_accounts(async_client):
     email = "tester@example.com"
@@ -169,6 +182,29 @@ async def test_accounts_list_sets_has_live_session_from_runtime_telemetry(
 
     get_settings.cache_clear()
 
+    # First request imports the codex-auth snapshot-backed account.
+    initial = await async_client.get("/api/accounts")
+    assert initial.status_code == 200
+
+    expected_account_id = generate_unique_account_id("acc_tokio", "tokio@example.com")
+    async with SessionLocal() as session:
+        for index in range(3):
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO sticky_sessions (key, account_id, kind, created_at, updated_at)
+                    VALUES (:key, :account_id, :kind, :timestamp, :timestamp)
+                    """
+                ),
+                {
+                    "key": f"accounts-sticky-{index + 1}",
+                    "account_id": expected_account_id,
+                    "kind": "codex_session",
+                    "timestamp": now - timedelta(minutes=1),
+                },
+            )
+        await session.commit()
+
     response = await async_client.get("/api/accounts")
     assert response.status_code == 200
     accounts = response.json()["accounts"]
@@ -181,7 +217,141 @@ async def test_accounts_list_sets_has_live_session_from_runtime_telemetry(
 
 
 @pytest.mark.asyncio
-async def test_accounts_list_sets_has_live_session_from_sticky_sessions(async_client):
+async def test_accounts_list_maps_multiple_default_sessions_to_multiple_accounts(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    work_raw_id = "acc_work"
+    personal_raw_id = "acc_personal"
+    work_email = "work@example.com"
+    personal_email = "personal@example.com"
+    work_account_id = generate_unique_account_id(work_raw_id, work_email)
+    personal_account_id = generate_unique_account_id(personal_raw_id, personal_email)
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    _write_auth_snapshot(accounts_dir / "work.json", email=work_email, account_id=work_raw_id)
+    _write_auth_snapshot(accounts_dir / "personal.json", email=personal_email, account_id=personal_raw_id)
+    (tmp_path / "current").write_text("work")
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+
+    sessions_root = tmp_path / "sessions"
+    day_dir = sessions_root / f"{now.year:04d}" / f"{now.month:02d}" / f"{now.day:02d}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    work_ts = now - timedelta(minutes=2)
+    personal_ts = now - timedelta(minutes=1)
+    _write_rollout_snapshot(
+        day_dir / "rollout-work.jsonl",
+        timestamp=work_ts,
+        primary_used=20.0,
+        secondary_used=30.0,
+    )
+    _write_rollout_snapshot(
+        day_dir / "rollout-personal.jsonl",
+        timestamp=personal_ts,
+        primary_used=40.0,
+        secondary_used=50.0,
+    )
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_LB_LOCAL_SESSION_ACTIVE_SECONDS", "300")
+
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    # First request imports snapshots into accounts.
+    first = await async_client.get("/api/accounts")
+    assert first.status_code == 200
+
+    work_primary_reset = int((work_ts + timedelta(minutes=30)).timestamp())
+    work_secondary_reset = int((work_ts + timedelta(days=7)).timestamp())
+    personal_primary_reset = int((personal_ts + timedelta(minutes=30)).timestamp())
+    personal_secondary_reset = int((personal_ts + timedelta(days=7)).timestamp())
+
+    async with SessionLocal() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO usage_history (account_id, used_percent, window, reset_at, window_minutes, recorded_at)
+                VALUES
+                    (:work_account_id, 20.0, 'primary', :work_primary_reset, 300, :work_recorded_at),
+                    (:work_account_id, 30.0, 'secondary', :work_secondary_reset, 10080, :work_recorded_at),
+                    (:personal_account_id, 40.0, 'primary', :personal_primary_reset, 300, :personal_recorded_at),
+                    (:personal_account_id, 50.0, 'secondary', :personal_secondary_reset, 10080, :personal_recorded_at)
+                """
+            ),
+            {
+                "work_account_id": work_account_id,
+                "work_primary_reset": work_primary_reset,
+                "work_secondary_reset": work_secondary_reset,
+                "work_recorded_at": work_ts,
+                "personal_account_id": personal_account_id,
+                "personal_primary_reset": personal_primary_reset,
+                "personal_secondary_reset": personal_secondary_reset,
+                "personal_recorded_at": personal_ts,
+            },
+        )
+        await session.commit()
+
+    response = await async_client.get("/api/accounts")
+    assert response.status_code == 200
+    accounts = {item["accountId"]: item for item in response.json()["accounts"]}
+
+    assert accounts[work_account_id]["codexAuth"]["hasLiveSession"] is True
+    assert accounts[work_account_id]["codexSessionCount"] == 1
+    assert accounts[work_account_id]["usage"]["primaryRemainingPercent"] == pytest.approx(80.0)
+    assert accounts[work_account_id]["usage"]["secondaryRemainingPercent"] == pytest.approx(70.0)
+
+    assert accounts[personal_account_id]["codexAuth"]["hasLiveSession"] is True
+    assert accounts[personal_account_id]["codexSessionCount"] == 1
+    assert accounts[personal_account_id]["usage"]["primaryRemainingPercent"] == pytest.approx(60.0)
+    assert accounts[personal_account_id]["usage"]["secondaryRemainingPercent"] == pytest.approx(50.0)
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_detects_live_runtime_session_before_first_token_count(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    now = datetime.now(timezone.utc)
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    _write_auth_snapshot(accounts_dir / "tokio.json", email="tokio@example.com", account_id="acc_tokio")
+    (tmp_path / "current").write_text("tokio")
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+    monkeypatch.setenv("CODEX_LB_LOCAL_SESSION_ACTIVE_SECONDS", "120")
+
+    runtime_root = tmp_path / "runtimes"
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(runtime_root))
+    runtime_dir = runtime_root / "terminal-tokio"
+    day_dir = runtime_dir / "sessions" / f"{now.year:04d}" / f"{now.month:02d}" / f"{now.day:02d}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "current").write_text("tokio")
+    _write_rollout_without_usage(
+        day_dir / "rollout-1.jsonl",
+        timestamp=now - timedelta(seconds=20),
+    )
+
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    response = await async_client.get("/api/accounts")
+    assert response.status_code == 200
+    accounts = response.json()["accounts"]
+    assert len(accounts) == 1
+    account = accounts[0]
+    assert account["codexAuth"]["hasLiveSession"] is True
+    assert account["codexSessionCount"] == 1
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_uses_sticky_session_count_without_marking_live(async_client):
     email = "sticky@example.com"
     raw_account_id = "acc_sticky"
     payload = {
@@ -227,7 +397,7 @@ async def test_accounts_list_sets_has_live_session_from_sticky_sessions(async_cl
         entry for entry in list_response.json()["accounts"] if entry["accountId"] == expected_account_id
     )
     assert account["codexSessionCount"] == 1
-    assert account["codexAuth"]["hasLiveSession"] is True
+    assert account["codexAuth"]["hasLiveSession"] is False
 
 
 @pytest.mark.asyncio
