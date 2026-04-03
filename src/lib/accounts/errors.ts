@@ -41,6 +41,16 @@ export class AccountNameInferenceError extends CodexAuthError {
   }
 }
 
+export class SnapshotEmailMismatchError extends CodexAuthError {
+  constructor(accountName: string, existingEmail: string, incomingEmail: string) {
+    super(
+      `Refusing to overwrite snapshot "${accountName}" because it belongs to ` +
+        `${existingEmail}, but current auth is ${incomingEmail}. ` +
+        `Use a different name, run "codex-auth remove ${accountName}" first, or re-run with --force.`,
+    );
+  }
+}
+
 export class PromptCancelledError extends CodexAuthError {
   constructor() {
     super("No account selected. The operation was cancelled.");

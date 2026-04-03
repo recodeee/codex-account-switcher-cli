@@ -12,6 +12,7 @@ export {
   InvalidRemoveSelectionError,
   NoAccountsSavedError,
   PromptCancelledError,
+  SnapshotEmailMismatchError,
 } from "./errors";
 export type { AutoSwitchRunResult, StatusReport } from "./types";
 
