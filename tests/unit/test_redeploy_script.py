@@ -55,6 +55,13 @@ def _create_stub_project(tmp_path: Path) -> Path:
     stubs.mkdir()
     logs = project / "logs"
     logs.mkdir()
+    (project / "meminfo").write_text(
+        "MemTotal:       32768000 kB\n"
+        "MemAvailable:   8192000 kB\n"
+        "SwapTotal:      4194304 kB\n"
+        "SwapFree:       2097152 kB\n",
+        encoding="utf-8",
+    )
 
     _write_executable(
         stubs / "docker",
@@ -98,13 +105,21 @@ exit 0
     return project
 
 
-def _run_redeploy(project: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _run_redeploy(
+    project: Path,
+    *args: str,
+    expect_success: bool = True,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PATH"] = f"{project / 'stubs'}:{env['PATH']}"
     env["HOME"] = str(project / "home")
     env["NPM_LOG"] = str(project / "logs" / "npm.log")
     env["DOCKER_LOG"] = str(project / "logs" / "docker.log")
     env["CODEX_AUTH_VERSION"] = "0.1.0"
+    env["CODEX_LB_MEMINFO_PATH"] = str(project / "meminfo")
+    if extra_env:
+        env.update(extra_env)
     (project / "home").mkdir(exist_ok=True)
 
     result = subprocess.run(
@@ -115,10 +130,12 @@ def _run_redeploy(project: Path, *args: str) -> subprocess.CompletedProcess[str]
         capture_output=True,
         check=False,
     )
-    if result.returncode != 0:
+    if expect_success and result.returncode != 0:
         raise AssertionError(
             f"redeploy failed ({result.returncode})\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
+    if not expect_success and result.returncode == 0:
+        raise AssertionError(f"redeploy unexpectedly succeeded\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
     return result
 
 
@@ -161,3 +178,42 @@ def test_redeploy_reinstalls_codex_auth_when_switcher_changes(tmp_path: Path) ->
     npm_log = (project / "logs" / "npm.log").read_text(encoding="utf-8")
 
     assert "run --silent build" in npm_log
+
+
+def test_redeploy_switches_to_serial_build_on_low_memory(tmp_path: Path) -> None:
+    project = _create_stub_project(tmp_path)
+
+    (project / "logs" / "docker.log").write_text("", encoding="utf-8")
+    (project / "meminfo").write_text(
+        "MemTotal:       32768000 kB\n"
+        "MemAvailable:   2048000 kB\n"
+        "SwapTotal:      4194304 kB\n"
+        "SwapFree:       2097152 kB\n",
+        encoding="utf-8",
+    )
+
+    _run_redeploy(project, "--skip-codex-auth-install")
+    docker_log = (project / "logs" / "docker.log").read_text(encoding="utf-8")
+
+    assert "compose build --parallel" not in docker_log
+    assert "compose build server" in docker_log
+    assert "compose build frontend" in docker_log
+
+
+def test_redeploy_aborts_when_memory_and_swap_are_critical(tmp_path: Path) -> None:
+    project = _create_stub_project(tmp_path)
+
+    (project / "logs" / "docker.log").write_text("", encoding="utf-8")
+    (project / "meminfo").write_text(
+        "MemTotal:       32768000 kB\n"
+        "MemAvailable:   524288 kB\n"
+        "SwapTotal:      4194304 kB\n"
+        "SwapFree:       131072 kB\n",
+        encoding="utf-8",
+    )
+
+    result = _run_redeploy(project, "--skip-codex-auth-install", expect_success=False)
+    docker_log = (project / "logs" / "docker.log").read_text(encoding="utf-8")
+
+    assert "refusing to continue redeploy" in result.stderr
+    assert docker_log == ""

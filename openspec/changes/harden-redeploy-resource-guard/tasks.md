@@ -1,0 +1,6 @@
+- [x] Add redeploy resource headroom checks with fail-safe abort when RAM+swap are critically low.
+- [x] Add low-memory auto-fallback from parallel to serial Docker builds.
+- [x] Add explicit build mode controls (`--serial-build`, `--parallel-build`) and env toggles.
+- [x] Add/extend unit tests for serial fallback and low-resource abort behavior.
+- [x] Update README redeploy documentation for new safety controls.
+- [x] Validate specs with `openspec validate --specs`.

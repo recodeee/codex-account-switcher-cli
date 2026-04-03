@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,7 @@ from typing import Any
 _DEFAULT_ACTIVE_WINDOW_SECONDS = 1800
 _TAIL_LINE_LIMIT = 400
 _FALLBACK_SCAN_LIMIT = 200
+_ROLLOUT_SESSION_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$")
 
 
 @dataclass(frozen=True)
@@ -46,12 +48,12 @@ def read_local_codex_live_usage(*, now: datetime | None = None) -> LocalCodexLiv
         return None
 
     latest: tuple[datetime, LocalUsageWindow | None, LocalUsageWindow | None] | None = None
-    for path in active_files:
+    for path in _prefer_newest_sessions(active_files):
         snapshot = _extract_latest_rate_limit_from_file(path)
         if snapshot is None:
             continue
-        if latest is None or snapshot[0] > latest[0]:
-            latest = snapshot
+        latest = snapshot
+        break
 
     if latest is None:
         return None
@@ -63,6 +65,29 @@ def read_local_codex_live_usage(*, now: datetime | None = None) -> LocalCodexLiv
         primary=primary,
         secondary=secondary,
     )
+
+
+def _prefer_newest_sessions(paths: list[Path]) -> list[Path]:
+    return sorted(
+        paths,
+        key=lambda path: (_session_start_sort_key(path), _safe_mtime(path)),
+        reverse=True,
+    )
+
+
+def _session_start_sort_key(path: Path) -> str:
+    # rollout-<local-session-start>-<session-id>.jsonl
+    # Example: rollout-2026-04-03T16-22-44-019d53...
+    name = path.name
+    if not name.startswith("rollout-"):
+        return ""
+    key = name.removeprefix("rollout-")
+    # 19 chars: YYYY-MM-DDTHH-MM-SS
+    if len(key) >= 19:
+        prefix = key[:19]
+        if _ROLLOUT_SESSION_PREFIX_RE.match(prefix):
+            return prefix
+    return ""
 
 
 def _active_window_seconds() -> int:
@@ -254,4 +279,3 @@ def _to_int(value: Any) -> int | None:
         except ValueError:
             return None
     return None
-

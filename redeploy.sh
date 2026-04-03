@@ -9,10 +9,16 @@ TARGET_SERVICES=("server" "frontend")
 INSTALL_CODEX_AUTH="${CODEX_LB_INSTALL_CODEX_AUTH:-true}"
 BUMP_FRONTEND_VERSION="${CODEX_LB_BUMP_FRONTEND_VERSION:-false}"
 FORCE_CODEX_AUTH_INSTALL="false"
+FORCE_SERIAL_BUILD="${CODEX_LB_FORCE_SERIAL_BUILD:-false}"
+FORCE_PARALLEL_BUILD="${CODEX_LB_FORCE_PARALLEL_BUILD:-false}"
+PARALLEL_BUILD_MIN_MEM_MB="${CODEX_LB_PARALLEL_BUILD_MIN_MEM_MB:-4096}"
+MIN_AVAILABLE_MEM_MB="${CODEX_LB_MIN_AVAILABLE_MEM_MB:-1024}"
+MIN_AVAILABLE_SWAP_MB="${CODEX_LB_MIN_AVAILABLE_SWAP_MB:-512}"
+MEMINFO_PATH="${CODEX_LB_MEMINFO_PATH:-/proc/meminfo}"
 
 usage() {
   cat <<'EOF'
-Usage: ./redeploy.sh [--turbo|--full] [--skip-codex-auth-install] [--force-codex-auth-install] [--bump-frontend-version] [service...]
+Usage: ./redeploy.sh [--turbo|--full] [--skip-codex-auth-install] [--force-codex-auth-install] [--bump-frontend-version] [--serial-build|--parallel-build] [service...]
 
 Modes:
   --turbo  Build in parallel and restart only selected services (default, faster)
@@ -22,16 +28,25 @@ Flags:
   --skip-codex-auth-install  Skip global codex-auth install/update step
   --force-codex-auth-install Force global codex-auth install/update step
   --bump-frontend-version    Increment frontend/package.json patch version
+  --serial-build             Build services sequentially (safer for low-memory hosts)
+  --parallel-build           Force parallel docker builds
 
 Env:
   CODEX_LB_INSTALL_CODEX_AUTH=true|false (default: true)
   CODEX_LB_BUMP_FRONTEND_VERSION=true|false (default: false)
+  CODEX_LB_FORCE_SERIAL_BUILD=true|false (default: false)
+  CODEX_LB_FORCE_PARALLEL_BUILD=true|false (default: false)
+  CODEX_LB_PARALLEL_BUILD_MIN_MEM_MB=4096 (auto-switch to serial below this MemAvailable)
+  CODEX_LB_MIN_AVAILABLE_MEM_MB=1024 (abort when both mem/swap are too low)
+  CODEX_LB_MIN_AVAILABLE_SWAP_MB=512
+  CODEX_LB_MEMINFO_PATH=/proc/meminfo (override for testing/debugging)
 
 Examples:
   ./redeploy.sh
   ./redeploy.sh --turbo server frontend
   ./redeploy.sh --force-codex-auth-install
   ./redeploy.sh --bump-frontend-version
+  ./redeploy.sh --serial-build
   ./redeploy.sh --skip-codex-auth-install --full
   ./redeploy.sh --full
 EOF
@@ -59,6 +74,16 @@ while (($#)); do
       BUMP_FRONTEND_VERSION="true"
       shift
       ;;
+    --serial-build)
+      FORCE_SERIAL_BUILD="true"
+      FORCE_PARALLEL_BUILD="false"
+      shift
+      ;;
+    --parallel-build)
+      FORCE_PARALLEL_BUILD="true"
+      FORCE_SERIAL_BUILD="false"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -82,9 +107,23 @@ normalize_bool() {
   esac
 }
 
+normalize_positive_int() {
+  local value="${1:-}"
+  if [[ -z "$value" || ! "$value" =~ ^[0-9]+$ ]]; then
+    echo "Error: expected positive integer value, got: ${value}" >&2
+    exit 1
+  fi
+  echo "$value"
+}
+
 INSTALL_CODEX_AUTH="$(normalize_bool "$INSTALL_CODEX_AUTH")"
 BUMP_FRONTEND_VERSION="$(normalize_bool "$BUMP_FRONTEND_VERSION")"
 FORCE_CODEX_AUTH_INSTALL="$(normalize_bool "$FORCE_CODEX_AUTH_INSTALL")"
+FORCE_SERIAL_BUILD="$(normalize_bool "$FORCE_SERIAL_BUILD")"
+FORCE_PARALLEL_BUILD="$(normalize_bool "$FORCE_PARALLEL_BUILD")"
+PARALLEL_BUILD_MIN_MEM_MB="$(normalize_positive_int "$PARALLEL_BUILD_MIN_MEM_MB")"
+MIN_AVAILABLE_MEM_MB="$(normalize_positive_int "$MIN_AVAILABLE_MEM_MB")"
+MIN_AVAILABLE_SWAP_MB="$(normalize_positive_int "$MIN_AVAILABLE_SWAP_MB")"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Error: docker is not installed or not in PATH." >&2
@@ -95,6 +134,109 @@ if ! docker compose version >/dev/null 2>&1; then
   echo "Error: docker compose is not available." >&2
   exit 1
 fi
+
+docker_compose() {
+  local cmd=(docker compose "$@")
+  if command -v ionice >/dev/null 2>&1; then
+    cmd=(ionice -c2 -n7 "${cmd[@]}")
+  fi
+  if command -v nice >/dev/null 2>&1; then
+    cmd=(nice -n 10 "${cmd[@]}")
+  fi
+  "${cmd[@]}"
+}
+
+read_meminfo_kb() {
+  local field_name="$1"
+  if [[ ! -r "$MEMINFO_PATH" ]]; then
+    return 1
+  fi
+  awk -v field_name="$field_name" '$1 == field_name":" {print $2; exit}' "$MEMINFO_PATH"
+}
+
+mem_available_mb() {
+  local mem_kb=""
+  mem_kb="$(read_meminfo_kb MemAvailable || true)"
+  if [[ -z "$mem_kb" ]]; then
+    return 1
+  fi
+  echo $((mem_kb / 1024))
+}
+
+swap_free_mb() {
+  local swap_kb=""
+  swap_kb="$(read_meminfo_kb SwapFree || true)"
+  if [[ -z "$swap_kb" ]]; then
+    echo 0
+    return 0
+  fi
+  echo $((swap_kb / 1024))
+}
+
+require_resource_headroom() {
+  local stage="$1"
+  local mem_mb=""
+  local swap_mb=""
+  mem_mb="$(mem_available_mb || true)"
+  if [[ -z "$mem_mb" ]]; then
+    return
+  fi
+  swap_mb="$(swap_free_mb)"
+
+  if (( mem_mb < MIN_AVAILABLE_MEM_MB && swap_mb < MIN_AVAILABLE_SWAP_MB )); then
+    cat >&2 <<EOF
+Error: refusing to continue redeploy at stage '${stage}'.
+Host resources are critically low (MemAvailable=${mem_mb} MiB, SwapFree=${swap_mb} MiB).
+This safety stop prevents host freezes and forced reboots.
+
+Free memory/swap, then retry with --serial-build.
+EOF
+    exit 1
+  fi
+}
+
+should_build_parallel() {
+  local mem_mb=""
+  if [[ "$FORCE_SERIAL_BUILD" == "true" ]]; then
+    return 1
+  fi
+  if [[ "$FORCE_PARALLEL_BUILD" == "true" ]]; then
+    return 0
+  fi
+
+  mem_mb="$(mem_available_mb || true)"
+  if [[ -z "$mem_mb" ]]; then
+    return 0
+  fi
+
+  if (( mem_mb < PARALLEL_BUILD_MIN_MEM_MB )); then
+    echo "MemAvailable=${mem_mb} MiB (< ${PARALLEL_BUILD_MIN_MEM_MB} MiB); switching to serial docker builds for stability."
+    return 1
+  fi
+  return 0
+}
+
+build_services_serial() {
+  local service=""
+  echo "Building services sequentially: ${TARGET_SERVICES[*]}"
+  for service in "${TARGET_SERVICES[@]}"; do
+    require_resource_headroom "build:${service}"
+    docker_compose build "$service"
+  done
+}
+
+build_selected_services() {
+  require_resource_headroom "build:start"
+  if should_build_parallel; then
+    echo "Building services in parallel: ${TARGET_SERVICES[*]}"
+    if ! docker_compose build --parallel "${TARGET_SERVICES[@]}"; then
+      echo "Parallel build failed or not supported, falling back to serial build..."
+      build_services_serial
+    fi
+  else
+    build_services_serial
+  fi
+}
 
 install_codex_auth() {
   local switcher_dir="$ROOT_DIR/codex-account-switcher"
@@ -240,14 +382,15 @@ fi
 echo "Redeploying docker compose stack in ${MODE} mode..."
 
 if [[ "$MODE" == "full" ]]; then
-  docker compose down
-  docker compose up -d --build "${TARGET_SERVICES[@]}"
+  require_resource_headroom "down"
+  docker_compose down
+  build_selected_services
+  require_resource_headroom "up"
+  docker_compose up -d "${TARGET_SERVICES[@]}"
 else
-  if ! docker compose build --parallel "${TARGET_SERVICES[@]}"; then
-    echo "Parallel build failed or not supported, falling back to standard build..."
-    docker compose build "${TARGET_SERVICES[@]}"
-  fi
-  docker compose up -d --no-deps "${TARGET_SERVICES[@]}"
+  build_selected_services
+  require_resource_headroom "up"
+  docker_compose up -d --no-deps "${TARGET_SERVICES[@]}"
 fi
 
 echo "Redeploy complete. Current frontend version: ${NEW_VERSION}"

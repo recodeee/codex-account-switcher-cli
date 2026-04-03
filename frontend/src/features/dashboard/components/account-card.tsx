@@ -13,15 +13,16 @@ import {
   resolveEffectiveAccountStatus,
 } from "@/utils/account-status";
 import {
-  formatCompactNumber,
   formatLastUsageLabel,
   formatPercentNullable,
   formatQuotaResetLabel,
+  formatTokenCredits,
   formatSlug,
 } from "@/utils/formatters";
+import { resolveCodexSessionCount } from "@/utils/codex-sessions";
 import { canUseLocalAccount, getUseLocalAccountDisabledReason } from "@/utils/use-local-account";
 
-type AccountAction = "details" | "resume" | "reauth" | "terminal" | "useLocal";
+type AccountAction = "details" | "resume" | "reauth" | "terminal" | "useLocal" | "sessions";
 
 export type AccountCardProps = {
   account: AccountSummary;
@@ -119,7 +120,7 @@ export function AccountCard({
   const compactId = formatCompactAccountId(account.accountId);
   const planLabel = formatSlug(account.planType);
   const totalTokensUsed = tokensUsed ?? account.requestUsage?.totalTokens ?? 0;
-  const codexSessionCount = Math.max(account.codexSessionCount ?? 0, isWorkingNow ? 1 : 0);
+  const codexSessionCount = resolveCodexSessionCount(account.codexSessionCount, isWorkingNow);
   const emailSubtitle =
     account.displayName && account.displayName !== account.email
       ? account.email
@@ -163,11 +164,11 @@ export function AccountCard({
       <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tokens used</p>
-          <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatCompactNumber(totalTokensUsed)}</p>
+          <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatTokenCredits(totalTokensUsed)}</p>
         </div>
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Codex sessions</p>
-          <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatCompactNumber(codexSessionCount)}</p>
+          <p className="mt-0.5 text-xs font-semibold tabular-nums">{codexSessionCount}</p>
         </div>
       </div>
 
@@ -229,6 +230,18 @@ export function AccountCard({
           <ExternalLink className="h-3 w-3" />
           Details
         </Button>
+        {codexSessionCount > 0 ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1.5 rounded-lg text-xs text-cyan-700 hover:bg-cyan-500/10 hover:text-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200"
+            onClick={() => onAction?.(account, "sessions")}
+          >
+            <ExternalLink className="h-3 w-3" />
+            Sessions
+          </Button>
+        ) : null}
         {status === "paused" && (
           <Button
             type="button"

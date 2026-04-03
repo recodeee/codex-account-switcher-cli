@@ -30,8 +30,9 @@ describe("AccountCard", () => {
     expect(screen.getByText("Weekly")).toBeInTheDocument();
     expect(screen.getByText("Tokens used")).toBeInTheDocument();
     expect(screen.getByText("Codex sessions")).toBeInTheDocument();
-    expect(screen.getByText("98.77K")).toBeInTheDocument();
+    expect(screen.getByText("98,765k")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sessions" })).toBeInTheDocument();
   });
 
   it("hides 5h quota bar for weekly-only accounts", () => {
@@ -170,6 +171,18 @@ describe("AccountCard", () => {
     expect(onAction).toHaveBeenCalledWith(account, "terminal");
   });
 
+  it("calls sessions action when sessions button is clicked", async () => {
+    const user = userEvent.setup({ delay: null });
+    const account = createAccountSummary({ codexSessionCount: 6 });
+    const onAction = vi.fn();
+
+    render(<AccountCard account={account} onAction={onAction} />);
+
+    await user.click(screen.getByRole("button", { name: "Sessions" }));
+
+    expect(onAction).toHaveBeenCalledWith(account, "sessions");
+  });
+
   it("shows working indicator when account snapshot is active", () => {
     const account = createAccountSummary({
       codexAuth: {
@@ -266,5 +279,6 @@ describe("AccountCard", () => {
     const sessionsValue = sessionsLabel.parentElement?.querySelector("p.mt-0\\.5.text-xs.font-semibold.tabular-nums");
     expect(sessionsValue).not.toBeNull();
     expect(sessionsValue).toHaveTextContent(/^0$/);
+    expect(within(card as HTMLElement).queryByRole("button", { name: "Sessions" })).not.toBeInTheDocument();
   });
 });

@@ -96,3 +96,39 @@ def test_read_local_codex_live_usage_ignores_stale_rollout_files(monkeypatch, tm
 
     usage = read_local_codex_live_usage(now=now)
     assert usage is None
+
+
+def test_read_local_codex_live_usage_prefers_newest_session_file_over_older_active_session(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    # Older session file still emits fresh token_count events (stale account).
+    older_active = day_dir / "rollout-2026-04-03T16-13-25-older-session.jsonl"
+    _write_rollout(
+        older_active,
+        timestamp=now - timedelta(seconds=10),
+        primary_used=88.0,
+        secondary_used=23.0,
+    )
+
+    # Newest session file corresponds to the currently selected account.
+    newest_active = day_dir / "rollout-2026-04-03T16-22-44-newest-session.jsonl"
+    _write_rollout(
+        newest_active,
+        timestamp=now - timedelta(seconds=20),
+        primary_used=0.0,
+        secondary_used=0.0,
+    )
+
+    usage = read_local_codex_live_usage(now=now)
+    assert usage is not None
+    assert usage.active_session_count == 2
+    assert usage.primary is not None
+    assert usage.secondary is not None
+    assert usage.primary.used_percent == 0.0
+    assert usage.secondary.used_percent == 0.0

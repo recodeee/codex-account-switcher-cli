@@ -7,6 +7,7 @@ import { AlertMessage } from "@/components/alert-message";
 import { useAccountMutations } from "@/features/accounts/hooks/use-accounts";
 import { AccountCards } from "@/features/dashboard/components/account-cards";
 import { DashboardSkeleton } from "@/features/dashboard/components/dashboard-skeleton";
+import { useTerminalWorkspace } from "@/features/dashboard/components/terminal-workspace-context";
 import { RequestFilters } from "@/features/dashboard/components/filters/request-filters";
 import { RecentRequestsTable } from "@/features/dashboard/components/recent-requests-table";
 import { UsageDonuts } from "@/features/dashboard/components/usage-donuts";
@@ -27,7 +28,8 @@ export function DashboardPage() {
   const isDark = useThemeStore((s) => s.theme === "dark");
   const dashboardQuery = useDashboard();
   const { filters, logsQuery, optionsQuery, updateFilters } = useRequestLogs();
-  const { resumeMutation, useLocalMutation, openTerminalMutation } = useAccountMutations();
+  const { resumeMutation, useLocalMutation } = useAccountMutations();
+  const { openTerminal } = useTerminalWorkspace();
 
   const isRefreshing = dashboardQuery.isFetching || logsQuery.isFetching;
 
@@ -57,11 +59,17 @@ export function DashboardPage() {
           });
           break;
         case "terminal":
-          openTerminalMutation.mutate(account.accountId);
+          openTerminal({
+            accountId: account.accountId,
+            email: account.email,
+          });
+          break;
+        case "sessions":
+          navigate(`/sessions?accountId=${encodeURIComponent(account.accountId)}`);
           break;
       }
     },
-    [navigate, openTerminalMutation, resumeMutation, useLocalMutation],
+    [navigate, openTerminal, resumeMutation, useLocalMutation],
   );
 
   const overview = dashboardQuery.data;

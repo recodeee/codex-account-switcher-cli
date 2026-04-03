@@ -5,3 +5,5 @@
 - [x] Add/extend backend and frontend tests for the new payload/UI behavior.
 - [x] Bump frontend patch version and verify build/test/lint/typecheck.
 - [x] Validate specs with `openspec validate --specs`.
+- [x] Show dashboard account-card `Tokens used` values with a `k` suffix (e.g. `225k`) to match quota-credit semantics.
+- [x] Add dashboard account-card `Sessions` shortcut and make `/sessions` show dashboard session counters when sticky mappings are empty.

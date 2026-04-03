@@ -160,6 +160,11 @@ When `CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST=true` (default), loading 
 > Use `--force-codex-auth-install` to force reinstall, or `--skip-codex-auth-install` (or `CODEX_LB_INSTALL_CODEX_AUTH=false`) to disable that step.
 >
 > Frontend version no longer auto-increments on every redeploy. Use `--bump-frontend-version` (or `CODEX_LB_BUMP_FRONTEND_VERSION=true`) when you explicitly want a patch bump.
+>
+> Redeploy now also protects low-memory hosts from freezes:
+> - auto-switches to serial Docker builds when available memory is low
+> - aborts early when both RAM and swap are critically low
+> - supports explicit overrides: `--serial-build`, `--parallel-build`, `CODEX_LB_FORCE_SERIAL_BUILD`, `CODEX_LB_FORCE_PARALLEL_BUILD`
 
 ## Client Setup
 

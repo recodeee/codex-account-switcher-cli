@@ -21,6 +21,7 @@ import {
   formatResetRelative,
   formatRefreshTokenLabel,
   formatRelative,
+  formatTokenCredits,
   formatTimeLong,
   formatTokensWithCached,
   formatWindowLabel,
@@ -56,6 +57,8 @@ describe("formatters", () => {
   it("formats number-like values", () => {
     expect(formatNumber(1200)).toBe("1,200");
     expect(formatCompactNumber(1200)).toMatch(/K$/);
+    expect(formatTokenCredits(225)).toBe("225k");
+    expect(formatTokenCredits(220.5)).toBe("220.5k");
     expect(formatCurrency(12)).toMatch(/^\$/);
     expect(formatNumber("abc")).toBe("--");
   });

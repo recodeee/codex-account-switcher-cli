@@ -4,6 +4,7 @@ import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 
 import App from "@/App";
+import { createAccountSummary, createDashboardOverview } from "@/test/mocks/factories";
 import { server } from "@/test/mocks/server";
 import { renderWithProviders } from "@/test/utils";
 
@@ -65,5 +66,50 @@ describe("sessions flow integration", () => {
 
     await user.click(screen.getByRole("link", { name: "Sessions" }));
     expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+  });
+
+  it("falls back to dashboard codex session counters when sticky mappings are empty", async () => {
+    server.use(
+      http.get("/api/sticky-sessions", ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("kind") !== "codex_session") {
+          return HttpResponse.json({ entries: [], stalePromptCacheCount: 0, total: 0, hasMore: false });
+        }
+        return HttpResponse.json({
+          entries: [],
+          stalePromptCacheCount: 0,
+          total: 0,
+          hasMore: false,
+        });
+      }),
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_zeus",
+                email: "zeus@example.com",
+                displayName: "zeus@example.com",
+                codexSessionCount: 6,
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "zeus",
+                  activeSnapshotName: "zeus",
+                  isActiveSnapshot: true,
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/sessions?accountId=acc_zeus");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(await screen.findByText("Live Codex session counters")).toBeInTheDocument();
+    expect(screen.getByText("zeus@example.com")).toBeInTheDocument();
+    expect(screen.getAllByText("6").length).toBeGreaterThan(0);
   });
 });

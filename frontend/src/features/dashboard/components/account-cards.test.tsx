@@ -46,7 +46,7 @@ describe("AccountCards", () => {
 
     const card = screen.getByText("regular@example.com").closest(".card-hover");
     expect(card).not.toBeNull();
-    expect(within(card as HTMLElement).getByText("100")).toBeInTheDocument();
+    expect(within(card as HTMLElement).getByText("100k")).toBeInTheDocument();
   });
 
   it("uses secondary window consumption for weekly-only-account tokens used", () => {
@@ -74,6 +74,6 @@ describe("AccountCards", () => {
 
     const card = screen.getByText("weekly@example.com").closest(".card-hover");
     expect(card).not.toBeNull();
-    expect(within(card as HTMLElement).getByText("1.5K")).toBeInTheDocument();
+    expect(within(card as HTMLElement).getByText("1,500k")).toBeInTheDocument();
   });
 });
