@@ -18,6 +18,10 @@ from app.core.plan_types import coerce_account_plan_type
 from app.core.utils.time import naive_utc_to_epoch, to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus
 from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
+from app.modules.accounts.codex_auth_auto_import_ignore import (
+    add_auto_import_ignored_account_id,
+    remove_auto_import_ignored_account_id,
+)
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     CodexAuthSnapshotNotFoundError,
@@ -196,6 +200,7 @@ class AccountsService:
         account = self._account_from_auth_bytes(raw)
 
         saved = await self._repo.upsert(account)
+        remove_auto_import_ignored_account_id(saved.id)
         if self._usage_repo and self._usage_updater:
             latest_usage = await self._usage_repo.latest_by_account(window="primary")
             await self._usage_updater.refresh_accounts([saved], latest_usage)
@@ -222,6 +227,7 @@ class AccountsService:
     async def delete_account(self, account_id: str) -> bool:
         result = await self._repo.delete(account_id)
         if result:
+            add_auto_import_ignored_account_id(account_id)
             get_account_selection_cache().invalidate()
         return result
 

@@ -18,6 +18,7 @@ from app.core.crypto import TokenEncryptor
 from app.core.plan_types import coerce_account_plan_type
 from app.core.utils.time import to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus
+from app.modules.accounts.codex_auth_auto_import_ignore import list_auto_import_ignored_account_ids
 from app.modules.accounts.repository import AccountIdentityConflictError, AccountsRepository
 from app.modules.proxy.account_cache import get_account_selection_cache
 
@@ -26,6 +27,7 @@ async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor
     if not get_settings().codex_auth_auto_import_on_accounts_list:
         return
 
+    ignored_account_ids = list_auto_import_ignored_account_ids()
     imported_any = False
     for snapshot_path in _collect_codex_auth_snapshot_paths():
         try:
@@ -35,6 +37,8 @@ async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor
 
         account = _parse_account_from_auth_bytes(raw=raw, encryptor=encryptor)
         if account is None:
+            continue
+        if account.id in ignored_account_ids:
             continue
 
         existing = await repo.get_by_id(account.id)

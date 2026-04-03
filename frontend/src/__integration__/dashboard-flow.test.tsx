@@ -296,9 +296,8 @@ describe("dashboard flow integration", () => {
     expect(window.location.search).toContain("selected=acc_no_snapshot");
   });
 
-  it("tries local snapshot switch first when re-auth is clicked for a deactivated account", async () => {
+  it("routes to account details when re-auth is clicked for a deactivated account", async () => {
     const user = userEvent.setup({ delay: null });
-    let useLocalCalls = 0;
 
     server.use(
       http.get("/api/dashboard/overview", () =>
@@ -326,75 +325,6 @@ describe("dashboard flow integration", () => {
           }),
         ),
       ),
-      http.post("/api/accounts/:accountId/use-local", ({ params }) => {
-        if (params.accountId === "acc_reauth_success") {
-          useLocalCalls += 1;
-          return HttpResponse.json({
-            status: "switched",
-            accountId: "acc_reauth_success",
-            snapshotName: "reauth-snapshot",
-          });
-        }
-        return HttpResponse.json({ status: "switched", accountId: String(params.accountId), snapshotName: "main" });
-      }),
-    );
-
-    window.history.pushState({}, "", "/dashboard");
-    renderWithProviders(<App />);
-
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Re-auth" }));
-
-    expect(await screen.findByText(/Switched to reauth-snapshot/i)).toBeInTheDocument();
-    expect(useLocalCalls).toBe(1);
-    expect(window.location.pathname).toBe("/dashboard");
-  });
-
-  it("falls back to account details when re-auth local snapshot switch fails", async () => {
-    const user = userEvent.setup({ delay: null });
-    let useLocalCalls = 0;
-
-    server.use(
-      http.get("/api/dashboard/overview", () =>
-        HttpResponse.json(
-          createDashboardOverview({
-            accounts: [
-              createAccountSummary({
-                accountId: "acc_reauth_fallback",
-                status: "deactivated",
-                usage: {
-                  primaryRemainingPercent: 44,
-                  secondaryRemainingPercent: 73,
-                },
-                codexAuth: {
-                  hasSnapshot: true,
-                  snapshotName: "reauth-snapshot",
-                  activeSnapshotName: "different-snapshot",
-                  isActiveSnapshot: false,
-                  hasLiveSession: false,
-                  expectedSnapshotName: "reauth-snapshot",
-                  snapshotNameMatchesEmail: true,
-                },
-              }),
-            ],
-          }),
-        ),
-      ),
-      http.post("/api/accounts/:accountId/use-local", ({ params }) => {
-        if (params.accountId === "acc_reauth_fallback") {
-          useLocalCalls += 1;
-          return HttpResponse.json(
-            {
-              error: {
-                code: "codex_auth_switch_failed",
-                message: "Failed to switch snapshot.",
-              },
-            },
-            { status: 400 },
-          );
-        }
-        return HttpResponse.json({ status: "switched", accountId: String(params.accountId), snapshotName: "main" });
-      }),
     );
 
     window.history.pushState({}, "", "/dashboard");
@@ -404,9 +334,8 @@ describe("dashboard flow integration", () => {
     await user.click(await screen.findByRole("button", { name: "Re-auth" }));
 
     expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
-    expect(useLocalCalls).toBe(1);
     expect(window.location.pathname).toBe("/accounts");
-    expect(window.location.search).toContain("selected=acc_reauth_fallback");
+    expect(window.location.search).toContain("selected=acc_reauth_success");
   });
 
   it("opens sessions page from account card when codex sessions are present", async () => {

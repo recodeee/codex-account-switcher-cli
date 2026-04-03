@@ -211,6 +211,39 @@ async def test_accounts_list_auto_imports_codex_auth_snapshots(
 
 
 @pytest.mark.asyncio
+async def test_deleted_auto_imported_account_is_not_resurrected(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "tokio.json", email="tokio@example.com", account_id="acc_tokio")
+    (tmp_path / "current").write_text("tokio")
+
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+    monkeypatch.setenv("CODEX_AUTH_AUTO_IMPORT_IGNORE_PATH", str(tmp_path / "auto-import-ignore.json"))
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    listed = await async_client.get("/api/accounts")
+    assert listed.status_code == 200
+    accounts = listed.json()["accounts"]
+    assert len(accounts) == 1
+    account_id = accounts[0]["accountId"]
+
+    deleted = await async_client.delete(f"/api/accounts/{account_id}")
+    assert deleted.status_code == 200
+    assert deleted.json()["status"] == "deleted"
+
+    relisted = await async_client.get("/api/accounts")
+    assert relisted.status_code == 200
+    assert relisted.json()["accounts"] == []
+
+
+@pytest.mark.asyncio
 async def test_accounts_list_sets_has_live_session_from_runtime_telemetry(
     async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):

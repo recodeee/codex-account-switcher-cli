@@ -234,6 +234,7 @@ def _apply_local_default_session_fingerprint_overrides(
     active_account_id = _resolve_active_account_id(codex_auth_by_account)
 
     matched_counts_by_account: dict[str, int] = {}
+    latest_sample_by_account: dict[str, LocalCodexLiveUsage] = {}
     for sample in fingerprint_samples:
         account_id = _match_sample_to_account(
             sample=sample,
@@ -244,6 +245,9 @@ def _apply_local_default_session_fingerprint_overrides(
         if account_id is None:
             continue
         matched_counts_by_account[account_id] = matched_counts_by_account.get(account_id, 0) + 1
+        previous_sample = latest_sample_by_account.get(account_id)
+        if previous_sample is None or sample.recorded_at >= previous_sample.recorded_at:
+            latest_sample_by_account[account_id] = sample
 
     if len(matched_counts_by_account) <= 1:
         if len(matched_counts_by_account) != 1:
@@ -266,14 +270,36 @@ def _apply_local_default_session_fingerprint_overrides(
             codex_auth_status.has_live_session = True
 
         codex_session_counts_by_account[account_id] = match_count
+        latest_sample = latest_sample_by_account.get(account_id)
+        if latest_sample is None:
+            continue
 
-        # NOTE:
-        # These fallback matches are inferred from local rollout samples when
-        # Codex is running only against the default auth pointer. They are good
-        # enough to infer "working now" and session counts, but not reliable
-        # enough to overwrite per-account quota percentages without causing
-        # occasional cross-account bleed (showing one account's budget on
-        # another card). Keep baseline quota windows intact here.
+        if not _has_unique_reset_fingerprint_match(
+            sample=latest_sample,
+            account_id=account_id,
+            accounts=candidate_accounts,
+            baseline_primary_usage=baseline_primary_usage,
+            baseline_secondary_usage=baseline_secondary_usage,
+        ):
+            # Without a unique reset fingerprint we can still trust session
+            # presence/count, but quota attribution may bleed across accounts.
+            continue
+
+        recorded_at = to_utc_naive(latest_sample.recorded_at)
+        if latest_sample.primary is not None:
+            primary_usage[account_id] = _usage_history_from_live_window(
+                account_id=account_id,
+                window="primary",
+                recorded_at=recorded_at,
+                usage_window=latest_sample.primary,
+            )
+        if latest_sample.secondary is not None:
+            secondary_usage[account_id] = _usage_history_from_live_window(
+                account_id=account_id,
+                window="secondary",
+                recorded_at=recorded_at,
+                usage_window=latest_sample.secondary,
+            )
 
 
 def _account_has_snapshot(status: AccountCodexAuthStatus | None) -> bool:
@@ -333,6 +359,45 @@ def _account_has_usage_fingerprint(
             return True
         if secondary_entry.used_percent is not None:
             return True
+    return False
+
+
+def _has_unique_reset_fingerprint_match(
+    *,
+    sample: LocalCodexLiveUsage,
+    account_id: str,
+    accounts: list[Account],
+    baseline_primary_usage: dict[str, UsageHistory],
+    baseline_secondary_usage: dict[str, UsageHistory],
+) -> bool:
+    sample_primary_reset = sample.primary.reset_at if sample.primary is not None else None
+    sample_secondary_reset = sample.secondary.reset_at if sample.secondary is not None else None
+
+    def _matching_accounts_for_reset(*, window: Literal["primary", "secondary"], reset_at: int) -> set[str]:
+        matches: set[str] = set()
+        for account in accounts:
+            account_usage = (
+                baseline_primary_usage.get(account.id)
+                if window == "primary"
+                else baseline_secondary_usage.get(account.id)
+            )
+            account_reset_at = account_usage.reset_at if account_usage is not None else None
+            if account_reset_at is None:
+                continue
+            if abs(reset_at - account_reset_at) <= _RESET_FINGERPRINT_TIE_BREAK_SECONDS:
+                matches.add(account.id)
+        return matches
+
+    if sample_primary_reset is not None:
+        primary_matches = _matching_accounts_for_reset(window="primary", reset_at=sample_primary_reset)
+        if account_id in primary_matches and len(primary_matches) == 1:
+            return True
+
+    if sample_secondary_reset is not None:
+        secondary_matches = _matching_accounts_for_reset(window="secondary", reset_at=sample_secondary_reset)
+        if account_id in secondary_matches and len(secondary_matches) == 1:
+            return True
+
     return False
 
 
