@@ -13,6 +13,8 @@ export type MergedRequestLogUsageSummary = {
 
 const EMPTY_USAGE_WINDOW: RequestLogUsageSummary["last5h"] = {
   totalTokens: 0,
+  totalCostUsd: 0,
+  totalCostEur: 0,
   accounts: [],
 };
 
@@ -25,11 +27,15 @@ function toConsumedTokens(window: UsageWindow | null | undefined): RequestLogUsa
     .map((row) => ({
       accountId: row.accountId,
       tokens: Math.max(0, row.capacityCredits - row.remainingCredits),
+      costUsd: 0,
+      costEur: 0,
     }))
     .sort((left, right) => right.tokens - left.tokens);
 
   return {
     totalTokens: accounts.reduce((total, row) => total + row.tokens, 0),
+    totalCostUsd: 0,
+    totalCostEur: 0,
     accounts,
   };
 }
@@ -40,6 +46,7 @@ export function buildLiveUsageFallbackSummary(
   return {
     last5h: toConsumedTokens(windows?.primary),
     last7d: toConsumedTokens(windows?.secondary),
+    fxRateUsdToEur: 1,
   };
 }
 
@@ -50,6 +57,7 @@ export function mergeRequestLogUsageSummaryWithLiveFallback(
   const requestUsageSummary: RequestLogUsageSummary = requestSummary ?? {
     last5h: EMPTY_USAGE_WINDOW,
     last7d: EMPTY_USAGE_WINDOW,
+    fxRateUsdToEur: 1,
   };
   const liveUsageSummary = buildLiveUsageFallbackSummary(windows);
 
@@ -62,6 +70,7 @@ export function mergeRequestLogUsageSummaryWithLiveFallback(
     usageSummary: {
       last5h: use5hFallback ? liveUsageSummary.last5h : requestUsageSummary.last5h,
       last7d: use7dFallback ? liveUsageSummary.last7d : requestUsageSummary.last7d,
+      fxRateUsdToEur: requestUsageSummary.fxRateUsdToEur,
     },
     fallback: {
       last5h: use5hFallback,

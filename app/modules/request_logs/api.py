@@ -118,16 +118,31 @@ async def get_request_log_usage_summary(
     return RequestLogUsageSummaryResponse(
         last_5h=RequestLogUsageSummaryWindow(
             total_tokens=summary.last_5h.total_tokens,
+            total_cost_usd=summary.last_5h.total_cost_usd,
+            total_cost_eur=summary.last_5h.total_cost_eur,
             accounts=[
-                RequestLogUsageSummaryAccountTokens(account_id=row.account_id, tokens=row.tokens)
+                RequestLogUsageSummaryAccountTokens(
+                    account_id=row.account_id,
+                    tokens=row.tokens,
+                    cost_usd=row.cost_usd,
+                    cost_eur=row.cost_eur,
+                )
                 for row in summary.last_5h.accounts
             ],
         ),
         last_7d=RequestLogUsageSummaryWindow(
             total_tokens=summary.last_7d.total_tokens,
+            total_cost_usd=summary.last_7d.total_cost_usd,
+            total_cost_eur=summary.last_7d.total_cost_eur,
             accounts=[
-                RequestLogUsageSummaryAccountTokens(account_id=row.account_id, tokens=row.tokens)
+                RequestLogUsageSummaryAccountTokens(
+                    account_id=row.account_id,
+                    tokens=row.tokens,
+                    cost_usd=row.cost_usd,
+                    cost_eur=row.cost_eur,
+                )
                 for row in summary.last_7d.accounts
             ],
         ),
+        fx_rate_usd_to_eur=summary.fx_rate_usd_to_eur,
     )

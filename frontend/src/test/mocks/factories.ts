@@ -309,18 +309,23 @@ export function createRequestLogUsageSummary(
 	return RequestLogUsageSummarySchema.parse({
 		last5h: {
 			totalTokens: 1800,
+			totalCostUsd: 0.42,
+			totalCostEur: 0.39,
 			accounts: [
-				{ accountId: "acc_primary", tokens: 1200 },
-				{ accountId: "acc_secondary", tokens: 600 },
+				{ accountId: "acc_primary", tokens: 1200, costUsd: 0.28, costEur: 0.26 },
+				{ accountId: "acc_secondary", tokens: 600, costUsd: 0.14, costEur: 0.13 },
 			],
 		},
 		last7d: {
 			totalTokens: 45_000,
+			totalCostUsd: 8.17,
+			totalCostEur: 7.52,
 			accounts: [
-				{ accountId: "acc_primary", tokens: 28_000 },
-				{ accountId: "acc_secondary", tokens: 17_000 },
+				{ accountId: "acc_primary", tokens: 28_000, costUsd: 5.08, costEur: 4.67 },
+				{ accountId: "acc_secondary", tokens: 17_000, costUsd: 3.09, costEur: 2.84 },
 			],
 		},
+		fxRateUsdToEur: 0.92,
 		...overrides,
 	});
 }

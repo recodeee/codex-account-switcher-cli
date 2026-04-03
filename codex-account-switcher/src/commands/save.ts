@@ -2,21 +2,25 @@ import { Args } from "@oclif/core";
 import { BaseCommand } from "../lib/base-command";
 
 export default class SaveCommand extends BaseCommand {
-  static description = "Save the current ~/.codex/auth.json as a named account";
+  static description =
+    "Save the current ~/.codex/auth.json as a named account (or infer one from auth email)";
 
   static args = {
     name: Args.string({
       name: "name",
-      required: true,
-      description: "Name for the account snapshot",
+      required: false,
+      description: "Optional account snapshot name. If omitted, inferred from auth email",
     }),
   } as const;
 
   async run(): Promise<void> {
     await this.runSafe(async () => {
       const { args } = await this.parse(SaveCommand);
-      const savedName = await this.accounts.saveAccount(args.name as string);
-      this.log(`Saved current Codex auth tokens as "${savedName}".`);
+      const providedName = args.name as string | undefined;
+      const accountName = providedName ?? (await this.accounts.inferAccountNameFromCurrentAuth());
+      const savedName = await this.accounts.saveAccount(accountName);
+      const suffix = providedName ? "" : " (inferred from auth email)";
+      this.log(`Saved current Codex auth tokens as "${savedName}"${suffix}.`);
     });
   }
 }

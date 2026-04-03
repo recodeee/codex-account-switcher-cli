@@ -11,6 +11,7 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const currencyFormatterByCode = new Map<string, Intl.NumberFormat>();
 const timeFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
   minute: "2-digit",
@@ -88,6 +89,32 @@ export function formatTokenCredits(value: unknown): string {
 export function formatCurrency(value: unknown): string {
   const numeric = toNumber(value);
   return numeric === null ? "--" : currencyFormatter.format(numeric);
+}
+
+export function formatCurrencyByCode(value: unknown, currencyCode: string): string {
+  const numeric = toNumber(value);
+  if (numeric === null) {
+    return "--";
+  }
+  const normalizedCode = currencyCode.trim().toUpperCase();
+  if (!normalizedCode) {
+    return formatCurrency(numeric);
+  }
+  let formatter = currencyFormatterByCode.get(normalizedCode);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: normalizedCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    currencyFormatterByCode.set(normalizedCode, formatter);
+  }
+  return formatter.format(numeric);
+}
+
+export function formatEuro(value: unknown): string {
+  return formatCurrencyByCode(value, "EUR");
 }
 
 export function formatPercent(value: unknown): string {

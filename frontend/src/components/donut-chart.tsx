@@ -15,6 +15,7 @@ export type DonutChartItem = {
   /** When true the label text gets CSS-blurred in privacy mode. */
   isEmail?: boolean;
   value: number;
+  costEur?: number;
   color?: string;
 };
 
@@ -24,6 +25,10 @@ export type DonutChartProps = {
   title: string;
   subtitle?: string;
   centerLabel?: string;
+  centerValue?: string;
+  centerSubvalue?: string | null;
+  legendValueFormatter?: (item: DonutChartItem) => string;
+  legendSecondaryFormatter?: (item: DonutChartItem) => string | null;
   safeLine?: { safePercent: number; riskLevel: "safe" | "warning" | "danger" | "critical" } | null;
 };
 
@@ -76,7 +81,18 @@ const PIE_CY = 71;
 const INNER_R = 53;
 const OUTER_R = 71;
 
-export function DonutChart({ items, total, title, subtitle, centerLabel = "Remaining", safeLine }: DonutChartProps) {
+export function DonutChart({
+  items,
+  total,
+  title,
+  subtitle,
+  centerLabel = "Remaining",
+  centerValue,
+  centerSubvalue,
+  legendValueFormatter,
+  legendSecondaryFormatter,
+  safeLine,
+}: DonutChartProps) {
   const isDark = useThemeStore((s) => s.theme === "dark");
   const blurred = usePrivacyStore((s) => s.blurred);
   const reducedMotion = useReducedMotion();
@@ -90,6 +106,7 @@ export function DonutChart({ items, total, title, subtitle, centerLabel = "Remai
   const usedSum = normalizedItems.reduce((acc, item) => acc + Math.max(0, item.value), 0);
   const consumed = Math.max(0, total - usedSum);
   const safeTotal = Math.max(0, total);
+  const centerPrimaryValue = centerValue ?? formatCompactNumber(safeTotal);
 
   const chartData = [
     ...normalizedItems.map((item) => ({
@@ -153,7 +170,10 @@ export function DonutChart({ items, total, title, subtitle, centerLabel = "Remai
           <div className="absolute inset-[18px] flex items-center justify-center rounded-full text-center pointer-events-none">
             <div>
               <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{centerLabel}</p>
-              <p className="text-base font-semibold tabular-nums">{formatCompactNumber(safeTotal)}</p>
+              <p className="text-base font-semibold tabular-nums">{centerPrimaryValue}</p>
+              {centerSubvalue ? (
+                <p className="mt-0.5 text-[10px] text-muted-foreground tabular-nums">{centerSubvalue}</p>
+              ) : null}
             </div>
           </div>
         </div>
@@ -174,8 +194,13 @@ export function DonutChart({ items, total, title, subtitle, centerLabel = "Remai
                 </span>
               </div>
               <span className="tabular-nums text-muted-foreground">
-                {formatCompactNumber(item.value)}
+                {legendValueFormatter ? legendValueFormatter(item) : formatCompactNumber(item.value)}
               </span>
+              {legendSecondaryFormatter ? (
+                <span className="tabular-nums text-[10px] text-muted-foreground/80">
+                  {legendSecondaryFormatter(item)}
+                </span>
+              ) : null}
             </div>
           ))}
         </div>

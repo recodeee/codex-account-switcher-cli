@@ -100,4 +100,20 @@ describe("AccountUsagePanel", () => {
     expect(screen.getByText("last seen 30m ago")).toBeInTheDocument();
     expect(screen.getByText("last seen 2h ago")).toBeInTheDocument();
   });
+
+  it("shows 100% for 5h when reset already passed, even for deactivated accounts", () => {
+    const account = createAccountSummary({
+      status: "deactivated",
+      usage: {
+        primaryRemainingPercent: 2,
+        secondaryRemainingPercent: 67,
+      },
+      resetAtPrimary: "2025-12-31T23:00:00.000Z",
+      resetAtSecondary: "2026-01-07T00:00:00.000Z",
+    });
+
+    render(<AccountUsagePanel account={account} trends={null} />);
+
+    expect(screen.getByText("100%")).toBeInTheDocument();
+  });
 });

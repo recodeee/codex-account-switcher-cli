@@ -1,0 +1,6 @@
+- [x] Extend request-log usage-summary backend aggregation to include per-window and per-account USD totals.
+- [x] Add fixed configurable USD→EUR conversion in settings and include EUR + FX rate in usage-summary API responses.
+- [x] Update frontend request-log usage schemas and fallback merger for token+cost payloads.
+- [x] Update Request Logs usage cards and donuts to show EUR values and render `N/A` for fallback windows.
+- [x] Add/adjust backend integration and frontend tests for EUR values and fallback behavior.
+- [x] Validate specs with `openspec validate --specs`.

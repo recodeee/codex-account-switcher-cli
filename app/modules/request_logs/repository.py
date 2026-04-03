@@ -27,6 +27,8 @@ class RequestLogTokenUsageRow:
     account_id: str | None
     tokens_5h: int
     tokens_7d: int
+    cost_usd_5h: float
+    cost_usd_7d: float
 
 
 class RequestLogsRepository:
@@ -45,6 +47,7 @@ class RequestLogsRepository:
     ) -> list[RequestLogTokenUsageRow]:
         output_tokens_expr = func.coalesce(RequestLog.output_tokens, RequestLog.reasoning_tokens, 0)
         token_expr = func.coalesce(RequestLog.input_tokens, 0) + output_tokens_expr
+        cost_usd_expr = func.coalesce(RequestLog.cost_usd, 0.0)
 
         stmt = (
             select(
@@ -54,6 +57,11 @@ class RequestLogsRepository:
                     0,
                 ).label("tokens_5h"),
                 func.coalesce(func.sum(token_expr), 0).label("tokens_7d"),
+                func.coalesce(
+                    func.sum(case((RequestLog.requested_at >= since_5h, cost_usd_expr), else_=0.0)),
+                    0.0,
+                ).label("cost_usd_5h"),
+                func.coalesce(func.sum(cost_usd_expr), 0.0).label("cost_usd_7d"),
             )
             .where(RequestLog.requested_at >= since_7d)
             .group_by(RequestLog.account_id)
@@ -65,8 +73,10 @@ class RequestLogsRepository:
                 account_id=account_id,
                 tokens_5h=int(tokens_5h or 0),
                 tokens_7d=int(tokens_7d or 0),
+                cost_usd_5h=float(cost_usd_5h or 0.0),
+                cost_usd_7d=float(cost_usd_7d or 0.0),
             )
-            for account_id, tokens_5h, tokens_7d in result.all()
+            for account_id, tokens_5h, tokens_7d, cost_usd_5h, cost_usd_7d in result.all()
         ]
 
     async def aggregate_by_bucket(

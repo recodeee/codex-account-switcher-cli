@@ -121,16 +121,21 @@ export const RequestLogFilterOptionsSchema = z.object({
 export const RequestLogUsageSummaryAccountSchema = z.object({
   accountId: z.string().nullable(),
   tokens: z.number().int().nonnegative(),
+  costUsd: z.number().nonnegative(),
+  costEur: z.number().nonnegative(),
 });
 
 export const RequestLogUsageSummaryWindowSchema = z.object({
   totalTokens: z.number().int().nonnegative(),
+  totalCostUsd: z.number().nonnegative(),
+  totalCostEur: z.number().nonnegative(),
   accounts: z.array(RequestLogUsageSummaryAccountSchema),
 });
 
 export const RequestLogUsageSummarySchema = z.object({
   last5h: RequestLogUsageSummaryWindowSchema,
   last7d: RequestLogUsageSummaryWindowSchema,
+  fxRateUsdToEur: z.number().positive(),
 });
 
 export const FilterStateSchema = z.object({

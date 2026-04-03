@@ -1,4 +1,10 @@
-import { Clock, ExternalLink, Play, RotateCcw, SquareTerminal } from "lucide-react";
+import {
+  Clock,
+  ExternalLink,
+  Play,
+  RotateCcw,
+  SquareTerminal,
+} from "lucide-react";
 
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { Badge } from "@/components/ui/badge";
@@ -20,9 +26,19 @@ import {
 } from "@/utils/formatters";
 import { resolveCodexSessionCount } from "@/utils/codex-sessions";
 import { isAccountWorkingNow } from "@/utils/account-working";
-import { canUseLocalAccount, getUseLocalAccountDisabledReason } from "@/utils/use-local-account";
+import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
+import {
+  canUseLocalAccount,
+  getUseLocalAccountDisabledReason,
+} from "@/utils/use-local-account";
 
-type AccountAction = "details" | "resume" | "reauth" | "terminal" | "useLocal" | "sessions";
+type AccountAction =
+  | "details"
+  | "resume"
+  | "reauth"
+  | "terminal"
+  | "useLocal"
+  | "sessions";
 
 export type AccountCardProps = {
   account: AccountSummary;
@@ -67,17 +83,23 @@ function QuotaBar({
 
   const percentPillClass = cn(
     "rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-    tone === "healthy" && "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
-    tone === "warning" && "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-300",
-    tone === "critical" && "border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-300",
+    tone === "healthy" &&
+      "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+    tone === "warning" &&
+      "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-300",
+    tone === "critical" &&
+      "border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-300",
     tone === "unknown" && "border-border/70 bg-muted/35 text-muted-foreground",
   );
 
   const fillClass = cn(
     "h-full rounded-full transition-all duration-500 ease-out",
-    tone === "healthy" && "bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 shadow-[0_0_12px_rgba(16,185,129,0.35)]",
-    tone === "warning" && "bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300 shadow-[0_0_12px_rgba(245,158,11,0.32)]",
-    tone === "critical" && "bg-gradient-to-r from-rose-600 via-red-500 to-orange-400 shadow-[0_0_12px_rgba(239,68,68,0.32)]",
+    tone === "healthy" &&
+      "bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 shadow-[0_0_12px_rgba(16,185,129,0.35)]",
+    tone === "warning" &&
+      "bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300 shadow-[0_0_12px_rgba(245,158,11,0.32)]",
+    tone === "critical" &&
+      "bg-gradient-to-r from-rose-600 via-red-500 to-orange-400 shadow-[0_0_12px_rgba(239,68,68,0.32)]",
     tone === "unknown" && "bg-muted-foreground/45",
   );
 
@@ -85,7 +107,9 @@ function QuotaBar({
     <div className="space-y-2 rounded-lg border border-border/60 bg-background/30 px-2.5 py-2.5">
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="font-medium text-muted-foreground">{label}</span>
-        <span className={percentPillClass}>{formatPercentNullable(percent)}</span>
+        <span className={percentPillClass}>
+          {formatPercentNullable(percent)}
+        </span>
       </div>
       <div
         className={cn(
@@ -93,16 +117,15 @@ function QuotaBar({
           quotaBarTrack(clamped),
         )}
       >
-        <div
-          className={fillClass}
-          style={{ width: `${clamped}%` }}
-        />
+        <div className={fillClass} style={{ width: `${clamped}%` }} />
       </div>
       <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <Clock className="h-3 w-3 shrink-0" />
         <span>{resetLabel}</span>
       </div>
-      {lastSeenLabel ? <div className="text-[11px] text-muted-foreground">{lastSeenLabel}</div> : null}
+      {lastSeenLabel ? (
+        <div className="text-[11px] text-muted-foreground">{lastSeenLabel}</div>
+      ) : null}
     </div>
   );
 }
@@ -123,24 +146,33 @@ export function AccountCard({
     isActiveSnapshot,
     hasLiveSession,
   });
-  const primaryRemaining = account.usage?.primaryRemainingPercent ?? null;
+  const primaryRemainingRaw = account.usage?.primaryRemainingPercent ?? null;
+  const primaryRemaining = normalizeRemainingPercentForDisplay({
+    windowKey: "primary",
+    remainingPercent: primaryRemainingRaw,
+    resetAt: account.resetAtPrimary ?? null,
+  });
   const secondaryRemaining = account.usage?.secondaryRemainingPercent ?? null;
-  const weeklyOnly = account.windowMinutesPrimary == null && account.windowMinutesSecondary != null;
+  const weeklyOnly =
+    account.windowMinutesPrimary == null &&
+    account.windowMinutesSecondary != null;
   const canUseLocally = canUseLocalAccount({
     status: account.status,
-    primaryRemainingPercent: primaryRemaining,
+    primaryRemainingPercent: primaryRemainingRaw,
     isActiveSnapshot,
     hasLiveSession,
   });
   const useLocalDisabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
-    primaryRemainingPercent: primaryRemaining,
+    primaryRemainingPercent: primaryRemainingRaw,
     isActiveSnapshot,
     hasLiveSession,
   });
 
   const primaryReset = formatQuotaResetLabel(account.resetAtPrimary ?? null);
-  const secondaryReset = formatQuotaResetLabel(account.resetAtSecondary ?? null);
+  const secondaryReset = formatQuotaResetLabel(
+    account.resetAtSecondary ?? null,
+  );
   const showLastSeen = account.status === "deactivated";
   const primaryLastSeen = showLastSeen
     ? formatLastUsageLabel(account.lastUsageRecordedAtPrimary ?? null)
@@ -156,7 +188,10 @@ export function AccountCard({
     account.codexAuth?.snapshotName,
   );
   const totalTokensUsed = tokensUsed ?? account.requestUsage?.totalTokens ?? 0;
-  const codexSessionCount = resolveCodexSessionCount(account.codexSessionCount, isWorkingNow);
+  const codexSessionCount = resolveCodexSessionCount(
+    account.codexSessionCount,
+    isWorkingNow,
+  );
   const emailSubtitle =
     account.displayName && account.displayName !== account.email
       ? account.email
@@ -169,17 +204,23 @@ export function AccountCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold leading-tight">
-            {blurred
-              ? <span className="privacy-blur">{title}</span>
-              : title}
+            {blurred ? <span className="privacy-blur">{title}</span> : title}
           </p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {planWithSnapshot}
             {!emailSubtitle ? idSuffix : ""}
           </p>
           {emailSubtitle ? (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground" title={showAccountId ? `Account ID ${account.accountId}` : undefined}>
-              <span className={blurred ? "privacy-blur" : undefined}>{emailSubtitle}</span>{showAccountId ? ` | ID ${compactId}` : ""}
+            <p
+              className="mt-0.5 truncate text-xs text-muted-foreground"
+              title={
+                showAccountId ? `Account ID ${account.accountId}` : undefined
+              }
+            >
+              <span className={blurred ? "privacy-blur" : undefined}>
+                {emailSubtitle}
+              </span>
+              {showAccountId ? ` | ID ${compactId}` : ""}
             </p>
           ) : null}
         </div>
@@ -190,7 +231,10 @@ export function AccountCard({
               variant="outline"
               className="gap-1.5 border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-current"
+                aria-hidden
+              />
               Working now
             </Badge>
           ) : null}
@@ -199,17 +243,30 @@ export function AccountCard({
 
       <div className="mt-3 grid grid-cols-2 gap-2.5 rounded-lg border border-border/60 bg-background/35 px-2.5 py-2">
         <div>
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tokens used</p>
-          <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatTokenCredits(totalTokensUsed)}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Tokens used
+          </p>
+          <p className="mt-0.5 text-xs font-semibold tabular-nums">
+            {formatTokenCredits(totalTokensUsed)}
+          </p>
         </div>
         <div>
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Codex sessions</p>
-          <p className="mt-0.5 text-xs font-semibold tabular-nums">{codexSessionCount}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Codex CLI sessions
+          </p>
+          <p className="mt-0.5 text-xs font-semibold tabular-nums">
+            {codexSessionCount}
+          </p>
         </div>
       </div>
 
       {/* Quota bars */}
-      <div className={cn("mt-3.5 grid gap-2.5", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
+      <div
+        className={cn(
+          "mt-3.5 grid gap-2.5",
+          weeklyOnly ? "grid-cols-1" : "grid-cols-2",
+        )}
+      >
         {!weeklyOnly && (
           <QuotaBar
             label="5h"

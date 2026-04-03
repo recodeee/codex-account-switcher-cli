@@ -129,8 +129,8 @@ describe("dashboard flow integration", () => {
       http.get("/api/request-logs/usage-summary", () =>
         HttpResponse.json(
           createRequestLogUsageSummary({
-            last5h: { totalTokens: 0, accounts: [] },
-            last7d: { totalTokens: 0, accounts: [] },
+            last5h: { totalTokens: 0, totalCostUsd: 0, totalCostEur: 0, accounts: [] },
+            last7d: { totalTokens: 0, totalCostUsd: 0, totalCostEur: 0, accounts: [] },
           }),
         ),
       ),
@@ -368,7 +368,7 @@ describe("dashboard flow integration", () => {
     expect(screen.queryByTestId("terminal-window-acc_primary")).not.toBeInTheDocument();
   });
 
-  it("falls back to in-app terminal when host launch is unavailable", async () => {
+  it("shows an error and does not open in-app terminal when host launch is unavailable", async () => {
     const user = userEvent.setup({ delay: null });
     let openTerminalEndpointCalls = 0;
 
@@ -400,8 +400,8 @@ describe("dashboard flow integration", () => {
 
     await user.click(targetButton);
 
-    expect(await screen.findByText(/Host terminal unavailable\. Opened in-app terminal\./i)).toBeInTheDocument();
-    expect(screen.getByTestId("terminal-window-acc_primary")).toBeInTheDocument();
+    expect(await screen.findByText(/Failed to open host terminal/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("terminal-window-acc_primary")).not.toBeInTheDocument();
     expect(openTerminalEndpointCalls).toBe(1);
   });
 });

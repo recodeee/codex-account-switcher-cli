@@ -35,6 +35,12 @@ export class InvalidAccountNameError extends CodexAuthError {
   }
 }
 
+export class AccountNameInferenceError extends CodexAuthError {
+  constructor() {
+    super("Could not infer account name from auth email. Pass one explicitly: codex-auth save <name>.");
+  }
+}
+
 export class PromptCancelledError extends CodexAuthError {
   constructor() {
     super("No account selected. The operation was cancelled.");

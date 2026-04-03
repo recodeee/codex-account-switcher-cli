@@ -9,6 +9,7 @@ import {
 } from "../config/paths";
 import {
   AccountNotFoundError,
+  AccountNameInferenceError,
   AmbiguousAccountQueryError,
   AuthFileMissingError,
   AutoSwitchConfigError,
@@ -132,6 +133,28 @@ export class AccountService {
     await this.persistRegistry(registry);
 
     return name;
+  }
+
+  public async inferAccountNameFromCurrentAuth(): Promise<string> {
+    const authPath = resolveAuthPath();
+    await this.ensureAuthFileExists(authPath);
+
+    const parsed = await parseAuthSnapshotFile(authPath);
+    const email = parsed.email?.trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      throw new AccountNameInferenceError();
+    }
+
+    const [localPartRaw, domainRaw] = email.split("@", 2);
+    const baseName = this.sanitizeInferredSegment(localPartRaw);
+    const domainName = this.sanitizeInferredSegment(domainRaw.replace(/\./g, "-"));
+    if (!baseName || !domainName) {
+      throw new AccountNameInferenceError();
+    }
+
+    const baseCandidate = this.normalizeAccountName(baseName);
+    const uniqueName = await this.resolveUniqueInferredName(baseCandidate, domainName, email);
+    return uniqueName;
   }
 
   public async useAccount(rawName: string): Promise<string> {
@@ -511,6 +534,51 @@ export class AccountService {
     if (parsed.planType) entry.planType = parsed.planType;
 
     registry.accounts[accountName] = entry;
+  }
+
+  private sanitizeInferredSegment(value: string): string {
+    const lowered = value.toLowerCase().trim();
+    const replaced = lowered.replace(/[^a-z0-9._-]+/g, "-");
+    const noEdgePunctuation = replaced.replace(/^[._-]+|[._-]+$/g, "");
+    return noEdgePunctuation;
+  }
+
+  private async resolveUniqueInferredName(baseName: string, domainName: string, email: string): Promise<string> {
+    const accountPathFor = (name: string): string => this.accountFilePath(name);
+    const hasMatchingEmail = async (name: string): Promise<boolean> => {
+      const parsed = await parseAuthSnapshotFile(accountPathFor(name));
+      return parsed.email?.trim().toLowerCase() === email;
+    };
+
+    const basePath = accountPathFor(baseName);
+    if (!(await this.pathExists(basePath))) {
+      return baseName;
+    }
+    if (await hasMatchingEmail(baseName)) {
+      return baseName;
+    }
+
+    const domainCandidate = this.normalizeAccountName(`${baseName}-${domainName}`);
+    const domainPath = accountPathFor(domainCandidate);
+    if (!(await this.pathExists(domainPath))) {
+      return domainCandidate;
+    }
+    if (await hasMatchingEmail(domainCandidate)) {
+      return domainCandidate;
+    }
+
+    for (let i = 2; i <= 99; i += 1) {
+      const candidate = this.normalizeAccountName(`${domainCandidate}-${i}`);
+      const candidatePath = accountPathFor(candidate);
+      if (!(await this.pathExists(candidatePath))) {
+        return candidate;
+      }
+      if (await hasMatchingEmail(candidate)) {
+        return candidate;
+      }
+    }
+
+    throw new AccountNameInferenceError();
   }
 
   private async loadReconciledRegistry(): Promise<RegistryData> {

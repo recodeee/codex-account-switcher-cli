@@ -48,13 +48,18 @@ class RequestLogFilterOptionsResponse(DashboardModel):
 class RequestLogUsageSummaryAccountTokens(DashboardModel):
     account_id: str | None = None
     tokens: int
+    cost_usd: float
+    cost_eur: float
 
 
 class RequestLogUsageSummaryWindow(DashboardModel):
     total_tokens: int
+    total_cost_usd: float
+    total_cost_eur: float
     accounts: list[RequestLogUsageSummaryAccountTokens] = Field(default_factory=list)
 
 
 class RequestLogUsageSummaryResponse(DashboardModel):
     last_5h: RequestLogUsageSummaryWindow = Field(alias="last5h")
     last_7d: RequestLogUsageSummaryWindow = Field(alias="last7d")
+    fx_rate_usd_to_eur: float = Field(alias="fxRateUsdToEur")

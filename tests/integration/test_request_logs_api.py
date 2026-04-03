@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import pytest
 
+from app.core.config.settings import get_settings
 from app.core.crypto import TokenEncryptor
 from app.core.utils.time import utcnow
 from app.db.models import Account, AccountStatus, ApiKey
@@ -165,16 +166,34 @@ async def test_request_logs_usage_summary_returns_rolling_5h_and_7d_totals(async
     response = await async_client.get("/api/request-logs/usage-summary")
     assert response.status_code == 200
     payload = response.json()
+    fx_rate = get_settings().request_logs_usage_fx_usd_to_eur
 
     assert payload["last5h"]["totalTokens"] == 200
     assert payload["last7d"]["totalTokens"] == 260
+    assert payload["fxRateUsdToEur"] == pytest.approx(fx_rate)
+
+    assert payload["last5h"]["totalCostUsd"] > 0
+    assert payload["last7d"]["totalCostUsd"] >= payload["last5h"]["totalCostUsd"]
+    assert payload["last5h"]["totalCostEur"] == pytest.approx(payload["last5h"]["totalCostUsd"] * fx_rate)
+    assert payload["last7d"]["totalCostEur"] == pytest.approx(payload["last7d"]["totalCostUsd"] * fx_rate)
 
     last5h_accounts = payload["last5h"]["accounts"]
-    assert last5h_accounts[0] == {"accountId": "acc_usage_a", "tokens": 150}
-    assert last5h_accounts[1] == {"accountId": "acc_usage_b", "tokens": 40}
-    assert last5h_accounts[2] == {"accountId": None, "tokens": 10}
+    assert last5h_accounts[0]["accountId"] == "acc_usage_a"
+    assert last5h_accounts[0]["tokens"] == 150
+    assert last5h_accounts[0]["costUsd"] > 0
+    assert last5h_accounts[0]["costEur"] == pytest.approx(last5h_accounts[0]["costUsd"] * fx_rate)
+    assert last5h_accounts[1]["accountId"] == "acc_usage_b"
+    assert last5h_accounts[1]["tokens"] == 40
+    assert last5h_accounts[1]["costUsd"] > 0
+    assert last5h_accounts[2]["accountId"] is None
+    assert last5h_accounts[2]["tokens"] == 10
+    assert last5h_accounts[2]["costUsd"] > 0
 
     last7d_accounts = payload["last7d"]["accounts"]
-    assert last7d_accounts[0] == {"accountId": "acc_usage_a", "tokens": 210}
-    assert last7d_accounts[1] == {"accountId": "acc_usage_b", "tokens": 40}
-    assert last7d_accounts[2] == {"accountId": None, "tokens": 10}
+    assert last7d_accounts[0]["accountId"] == "acc_usage_a"
+    assert last7d_accounts[0]["tokens"] == 210
+    assert last7d_accounts[0]["costUsd"] >= last5h_accounts[0]["costUsd"]
+    assert last7d_accounts[1]["accountId"] == "acc_usage_b"
+    assert last7d_accounts[1]["tokens"] == 40
+    assert last7d_accounts[2]["accountId"] is None
+    assert last7d_accounts[2]["tokens"] == 10

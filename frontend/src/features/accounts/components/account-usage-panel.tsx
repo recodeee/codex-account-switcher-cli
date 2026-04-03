@@ -13,6 +13,7 @@ import {
   formatResetRelative,
   formatWindowLabel,
 } from "@/utils/formatters";
+import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 
 export type AccountUsagePanelProps = {
   account: AccountSummary;
@@ -127,7 +128,11 @@ function AdditionalQuotaRow({
 }
 
 export function AccountUsagePanel({ account, trends }: AccountUsagePanelProps) {
-  const primary = account.usage?.primaryRemainingPercent ?? null;
+  const primary = normalizeRemainingPercentForDisplay({
+    windowKey: "primary",
+    remainingPercent: account.usage?.primaryRemainingPercent ?? null,
+    resetAt: account.resetAtPrimary ?? null,
+  });
   const secondary = account.usage?.secondaryRemainingPercent ?? null;
   const requestUsage = account.requestUsage ?? null;
   const hasRequestUsage = (requestUsage?.requestCount ?? 0) > 0;

@@ -344,20 +344,40 @@ export const handlers = [
 
 		const sumByAccount = (
 			entries: RequestLogEntry[],
-		): { totalTokens: number; accounts: Array<{ accountId: string | null; tokens: number }> } => {
-			const byAccount = new Map<string | null, number>();
+		): {
+			totalTokens: number;
+			totalCostUsd: number;
+			totalCostEur: number;
+			accounts: Array<{ accountId: string | null; tokens: number; costUsd: number; costEur: number }>;
+		} => {
+			const byAccount = new Map<string | null, { tokens: number; costUsd: number; costEur: number }>();
+			const fxRate = 0.92;
 			for (const entry of entries) {
 				const tokens = entry.tokens ?? 0;
+				const costUsd = entry.costUsd ?? 0;
+				const costEur = costUsd * fxRate;
 				const key = entry.accountId ?? null;
-				byAccount.set(key, (byAccount.get(key) ?? 0) + tokens);
+				const current = byAccount.get(key) ?? { tokens: 0, costUsd: 0, costEur: 0 };
+				byAccount.set(key, {
+					tokens: current.tokens + tokens,
+					costUsd: current.costUsd + costUsd,
+					costEur: current.costEur + costEur,
+				});
 			}
 
 			const accounts = [...byAccount.entries()]
-				.map(([accountId, tokens]) => ({ accountId, tokens }))
+				.map(([accountId, aggregate]) => ({
+					accountId,
+					tokens: aggregate.tokens,
+					costUsd: aggregate.costUsd,
+					costEur: aggregate.costEur,
+				}))
 				.sort((left, right) => right.tokens - left.tokens);
 
 			return {
 				totalTokens: accounts.reduce((total, row) => total + row.tokens, 0),
+				totalCostUsd: accounts.reduce((total, row) => total + row.costUsd, 0),
+				totalCostEur: accounts.reduce((total, row) => total + row.costEur, 0),
 				accounts,
 			};
 		};
@@ -369,6 +389,7 @@ export const handlers = [
 			createRequestLogUsageSummary({
 				last5h: sumByAccount(last5hEntries),
 				last7d: sumByAccount(last7dEntries),
+				fxRateUsdToEur: 0.92,
 			}),
 		);
 	}),

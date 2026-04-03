@@ -42,12 +42,17 @@ function createRequestSummary(
   return {
     last5h: {
       totalTokens: last5hTotal,
-      accounts: [{ accountId: "acc-1", tokens: last5hTotal }],
+      totalCostUsd: 1,
+      totalCostEur: 0.92,
+      accounts: [{ accountId: "acc-1", tokens: last5hTotal, costUsd: 1, costEur: 0.92 }],
     },
     last7d: {
       totalTokens: last7dTotal,
-      accounts: [{ accountId: "acc-1", tokens: last7dTotal }],
+      totalCostUsd: 2,
+      totalCostEur: 1.84,
+      accounts: [{ accountId: "acc-1", tokens: last7dTotal, costUsd: 2, costEur: 1.84 }],
     },
+    fxRateUsdToEur: 0.92,
   };
 }
 
@@ -60,6 +65,7 @@ describe("mergeRequestLogUsageSummaryWithLiveFallback", () => {
 
     expect(merged.usageSummary.last5h.totalTokens).toBe(320);
     expect(merged.usageSummary.last7d.totalTokens).toBe(1800);
+    expect(merged.usageSummary.fxRateUsdToEur).toBe(0.92);
     expect(merged.fallback).toEqual({
       last5h: false,
       last7d: false,
@@ -75,6 +81,7 @@ describe("mergeRequestLogUsageSummaryWithLiveFallback", () => {
 
     expect(merged.usageSummary.last5h.totalTokens).toBe(640);
     expect(merged.usageSummary.last7d.totalTokens).toBe(3200);
+    expect(merged.usageSummary.fxRateUsdToEur).toBe(0.92);
     expect(merged.fallback).toEqual({
       last5h: true,
       last7d: true,
@@ -90,6 +97,7 @@ describe("mergeRequestLogUsageSummaryWithLiveFallback", () => {
 
     expect(merged.usageSummary.last5h.totalTokens).toBe(420);
     expect(merged.usageSummary.last7d.totalTokens).toBe(9000);
+    expect(merged.usageSummary.fxRateUsdToEur).toBe(0.92);
     expect(merged.fallback).toEqual({
       last5h: false,
       last7d: true,

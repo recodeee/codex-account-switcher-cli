@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from app.core.config.settings import get_settings
 from app.core.utils.time import utcnow
 from app.modules.request_logs.mappers import (
     QUOTA_CODES,
@@ -46,11 +47,15 @@ class RequestLogsPage:
 class RequestLogUsageAccountTokens:
     account_id: str | None
     tokens: int
+    cost_usd: float
+    cost_eur: float
 
 
 @dataclass(frozen=True, slots=True)
 class RequestLogUsageSummaryWindow:
     total_tokens: int
+    total_cost_usd: float
+    total_cost_eur: float
     accounts: list[RequestLogUsageAccountTokens]
 
 
@@ -58,11 +63,16 @@ class RequestLogUsageSummaryWindow:
 class RequestLogUsageSummary:
     last_5h: RequestLogUsageSummaryWindow
     last_7d: RequestLogUsageSummaryWindow
+    fx_rate_usd_to_eur: float
 
 
 class RequestLogsService:
-    def __init__(self, repo: RequestLogsRepository) -> None:
+    def __init__(self, repo: RequestLogsRepository, *, fx_rate_usd_to_eur: float | None = None) -> None:
         self._repo = repo
+        configured_rate = fx_rate_usd_to_eur
+        if configured_rate is None:
+            configured_rate = get_settings().request_logs_usage_fx_usd_to_eur
+        self._fx_rate_usd_to_eur = configured_rate if configured_rate > 0 else 1.0
 
     async def list_recent(
         self,
@@ -147,8 +157,9 @@ class RequestLogsService:
         rows = await self._repo.aggregate_token_usage_by_account(since_7d=since_7d, since_5h=since_5h)
 
         return RequestLogUsageSummary(
-            last_5h=_build_usage_window(rows, window="5h"),
-            last_7d=_build_usage_window(rows, window="7d"),
+            last_5h=_build_usage_window(rows, window="5h", fx_rate_usd_to_eur=self._fx_rate_usd_to_eur),
+            last_7d=_build_usage_window(rows, window="7d", fx_rate_usd_to_eur=self._fx_rate_usd_to_eur),
+            fx_rate_usd_to_eur=self._fx_rate_usd_to_eur,
         )
 
 
@@ -198,16 +209,22 @@ def _build_usage_window(
     rows: list[RequestLogTokenUsageRow],
     *,
     window: str,
+    fx_rate_usd_to_eur: float,
 ) -> RequestLogUsageSummaryWindow:
+    cost_attr = "cost_usd_5h" if window == "5h" else "cost_usd_7d"
     accounts = [
         RequestLogUsageAccountTokens(
             account_id=row.account_id,
             tokens=max(0, row.tokens_5h if window == "5h" else row.tokens_7d),
+            cost_usd=max(0.0, getattr(row, cost_attr)),
+            cost_eur=max(0.0, getattr(row, cost_attr) * fx_rate_usd_to_eur),
         )
         for row in rows
     ]
     accounts.sort(key=lambda row: (-row.tokens, row.account_id is None, row.account_id or ""))
     return RequestLogUsageSummaryWindow(
         total_tokens=sum(item.tokens for item in accounts),
+        total_cost_usd=sum(item.cost_usd for item in accounts),
+        total_cost_eur=sum(item.cost_eur for item in accounts),
         accounts=accounts,
     )

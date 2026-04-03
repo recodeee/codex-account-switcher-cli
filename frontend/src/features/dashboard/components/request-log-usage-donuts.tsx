@@ -4,7 +4,7 @@ import { DonutChart } from "@/components/donut-chart";
 import type { RequestLogUsageFallbackState } from "@/features/dashboard/request-log-usage-fallback";
 import type { AccountSummary, RequestLogUsageSummary } from "@/features/dashboard/schemas";
 import { buildDuplicateAccountIdSet, formatCompactAccountId } from "@/utils/account-identifiers";
-import { formatCompactNumber } from "@/utils/formatters";
+import { formatCompactNumber, formatEuro } from "@/utils/formatters";
 
 export type RequestLogUsageDonutsProps = {
   accounts: AccountSummary[];
@@ -18,6 +18,7 @@ type DonutLegendItem = {
   labelSuffix: string;
   isEmail: boolean;
   value: number;
+  costEur: number;
 };
 
 type UsageSummaryWindow = RequestLogUsageSummary["last5h"];
@@ -32,14 +33,18 @@ type UsageWindowStats = {
 function buildDonutItems(accounts: AccountSummary[], window: UsageSummaryWindow): DonutLegendItem[] {
   const duplicateAccountIds = buildDuplicateAccountIdSet(accounts);
   const tokensByAccount = new Map<string, number>();
+  const costEurByAccount = new Map<string, number>();
   let unassignedTokens = 0;
+  let unassignedCostEur = 0;
 
   for (const row of window.accounts) {
     if (!row.accountId) {
       unassignedTokens += row.tokens;
+      unassignedCostEur += row.costEur;
       continue;
     }
     tokensByAccount.set(row.accountId, row.tokens);
+    costEurByAccount.set(row.accountId, row.costEur);
   }
 
   const items: DonutLegendItem[] = accounts.map((account) => {
@@ -55,6 +60,7 @@ function buildDonutItems(accounts: AccountSummary[], window: UsageSummaryWindow)
       labelSuffix,
       isEmail,
       value: Math.max(0, tokensByAccount.get(account.accountId) ?? 0),
+      costEur: Math.max(0, costEurByAccount.get(account.accountId) ?? 0),
     };
   });
 
@@ -71,6 +77,7 @@ function buildDonutItems(accounts: AccountSummary[], window: UsageSummaryWindow)
       labelSuffix: "",
       isEmail: false,
       value: Math.max(0, row.tokens),
+      costEur: Math.max(0, row.costEur),
     });
   }
 
@@ -81,6 +88,7 @@ function buildDonutItems(accounts: AccountSummary[], window: UsageSummaryWindow)
       labelSuffix: "",
       isEmail: false,
       value: unassignedTokens,
+      costEur: Math.max(0, unassignedCostEur),
     });
   }
 
@@ -135,17 +143,26 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
     usageSummary.last5h.totalTokens,
     items5h.reduce((total, item) => total + item.value, 0),
   );
+  const totalCostEur5h = Math.max(
+    usageSummary.last5h.totalCostEur,
+    items5h.reduce((total, item) => total + item.costEur, 0),
+  );
   const total7d = Math.max(
     usageSummary.last7d.totalTokens,
     items7d.reduce((total, item) => total + item.value, 0),
   );
+  const totalCostEur7d = Math.max(
+    usageSummary.last7d.totalCostEur,
+    items7d.reduce((total, item) => total + item.costEur, 0),
+  );
   const stats5h = useMemo(() => buildWindowStats(items5h, total5h), [items5h, total5h]);
   const stats7d = useMemo(() => buildWindowStats(items7d, total7d), [items7d, total7d]);
   const recentWindowWeight = total7d > 0 ? Math.min(100, (total5h / total7d) * 100) : 0;
+  const fxHint = `Fixed FX ${usageSummary.fxRateUsdToEur.toFixed(2)} USD/EUR`;
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard
           label="5h Tokens"
           value={formatCompactNumber(total5h)}
@@ -155,6 +172,16 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
           label="7d Tokens"
           value={formatCompactNumber(total7d)}
           hint={`${stats7d.activeAccounts} active accounts`}
+        />
+        <StatCard
+          label="5h EUR"
+          value={fallback.last5h ? "N/A" : formatEuro(totalCostEur5h)}
+          hint={fallback.last5h ? "Unavailable in live fallback" : fxHint}
+        />
+        <StatCard
+          label="7d EUR"
+          value={fallback.last7d ? "N/A" : formatEuro(totalCostEur7d)}
+          hint={fallback.last7d ? "Unavailable in live fallback" : fxHint}
         />
         <StatCard
           label="Avg / active account"
@@ -174,6 +201,8 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
           centerLabel="Consumed"
           items={items5h}
           total={total5h}
+          centerSubvalue={fallback.last5h ? "€ N/A" : formatEuro(totalCostEur5h)}
+          legendSecondaryFormatter={(item) => (fallback.last5h ? "€ N/A" : formatEuro(item.costEur ?? 0))}
         />
         <DonutChart
           title="Weekly Consumed"
@@ -181,6 +210,8 @@ export function RequestLogUsageDonuts({ accounts, usageSummary, fallback }: Requ
           centerLabel="Consumed"
           items={items7d}
           total={total7d}
+          centerSubvalue={fallback.last7d ? "€ N/A" : formatEuro(totalCostEur7d)}
+          legendSecondaryFormatter={(item) => (fallback.last7d ? "€ N/A" : formatEuro(item.costEur ?? 0))}
         />
       </div>
       {fallback.active ? (

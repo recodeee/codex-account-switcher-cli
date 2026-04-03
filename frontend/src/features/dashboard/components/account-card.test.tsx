@@ -29,7 +29,7 @@ describe("AccountCard", () => {
     expect(screen.getByText("5h")).toBeInTheDocument();
     expect(screen.getByText("Weekly")).toBeInTheDocument();
     expect(screen.getByText("Tokens used")).toBeInTheDocument();
-    expect(screen.getByText("Codex sessions")).toBeInTheDocument();
+    expect(screen.getByText("Codex CLI sessions")).toBeInTheDocument();
     expect(screen.getByText("98,765k")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sessions" })).toBeInTheDocument();
@@ -295,7 +295,7 @@ describe("AccountCard", () => {
 
     const card = screen.getByText("working@example.com").closest(".card-hover");
     expect(card).not.toBeNull();
-    const sessionsLabel = within(card as HTMLElement).getByText("Codex sessions");
+    const sessionsLabel = within(card as HTMLElement).getByText("Codex CLI sessions");
     const sessionsValue = sessionsLabel.parentElement?.querySelector("p.mt-0\\.5.text-xs.font-semibold.tabular-nums");
     expect(sessionsValue).not.toBeNull();
     expect(sessionsValue).toHaveTextContent(/^1$/);
@@ -319,10 +319,30 @@ describe("AccountCard", () => {
 
     const card = screen.getByText("runtime@example.com").closest(".card-hover");
     expect(card).not.toBeNull();
-    const sessionsLabel = within(card as HTMLElement).getByText("Codex sessions");
+    const sessionsLabel = within(card as HTMLElement).getByText("Codex CLI sessions");
     const sessionsValue = sessionsLabel.parentElement?.querySelector("p.mt-0\\.5.text-xs.font-semibold.tabular-nums");
     expect(sessionsValue).not.toBeNull();
     expect(sessionsValue).toHaveTextContent(/^1$/);
+  });
+
+  it("shows 100% for 5h when reset time already passed, including deactivated accounts", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:10:00.000Z"));
+
+    const account = createAccountSummary({
+      status: "deactivated",
+      usage: {
+        primaryRemainingPercent: 2,
+        secondaryRemainingPercent: 67,
+      },
+      resetAtPrimary: "2026-01-01T00:00:00.000Z",
+      resetAtSecondary: "2026-01-07T00:00:00.000Z",
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it("shows last-seen usage labels for deactivated accounts", () => {
@@ -364,7 +384,7 @@ describe("AccountCard", () => {
 
     const card = screen.getByText("idle@example.com").closest(".card-hover");
     expect(card).not.toBeNull();
-    const sessionsLabel = within(card as HTMLElement).getByText("Codex sessions");
+    const sessionsLabel = within(card as HTMLElement).getByText("Codex CLI sessions");
     const sessionsValue = sessionsLabel.parentElement?.querySelector("p.mt-0\\.5.text-xs.font-semibold.tabular-nums");
     expect(sessionsValue).not.toBeNull();
     expect(sessionsValue).toHaveTextContent(/^0$/);
