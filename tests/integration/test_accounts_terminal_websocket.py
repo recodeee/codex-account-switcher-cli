@@ -69,9 +69,25 @@ def test_account_terminal_websocket_streams_process_output(app_instance, monkeyp
 
         with client.websocket_connect(f"/api/accounts/{account_id}/terminal/ws") as websocket:
             messages: list[dict[str, object]] = []
-            for _ in range(8):
-                messages.append(json.loads(websocket.receive_text()))
-                if messages[-1].get("type") == "exit":
+            sent_echo = False
+            sent_exit = False
+            for _ in range(120):
+                message = json.loads(websocket.receive_text())
+                messages.append(message)
+
+                if message.get("type") == "output":
+                    output_chunk = str(message.get("data", ""))
+                    if "codex-ready" in output_chunk and not sent_echo:
+                        websocket.send_text(json.dumps({"type": "input", "data": "echo still-open\n"}))
+                        sent_echo = True
+                        continue
+
+                    if "still-open" in output_chunk and sent_echo and not sent_exit:
+                        websocket.send_text(json.dumps({"type": "input", "data": "exit\n"}))
+                        sent_exit = True
+                        continue
+
+                if message.get("type") == "exit":
                     break
 
     ready = next((message for message in messages if message.get("type") == "ready"), None)
@@ -85,6 +101,7 @@ def test_account_terminal_websocket_streams_process_output(app_instance, monkeyp
     assert ready is not None
     assert ready["snapshotName"] == "work"
     assert "codex-ready" in output
+    assert "still-open" in output
     assert exit_message is not None
     assert exit_message["code"] == 0
 

@@ -64,6 +64,8 @@ export const AccountSummarySchema = z.object({
   usage: AccountUsageSchema.nullable().optional(),
   resetAtPrimary: z.string().datetime({ offset: true }).nullable().optional(),
   resetAtSecondary: z.string().datetime({ offset: true }).nullable().optional(),
+  lastUsageRecordedAtPrimary: z.string().datetime({ offset: true }).nullable().optional(),
+  lastUsageRecordedAtSecondary: z.string().datetime({ offset: true }).nullable().optional(),
   windowMinutesPrimary: z.number().nullable().optional(),
   windowMinutesSecondary: z.number().nullable().optional(),
   requestUsage: AccountRequestUsageSchema.nullable().optional(),
@@ -95,6 +97,12 @@ export const AccountActionResponseSchema = z.object({
 });
 
 export const AccountUseLocalResponseSchema = z.object({
+  status: z.string(),
+  accountId: z.string(),
+  snapshotName: z.string(),
+});
+
+export const AccountOpenTerminalResponseSchema = z.object({
   status: z.string(),
   accountId: z.string(),
   snapshotName: z.string(),
@@ -167,6 +175,7 @@ export type AccountAdditionalWindow = z.infer<typeof AccountAdditionalWindowSche
 export type AccountAdditionalQuota = z.infer<typeof AccountAdditionalQuotaSchema>;
 export type AccountTrendsResponse = z.infer<typeof AccountTrendsResponseSchema>;
 export type AccountUseLocalResponse = z.infer<typeof AccountUseLocalResponseSchema>;
+export type AccountOpenTerminalResponse = z.infer<typeof AccountOpenTerminalResponseSchema>;
 export type OauthStartResponse = z.infer<typeof OauthStartResponseSchema>;
 export type OauthStatusResponse = z.infer<typeof OauthStatusResponseSchema>;
 export type ManualOauthCallbackResponse = z.infer<typeof ManualOauthCallbackResponseSchema>;

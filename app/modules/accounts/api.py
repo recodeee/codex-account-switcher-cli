@@ -16,6 +16,7 @@ from app.modules.accounts.repository import AccountIdentityConflictError
 from app.modules.accounts.schemas import (
     AccountDeleteResponse,
     AccountImportResponse,
+    AccountOpenTerminalResponse,
     AccountPauseResponse,
     AccountReactivateResponse,
     AccountsResponse,
@@ -23,7 +24,12 @@ from app.modules.accounts.schemas import (
     AccountUseLocalResponse,
 )
 from app.modules.accounts.service import InvalidAuthJsonError
-from app.modules.accounts.terminal import TerminalLaunchError, TerminalProcess, stream_terminal_session
+from app.modules.accounts.terminal import (
+    TerminalLaunchError,
+    TerminalProcess,
+    open_host_terminal,
+    stream_terminal_session,
+)
 from app.modules.dashboard_auth.service import DASHBOARD_SESSION_COOKIE, get_dashboard_session_store
 
 router = APIRouter(
@@ -131,6 +137,35 @@ async def use_account_locally(
     if result is None:
         raise DashboardNotFoundError("Account not found", code="account_not_found")
     return result
+
+
+@router.post("/{account_id}/open-terminal", response_model=AccountOpenTerminalResponse)
+async def open_account_terminal(
+    account_id: str,
+    context: AccountsContext = Depends(get_accounts_context),
+) -> AccountOpenTerminalResponse:
+    try:
+        result = await context.service.use_account_locally(account_id)
+    except CodexAuthSnapshotNotFoundError as exc:
+        raise DashboardBadRequestError(str(exc), code="codex_auth_snapshot_not_found") from exc
+    except CodexAuthNotInstalledError as exc:
+        raise DashboardBadRequestError(str(exc), code="codex_auth_not_installed") from exc
+    except CodexAuthSwitchFailedError as exc:
+        raise DashboardBadRequestError(str(exc), code="codex_auth_switch_failed") from exc
+
+    if result is None:
+        raise DashboardNotFoundError("Account not found", code="account_not_found")
+
+    try:
+        open_host_terminal(snapshot_name=result.snapshot_name)
+    except TerminalLaunchError as exc:
+        raise DashboardBadRequestError(str(exc), code="terminal_launch_failed") from exc
+
+    return AccountOpenTerminalResponse(
+        status="opened",
+        account_id=result.account_id,
+        snapshot_name=result.snapshot_name,
+    )
 
 
 @ws_router.websocket("/{account_id}/terminal/ws")

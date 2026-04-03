@@ -12,7 +12,13 @@ import {
   quotaBarTrack,
   resolveEffectiveAccountStatus,
 } from "@/utils/account-status";
-import { formatCompactNumber, formatPercentNullable, formatQuotaResetLabel, formatSlug } from "@/utils/formatters";
+import {
+  formatCompactNumber,
+  formatLastUsageLabel,
+  formatPercentNullable,
+  formatQuotaResetLabel,
+  formatSlug,
+} from "@/utils/formatters";
 import { canUseLocalAccount, getUseLocalAccountDisabledReason } from "@/utils/use-local-account";
 
 type AccountAction = "details" | "resume" | "reauth" | "terminal" | "useLocal";
@@ -29,10 +35,12 @@ function QuotaBar({
   label,
   percent,
   resetLabel,
+  lastSeenLabel,
 }: {
   label: string;
   percent: number | null;
   resetLabel: string;
+  lastSeenLabel?: string | null;
 }) {
   const clamped = percent === null ? 0 : Math.max(0, Math.min(100, percent));
   const hasPercent = percent !== null;
@@ -65,6 +73,7 @@ function QuotaBar({
         <Clock className="h-3 w-3 shrink-0" />
         <span>{resetLabel}</span>
       </div>
+      {lastSeenLabel ? <div className="text-[11px] text-muted-foreground">{lastSeenLabel}</div> : null}
     </div>
   );
 }
@@ -98,6 +107,13 @@ export function AccountCard({
 
   const primaryReset = formatQuotaResetLabel(account.resetAtPrimary ?? null);
   const secondaryReset = formatQuotaResetLabel(account.resetAtSecondary ?? null);
+  const showLastSeen = account.status === "deactivated";
+  const primaryLastSeen = showLastSeen
+    ? formatLastUsageLabel(account.lastUsageRecordedAtPrimary ?? null)
+    : null;
+  const secondaryLastSeen = showLastSeen
+    ? formatLastUsageLabel(account.lastUsageRecordedAtSecondary ?? null)
+    : null;
 
   const title = account.displayName || account.email;
   const compactId = formatCompactAccountId(account.accountId);
@@ -157,8 +173,20 @@ export function AccountCard({
 
       {/* Quota bars */}
       <div className={cn("mt-3.5 grid gap-3", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
-        {!weeklyOnly && <QuotaBar label="5h" percent={primaryRemaining} resetLabel={primaryReset} />}
-        <QuotaBar label="Weekly" percent={secondaryRemaining} resetLabel={secondaryReset} />
+        {!weeklyOnly && (
+          <QuotaBar
+            label="5h"
+            percent={primaryRemaining}
+            resetLabel={primaryReset}
+            lastSeenLabel={primaryLastSeen}
+          />
+        )}
+        <QuotaBar
+          label="Weekly"
+          percent={secondaryRemaining}
+          resetLabel={secondaryReset}
+          lastSeenLabel={secondaryLastSeen}
+        />
       </div>
 
       {/* Actions */}

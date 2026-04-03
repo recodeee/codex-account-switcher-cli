@@ -223,6 +223,28 @@ describe("AccountCard", () => {
     expect(sessionsValue).toHaveTextContent(/^1$/);
   });
 
+  it("shows last-seen usage labels for deactivated accounts", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const account = createAccountSummary({
+      status: "deactivated",
+      codexAuth: {
+        hasSnapshot: false,
+        snapshotName: null,
+        activeSnapshotName: null,
+        isActiveSnapshot: false,
+      },
+      lastUsageRecordedAtPrimary: "2025-12-31T23:30:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-31T23:00:00.000Z",
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("last seen 30m ago")).toBeInTheDocument();
+    expect(screen.getByText("last seen 1h ago")).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
   it("keeps codex sessions at zero when account is not the active snapshot", () => {
     const account = createAccountSummary({
       email: "idle@example.com",

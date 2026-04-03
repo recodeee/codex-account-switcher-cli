@@ -87,4 +87,17 @@ describe("AccountUsagePanel", () => {
     expect(screen.getByText(/\$0\.13/)).toBeInTheDocument();
     expect(screen.getByText(/51\.48K tok/)).toBeInTheDocument();
   });
+
+  it("shows last-seen usage labels for deactivated accounts", () => {
+    const account = createAccountSummary({
+      status: "deactivated",
+      lastUsageRecordedAtPrimary: "2025-12-31T23:30:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-31T22:00:00.000Z",
+    });
+
+    render(<AccountUsagePanel account={account} trends={null} />);
+
+    expect(screen.getByText("last seen 30m ago")).toBeInTheDocument();
+    expect(screen.getByText("last seen 2h ago")).toBeInTheDocument();
+  });
 });

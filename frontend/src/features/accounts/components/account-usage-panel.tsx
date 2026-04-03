@@ -7,6 +7,7 @@ import { quotaBarColor, quotaBarTrack } from "@/utils/account-status";
 import {
   formatCompactNumber,
   formatCurrency,
+  formatLastUsageLabel,
   formatPercentNullable,
   formatQuotaResetLabel,
   formatResetRelative,
@@ -22,10 +23,12 @@ function QuotaRow({
   label,
   percent,
   resetAt,
+  lastSeen,
 }: {
   label: string;
   percent: number | null;
   resetAt: string | null | undefined;
+  lastSeen?: string | null;
 }) {
   const clamped = percent === null ? 0 : Math.max(0, Math.min(100, percent));
   const hasPercent = percent !== null;
@@ -58,6 +61,7 @@ function QuotaRow({
         <Clock className="h-3 w-3 shrink-0" />
         <span>Reset {formatQuotaResetLabel(resetAt ?? null)}</span>
       </div>
+      {lastSeen ? <p className="text-xs text-muted-foreground">{lastSeen}</p> : null}
     </div>
   );
 }
@@ -129,13 +133,28 @@ export function AccountUsagePanel({ account, trends }: AccountUsagePanelProps) {
   const hasRequestUsage = (requestUsage?.requestCount ?? 0) > 0;
   const weeklyOnly = account.windowMinutesPrimary == null && account.windowMinutesSecondary != null;
   const hasTrends = trends && (trends.primary.length > 0 || trends.secondary.length > 0);
+  const showLastSeen = account.status === "deactivated";
+  const primaryLastSeen = showLastSeen ? formatLastUsageLabel(account.lastUsageRecordedAtPrimary ?? null) : null;
+  const secondaryLastSeen = showLastSeen ? formatLastUsageLabel(account.lastUsageRecordedAtSecondary ?? null) : null;
 
   return (
     <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Usage</h3>
       <div className={cn("grid gap-4", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
-        {!weeklyOnly && <QuotaRow label="5h" percent={primary} resetAt={account.resetAtPrimary} />}
-        <QuotaRow label="Weekly" percent={secondary} resetAt={account.resetAtSecondary} />
+        {!weeklyOnly && (
+          <QuotaRow
+            label="5h"
+            percent={primary}
+            resetAt={account.resetAtPrimary}
+            lastSeen={primaryLastSeen}
+          />
+        )}
+        <QuotaRow
+          label="Weekly"
+          percent={secondary}
+          resetAt={account.resetAtSecondary}
+          lastSeen={secondaryLastSeen}
+        />
       </div>
       <div className="rounded-md border bg-background/60 px-3 py-2">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Request logs total</p>

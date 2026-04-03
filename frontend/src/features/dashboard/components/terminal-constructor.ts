@@ -36,19 +36,29 @@ export type XtermTerminalConstructor = new (options: {
   theme: XtermTerminalTheme;
 }) => XtermTerminalInstance;
 
+function safeGetProperty(value: unknown, key: string): unknown {
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) {
+    return undefined;
+  }
+  try {
+    return Reflect.get(value, key);
+  } catch {
+    return undefined;
+  }
+}
+
 export function resolveTerminalConstructor(
   moduleValue: unknown,
 ): XtermTerminalConstructor | null {
-  const direct = moduleValue as { Terminal?: unknown; default?: unknown } | null;
-  if (direct && typeof direct.Terminal === "function") {
-    return direct.Terminal as XtermTerminalConstructor;
+  const directTerminal = safeGetProperty(moduleValue, "Terminal");
+  if (typeof directTerminal === "function") {
+    return directTerminal as XtermTerminalConstructor;
   }
 
-  if (direct && direct.default && typeof direct.default === "object") {
-    const nested = direct.default as { Terminal?: unknown };
-    if (typeof nested.Terminal === "function") {
-      return nested.Terminal as XtermTerminalConstructor;
-    }
+  const nestedDefault = safeGetProperty(moduleValue, "default");
+  const nestedTerminal = safeGetProperty(nestedDefault, "Terminal");
+  if (typeof nestedTerminal === "function") {
+    return nestedTerminal as XtermTerminalConstructor;
   }
 
   if (typeof moduleValue === "function") {

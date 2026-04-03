@@ -305,3 +305,104 @@ async def test_use_account_locally_falls_back_when_codex_auth_missing(
     assert use_response.json()["snapshotName"] == "work"
     assert (tmp_path / "current").read_text(encoding="utf-8").strip() == "work"
     assert (tmp_path / "auth.json").resolve() == (accounts_dir / "work.json").resolve()
+
+
+@pytest.mark.asyncio
+async def test_open_account_terminal_switches_snapshot_and_launches(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    email = "terminal-launch@example.com"
+    raw_account_id = "acc_terminal_launch"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": raw_account_id,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "work.json", email=email, account_id=raw_account_id)
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    current_path = tmp_path / "current"
+    auth_path = tmp_path / "auth.json"
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(auth_path))
+
+    def _run(args, **_kwargs):
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    launched: list[str] = []
+    from app.modules.accounts import api as accounts_api
+
+    def _open_host_terminal(*, snapshot_name: str):
+        launched.append(snapshot_name)
+
+    monkeypatch.setattr(accounts_api, "open_host_terminal", _open_host_terminal)
+
+    open_response = await async_client.post(f"/api/accounts/{expected_account_id}/open-terminal")
+    assert open_response.status_code == 200
+    assert open_response.json()["status"] == "opened"
+    assert open_response.json()["snapshotName"] == "work"
+    assert launched == ["work"]
+    assert current_path.read_text(encoding="utf-8").strip() == "work"
+
+
+@pytest.mark.asyncio
+async def test_open_account_terminal_returns_launch_error(async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    email = "terminal-error@example.com"
+    raw_account_id = "acc_terminal_error"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": raw_account_id,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "work.json", email=email, account_id=raw_account_id)
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    def _run(args, **_kwargs):
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    from app.modules.accounts import api as accounts_api
+    from app.modules.accounts.terminal import TerminalLaunchError
+
+    def _open_host_terminal(*, snapshot_name: str):
+        raise TerminalLaunchError(f"boom for {snapshot_name}")
+
+    monkeypatch.setattr(accounts_api, "open_host_terminal", _open_host_terminal)
+
+    open_response = await async_client.post(f"/api/accounts/{expected_account_id}/open-terminal")
+    assert open_response.status_code == 400
+    assert open_response.json()["error"]["code"] == "terminal_launch_failed"

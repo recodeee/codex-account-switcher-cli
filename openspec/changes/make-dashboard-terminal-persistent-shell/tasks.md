@@ -1,0 +1,4 @@
+- [x] Update terminal PTY launch flow to use interactive shell with auto-run startup input.
+- [x] Redesign dashboard terminal modal chrome and dark terminal viewport styling.
+- [x] Update backend/frontend tests for persistent-shell behavior and terminal host presentation.
+- [x] Validate specs with `openspec validate --specs`.

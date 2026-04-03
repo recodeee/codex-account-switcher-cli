@@ -5,7 +5,9 @@ import fcntl
 import json
 import os
 import pty
+import platform
 import shlex
+import shutil
 import signal
 import struct
 import subprocess
@@ -47,6 +49,88 @@ def resolve_terminal_launch_config() -> TerminalLaunchConfig:
     return TerminalLaunchConfig(command=raw_command, cwd=cwd, shell=shell)
 
 
+def _build_startup_input(*, cwd: Path, command: str) -> str:
+    return f"cd {shlex.quote(str(cwd))}\n{command}\n"
+
+
+def open_host_terminal(*, snapshot_name: str) -> TerminalLaunchConfig:
+    launch = resolve_terminal_launch_config()
+    if not launch.cwd.is_dir():
+        raise TerminalLaunchError(f"Terminal working directory does not exist: {launch.cwd}")
+
+    command = f"cd {shlex.quote(str(launch.cwd))} && {launch.command}"
+    system = platform.system().lower()
+    if system == "darwin":
+        _open_macos_terminal(command)
+        return launch
+    if system == "windows":
+        _open_windows_terminal(command)
+        return launch
+    if system == "linux":
+        _open_linux_terminal(launch.shell, command)
+        return launch
+
+    raise TerminalLaunchError(
+        f"Opening host terminal is not supported on this OS ({platform.system()})."
+    )
+
+
+def _spawn_detached(argv: list[str]) -> None:
+    subprocess.Popen(
+        argv,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+    )
+
+
+def _open_linux_terminal(shell: str, command: str) -> None:
+    candidates: list[list[str]] = [
+        ["x-terminal-emulator", "-e", shell, "-lc", command],
+        ["gnome-terminal", "--", shell, "-lc", command],
+        ["konsole", "-e", shell, "-lc", command],
+        ["alacritty", "-e", shell, "-lc", command],
+        ["kitty", shell, "-lc", command],
+        ["wezterm", "start", "--", shell, "-lc", command],
+        ["xterm", "-e", shell, "-lc", command],
+    ]
+
+    errors: list[str] = []
+    for argv in candidates:
+        if shutil.which(argv[0]) is None:
+            continue
+        try:
+            _spawn_detached(argv)
+            return
+        except Exception as exc:  # pragma: no cover - platform specific
+            errors.append(f"{argv[0]}: {exc}")
+
+    detail = "; ".join(errors) if errors else "No supported terminal app found in PATH."
+    raise TerminalLaunchError(f"Failed to open host terminal. {detail}")
+
+
+def _open_macos_terminal(command: str) -> None:
+    script = f'tell application "Terminal" to do script {json.dumps(command)}'
+    try:
+        _spawn_detached(["osascript", "-e", script, "-e", 'activate application "Terminal"'])
+    except Exception as exc:  # pragma: no cover - platform specific
+        raise TerminalLaunchError(f"Failed to open macOS Terminal: {exc}") from exc
+
+
+def _open_windows_terminal(command: str) -> None:
+    wt_path = shutil.which("wt")
+    try:
+        if wt_path:
+            _spawn_detached([wt_path, "new-tab", "cmd", "/k", command])
+            return
+
+        _spawn_detached(["cmd", "/c", "start", "", "cmd", "/k", command])
+    except Exception as exc:  # pragma: no cover - platform specific
+        raise TerminalLaunchError(f"Failed to open Windows terminal: {exc}") from exc
+
+
 @dataclass(slots=True)
 class TerminalProcess:
     process: subprocess.Popen[bytes]
@@ -58,8 +142,7 @@ class TerminalProcess:
         if not launch.cwd.is_dir():
             raise TerminalLaunchError(f"Terminal working directory does not exist: {launch.cwd}")
 
-        startup_script = f"cd {shlex.quote(str(launch.cwd))} && {launch.command}"
-        argv = [launch.shell, "-lc", startup_script]
+        argv = [launch.shell, "-il"]
 
         master_fd, slave_fd = pty.openpty()
         env = os.environ.copy()
@@ -85,6 +168,7 @@ class TerminalProcess:
 
         terminal_process = cls(process=process, master_fd=master_fd)
         terminal_process.resize(cols=DEFAULT_TERMINAL_COLS, rows=DEFAULT_TERMINAL_ROWS)
+        terminal_process.write(_build_startup_input(cwd=launch.cwd, command=launch.command))
         return terminal_process, launch
 
     def write(self, data: str) -> None:

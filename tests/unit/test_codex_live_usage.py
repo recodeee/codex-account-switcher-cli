@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from app.modules.accounts.codex_live_usage import read_local_codex_live_usage
+
+
+def _sessions_day_dir(root: Path, now: datetime) -> Path:
+    day = now.date()
+    path = root / f"{day.year:04d}" / f"{day.month:02d}" / f"{day.day:02d}"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _write_rollout(
+    path: Path,
+    *,
+    timestamp: datetime,
+    primary_used: float,
+    secondary_used: float,
+) -> None:
+    payload = {
+        "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "rate_limits": {
+                "primary": {
+                    "used_percent": primary_used,
+                    "window_minutes": 300,
+                    "resets_at": int((timestamp + timedelta(minutes=30)).timestamp()),
+                },
+                "secondary": {
+                    "used_percent": secondary_used,
+                    "window_minutes": 10080,
+                    "resets_at": int((timestamp + timedelta(days=7)).timestamp()),
+                },
+            },
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ts = timestamp.timestamp()
+    os.utime(path, (ts, ts))
+
+
+def test_read_local_codex_live_usage_uses_latest_rate_limit_and_counts_active_sessions(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    older = day_dir / "rollout-older.jsonl"
+    latest = day_dir / "rollout-latest.jsonl"
+    _write_rollout(
+        older,
+        timestamp=now - timedelta(minutes=5),
+        primary_used=66.0,
+        secondary_used=44.0,
+    )
+    _write_rollout(
+        latest,
+        timestamp=now - timedelta(minutes=1),
+        primary_used=12.0,
+        secondary_used=34.0,
+    )
+
+    usage = read_local_codex_live_usage(now=now)
+    assert usage is not None
+    assert usage.active_session_count == 2
+    assert usage.primary is not None
+    assert usage.secondary is not None
+    assert usage.primary.used_percent == 12.0
+    assert usage.secondary.used_percent == 34.0
+
+
+def test_read_local_codex_live_usage_ignores_stale_rollout_files(monkeypatch, tmp_path: Path) -> None:
+    now = datetime.now(timezone.utc)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_LB_LOCAL_SESSION_ACTIVE_SECONDS", "60")
+
+    day_dir = _sessions_day_dir(sessions_root, now - timedelta(hours=2))
+    stale = day_dir / "rollout-stale.jsonl"
+    _write_rollout(
+        stale,
+        timestamp=now - timedelta(hours=2),
+        primary_used=77.0,
+        secondary_used=55.0,
+    )
+
+    usage = read_local_codex_live_usage(now=now)
+    assert usage is None

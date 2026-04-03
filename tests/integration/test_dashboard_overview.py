@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import timedelta
+import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -52,6 +53,37 @@ def _write_auth_snapshot(path: Path, *, email: str, account_id: str) -> None:
         },
     }
     path.write_text(json.dumps(auth_json))
+
+
+def _write_rollout_snapshot(
+    path: Path,
+    *,
+    timestamp: datetime,
+    primary_used: float,
+    secondary_used: float,
+) -> None:
+    payload = {
+        "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "rate_limits": {
+                "primary": {
+                    "used_percent": primary_used,
+                    "window_minutes": 300,
+                    "resets_at": int((timestamp + timedelta(minutes=30)).timestamp()),
+                },
+                "secondary": {
+                    "used_percent": secondary_used,
+                    "window_minutes": 10080,
+                    "resets_at": int((timestamp + timedelta(days=7)).timestamp()),
+                },
+            },
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ts = timestamp.timestamp()
+    os.utime(path, (ts, ts))
 
 
 @pytest.mark.asyncio
@@ -160,6 +192,74 @@ async def test_dashboard_overview_auto_imports_codex_auth_snapshots(
     assert matching_account["codexAuth"]["snapshotName"] == "tokio"
     assert matching_account["codexAuth"]["activeSnapshotName"] == "tokio"
     assert matching_account["codexAuth"]["isActiveSnapshot"] is True
+
+
+@pytest.mark.asyncio
+async def test_dashboard_overview_prefers_local_active_snapshot_usage_and_session_count(
+    async_client,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    now = utcnow().replace(microsecond=0)
+    expected_account_id = generate_unique_account_id("acc_local", "local@example.com")
+
+    async with SessionLocal() as session:
+        accounts_repo = AccountsRepository(session)
+        usage_repo = UsageRepository(session)
+        await accounts_repo.upsert(_make_account(expected_account_id, "local@example.com"))
+        await usage_repo.add_entry(
+            expected_account_id,
+            100.0,
+            window="primary",
+            window_minutes=300,
+            recorded_at=now - timedelta(minutes=2),
+        )
+        await usage_repo.add_entry(
+            expected_account_id,
+            88.0,
+            window="secondary",
+            window_minutes=10080,
+            recorded_at=now - timedelta(minutes=2),
+        )
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "local.json", email="local@example.com", account_id="acc_local")
+    (tmp_path / "current").write_text("local")
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    sessions_root = tmp_path / "sessions"
+    day_dir = sessions_root / f"{now.year:04d}" / f"{now.month:02d}" / f"{now.day:02d}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    _write_rollout_snapshot(
+        day_dir / "rollout-1.jsonl",
+        timestamp=(now - timedelta(minutes=5)).replace(tzinfo=timezone.utc),
+        primary_used=22.0,
+        secondary_used=35.0,
+    )
+    _write_rollout_snapshot(
+        day_dir / "rollout-2.jsonl",
+        timestamp=(now - timedelta(minutes=1)).replace(tzinfo=timezone.utc),
+        primary_used=1.0,
+        secondary_used=14.0,
+    )
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    response = await async_client.get("/api/dashboard/overview")
+    assert response.status_code == 200
+    payload = response.json()
+    account = next(item for item in payload["accounts"] if item["accountId"] == expected_account_id)
+    assert account["codexAuth"]["isActiveSnapshot"] is True
+    assert account["codexSessionCount"] == 2
+    assert account["usage"]["primaryRemainingPercent"] == pytest.approx(99.0)
+    assert account["usage"]["secondaryRemainingPercent"] == pytest.approx(86.0)
 
 
 @pytest.mark.asyncio

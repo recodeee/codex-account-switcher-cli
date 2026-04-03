@@ -77,6 +77,14 @@ export function formatCompactNumber(value: unknown): string {
   return numeric === null ? "--" : compactFormatter.format(numeric);
 }
 
+export function formatTokenCredits(value: unknown): string {
+  const numeric = toNumber(value);
+  if (numeric === null) {
+    return "--";
+  }
+  return `${numberFormatter.format(numeric)}k`;
+}
+
 export function formatCurrency(value: unknown): string {
   const numeric = toNumber(value);
   return numeric === null ? "--" : currencyFormatter.format(numeric);
@@ -220,6 +228,36 @@ export function formatResetRelative(ms: number): string {
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
   return hours > 0 ? `in ${days}d ${hours}h` : `in ${days}d`;
+}
+
+export function formatRelativePast(ms: number): string {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60_000));
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m ago`;
+  }
+
+  if (totalMinutes < 1440) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m ago` : `${hours}h ago`;
+  }
+
+  const totalHours = Math.floor(ms / 3_600_000);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours > 0 ? `${days}d ${hours}h ago` : `${days}d ago`;
+}
+
+export function formatLastUsageLabel(recordedAt: string | null | undefined): string | null {
+  const date = parseDate(recordedAt);
+  if (!date || date.getTime() <= 0) {
+    return null;
+  }
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 0) {
+    return "last seen now";
+  }
+  return `last seen ${formatRelativePast(diffMs)}`;
 }
 
 export function formatCountdown(seconds: number): string {

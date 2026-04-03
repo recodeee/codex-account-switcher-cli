@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import cast
 
 from pydantic import ValidationError
@@ -16,8 +16,9 @@ from app.core.auth import (
 from app.core.crypto import TokenEncryptor
 from app.core.plan_types import coerce_account_plan_type
 from app.core.utils.time import naive_utc_to_epoch, to_utc_naive, utcnow
-from app.db.models import Account, AccountStatus
+from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
+from app.modules.accounts.codex_live_usage import LocalUsageWindow, read_local_codex_live_usage
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     CodexAuthSnapshotNotFoundError,
@@ -130,6 +131,12 @@ class AccountsService:
             )
             for account in accounts
         }
+        self._apply_local_live_usage_overrides(
+            accounts=accounts,
+            codex_auth_by_account=codex_auth_by_account,
+            primary_usage=primary_usage,
+            secondary_usage=secondary_usage,
+        )
 
         return build_account_summaries(
             accounts=accounts,
@@ -231,6 +238,44 @@ class AccountsService:
             is_active_snapshot=bool(active_snapshot_name and active_snapshot_name in snapshot_names),
         )
 
+    def _apply_local_live_usage_overrides(
+        self,
+        *,
+        accounts: list[Account],
+        codex_auth_by_account: dict[str, AccountCodexAuthStatus],
+        primary_usage: dict[str, UsageHistory],
+        secondary_usage: dict[str, UsageHistory],
+    ) -> None:
+        live_usage = read_local_codex_live_usage()
+        if live_usage is None:
+            return
+
+        active_account_ids = [
+            account.id
+            for account in accounts
+            if codex_auth_by_account.get(account.id) is not None
+            and codex_auth_by_account[account.id].is_active_snapshot
+        ]
+        if not active_account_ids:
+            return
+
+        recorded_at = to_utc_naive(live_usage.recorded_at)
+        for account_id in active_account_ids:
+            if live_usage.primary is not None:
+                primary_usage[account_id] = _usage_history_from_live_window(
+                    account_id=account_id,
+                    window="primary",
+                    recorded_at=recorded_at,
+                    usage_window=live_usage.primary,
+                )
+            if live_usage.secondary is not None:
+                secondary_usage[account_id] = _usage_history_from_live_window(
+                    account_id=account_id,
+                    window="secondary",
+                    recorded_at=recorded_at,
+                    usage_window=live_usage.secondary,
+                )
+
     def _account_from_auth_bytes(self, raw: bytes) -> Account:
         try:
             auth = parse_auth_json(raw)
@@ -255,3 +300,20 @@ class AccountsService:
             status=AccountStatus.ACTIVE,
             deactivation_reason=None,
         )
+
+
+def _usage_history_from_live_window(
+    *,
+    account_id: str,
+    window: str,
+    recorded_at: datetime,
+    usage_window: LocalUsageWindow,
+) -> UsageHistory:
+    return UsageHistory(
+        account_id=account_id,
+        window=window,
+        used_percent=float(usage_window.used_percent),
+        reset_at=usage_window.reset_at,
+        window_minutes=usage_window.window_minutes,
+        recorded_at=recorded_at,
+    )

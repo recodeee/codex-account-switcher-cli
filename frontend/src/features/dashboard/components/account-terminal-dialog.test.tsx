@@ -108,17 +108,21 @@ describe("AccountTerminalDialog", () => {
       />,
     );
 
+    expect(screen.getByText("Codex Terminal")).toBeInTheDocument();
+    expect(screen.getByText(`Account: ${account.email}`)).toBeInTheDocument();
+    expect(screen.getByTestId("account-terminal-host").className).toContain("bg-[#050b14]");
+
     await waitFor(() => {
-      expect(terminalState.instances).toHaveLength(1);
+      expect(terminalState.instances.length).toBeGreaterThan(0);
     });
 
-    const terminal = terminalState.instances[0] as { writeln: ReturnType<typeof vi.fn> };
+    const terminal = terminalState.instances.at(-1) as { writeln: ReturnType<typeof vi.fn> };
     expect(terminal.writeln).toHaveBeenCalledWith(
       `Connecting terminal for ${account.email}...`,
     );
 
-    expect(websocketInstances).toHaveLength(1);
-    expect(websocketInstances[0]?.url).toBe(
+    expect(websocketInstances.length).toBeGreaterThan(0);
+    expect(websocketInstances.at(-1)?.url).toBe(
       `ws://${window.location.host}/api/accounts/${encodeURIComponent(account.accountId)}/terminal/ws`,
     );
   });

@@ -83,6 +83,8 @@ export function createAccountSummary(
 		},
 		resetAtPrimary: offsetIso(60),
 		resetAtSecondary: offsetIso(24 * 60),
+		lastUsageRecordedAtPrimary: offsetIso(-3),
+		lastUsageRecordedAtSecondary: offsetIso(-5),
 		windowMinutesPrimary: 300,
 		windowMinutesSecondary: 10_080,
 		codexSessionCount: 0,

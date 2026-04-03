@@ -8,6 +8,7 @@ import {
   formatCountdown,
   formatCurrency,
   formatIdTokenLabel,
+  formatLastUsageLabel,
   formatModelLabel,
   formatNumber,
   formatPercent,
@@ -16,6 +17,7 @@ import {
   formatQuotaResetLabel,
   formatQuotaResetMeta,
   formatRate,
+  formatRelativePast,
   formatResetRelative,
   formatRefreshTokenLabel,
   formatRelative,
@@ -104,6 +106,9 @@ describe("formatters", () => {
     expect(formatResetRelative(30 * 60_000)).toBe("in 30m");
     expect(formatResetRelative((4 * 60 + 13) * 60_000)).toBe("in 4h 13m");
     expect(formatResetRelative((6 * 24 + 13) * 60 * 60_000)).toBe("in 6d 13h");
+    expect(formatRelativePast(30 * 60_000)).toBe("30m ago");
+    expect(formatRelativePast((4 * 60 + 13) * 60_000)).toBe("4h 13m ago");
+    expect(formatRelativePast((6 * 24 + 13) * 60 * 60_000)).toBe("6d 13h ago");
     expect(formatCountdown(125)).toBe("2:05");
   });
 
@@ -119,6 +124,18 @@ describe("formatters", () => {
     expect(formatQuotaResetLabel("1970-01-01T00:00:00.000Z")).toBe(RESET_ERROR_LABEL);
     expect(formatQuotaResetLabel("bad-date")).toBe(RESET_ERROR_LABEL);
     expect(formatQuotaResetMeta(null, null)).toBe("Quota reset unavailable");
+  });
+
+  it("formats last usage labels", () => {
+    const justNow = new Date(Date.now() - 30_000).toISOString();
+    const halfHour = new Date(Date.now() - 30 * 60_000).toISOString();
+    const inFuture = new Date(Date.now() + 60_000).toISOString();
+
+    expect(formatLastUsageLabel(justNow)).toBe("last seen 0m ago");
+    expect(formatLastUsageLabel(halfHour)).toBe("last seen 30m ago");
+    expect(formatLastUsageLabel(inFuture)).toBe("last seen now");
+    expect(formatLastUsageLabel("bad-date")).toBeNull();
+    expect(formatLastUsageLabel(null)).toBeNull();
   });
 
   it("truncates long text safely", () => {

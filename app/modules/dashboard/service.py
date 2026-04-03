@@ -5,9 +5,10 @@ from datetime import datetime, timedelta
 from app.core import usage as usage_core
 from app.core.crypto import TokenEncryptor
 from app.core.usage.types import UsageWindowRow
-from app.core.utils.time import utcnow
-from app.db.models import UsageHistory
+from app.core.utils.time import to_utc_naive, utcnow
+from app.db.models import Account, UsageHistory
 from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
+from app.modules.accounts.codex_live_usage import LocalUsageWindow, read_local_codex_live_usage
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     build_snapshot_index,
@@ -60,6 +61,13 @@ class DashboardService:
             account.id: _build_codex_auth_status(account_id=account.id, snapshot_index=snapshot_index)
             for account in accounts
         }
+        _apply_local_live_usage_overrides(
+            accounts=accounts,
+            codex_auth_by_account=codex_auth_by_account,
+            primary_usage=primary_usage,
+            secondary_usage=secondary_usage,
+            codex_session_counts_by_account=codex_session_counts_by_account,
+        )
 
         account_summaries = build_account_summaries(
             accounts=accounts,
@@ -319,4 +327,63 @@ def _build_codex_auth_status(*, account_id: str, snapshot_index: CodexAuthSnapsh
         snapshot_name=selected_snapshot_name,
         active_snapshot_name=active_snapshot_name,
         is_active_snapshot=bool(active_snapshot_name and active_snapshot_name in snapshot_names),
+    )
+
+
+def _apply_local_live_usage_overrides(
+    *,
+    accounts: list[Account],
+    codex_auth_by_account: dict[str, AccountCodexAuthStatus],
+    primary_usage: dict[str, UsageHistory],
+    secondary_usage: dict[str, UsageHistory],
+    codex_session_counts_by_account: dict[str, int],
+) -> None:
+    live_usage = read_local_codex_live_usage()
+    if live_usage is None:
+        return
+
+    active_account_ids = [
+        account.id
+        for account in accounts
+        if codex_auth_by_account.get(account.id) is not None and codex_auth_by_account[account.id].is_active_snapshot
+    ]
+    if not active_account_ids:
+        return
+
+    recorded_at = to_utc_naive(live_usage.recorded_at)
+    for account_id in active_account_ids:
+        codex_session_counts_by_account[account_id] = max(
+            codex_session_counts_by_account.get(account_id, 0),
+            live_usage.active_session_count,
+        )
+        if live_usage.primary is not None:
+            primary_usage[account_id] = _usage_history_from_live_window(
+                account_id=account_id,
+                window="primary",
+                recorded_at=recorded_at,
+                usage_window=live_usage.primary,
+            )
+        if live_usage.secondary is not None:
+            secondary_usage[account_id] = _usage_history_from_live_window(
+                account_id=account_id,
+                window="secondary",
+                recorded_at=recorded_at,
+                usage_window=live_usage.secondary,
+            )
+
+
+def _usage_history_from_live_window(
+    *,
+    account_id: str,
+    window: str,
+    recorded_at: datetime,
+    usage_window: LocalUsageWindow,
+) -> UsageHistory:
+    return UsageHistory(
+        account_id=account_id,
+        window=window,
+        used_percent=float(usage_window.used_percent),
+        reset_at=usage_window.reset_at,
+        window_minutes=usage_window.window_minutes,
+        recorded_at=recorded_at,
     )

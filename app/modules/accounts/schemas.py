@@ -72,6 +72,8 @@ class AccountSummary(DashboardModel):
     usage: AccountUsage | None = None
     reset_at_primary: datetime | None = None
     reset_at_secondary: datetime | None = None
+    last_usage_recorded_at_primary: datetime | None = None
+    last_usage_recorded_at_secondary: datetime | None = None
     window_minutes_primary: int | None = None
     window_minutes_secondary: int | None = None
     last_refresh_at: datetime | None = None
@@ -111,6 +113,12 @@ class AccountDeleteResponse(DashboardModel):
 
 
 class AccountUseLocalResponse(DashboardModel):
+    status: str
+    account_id: str
+    snapshot_name: str
+
+
+class AccountOpenTerminalResponse(DashboardModel):
     status: str
     account_id: str
     snapshot_name: str

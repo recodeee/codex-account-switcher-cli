@@ -1,0 +1,7 @@
+- [x] Add shared terminal surface component reusable by in-app windows and detached page.
+- [x] Implement app-level terminal workspace provider with draggable windows and side dock.
+- [x] Wire dashboard account-card terminal action to workspace open behavior.
+- [x] Add detached terminal route/page and pop-out flow.
+- [x] Add frontend tests for workspace behaviors and detached route.
+- [x] Validate specs with `openspec validate --specs`.
+- [x] Run frontend lint, typecheck, and targeted tests.

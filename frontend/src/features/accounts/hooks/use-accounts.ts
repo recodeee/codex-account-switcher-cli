@@ -5,6 +5,7 @@ import {
   deleteAccount,
   getAccountTrends,
   importAccount,
+  openAccountTerminal,
   listAccounts,
   pauseAccount,
   reactivateAccount,
@@ -79,7 +80,25 @@ export function useAccountMutations() {
     },
   });
 
-  return { importMutation, pauseMutation, resumeMutation, deleteMutation, useLocalMutation };
+  const openTerminalMutation = useMutation({
+    mutationFn: openAccountTerminal,
+    onSuccess: (response) => {
+      toast.success(`Opened terminal for ${response.snapshotName}`);
+      invalidateAccountRelatedQueries(queryClient);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Terminal launch failed");
+    },
+  });
+
+  return {
+    importMutation,
+    pauseMutation,
+    resumeMutation,
+    deleteMutation,
+    useLocalMutation,
+    openTerminalMutation,
+  };
 }
 
 export function useAccountTrends(accountId: string | null) {

@@ -1,0 +1,6 @@
+- [x] Add backend account endpoint to open host terminal after successful local snapshot switch.
+- [x] Implement cross-platform terminal launcher utility with clear launch errors.
+- [x] Rewire dashboard Terminal action to call host-terminal endpoint (no in-app workspace open).
+- [x] Remove app-shell dependency on in-app terminal workspace wrapper.
+- [x] Add/adjust backend + frontend tests for new terminal action flow.
+- [x] Validate with targeted lint/typecheck/tests and `openspec validate --specs`.

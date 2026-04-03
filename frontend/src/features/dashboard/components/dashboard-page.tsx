@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -6,7 +6,6 @@ import { RefreshCw } from "lucide-react";
 import { AlertMessage } from "@/components/alert-message";
 import { useAccountMutations } from "@/features/accounts/hooks/use-accounts";
 import { AccountCards } from "@/features/dashboard/components/account-cards";
-import { AccountTerminalDialog } from "@/features/dashboard/components/account-terminal-dialog";
 import { DashboardSkeleton } from "@/features/dashboard/components/dashboard-skeleton";
 import { RequestFilters } from "@/features/dashboard/components/filters/request-filters";
 import { RecentRequestsTable } from "@/features/dashboard/components/recent-requests-table";
@@ -28,9 +27,7 @@ export function DashboardPage() {
   const isDark = useThemeStore((s) => s.theme === "dark");
   const dashboardQuery = useDashboard();
   const { filters, logsQuery, optionsQuery, updateFilters } = useRequestLogs();
-  const { resumeMutation, useLocalMutation } = useAccountMutations();
-  const [terminalAccount, setTerminalAccount] = useState<AccountSummary | null>(null);
-  const [terminalOpen, setTerminalOpen] = useState(false);
+  const { resumeMutation, useLocalMutation, openTerminalMutation } = useAccountMutations();
 
   const isRefreshing = dashboardQuery.isFetching || logsQuery.isFetching;
 
@@ -60,12 +57,11 @@ export function DashboardPage() {
           });
           break;
         case "terminal":
-          setTerminalAccount(account);
-          setTerminalOpen(true);
+          openTerminalMutation.mutate(account.accountId);
           break;
       }
     },
-    [navigate, resumeMutation, useLocalMutation],
+    [navigate, openTerminalMutation, resumeMutation, useLocalMutation],
   );
 
   const overview = dashboardQuery.data;
@@ -212,12 +208,6 @@ export function DashboardPage() {
           </section>
         </>
       )}
-
-      <AccountTerminalDialog
-        open={terminalOpen}
-        account={terminalAccount}
-        onOpenChange={setTerminalOpen}
-      />
 
     </div>
   );

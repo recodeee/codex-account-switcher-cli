@@ -3,6 +3,7 @@ import { del, get, post } from "@/lib/api-client";
 import {
   AccountActionResponseSchema,
   AccountImportResponseSchema,
+  AccountOpenTerminalResponseSchema,
   AccountUseLocalResponseSchema,
   AccountsResponseSchema,
   AccountTrendsResponseSchema,
@@ -63,6 +64,13 @@ export function useAccountLocally(accountId: string) {
   return post(
     `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/use-local`,
     AccountUseLocalResponseSchema,
+  );
+}
+
+export function openAccountTerminal(accountId: string) {
+  return post(
+    `${ACCOUNTS_BASE_PATH}/${encodeURIComponent(accountId)}/open-terminal`,
+    AccountOpenTerminalResponseSchema,
   );
 }
 

@@ -87,6 +87,10 @@ def _account_to_summary(
     reset_at_secondary = (
         from_epoch_seconds(effective_secondary_usage.reset_at) if effective_secondary_usage is not None else None
     )
+    last_usage_recorded_at_primary = effective_primary_usage.recorded_at if effective_primary_usage is not None else None
+    last_usage_recorded_at_secondary = (
+        effective_secondary_usage.recorded_at if effective_secondary_usage is not None else None
+    )
     window_minutes_primary = effective_primary_usage.window_minutes if effective_primary_usage is not None else None
     window_minutes_secondary = (
         effective_secondary_usage.window_minutes if effective_secondary_usage is not None else None
@@ -113,6 +117,8 @@ def _account_to_summary(
         ),
         reset_at_primary=reset_at_primary,
         reset_at_secondary=reset_at_secondary,
+        last_usage_recorded_at_primary=last_usage_recorded_at_primary,
+        last_usage_recorded_at_secondary=last_usage_recorded_at_secondary,
         window_minutes_primary=window_minutes_primary,
         window_minutes_secondary=window_minutes_secondary,
         last_refresh_at=account.last_refresh,
