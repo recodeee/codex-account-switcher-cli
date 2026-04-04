@@ -98,6 +98,7 @@ def apply_local_live_usage_overrides(
     (
         debug_raw_samples_by_account,
         confident_raw_samples_by_account,
+        deferred_default_scope_session_hints_by_account,
     ) = _build_default_sample_debug_overrides(
         accounts=accounts,
         snapshot_index=snapshot_index,
@@ -169,6 +170,12 @@ def apply_local_live_usage_overrides(
         live_process_session_counts_by_account[account.id] = max(0, live_process_session_count)
         has_live_process_session = live_process_session_count > 0
         has_live_runtime_session = live_runtime_session_count > 0
+        deferred_default_scope_session_hint_count = (
+            deferred_default_scope_session_hints_by_account.get(account.id, 0)
+            if should_defer_active_snapshot_usage
+            else 0
+        )
+        has_deferred_default_scope_session_hint = deferred_default_scope_session_hint_count > 0
         has_live_telemetry = bool(live_usage and live_usage.active_session_count > 0)
         if (
             (has_live_process_session or has_live_runtime_session)
@@ -184,7 +191,22 @@ def apply_local_live_usage_overrides(
         # Treat runtime-scoped live sessions as live-presence hints for UI
         # grouping ("Working now"), while keeping numeric session counters
         # normalized to process presence later.
-        codex_auth_status.has_live_session = has_live_process_session or has_live_runtime_session
+        codex_auth_status.has_live_session = (
+            has_live_process_session
+            or has_live_runtime_session
+            or has_deferred_default_scope_session_hint
+        )
+        if (
+            not codex_auth_status.has_live_session
+            and should_defer_active_snapshot_usage
+            and is_effective_active_snapshot
+            and has_live_telemetry
+            and any(live_usage_samples_by_snapshot.get(name) for name in snapshots_considered)
+        ):
+            # In strict deferred mode, avoid cross-account remaps, but keep
+            # active-snapshot presence visible when there is concrete sample
+            # evidence in the default scope.
+            codex_auth_status.has_live_session = True
         account_id = account.id
         override_reason: str | None = None
         override_applied = False
@@ -459,6 +481,7 @@ def apply_local_live_usage_overrides(
         accounts=accounts,
         codex_live_session_counts_by_account=codex_live_session_counts_by_account,
         live_process_session_counts_by_account=live_process_session_counts_by_account,
+        codex_auth_by_account=codex_auth_by_account,
     )
     return _coalesce_persist_candidates(persist_candidates)
 
@@ -468,19 +491,36 @@ def _normalize_live_session_counts_to_process_presence(
     accounts: list[Account],
     codex_live_session_counts_by_account: dict[str, int],
     live_process_session_counts_by_account: dict[str, int],
+    codex_auth_by_account: dict[str, AccountCodexAuthStatus],
 ) -> None:
-    """Keep API live-session counters tied to observable codex processes.
+    """Keep API live-session counters grounded in observable attribution.
 
-    Runtime/session-file attribution still informs quota window overrides and debug
-    payloads, but `codexLiveSessionCount` / `codexSessionCount` should represent
-    process-level presence so UI "working now" indicators clear immediately after
-    Ctrl+C.
+    Prefer process-scoped counts when available. If process visibility is
+    missing but attribution already established a live-session hint, preserve
+    inferred counts from runtime/session fallback instead of forcing counters to
+    zero.
     """
 
     for account in accounts:
-        codex_live_session_counts_by_account[account.id] = max(
+        account_id = account.id
+        process_count = max(
             0,
-            live_process_session_counts_by_account.get(account.id, 0),
+            live_process_session_counts_by_account.get(account_id, 0),
+        )
+        if process_count > 0:
+            codex_live_session_counts_by_account[account_id] = process_count
+            continue
+
+        inferred_count = max(
+            0,
+            codex_live_session_counts_by_account.get(account_id, 0),
+        )
+        codex_auth_status = codex_auth_by_account.get(account_id)
+        has_live_session_hint = (
+            codex_auth_status is not None and codex_auth_status.has_live_session
+        )
+        codex_live_session_counts_by_account[account_id] = (
+            inferred_count if has_live_session_hint and inferred_count > 0 else 0
         )
 
 
@@ -971,17 +1011,18 @@ def _build_default_sample_debug_overrides(
 ) -> tuple[
     dict[str, list[AccountLiveQuotaDebugSample]],
     dict[str, list[AccountLiveQuotaDebugSample]],
+    dict[str, int],
 ]:
     if not should_defer_active_snapshot_usage:
-        return {}, {}
+        return {}, {}, {}
 
     active_snapshot_name = snapshot_index.active_snapshot_name
     if not active_snapshot_name:
-        return {}, {}
+        return {}, {}, {}
 
     default_scope_samples = list(live_usage_samples_by_snapshot.get(active_snapshot_name, []))
     if not default_scope_samples:
-        return {}, {}
+        return {}, {}, {}
 
     candidate_accounts = [
         account
@@ -989,7 +1030,7 @@ def _build_default_sample_debug_overrides(
         if _account_has_snapshot(codex_auth_by_account.get(account.id))
     ]
     if len(candidate_accounts) <= 1:
-        return {}, {}
+        return {}, {}, {}
 
     active_account_id = _resolve_active_snapshot_account_id(
         accounts=accounts,
@@ -1014,19 +1055,22 @@ def _build_default_sample_debug_overrides(
         baseline_secondary_usage=baseline_secondary_usage,
         sample_sources=[sample.source for sample in default_scope_samples],
         preferred_account_id=active_account_id,
+        allow_low_confidence_assignments=False,
         # Keep immediate attribution for a brand-new single default-scope
         # sample (common right after switching), but avoid spreading
         # multi-session ambiguous fingerprints across accounts.
         allow_ambiguous_fallback_assignments=len(default_scope_samples) <= 1,
     )
     if not assignments:
-        return {}, {}
+        return {}, {}, {}
 
     debug_samples_by_account: dict[str, list[AccountLiveQuotaDebugSample]] = {}
     confident_samples_by_account: dict[str, list[AccountLiveQuotaDebugSample]] = {}
+    session_hints_by_account: dict[str, int] = {}
     for sample_index, match in assignments.items():
         if sample_index < 0 or sample_index >= len(default_scope_samples):
             continue
+        session_hints_by_account[match.account_id] = session_hints_by_account.get(match.account_id, 0) + 1
         sample = default_scope_samples[sample_index]
         match_status = codex_auth_by_account.get(match.account_id)
         snapshot_name = match_status.snapshot_name if match_status is not None else active_snapshot_name
@@ -1055,7 +1099,7 @@ def _build_default_sample_debug_overrides(
     for samples in confident_samples_by_account.values():
         samples.sort(key=lambda sample: sample.recorded_at, reverse=True)
 
-    return debug_samples_by_account, confident_samples_by_account
+    return debug_samples_by_account, confident_samples_by_account, session_hints_by_account
 
 
 def _build_debug_sample(
@@ -1296,13 +1340,17 @@ def _apply_local_default_session_fingerprint_overrides(
     if not allow_quota_override and active_account_id is not None:
         # Deferred mixed-default mode prioritizes avoiding false positives on
         # non-active accounts over recovering every concurrent fallback match.
-        # Keep live-session hints scoped to the account that currently owns
-        # the active snapshot until process-level attribution is available.
+        # Keep attribution scoped to the active snapshot owner. Still allow
+        # quota overrides for high-confidence matches so the active account
+        # reflects the best-known live fingerprint while inactive accounts stay
+        # untouched.
         sample_matches_by_index = {
             sample_index: _SampleMatchResult(
                 account_id=active_account_id,
                 confidence=match.confidence,
-                allows_quota_override=False,
+                allows_quota_override=(
+                    match.allows_quota_override or match.confidence == "high"
+                ),
             )
             for sample_index, match in sample_matches_by_index.items()
         }
@@ -1360,7 +1408,10 @@ def _apply_local_default_session_fingerprint_overrides(
         if latest_attribution is None:
             continue
 
-        if not allow_quota_override or not latest_attribution.match.allows_quota_override:
+        can_apply_quota_override = latest_attribution.match.allows_quota_override and (
+            allow_quota_override or account_id == active_account_id
+        )
+        if not can_apply_quota_override:
             # Ambiguous or presence-only attribution still contributes to
             # live/session recall, but quota windows remain conservative.
             continue
@@ -1607,6 +1658,7 @@ def _resolve_sample_account_assignments(
     sample_sources: list[str] | None = None,
     preferred_account_id: str | None = None,
     allow_ambiguous_fallback_assignments: bool = True,
+    allow_low_confidence_assignments: bool = True,
 ) -> dict[int, _SampleMatchResult]:
     assignments: dict[int, _SampleMatchResult] = {}
     if not samples or not accounts:
@@ -1620,14 +1672,6 @@ def _resolve_sample_account_assignments(
     # Pass 1: preserve previously observed per-source ownership.
     if sample_sources is not None:
         for sample_index in _sorted_sample_indexes(samples, unresolved_sample_indexes):
-            sample = samples[sample_index]
-            if not _sample_has_fingerprint(sample):
-                # Presence-only samples (no quota windows) are common right
-                # after switching snapshots while old rollout files are still
-                # in the active default scope. Reusing cached source ownership
-                # for those samples can resurrect stale account mappings and
-                # incorrectly mark inactive accounts as "working now".
-                continue
             if sample_index < 0 or sample_index >= len(sample_sources):
                 continue
             source = sample_sources[sample_index]
@@ -1707,6 +1751,8 @@ def _resolve_sample_account_assignments(
         distance, neg_margin, _, account_id, match = best_match
         margin = -neg_margin
         allow_low_confidence_assignment = (
+            allow_low_confidence_assignments
+            and
             match.confidence == "low"
             and distance <= _PERCENT_PATTERN_HIGH_CONFIDENCE_MAX_DISTANCE
             and margin > 0
@@ -1719,6 +1765,11 @@ def _resolve_sample_account_assignments(
 
     # Pass 4: conservative fallback for unresolved samples.
     for sample_index in _sorted_sample_indexes(samples, unresolved_sample_indexes):
+        if (
+            not allow_low_confidence_assignments
+            and _sample_has_fingerprint(samples[sample_index])
+        ):
+            continue
         if (
             not allow_ambiguous_fallback_assignments
             and _sample_has_fingerprint(samples[sample_index])

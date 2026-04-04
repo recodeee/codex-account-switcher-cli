@@ -6,6 +6,7 @@ import json
 import os
 import pty
 import platform
+import re
 import shlex
 import shutil
 import signal
@@ -20,6 +21,12 @@ from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from app.core.config.settings import BASE_DIR
+from app.tools.codex_auth_multi_runtime import (
+    MultiRuntimeToolError,
+    activate_runtime_snapshot,
+    build_runtime_env,
+    build_runtime_paths,
+)
 
 DEFAULT_TERMINAL_COLS = 120
 DEFAULT_TERMINAL_ROWS = 36
@@ -45,6 +52,7 @@ _CONTAINER_HOST_TERMINAL_BRIDGES: tuple[tuple[str, ...], ...] = (
     ("distrobox-host-exec",),
     ("host-spawn",),
 )
+_RUNTIME_NAME_SANITIZE_RE = re.compile(r"[^a-zA-Z0-9._-]+")
 
 
 @dataclass(slots=True)
@@ -70,13 +78,45 @@ def resolve_terminal_launch_config() -> TerminalLaunchConfig:
     return TerminalLaunchConfig(command=raw_command, cwd=cwd, shell=shell)
 
 
-def _build_startup_input(*, cwd: Path, command: str) -> str:
-    return f"cd {shlex.quote(str(cwd))}\n{command}\n"
+def _build_startup_input(*, cwd: Path, command: str, env_exports: dict[str, str] | None = None) -> str:
+    export_lines = ""
+    if env_exports:
+        export_lines = "".join(
+            f"export {key}={shlex.quote(value)}\n" for key, value in sorted(env_exports.items())
+        )
+    return f"{export_lines}cd {shlex.quote(str(cwd))}\n{command}\n"
 
 
-def open_host_terminal(*, snapshot_name: str) -> TerminalLaunchConfig:
+def _normalize_runtime_name(raw_name: str) -> str:
+    normalized = _RUNTIME_NAME_SANITIZE_RE.sub("-", raw_name.strip()).strip("._-")
+    if not normalized:
+        normalized = "account"
+    if not normalized[0].isalnum():
+        normalized = f"account-{normalized}"
+    return normalized
+
+
+def _runtime_name_for_account(*, account_id: str) -> str:
+    return f"dashboard-{_normalize_runtime_name(account_id)}"
+
+
+def _prepare_runtime_scope_env(*, account_id: str, snapshot_name: str) -> dict[str, str]:
+    runtime_name = _runtime_name_for_account(account_id=account_id)
+    try:
+        runtime_paths = build_runtime_paths(runtime_name)
+        activate_runtime_snapshot(runtime_paths, snapshot_name)
+        runtime_env = build_runtime_env(runtime_paths)
+    except MultiRuntimeToolError as exc:
+        raise TerminalLaunchError(f"Failed to initialize runtime-scoped auth: {exc}") from exc
+
+    runtime_env["CODEX_AUTH_ACTIVE_SNAPSHOT"] = snapshot_name
+    return runtime_env
+
+
+def open_host_terminal(*, account_id: str, snapshot_name: str) -> TerminalLaunchConfig:
     launch = resolve_terminal_launch_config()
     system = platform.system().lower()
+    runtime_env = _prepare_runtime_scope_env(account_id=account_id, snapshot_name=snapshot_name)
     if not launch.cwd.is_dir():
         # When running in a containerized runtime, host-terminal launch can still work via
         # bridge commands (for example flatpak-spawn --host) even if the cwd is not visible
@@ -84,7 +124,10 @@ def open_host_terminal(*, snapshot_name: str) -> TerminalLaunchConfig:
         if not (system == "linux" and _is_containerized_runtime()):
             raise TerminalLaunchError(f"Terminal working directory does not exist: {launch.cwd}")
 
-    command = f"cd {shlex.quote(str(launch.cwd))} && {launch.command}"
+    export_commands = [
+        f"export {key}={shlex.quote(value)}" for key, value in sorted(runtime_env.items())
+    ]
+    command = " && ".join([*export_commands, f"cd {shlex.quote(str(launch.cwd))}", launch.command])
     if system == "darwin":
         _open_macos_terminal(command)
         return launch
@@ -338,17 +381,18 @@ class TerminalProcess:
     master_fd: int
 
     @classmethod
-    def start(cls, *, snapshot_name: str) -> tuple["TerminalProcess", TerminalLaunchConfig]:
+    def start(cls, *, account_id: str, snapshot_name: str) -> tuple["TerminalProcess", TerminalLaunchConfig]:
         launch = resolve_terminal_launch_config()
         if not launch.cwd.is_dir():
             raise TerminalLaunchError(f"Terminal working directory does not exist: {launch.cwd}")
+        runtime_env = _prepare_runtime_scope_env(account_id=account_id, snapshot_name=snapshot_name)
 
         argv = [launch.shell, "-il"]
 
         master_fd, slave_fd = pty.openpty()
         env = os.environ.copy()
         env.setdefault("TERM", "xterm-256color")
-        env["CODEX_AUTH_ACTIVE_SNAPSHOT"] = snapshot_name
+        env.update(runtime_env)
 
         try:
             process = subprocess.Popen(
@@ -369,7 +413,13 @@ class TerminalProcess:
 
         terminal_process = cls(process=process, master_fd=master_fd)
         terminal_process.resize(cols=DEFAULT_TERMINAL_COLS, rows=DEFAULT_TERMINAL_ROWS)
-        terminal_process.write(_build_startup_input(cwd=launch.cwd, command=launch.command))
+        terminal_process.write(
+            _build_startup_input(
+                cwd=launch.cwd,
+                command=launch.command,
+                env_exports=runtime_env,
+            )
+        )
         return terminal_process, launch
 
     def write(self, data: str) -> None:

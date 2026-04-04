@@ -170,7 +170,7 @@ def test_apply_local_live_usage_overrides_marks_active_snapshot_live_from_proces
     assert codex_session_counts_by_account[account.id] == 1
 
 
-def test_apply_local_live_usage_overrides_does_not_mark_active_snapshot_live_from_runtime_sessions_without_process(
+def test_apply_local_live_usage_overrides_preserves_runtime_session_count_without_process_visibility(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     account = _make_account("acc-a", "a@example.com")
@@ -217,7 +217,7 @@ def test_apply_local_live_usage_overrides_does_not_mark_active_snapshot_live_fro
 
     assert candidates == []
     assert codex_auth_by_account[account.id].has_live_session is True
-    assert codex_session_counts_by_account[account.id] == 0
+    assert codex_session_counts_by_account[account.id] == 2
 
 
 def test_apply_local_live_usage_overrides_skips_mixed_default_session_fallback_when_process_counts_exist(
@@ -351,7 +351,7 @@ def test_apply_local_live_usage_overrides_disables_default_session_fingerprint_f
         codex_live_session_counts_by_account=codex_session_counts_by_account,
     )
 
-    assert codex_session_counts_by_account[account_a.id] == 0
+    assert codex_session_counts_by_account[account_a.id] == 2
     assert codex_session_counts_by_account[account_b.id] == 0
     assert codex_auth_by_account[account_a.id].has_live_session is False
     assert codex_auth_by_account[account_b.id].has_live_session is False
@@ -439,7 +439,7 @@ def test_apply_local_live_usage_overrides_uses_recent_switch_process_fallback_wi
         codex_live_session_counts_by_account=codex_session_counts_by_account,
     )
 
-    assert codex_session_counts_by_account[account_a.id] == 0
+    assert codex_session_counts_by_account[account_a.id] == 2
     assert codex_session_counts_by_account[account_b.id] == 0
     assert codex_auth_by_account[account_a.id].has_live_session is True
     assert codex_auth_by_account[account_b.id].has_live_session is False
@@ -562,7 +562,7 @@ def test_apply_local_live_usage_overrides_uses_mixed_default_session_fallback_wi
         codex_live_session_counts_by_account=codex_session_counts_by_account,
     )
 
-    assert codex_session_counts_by_account[account_a.id] == 0
+    assert codex_session_counts_by_account[account_a.id] == 2
     assert codex_session_counts_by_account[account_b.id] == 0
     assert codex_auth_by_account[account_a.id].has_live_session is True
     assert codex_auth_by_account[account_b.id].has_live_session is False
@@ -674,7 +674,7 @@ def test_apply_local_live_usage_overrides_uses_mixed_default_session_fallback_wi
     assert codex_session_counts_by_account[account_a.id] == 2
     assert codex_session_counts_by_account[account_b.id] == 0
     assert codex_auth_by_account[account_a.id].has_live_session is True
-    assert codex_auth_by_account[account_b.id].has_live_session is False
+    assert codex_auth_by_account[account_b.id].has_live_session is True
 
 
 def test_match_sample_prefers_unique_reset_fingerprint_over_percent_similarity() -> None:
@@ -1014,6 +1014,68 @@ def test_global_assignment_is_deterministic_across_account_and_sample_order_for_
     second_mapping = {reversed_samples[idx].primary.used_percent: match.account_id for idx, match in second.items()}
 
     assert first_mapping == second_mapping
+
+
+def test_global_assignment_can_disable_low_confidence_fallback_assignments() -> None:
+    account_a = _make_account("acc-a", "a@example.com")
+    account_b = _make_account("acc-b", "b@example.com")
+    baseline_primary = {
+        account_a.id: _usage_entry(
+            account_id=account_a.id,
+            window="primary",
+            used_percent=30.0,
+            reset_at=1_600_000,
+            window_minutes=300,
+        ),
+        account_b.id: _usage_entry(
+            account_id=account_b.id,
+            window="primary",
+            used_percent=35.0,
+            reset_at=1_600_000,
+            window_minutes=300,
+        ),
+    }
+    baseline_secondary = {
+        account_a.id: _usage_entry(
+            account_id=account_a.id,
+            window="secondary",
+            used_percent=30.0,
+            reset_at=1_603_600,
+            window_minutes=10_080,
+        ),
+        account_b.id: _usage_entry(
+            account_id=account_b.id,
+            window="secondary",
+            used_percent=35.0,
+            reset_at=1_603_600,
+            window_minutes=10_080,
+        ),
+    }
+    sample = _live_sample(
+        recorded_at=datetime(2026, 4, 3, 12, 0, tzinfo=timezone.utc),
+        primary_used=32.0,
+        secondary_used=32.0,
+        primary_reset=1_600_000,
+        secondary_reset=1_603_600,
+    )
+
+    default_assignments = _resolve_sample_account_assignments(
+        samples=[sample],
+        accounts=[account_a, account_b],
+        baseline_primary_usage=baseline_primary,
+        baseline_secondary_usage=baseline_secondary,
+    )
+    strict_assignments = _resolve_sample_account_assignments(
+        samples=[sample],
+        accounts=[account_a, account_b],
+        baseline_primary_usage=baseline_primary,
+        baseline_secondary_usage=baseline_secondary,
+        allow_low_confidence_assignments=False,
+    )
+
+    assert 0 in default_assignments
+    assert default_assignments[0].confidence == "low"
+    assert strict_assignments == {}
 
 
 def test_global_assignment_keeps_presence_only_samples_with_active_snapshot_without_quota_override() -> None:
@@ -1528,7 +1590,7 @@ def test_apply_local_live_usage_overrides_keeps_baseline_for_new_default_scope_s
     assert primary_usage[other_account.id].used_percent == pytest.approx(62.0)
     assert secondary_usage[other_account.id].used_percent == pytest.approx(44.0)
     assert active_account.id in debug_by_account
-    assert debug_by_account[active_account.id].raw_samples
+    assert debug_by_account[active_account.id].raw_samples == []
     assert debug_by_account[active_account.id].override_reason == "no_live_telemetry"
 
 

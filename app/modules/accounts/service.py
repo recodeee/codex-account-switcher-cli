@@ -245,6 +245,19 @@ class AccountsService:
         return result
 
     async def use_account_locally(self, account_id: str) -> AccountUseLocalResponse | None:
+        resolved = await self.resolve_account_snapshot(account_id)
+        if resolved is None:
+            return None
+
+        resolved_account_id, selected_snapshot_name = resolved
+        switch_snapshot(selected_snapshot_name)
+        return AccountUseLocalResponse(
+            status="switched",
+            account_id=resolved_account_id,
+            snapshot_name=selected_snapshot_name,
+        )
+
+    async def resolve_account_snapshot(self, account_id: str) -> tuple[str, str] | None:
         account = await self._repo.get_by_id(account_id)
         if account is None:
             return None
@@ -266,12 +279,7 @@ class AccountsService:
                 f"No codex-auth snapshot found for account {account.email}. Run `codex-auth save <name>` first."
             )
 
-        switch_snapshot(selected_snapshot_name)
-        return AccountUseLocalResponse(
-            status="switched",
-            account_id=account.id,
-            snapshot_name=selected_snapshot_name,
-        )
+        return account.id, selected_snapshot_name
 
     async def refresh_account_auth(self, account_id: str) -> AccountRefreshAuthResponse | None:
         account = await self._repo.get_by_id(account_id)

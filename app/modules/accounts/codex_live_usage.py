@@ -145,13 +145,30 @@ def read_live_codex_process_session_counts_by_snapshot() -> dict[str, int]:
 
     default_current_path = _resolve_current_path()
     default_auth_path = _resolve_auth_path()
-    counts: dict[str, int] = {}
-
+    processes: list[tuple[int, dict[str, str]]] = []
     for pid, _command in _iter_running_codex_commands(proc_root):
-        snapshot_name = _resolve_process_snapshot_name(
-            pid,
+        processes.append((pid, _read_process_env(pid) or {}))
+
+    eligible_unlabeled_default_scope_pids = [
+        pid
+        for pid, env in processes
+        if _is_eligible_unlabeled_default_scope_process(
+            pid=pid,
+            env=env,
             default_current_path=default_current_path,
             default_auth_path=default_auth_path,
+        )
+    ]
+    allow_unlabeled_default_scope_mapping = len(eligible_unlabeled_default_scope_pids) == 1
+
+    counts: dict[str, int] = {}
+    for pid, env in processes:
+        snapshot_name = _resolve_process_snapshot_name(
+            pid,
+            env=env,
+            default_current_path=default_current_path,
+            default_auth_path=default_auth_path,
+            allow_unlabeled_default_scope_mapping=allow_unlabeled_default_scope_mapping,
         )
         if not snapshot_name:
             continue
@@ -559,10 +576,12 @@ def _has_running_default_scope_codex_process() -> bool:
 def _resolve_process_snapshot_name(
     pid: int,
     *,
+    env: dict[str, str] | None = None,
     default_current_path: Path,
     default_auth_path: Path,
+    allow_unlabeled_default_scope_mapping: bool = True,
 ) -> str | None:
-    env = _read_process_env(pid) or {}
+    env = env or {}
 
     explicit_snapshot = env.get("CODEX_AUTH_ACTIVE_SNAPSHOT", "").strip()
 
@@ -601,6 +620,13 @@ def _resolve_process_snapshot_name(
     # explicit snapshot/runtime env metadata. In that case, cautiously attribute
     # the process to the currently selected default snapshot only when the
     # process appears to have started at or after the latest snapshot selection.
+    #
+    # Guardrail: if multiple unlabeled default-scope processes are eligible at
+    # the same time, attribution is ambiguous. Skip fallback mapping in that
+    # case instead of remapping all processes into whichever snapshot is
+    # currently selected.
+    if not allow_unlabeled_default_scope_mapping:
+        return None
     return _resolve_unlabeled_default_scope_snapshot_name(
         pid=pid,
         default_current_path=default_current_path,
@@ -632,6 +658,37 @@ def _resolve_unlabeled_default_scope_snapshot_name(
         return None
 
     return snapshot_name
+
+
+def _is_eligible_unlabeled_default_scope_process(
+    *,
+    pid: int,
+    env: dict[str, str],
+    default_current_path: Path,
+    default_auth_path: Path,
+) -> bool:
+    explicit_snapshot = env.get("CODEX_AUTH_ACTIVE_SNAPSHOT", "").strip()
+
+    current_override = _resolve_process_path(env.get("CODEX_AUTH_CURRENT_PATH"), pid)
+    auth_override = _resolve_process_path(env.get("CODEX_AUTH_JSON_PATH"), pid)
+    has_explicit_auth_scope_env = (
+        "CODEX_AUTH_CURRENT_PATH" in env or "CODEX_AUTH_JSON_PATH" in env
+    )
+    if has_explicit_auth_scope_env or _has_runtime_scoped_auth_paths(
+        current_override=current_override,
+        auth_override=auth_override,
+        default_current_path=default_current_path,
+        default_auth_path=default_auth_path,
+    ):
+        return False
+
+    if explicit_snapshot:
+        return False
+
+    return _resolve_unlabeled_default_scope_snapshot_name(
+        pid=pid,
+        default_current_path=default_current_path,
+    ) is not None
 
 
 def _read_process_started_at(pid: int) -> float | None:

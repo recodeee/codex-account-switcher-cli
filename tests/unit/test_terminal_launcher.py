@@ -16,6 +16,14 @@ def test_open_host_terminal_skips_missing_cwd_validation_when_containerized(
     launched_commands: list[tuple[str, str]] = []
 
     monkeypatch.setattr(terminal, "resolve_terminal_launch_config", lambda: launch)
+    monkeypatch.setattr(
+        terminal,
+        "_prepare_runtime_scope_env",
+        lambda *, account_id, snapshot_name: {
+            "CODEX_AUTH_ACTIVE_SNAPSHOT": snapshot_name,
+            "CODEX_AUTH_CURRENT_PATH": f"/tmp/{account_id}/current",
+        },
+    )
     monkeypatch.setattr(terminal.platform, "system", lambda: "Linux")
     monkeypatch.setattr(terminal, "_is_containerized_runtime", lambda: True)
     monkeypatch.setattr(
@@ -24,10 +32,17 @@ def test_open_host_terminal_skips_missing_cwd_validation_when_containerized(
         lambda shell, command: launched_commands.append((shell, command)),
     )
 
-    result = terminal.open_host_terminal(snapshot_name="work")
+    result = terminal.open_host_terminal(account_id="acc-work", snapshot_name="work")
 
     assert result == launch
-    assert launched_commands == [("/bin/bash", f"cd {missing_cwd} && codex")]
+    assert launched_commands == [
+        (
+            "/bin/bash",
+            "export CODEX_AUTH_ACTIVE_SNAPSHOT=work && "
+            "export CODEX_AUTH_CURRENT_PATH=/tmp/acc-work/current && "
+            f"cd {missing_cwd} && codex",
+        )
+    ]
 
 
 def test_open_host_terminal_keeps_missing_cwd_validation_outside_container(
@@ -37,11 +52,16 @@ def test_open_host_terminal_keeps_missing_cwd_validation_outside_container(
     launch = terminal.TerminalLaunchConfig(command="codex", cwd=missing_cwd, shell="/bin/bash")
 
     monkeypatch.setattr(terminal, "resolve_terminal_launch_config", lambda: launch)
+    monkeypatch.setattr(
+        terminal,
+        "_prepare_runtime_scope_env",
+        lambda *, account_id, snapshot_name: {"CODEX_AUTH_ACTIVE_SNAPSHOT": snapshot_name},
+    )
     monkeypatch.setattr(terminal.platform, "system", lambda: "Linux")
     monkeypatch.setattr(terminal, "_is_containerized_runtime", lambda: False)
 
     with pytest.raises(TerminalLaunchError, match=f"Terminal working directory does not exist: {missing_cwd}"):
-        terminal.open_host_terminal(snapshot_name="work")
+        terminal.open_host_terminal(account_id="acc-work", snapshot_name="work")
 
 
 def test_resolve_executable_falls_back_to_known_linux_dirs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -1458,7 +1458,7 @@ async def test_repair_snapshot_rename_returns_conflict_when_target_exists(
 
 
 @pytest.mark.asyncio
-async def test_open_account_terminal_switches_snapshot_and_launches(
+async def test_open_account_terminal_launches_runtime_scoped_terminal_without_switching_global_snapshot(
     async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     email = "terminal-launch@example.com"
@@ -1498,8 +1498,8 @@ async def test_open_account_terminal_switches_snapshot_and_launches(
     launched: list[str] = []
     from app.modules.accounts import api as accounts_api
 
-    def _open_host_terminal(*, snapshot_name: str):
-        launched.append(snapshot_name)
+    def _open_host_terminal(*, account_id: str, snapshot_name: str):
+        launched.append(f"{account_id}:{snapshot_name}")
 
     monkeypatch.setattr(accounts_api, "open_host_terminal", _open_host_terminal)
 
@@ -1507,8 +1507,8 @@ async def test_open_account_terminal_switches_snapshot_and_launches(
     assert open_response.status_code == 200
     assert open_response.json()["status"] == "opened"
     assert open_response.json()["snapshotName"] == "work"
-    assert launched == ["work"]
-    assert current_path.read_text(encoding="utf-8").strip() == "work"
+    assert launched == [f"{expected_account_id}:work"]
+    assert not current_path.exists()
 
 
 @pytest.mark.asyncio
@@ -1548,7 +1548,7 @@ async def test_open_account_terminal_returns_launch_error(async_client, monkeypa
     from app.modules.accounts import api as accounts_api
     from app.modules.accounts.terminal import TerminalLaunchError
 
-    def _open_host_terminal(*, snapshot_name: str):
+    def _open_host_terminal(*, account_id: str, snapshot_name: str):
         raise TerminalLaunchError(f"boom for {snapshot_name}")
 
     monkeypatch.setattr(accounts_api, "open_host_terminal", _open_host_terminal)

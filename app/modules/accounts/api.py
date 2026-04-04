@@ -187,26 +187,23 @@ async def open_account_terminal(
     context: AccountsContext = Depends(get_accounts_context),
 ) -> AccountOpenTerminalResponse:
     try:
-        result = await context.service.use_account_locally(account_id)
+        resolved = await context.service.resolve_account_snapshot(account_id)
     except CodexAuthSnapshotNotFoundError as exc:
         raise DashboardBadRequestError(str(exc), code="codex_auth_snapshot_not_found") from exc
-    except CodexAuthNotInstalledError as exc:
-        raise DashboardBadRequestError(str(exc), code="codex_auth_not_installed") from exc
-    except CodexAuthSwitchFailedError as exc:
-        raise DashboardBadRequestError(str(exc), code="codex_auth_switch_failed") from exc
 
-    if result is None:
+    if resolved is None:
         raise DashboardNotFoundError("Account not found", code="account_not_found")
+    resolved_account_id, resolved_snapshot_name = resolved
 
     try:
-        open_host_terminal(snapshot_name=result.snapshot_name)
+        open_host_terminal(account_id=resolved_account_id, snapshot_name=resolved_snapshot_name)
     except TerminalLaunchError as exc:
         raise DashboardBadRequestError(str(exc), code="terminal_launch_failed") from exc
 
     return AccountOpenTerminalResponse(
         status="opened",
-        account_id=result.account_id,
-        snapshot_name=result.snapshot_name,
+        account_id=resolved_account_id,
+        snapshot_name=resolved_snapshot_name,
     )
 
 
@@ -220,23 +217,21 @@ async def account_terminal_websocket(
         return
 
     try:
-        switch_result = await context.service.use_account_locally(account_id)
+        resolved = await context.service.resolve_account_snapshot(account_id)
     except CodexAuthSnapshotNotFoundError as exc:
         await _send_terminal_error(websocket, str(exc), code="codex_auth_snapshot_not_found")
         return
-    except CodexAuthNotInstalledError as exc:
-        await _send_terminal_error(websocket, str(exc), code="codex_auth_not_installed")
-        return
-    except CodexAuthSwitchFailedError as exc:
-        await _send_terminal_error(websocket, str(exc), code="codex_auth_switch_failed")
-        return
 
-    if switch_result is None:
+    if resolved is None:
         await _send_terminal_error(websocket, "Account not found", code="account_not_found")
         return
+    resolved_account_id, resolved_snapshot_name = resolved
 
     try:
-        terminal_process, launch = TerminalProcess.start(snapshot_name=switch_result.snapshot_name)
+        terminal_process, launch = TerminalProcess.start(
+            account_id=resolved_account_id,
+            snapshot_name=resolved_snapshot_name,
+        )
     except TerminalLaunchError as exc:
         await _send_terminal_error(websocket, str(exc), code="terminal_launch_failed")
         return
@@ -246,8 +241,8 @@ async def account_terminal_websocket(
         websocket=websocket,
         terminal_process=terminal_process,
         launch=launch,
-        account_id=switch_result.account_id,
-        snapshot_name=switch_result.snapshot_name,
+        account_id=resolved_account_id,
+        snapshot_name=resolved_snapshot_name,
     )
 
 
