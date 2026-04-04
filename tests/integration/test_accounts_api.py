@@ -311,6 +311,13 @@ async def test_accounts_list_sets_has_live_session_from_runtime_telemetry(
     assert account["codexSessionCount"] == 1
     assert account["usage"]["primaryRemainingPercent"] == pytest.approx(75.0)
     assert account["usage"]["secondaryRemainingPercent"] == pytest.approx(55.0)
+    debug_payload = account.get("liveQuotaDebug")
+    assert debug_payload is not None
+    assert debug_payload["overrideApplied"] is True
+    assert debug_payload["overrideReason"] == "applied_live_usage_windows"
+    assert debug_payload["merged"]["primary"]["remainingPercent"] == pytest.approx(75.0)
+    assert debug_payload["merged"]["secondary"]["remainingPercent"] == pytest.approx(55.0)
+    assert len(debug_payload.get("rawSamples", [])) >= 1
 
     async with SessionLocal() as session:
         usage_repo = UsageRepository(session)

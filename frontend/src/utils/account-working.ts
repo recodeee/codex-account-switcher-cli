@@ -18,6 +18,13 @@ function isFreshTimestamp(
   return nowMs - recordedAtMs <= LIVE_TELEMETRY_STALE_AFTER_MS;
 }
 
+export function isFreshQuotaTelemetryTimestamp(
+  value: string | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  return isFreshTimestamp(value, nowMs);
+}
+
 export function hasFreshLiveTelemetry(
   account: Pick<
     AccountSummary,

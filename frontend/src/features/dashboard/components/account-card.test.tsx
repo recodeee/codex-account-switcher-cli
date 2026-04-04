@@ -355,6 +355,31 @@ describe("AccountCard", () => {
     expect(screen.getAllByText(/^live$/i).length).toBeGreaterThanOrEqual(1);
   });
 
+  it("shows telemetry pending instead of syncing when runtime live sessions have no fresh usage timestamps", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: null,
+        secondaryRemainingPercent: null,
+      },
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getAllByText("Telemetry pending").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Syncing live telemetry")).not.toBeInTheDocument();
+  });
+
   it("renders current task preview for working accounts when provided", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 2,
@@ -660,5 +685,59 @@ describe("AccountCard", () => {
     expect(sessionsValue).not.toBeNull();
     expect(sessionsValue).toHaveTextContent(/^0$/);
     expect(within(card as HTMLElement).getByRole("button", { name: "Sessions" })).toBeDisabled();
+  });
+
+  it("renders live quota debug raw and merged values", () => {
+    const account = createAccountSummary({
+      liveQuotaDebug: {
+        snapshotsConsidered: ["snap-a"],
+        overrideApplied: true,
+        overrideReason: "applied_live_usage_windows",
+        merged: {
+          source: "merged",
+          snapshotName: "snap-a",
+          recordedAt: "2026-01-01T00:00:00.000Z",
+          stale: false,
+          primary: {
+            usedPercent: 83,
+            remainingPercent: 17,
+            resetAt: 1760000000,
+            windowMinutes: 300,
+          },
+          secondary: {
+            usedPercent: 23,
+            remainingPercent: 77,
+            resetAt: 1760600000,
+            windowMinutes: 10080,
+          },
+        },
+        rawSamples: [
+          {
+            source: "/tmp/rollout-a.jsonl",
+            snapshotName: "snap-a",
+            recordedAt: "2026-01-01T00:00:00.000Z",
+            stale: false,
+            primary: {
+              usedPercent: 2,
+              remainingPercent: 98,
+              resetAt: 1760000000,
+              windowMinutes: 300,
+            },
+            secondary: {
+              usedPercent: 40,
+              remainingPercent: 60,
+              resetAt: 1760600000,
+              windowMinutes: 10080,
+            },
+          },
+        ],
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Quota debug")).toBeInTheDocument();
+    expect(screen.getByText(/Merged → 5h 17% · Weekly 77%/)).toBeInTheDocument();
+    expect(screen.queryByText("No raw terminal samples")).not.toBeInTheDocument();
   });
 });

@@ -7,7 +7,11 @@ import pytest
 from app.core.crypto import TokenEncryptor
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
-from app.modules.accounts.codex_live_usage import LocalCodexLiveUsage, LocalUsageWindow
+from app.modules.accounts.codex_live_usage import (
+    LocalCodexLiveUsage,
+    LocalCodexLiveUsageSample,
+    LocalUsageWindow,
+)
 from app.modules.accounts.live_usage_overrides import (
     _apply_local_default_session_fingerprint_overrides,
     _match_sample_to_account,
@@ -143,6 +147,61 @@ def test_apply_local_live_usage_overrides_marks_active_snapshot_live_from_proces
     assert candidates == []
     assert codex_auth_by_account[account.id].has_live_session is True
     assert codex_session_counts_by_account[account.id] == 1
+
+
+def test_apply_local_live_usage_overrides_skips_mixed_default_session_fallback_when_process_counts_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    account_a = _make_account("acc-a", "a@example.com")
+    account_b = _make_account("acc-b", "b@example.com")
+    accounts = [account_a, account_b]
+    snapshot_index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={account_a.id: ["snap-a"], account_b.id: ["snap-b"]},
+        active_snapshot_name="snap-a",
+    )
+    codex_auth_by_account = _status_map(accounts, active_snapshot_name="snap-a")
+    primary_usage: dict[str, UsageHistory] = {}
+    secondary_usage: dict[str, UsageHistory] = {}
+    codex_session_counts_by_account = {account_a.id: 0, account_b.id: 0}
+
+    now = datetime(2026, 4, 3, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_by_snapshot",
+        lambda: {
+            "snap-a": LocalCodexLiveUsage(
+                recorded_at=now,
+                active_session_count=2,
+                primary=LocalUsageWindow(used_percent=42.0, reset_at=1_000_100, window_minutes=300),
+                secondary=LocalUsageWindow(used_percent=52.0, reset_at=1_003_700, window_minutes=10_080),
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_samples_by_snapshot",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_samples",
+        lambda: [_presence_sample(recorded_at=now), _presence_sample(recorded_at=now)],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_live_codex_process_session_counts_by_snapshot",
+        lambda: {"snap-a": 2},
+    )
+
+    apply_local_live_usage_overrides(
+        accounts=accounts,
+        snapshot_index=snapshot_index,
+        codex_auth_by_account=codex_auth_by_account,
+        primary_usage=primary_usage,
+        secondary_usage=secondary_usage,
+        codex_live_session_counts_by_account=codex_session_counts_by_account,
+    )
+
+    assert codex_session_counts_by_account[account_a.id] == 2
+    assert codex_session_counts_by_account[account_b.id] == 0
+    assert codex_auth_by_account[account_a.id].has_live_session is True
+    assert codex_auth_by_account[account_b.id].has_live_session is False
 
 
 def test_match_sample_prefers_unique_reset_fingerprint_over_percent_similarity() -> None:
@@ -457,3 +516,83 @@ def test_global_assignment_spreads_presence_only_samples_for_recall_without_quot
     for account in accounts:
         assert primary_usage[account.id].used_percent == baseline_primary[account.id].used_percent
         assert secondary_usage[account.id].used_percent == baseline_secondary[account.id].used_percent
+
+
+def test_apply_local_live_usage_overrides_populates_debug_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    account = _make_account("acc-a", "a@example.com")
+    snapshot_index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={account.id: ["snap-a"]},
+        active_snapshot_name="snap-a",
+    )
+    codex_auth_by_account = {
+        account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="snap-a",
+            active_snapshot_name="snap-a",
+            is_active_snapshot=True,
+            has_live_session=False,
+        )
+    }
+    primary_usage: dict[str, UsageHistory] = {}
+    secondary_usage: dict[str, UsageHistory] = {}
+    codex_session_counts_by_account = {account.id: 0}
+    debug_by_account = {}
+
+    now = datetime(2026, 4, 3, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_by_snapshot",
+        lambda: {
+            "snap-a": LocalCodexLiveUsage(
+                recorded_at=now,
+                active_session_count=2,
+                primary=LocalUsageWindow(used_percent=83.0, reset_at=1_900_100, window_minutes=300),
+                secondary=LocalUsageWindow(used_percent=23.0, reset_at=1_903_700, window_minutes=10_080),
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_samples_by_snapshot",
+        lambda: {
+            "snap-a": [
+                LocalCodexLiveUsageSample(
+                    source="rollout-a.jsonl",
+                    recorded_at=now,
+                    primary=LocalUsageWindow(used_percent=58.0, reset_at=1_900_100, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=22.0, reset_at=1_903_700, window_minutes=10_080),
+                    stale=False,
+                ),
+                LocalCodexLiveUsageSample(
+                    source="rollout-b.jsonl",
+                    recorded_at=now,
+                    primary=LocalUsageWindow(used_percent=42.0, reset_at=1_900_100, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=25.0, reset_at=1_903_700, window_minutes=10_080),
+                    stale=False,
+                ),
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_live_codex_process_session_counts_by_snapshot",
+        lambda: {"snap-a": 2},
+    )
+
+    candidates = apply_local_live_usage_overrides(
+        accounts=[account],
+        snapshot_index=snapshot_index,
+        codex_auth_by_account=codex_auth_by_account,
+        primary_usage=primary_usage,
+        secondary_usage=secondary_usage,
+        codex_live_session_counts_by_account=codex_session_counts_by_account,
+        live_quota_debug_by_account=debug_by_account,
+    )
+
+    assert len(candidates) == 2
+    debug = debug_by_account[account.id]
+    assert debug.override_applied is True
+    assert debug.override_reason == "applied_live_usage_windows"
+    assert debug.merged is not None
+    assert debug.merged.primary is not None
+    assert debug.merged.primary.remaining_percent == pytest.approx(17.0)
+    assert len(debug.raw_samples) == 2

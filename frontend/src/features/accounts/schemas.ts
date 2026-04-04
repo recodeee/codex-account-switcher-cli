@@ -59,6 +59,30 @@ export const AccountAdditionalQuotaSchema = z.object({
   secondaryWindow: AccountAdditionalWindowSchema.nullable().optional(),
 });
 
+export const AccountLiveQuotaDebugWindowSchema = z.object({
+  usedPercent: z.number(),
+  remainingPercent: z.number(),
+  resetAt: z.number().nullable().optional(),
+  windowMinutes: z.number().nullable().optional(),
+});
+
+export const AccountLiveQuotaDebugSampleSchema = z.object({
+  source: z.string(),
+  snapshotName: z.string().nullable().optional(),
+  recordedAt: z.string().datetime({ offset: true }),
+  stale: z.boolean().optional(),
+  primary: AccountLiveQuotaDebugWindowSchema.nullable().optional(),
+  secondary: AccountLiveQuotaDebugWindowSchema.nullable().optional(),
+});
+
+export const AccountLiveQuotaDebugSchema = z.object({
+  snapshotsConsidered: z.array(z.string()).default([]),
+  rawSamples: z.array(AccountLiveQuotaDebugSampleSchema).default([]),
+  merged: AccountLiveQuotaDebugSampleSchema.nullable().optional(),
+  overrideApplied: z.boolean().optional(),
+  overrideReason: z.string().nullable().optional(),
+});
+
 export const AccountSummarySchema = z.object({
   accountId: z.string(),
   email: z.string(),
@@ -77,6 +101,7 @@ export const AccountSummarySchema = z.object({
   codexTrackedSessionCount: z.number().int().nonnegative().optional(),
   codexSessionCount: z.number().int().nonnegative().optional(),
   codexCurrentTaskPreview: z.string().nullable().optional(),
+  liveQuotaDebug: AccountLiveQuotaDebugSchema.nullable().optional(),
   auth: AccountAuthSchema.nullable().optional(),
   codexAuth: AccountCodexAuthSchema.nullable().optional(),
   additionalQuotas: z.array(AccountAdditionalQuotaSchema).default([]),
@@ -196,6 +221,9 @@ export type AccountUsageTrend = z.infer<typeof AccountUsageTrendSchema>;
 export type AccountSummary = z.infer<typeof AccountSummarySchema>;
 export type AccountAdditionalWindow = z.infer<typeof AccountAdditionalWindowSchema>;
 export type AccountAdditionalQuota = z.infer<typeof AccountAdditionalQuotaSchema>;
+export type AccountLiveQuotaDebug = z.infer<typeof AccountLiveQuotaDebugSchema>;
+export type AccountLiveQuotaDebugSample = z.infer<typeof AccountLiveQuotaDebugSampleSchema>;
+export type AccountLiveQuotaDebugWindow = z.infer<typeof AccountLiveQuotaDebugWindowSchema>;
 export type AccountTrendsResponse = z.infer<typeof AccountTrendsResponseSchema>;
 export type AccountUseLocalResponse = z.infer<typeof AccountUseLocalResponseSchema>;
 export type AccountRefreshAuthResponse = z.infer<typeof AccountRefreshAuthResponseSchema>;

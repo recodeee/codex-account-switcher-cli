@@ -27,7 +27,11 @@ import {
   formatWindowLabel,
   formatSlug,
 } from "@/utils/formatters";
-import { hasFreshLiveTelemetry, isAccountWorkingNow } from "@/utils/account-working";
+import {
+  hasFreshLiveTelemetry,
+  isAccountWorkingNow,
+  isFreshQuotaTelemetryTimestamp,
+} from "@/utils/account-working";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 import {
   canUseLocalAccount,
@@ -72,6 +76,7 @@ function QuotaBar({
   lastSeenUpToDate = false,
   deactivated = false,
   isLive = false,
+  telemetryPending = false,
 }: {
   label: string;
   percent: number | null;
@@ -80,10 +85,12 @@ function QuotaBar({
   lastSeenUpToDate?: boolean;
   deactivated?: boolean;
   isLive?: boolean;
+  telemetryPending?: boolean;
 }) {
   const clamped = percent === null ? 0 : Math.max(0, Math.min(100, percent));
   const hasPercent = percent !== null;
-  const liveTelemetryStale = isLive && !deactivated && percent === null;
+  const liveTelemetryStale =
+    isLive && !deactivated && percent === null && !telemetryPending;
   const tone = deactivated
     ? "deactivated"
     : !hasPercent
@@ -162,7 +169,13 @@ function QuotaBar({
         {isLive && !deactivated ? (
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-cyan-700 dark:text-cyan-300">
             <Activity className={cn("h-3 w-3", liveTelemetryStale && "animate-pulse")} />
-            <span>{liveTelemetryStale ? "Syncing live telemetry" : "Live token status"}</span>
+            <span>
+              {telemetryPending
+                ? "Telemetry pending"
+                : liveTelemetryStale
+                  ? "Syncing live telemetry"
+                  : "Live token status"}
+            </span>
           </div>
         ) : lastSeenLabel ? (
           <div
@@ -195,6 +208,22 @@ function resolveLastSeenDisplay(
   return { label, upToDate: false };
 }
 
+function formatDebugPercent(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) {
+    return "—";
+  }
+  return `${Math.round(value)}%`;
+}
+
+function formatDebugSource(source: string): string {
+  const normalized = source.trim();
+  if (!normalized) {
+    return "unknown";
+  }
+  const parts = normalized.split("/");
+  return parts[parts.length - 1] || normalized;
+}
+
 export function AccountCard({
   account,
   tokensUsed = null,
@@ -212,6 +241,14 @@ export function AccountCard({
     hasLiveSession,
   });
   const primaryRemainingRaw = account.usage?.primaryRemainingPercent ?? null;
+  const primaryTelemetryFresh = isFreshQuotaTelemetryTimestamp(
+    account.lastUsageRecordedAtPrimary ?? null,
+  );
+  const secondaryTelemetryFresh = isFreshQuotaTelemetryTimestamp(
+    account.lastUsageRecordedAtSecondary ?? null,
+  );
+  const primaryTelemetryPending = hasLiveSession && !primaryTelemetryFresh;
+  const secondaryTelemetryPending = hasLiveSession && !secondaryTelemetryFresh;
   const primaryRemaining = normalizeRemainingPercentForDisplay({
     accountKey: account.accountId,
     windowKey: "primary",
@@ -289,6 +326,8 @@ export function AccountCard({
   const codexTrackedSessionCount = Math.max(account.codexTrackedSessionCount ?? 0, 0);
   const hasSessionInventory = codexLiveSessionCount > 0 || codexTrackedSessionCount > 0;
   const codexCurrentTaskPreview = account.codexCurrentTaskPreview?.trim() || null;
+  const liveQuotaDebug = account.liveQuotaDebug ?? null;
+  const mergedDebug = liveQuotaDebug?.merged ?? null;
   const emailSubtitle =
     account.displayName && account.displayName !== account.email
       ? account.email
@@ -405,6 +444,7 @@ export function AccountCard({
             lastSeenUpToDate={stalePrimaryLastSeen.upToDate}
             deactivated={isDeactivated}
             isLive={hasLiveSession}
+            telemetryPending={primaryTelemetryPending}
           />
         )}
         <QuotaBar
@@ -414,8 +454,35 @@ export function AccountCard({
           lastSeenLabel={staleSecondaryLastSeen.label}
           lastSeenUpToDate={staleSecondaryLastSeen.upToDate}
           isLive={hasLiveSession}
+          telemetryPending={secondaryTelemetryPending}
         />
       </div>
+      {liveQuotaDebug ? (
+        <div className="mt-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.06] px-2.5 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
+            Quota debug
+          </p>
+          <p className="mt-1 text-[11px] text-cyan-800 dark:text-cyan-200">
+            Merged → 5h {formatDebugPercent(mergedDebug?.primary?.remainingPercent)} · Weekly{" "}
+            {formatDebugPercent(mergedDebug?.secondary?.remainingPercent)}
+            {liveQuotaDebug.overrideReason ? ` (${liveQuotaDebug.overrideReason})` : ""}
+          </p>
+          {liveQuotaDebug.rawSamples.length > 0 ? (
+            <div className="mt-1.5 space-y-1">
+              {liveQuotaDebug.rawSamples.slice(0, 8).map((sample, index) => (
+                <p key={`${sample.source}-${sample.recordedAt}-${index}`} className="text-[10px] text-cyan-700/90 dark:text-cyan-200/90">
+                  {formatDebugSource(sample.source)} → 5h{" "}
+                  {formatDebugPercent(sample.primary?.remainingPercent)} · Weekly{" "}
+                  {formatDebugPercent(sample.secondary?.remainingPercent)}
+                  {sample.stale ? " · stale" : ""}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[10px] text-cyan-700/90 dark:text-cyan-200/90">No raw terminal samples</p>
+          )}
+        </div>
+      ) : null}
 
       {/* Actions */}
       <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t pt-3">

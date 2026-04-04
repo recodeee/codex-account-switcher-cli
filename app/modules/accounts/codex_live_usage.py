@@ -519,19 +519,27 @@ def _resolve_process_snapshot_name(
 
     current_override = _resolve_process_path(env.get("CODEX_AUTH_CURRENT_PATH"), pid)
     auth_override = _resolve_process_path(env.get("CODEX_AUTH_JSON_PATH"), pid)
-    if not _has_runtime_scoped_auth_paths(
+    if _has_runtime_scoped_auth_paths(
         current_override=current_override,
         auth_override=auth_override,
         default_current_path=default_current_path,
         default_auth_path=default_auth_path,
     ):
-        return None
+        snapshot_from_current = _read_current_snapshot_name(current_override)
+        if snapshot_from_current:
+            return snapshot_from_current
 
-    snapshot_from_current = _read_current_snapshot_name(current_override)
+        return _infer_snapshot_name_from_auth_path(auth_override)
+
+    # Default-scope Codex sessions often omit explicit auth env overrides.
+    # In that case, attribute the process to the currently selected snapshot
+    # instead of dropping it as "unlabeled", which causes random fallback
+    # attribution across unrelated accounts.
+    snapshot_from_current = _read_current_snapshot_name(default_current_path)
     if snapshot_from_current:
         return snapshot_from_current
 
-    return _infer_snapshot_name_from_auth_path(auth_override)
+    return _infer_snapshot_name_from_auth_path(default_auth_path)
 
 
 def _has_runtime_scoped_auth_paths(

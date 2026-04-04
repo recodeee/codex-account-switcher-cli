@@ -70,6 +70,7 @@ def apply_local_live_usage_overrides(
     baseline_secondary_usage = dict(secondary_usage)
     persist_candidates: list[LiveUsageOverridePersistCandidate] = []
     live_usage_by_snapshot = read_local_codex_live_usage_by_snapshot()
+    live_usage_samples_by_snapshot = read_local_codex_live_usage_samples_by_snapshot()
     live_process_session_counts_by_snapshot = read_live_codex_process_session_counts_by_snapshot()
     should_defer_active_snapshot_usage = _should_defer_active_snapshot_usage_override(
         accounts=accounts,
@@ -84,6 +85,10 @@ def apply_local_live_usage_overrides(
             continue
 
         snapshot_names = snapshot_index.snapshots_by_account_id.get(account.id, [])
+        snapshots_considered = _resolve_snapshot_candidates(
+            snapshot_names=snapshot_names,
+            selected_snapshot_name=codex_auth_status.snapshot_name,
+        )
         live_usage = _resolve_live_usage_for_account(
             snapshot_names=snapshot_names,
             selected_snapshot_name=codex_auth_status.snapshot_name,
@@ -98,15 +103,56 @@ def apply_local_live_usage_overrides(
         has_live_telemetry = bool(live_usage and live_usage.active_session_count > 0)
         codex_auth_status.has_live_session = has_live_process_session or has_live_telemetry
         account_id = account.id
+        override_reason: str | None = None
+        override_applied = False
+
         if has_live_process_session:
             codex_live_session_counts_by_account[account_id] = max(
                 live_process_session_count,
                 codex_live_session_counts_by_account.get(account_id, 0),
             )
         elif not has_live_telemetry:
+            override_reason = "no_live_telemetry"
+            _set_live_quota_debug(
+                account_id=account_id,
+                snapshots_considered=snapshots_considered,
+                live_usage=live_usage,
+                live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                override_applied=override_applied,
+                override_reason=override_reason,
+                live_quota_debug_by_account=live_quota_debug_by_account,
+            )
+            _log_live_quota_debug(
+                account=account,
+                snapshots_considered=snapshots_considered,
+                live_usage=live_usage,
+                live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                live_process_session_count=live_process_session_count,
+                override_applied=override_applied,
+                override_reason=override_reason,
+            )
             continue
 
         if live_usage is None:
+            override_reason = "missing_live_usage_payload"
+            _set_live_quota_debug(
+                account_id=account_id,
+                snapshots_considered=snapshots_considered,
+                live_usage=live_usage,
+                live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                override_applied=override_applied,
+                override_reason=override_reason,
+                live_quota_debug_by_account=live_quota_debug_by_account,
+            )
+            _log_live_quota_debug(
+                account=account,
+                snapshots_considered=snapshots_considered,
+                live_usage=live_usage,
+                live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                live_process_session_count=live_process_session_count,
+                override_applied=override_applied,
+                override_reason=override_reason,
+            )
             continue
 
         if (
@@ -124,6 +170,25 @@ def apply_local_live_usage_overrides(
                 1,
                 codex_live_session_counts_by_account.get(account_id, 0),
             )
+            override_reason = "deferred_active_snapshot_mixed_default_sessions"
+            _set_live_quota_debug(
+                account_id=account_id,
+                snapshots_considered=snapshots_considered,
+                live_usage=live_usage,
+                live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                override_applied=override_applied,
+                override_reason=override_reason,
+                live_quota_debug_by_account=live_quota_debug_by_account,
+            )
+            _log_live_quota_debug(
+                account=account,
+                snapshots_considered=snapshots_considered,
+                live_usage=live_usage,
+                live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                live_process_session_count=live_process_session_count,
+                override_applied=override_applied,
+                override_reason=override_reason,
+            )
             continue
 
         if not has_live_process_session:
@@ -134,6 +199,7 @@ def apply_local_live_usage_overrides(
 
         recorded_at = to_utc_naive(live_usage.recorded_at)
         if live_usage.primary is not None:
+            override_applied = True
             primary_usage[account_id] = _usage_history_from_live_window(
                 account_id=account_id,
                 window="primary",
@@ -151,6 +217,7 @@ def apply_local_live_usage_overrides(
                 )
             )
         if live_usage.secondary is not None:
+            override_applied = True
             secondary_usage[account_id] = _usage_history_from_live_window(
                 account_id=account_id,
                 window="secondary",
@@ -168,17 +235,44 @@ def apply_local_live_usage_overrides(
                 )
             )
 
-    _apply_local_default_session_fingerprint_overrides(
-        accounts=accounts,
-        snapshot_index=snapshot_index,
-        live_usage_by_snapshot=live_usage_by_snapshot,
-        codex_auth_by_account=codex_auth_by_account,
-        baseline_primary_usage=baseline_primary_usage,
-        baseline_secondary_usage=baseline_secondary_usage,
-        primary_usage=primary_usage,
-        secondary_usage=secondary_usage,
-        codex_session_counts_by_account=codex_live_session_counts_by_account,
-    )
+        if override_reason is None:
+            override_reason = "applied_live_usage_windows" if override_applied else "live_session_without_windows"
+
+        _set_live_quota_debug(
+            account_id=account_id,
+            snapshots_considered=snapshots_considered,
+            live_usage=live_usage,
+            live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+            override_applied=override_applied,
+            override_reason=override_reason,
+            live_quota_debug_by_account=live_quota_debug_by_account,
+        )
+        _log_live_quota_debug(
+            account=account,
+            snapshots_considered=snapshots_considered,
+            live_usage=live_usage,
+            live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+            live_process_session_count=live_process_session_count,
+            override_applied=override_applied,
+            override_reason=override_reason,
+        )
+
+    # When process-level session attribution is available, prefer it over
+    # mixed default-session fingerprint heuristics. The fallback can spread
+    # unlabeled sessions across accounts and surface random "working now"
+    # badges unrelated to the actual active snapshot.
+    if not live_process_session_counts_by_snapshot:
+        _apply_local_default_session_fingerprint_overrides(
+            accounts=accounts,
+            snapshot_index=snapshot_index,
+            live_usage_by_snapshot=live_usage_by_snapshot,
+            codex_auth_by_account=codex_auth_by_account,
+            baseline_primary_usage=baseline_primary_usage,
+            baseline_secondary_usage=baseline_secondary_usage,
+            primary_usage=primary_usage,
+            secondary_usage=secondary_usage,
+            codex_session_counts_by_account=codex_live_session_counts_by_account,
+        )
     return _coalesce_persist_candidates(persist_candidates)
 
 
@@ -194,19 +288,167 @@ def _coalesce_persist_candidates(
     return list(latest_by_key.values())
 
 
+def _resolve_snapshot_candidates(
+    *,
+    snapshot_names: list[str],
+    selected_snapshot_name: str | None,
+) -> list[str]:
+    candidate_names = [name for name in [selected_snapshot_name, *snapshot_names] if name]
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for snapshot_name in candidate_names:
+        if snapshot_name in seen:
+            continue
+        seen.add(snapshot_name)
+        ordered.append(snapshot_name)
+    return ordered
+
+
+def _set_live_quota_debug(
+    *,
+    account_id: str,
+    snapshots_considered: list[str],
+    live_usage: LocalCodexLiveUsage | None,
+    live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]],
+    override_applied: bool,
+    override_reason: str | None,
+    live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug] | None,
+) -> None:
+    if live_quota_debug_by_account is None:
+        return
+
+    raw_samples = _resolve_debug_raw_samples(
+        snapshots_considered=snapshots_considered,
+        live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+    )
+    merged = _build_debug_sample(
+        source="merged",
+        snapshot_name=snapshots_considered[0] if snapshots_considered else None,
+        recorded_at=live_usage.recorded_at if live_usage is not None else None,
+        primary=live_usage.primary if live_usage is not None else None,
+        secondary=live_usage.secondary if live_usage is not None else None,
+        stale=False,
+    )
+    live_quota_debug_by_account[account_id] = AccountLiveQuotaDebug(
+        snapshots_considered=snapshots_considered,
+        raw_samples=raw_samples,
+        merged=merged,
+        override_applied=override_applied,
+        override_reason=override_reason,
+    )
+
+
+def _resolve_debug_raw_samples(
+    *,
+    snapshots_considered: list[str],
+    live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]],
+) -> list[AccountLiveQuotaDebugSample]:
+    raw_samples: list[AccountLiveQuotaDebugSample] = []
+    for snapshot_name in snapshots_considered:
+        for sample in live_usage_samples_by_snapshot.get(snapshot_name, []):
+            debug_sample = _build_debug_sample(
+                source=sample.source,
+                snapshot_name=snapshot_name,
+                recorded_at=sample.recorded_at,
+                primary=sample.primary,
+                secondary=sample.secondary,
+                stale=sample.stale,
+            )
+            if debug_sample is not None:
+                raw_samples.append(debug_sample)
+    raw_samples.sort(key=lambda sample: sample.recorded_at, reverse=True)
+    return raw_samples
+
+
+def _build_debug_sample(
+    *,
+    source: str,
+    snapshot_name: str | None,
+    recorded_at: datetime | None,
+    primary: LocalUsageWindow | None,
+    secondary: LocalUsageWindow | None,
+    stale: bool,
+) -> AccountLiveQuotaDebugSample | None:
+    if recorded_at is None:
+        return None
+    return AccountLiveQuotaDebugSample(
+        source=source,
+        snapshot_name=snapshot_name,
+        recorded_at=recorded_at,
+        stale=stale,
+        primary=_build_debug_window(primary),
+        secondary=_build_debug_window(secondary),
+    )
+
+
+def _build_debug_window(window: LocalUsageWindow | None) -> AccountLiveQuotaDebugWindow | None:
+    if window is None:
+        return None
+    used_percent = float(window.used_percent)
+    remaining_percent = max(0.0, min(100.0, 100.0 - used_percent))
+    return AccountLiveQuotaDebugWindow(
+        used_percent=used_percent,
+        remaining_percent=remaining_percent,
+        reset_at=window.reset_at,
+        window_minutes=window.window_minutes,
+    )
+
+
+def _live_usage_debug_enabled() -> bool:
+    raw = (os.environ.get(_LIVE_USAGE_DEBUG_ENV) or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _log_live_quota_debug(
+    *,
+    account: Account,
+    snapshots_considered: list[str],
+    live_usage: LocalCodexLiveUsage | None,
+    live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]],
+    live_process_session_count: int,
+    override_applied: bool,
+    override_reason: str | None,
+) -> None:
+    if not _live_usage_debug_enabled():
+        return
+
+    raw_summary: list[str] = []
+    for snapshot_name in snapshots_considered:
+        for sample in live_usage_samples_by_snapshot.get(snapshot_name, []):
+            primary = f"{sample.primary.used_percent:.1f}" if sample.primary is not None else "-"
+            secondary = f"{sample.secondary.used_percent:.1f}" if sample.secondary is not None else "-"
+            raw_summary.append(
+                f"{snapshot_name}:{sample.source}:5h={primary}%:7d={secondary}%:stale={sample.stale}"
+            )
+
+    merged_primary = f"{live_usage.primary.used_percent:.1f}" if live_usage and live_usage.primary else "-"
+    merged_secondary = f"{live_usage.secondary.used_percent:.1f}" if live_usage and live_usage.secondary else "-"
+    logger.info(
+        "live_quota_debug account_id=%s email=%s snapshots=%s process_sessions=%s merged_5h=%s merged_7d=%s applied=%s reason=%s raw=%s",
+        account.id,
+        account.email,
+        snapshots_considered,
+        live_process_session_count,
+        merged_primary,
+        merged_secondary,
+        override_applied,
+        override_reason,
+        raw_summary,
+    )
+
+
 def _resolve_live_usage_for_account(
     *,
     snapshot_names: list[str],
     selected_snapshot_name: str | None,
     live_usage_by_snapshot: dict[str, LocalCodexLiveUsage],
 ) -> LocalCodexLiveUsage | None:
-    candidate_names = [name for name in [selected_snapshot_name, *snapshot_names] if name]
+    candidate_names = _resolve_snapshot_candidates(
+        snapshot_names=snapshot_names,
+        selected_snapshot_name=selected_snapshot_name,
+    )
     merged: LocalCodexLiveUsage | None = None
-    seen: set[str] = set()
     for snapshot_name in candidate_names:
-        if snapshot_name in seen:
-            continue
-        seen.add(snapshot_name)
         usage = live_usage_by_snapshot.get(snapshot_name)
         if usage is None:
             continue
@@ -220,13 +462,12 @@ def _resolve_live_process_session_count_for_account(
     selected_snapshot_name: str | None,
     live_process_session_counts_by_snapshot: dict[str, int],
 ) -> int:
-    candidate_names = [name for name in [selected_snapshot_name, *snapshot_names] if name]
-    seen: set[str] = set()
+    candidate_names = _resolve_snapshot_candidates(
+        snapshot_names=snapshot_names,
+        selected_snapshot_name=selected_snapshot_name,
+    )
     total = 0
     for snapshot_name in candidate_names:
-        if snapshot_name in seen:
-            continue
-        seen.add(snapshot_name)
         total += max(0, live_process_session_counts_by_snapshot.get(snapshot_name, 0))
     return total
 
@@ -350,13 +591,7 @@ def _apply_local_default_session_fingerprint_overrides(
         if latest_attribution is None:
             continue
 
-        if not _has_unique_reset_fingerprint_match(
-            sample=latest_attribution.sample,
-            account_id=account_id,
-            accounts=candidate_accounts,
-            baseline_primary_usage=baseline_primary_usage,
-            baseline_secondary_usage=baseline_secondary_usage,
-        ):
+        if not latest_attribution.match.allows_quota_override:
             # Ambiguous or presence-only attribution still contributes to
             # live/session recall, but quota windows remain conservative.
             continue
@@ -748,22 +983,3 @@ def _resolve_unique_reset_match_account_id(
         return None
 
     return primary_unique or secondary_unique
-
-
-def _has_unique_reset_fingerprint_match(
-    *,
-    sample: LocalCodexLiveUsage,
-    account_id: str,
-    accounts: list[Account],
-    baseline_primary_usage: dict[str, UsageHistory],
-    baseline_secondary_usage: dict[str, UsageHistory],
-) -> bool:
-    return (
-        _resolve_unique_reset_match_account_id(
-            sample=sample,
-            accounts=accounts,
-            baseline_primary_usage=baseline_primary_usage,
-            baseline_secondary_usage=baseline_secondary_usage,
-        )
-        == account_id
-    )

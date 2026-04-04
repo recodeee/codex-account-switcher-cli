@@ -92,6 +92,20 @@ def resolve_snapshot_names_for_account(
             seen.add(snapshot_name)
             resolved.append(snapshot_name)
 
+    # Prefer explicit email-shaped snapshot names first. This keeps dashboard
+    # mapping stable even when snapshot payload metadata drifts.
+    available_snapshot_names = {
+        snapshot_name
+        for snapshot_names in snapshot_index.snapshots_by_account_id.values()
+        for snapshot_name in snapshot_names
+    }
+    email_named_matches = [
+        name
+        for name in _email_snapshot_name_candidates(email)
+        if name in available_snapshot_names
+    ]
+    _add(email_named_matches)
+
     canonical_candidate_ids: list[str] = []
     if chatgpt_account_id and email:
         normalized_email = email.strip()
@@ -273,12 +287,27 @@ def select_snapshot_name(
 ) -> str | None:
     if not snapshot_names:
         return None
+    for candidate_name in _email_snapshot_name_candidates(email):
+        if candidate_name in snapshot_names:
+            return candidate_name
     if active_snapshot_name and active_snapshot_name in snapshot_names:
         return active_snapshot_name
-    canonical_name = _canonical_snapshot_name_from_email(email)
-    if canonical_name and canonical_name in snapshot_names:
-        return canonical_name
     return snapshot_names[0]
+
+
+def _email_snapshot_name_candidates(email: str | None) -> list[str]:
+    if not email:
+        return []
+
+    candidates = [build_email_snapshot_name(email), _canonical_snapshot_name_from_email(email)]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        deduped.append(candidate)
+    return deduped
 
 
 def _canonical_snapshot_name_from_email(email: str | None) -> str | None:
