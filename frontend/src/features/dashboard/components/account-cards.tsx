@@ -89,6 +89,11 @@ export function AccountCards({
     const deactivated: AccountSummary[] = [];
 
     for (const account of accounts) {
+      if (account.status === "deactivated") {
+        deactivated.push(account);
+        continue;
+      }
+
       if (isAccountWorkingNow(account)) {
         working.push(account);
         continue;

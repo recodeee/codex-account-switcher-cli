@@ -241,6 +241,37 @@ describe("AccountCards", () => {
     expect(titles).toEqual(["active-1@example.com", "active-2@example.com", "deactivated@example.com"]);
   });
 
+  it("does not place deactivated accounts in the working-now section even with live telemetry", () => {
+    const nowIso = new Date().toISOString();
+    const deactivatedLive = createAccountSummary({
+      accountId: "acc_deactivated_live",
+      email: "deactivated-live@example.com",
+      displayName: "deactivated-live@example.com",
+      status: "deactivated",
+      codexLiveSessionCount: 2,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "deactivated-live",
+        activeSnapshotName: "deactivated-live",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(
+      <AccountCards
+        accounts={[deactivatedLive]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    expect(screen.queryByRole("heading", { name: "Working now" })).not.toBeInTheDocument();
+    expect(screen.getByText("deactivated-live@example.com")).toBeInTheDocument();
+  });
+
   it("falls back to request-usage tokens when window row is unknown", () => {
     const account = createAccountSummary({
       accountId: "acc_unknown",

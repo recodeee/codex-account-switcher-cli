@@ -104,6 +104,14 @@ def resolve_snapshot_names_for_account(
         for name in _email_snapshot_name_candidates(email)
         if name in available_snapshot_names
     ]
+    email_named_matches.extend(
+        name
+        for name in _email_prefix_snapshot_name_candidates(
+            email=email,
+            snapshot_names=available_snapshot_names,
+        )
+        if name not in email_named_matches
+    )
     _add(email_named_matches)
 
     canonical_candidate_ids: list[str] = []
@@ -129,6 +137,23 @@ def resolve_snapshot_names_for_account(
         _add(snapshot_index.snapshots_by_account_id.get(account_id))
 
     return resolved
+
+
+def _expected_account_ids_for_account(
+    *,
+    account_id: str,
+    chatgpt_account_id: str | None,
+    email: str | None,
+) -> set[str]:
+    expected_account_ids: set[str] = {account_id}
+    if chatgpt_account_id and email:
+        normalized_email = email.strip()
+        if normalized_email:
+            expected_account_ids.add(generate_unique_account_id(chatgpt_account_id, normalized_email))
+            lowered_email = normalized_email.lower()
+            if lowered_email != normalized_email:
+                expected_account_ids.add(generate_unique_account_id(chatgpt_account_id, lowered_email))
+    return expected_account_ids
 
 
 def _resolve_accounts_dir() -> Path:
@@ -290,6 +315,12 @@ def select_snapshot_name(
     for candidate_name in _email_snapshot_name_candidates(email):
         if candidate_name in snapshot_names:
             return candidate_name
+    for candidate_name in _email_prefix_snapshot_name_candidates(
+        email=email,
+        snapshot_names=set(snapshot_names),
+    ):
+        if candidate_name in snapshot_names:
+            return candidate_name
     if active_snapshot_name and active_snapshot_name in snapshot_names:
         return active_snapshot_name
     return snapshot_names[0]
@@ -308,6 +339,24 @@ def _email_snapshot_name_candidates(email: str | None) -> list[str]:
         seen.add(candidate)
         deduped.append(candidate)
     return deduped
+
+
+def _email_prefix_snapshot_name_candidates(
+    *,
+    email: str | None,
+    snapshot_names: set[str],
+) -> list[str]:
+    local_part = _canonical_snapshot_name_from_email(email)
+    if not local_part:
+        return []
+
+    delimiters = ("-", "_", ".")
+    candidates = [
+        name
+        for name in sorted(snapshot_names, key=lambda value: (len(value), value))
+        if any(name.startswith(f"{local_part}{delimiter}") for delimiter in delimiters)
+    ]
+    return candidates
 
 
 def _canonical_snapshot_name_from_email(email: str | None) -> str | None:
@@ -354,8 +403,22 @@ def repair_snapshot_for_account(
             f"Resolved snapshot {selected_snapshot_name!r} for {email} is missing on disk."
         )
 
+    expected_account_ids = _expected_account_ids_for_account(
+        account_id=account_id,
+        chatgpt_account_id=chatgpt_account_id,
+        email=email,
+    )
+    source_snapshot_account_id = _snapshot_account_id(source_path)
+    source_matches_account = (
+        source_snapshot_account_id is not None and source_snapshot_account_id in expected_account_ids
+    )
+
     target_snapshot_name = build_email_snapshot_name(email)
     if target_snapshot_name == selected_snapshot_name:
+        if not source_matches_account:
+            raise CodexAuthSnapshotConflictError(
+                f"Cannot keep snapshot {selected_snapshot_name!r} for {email}: snapshot belongs to a different account."
+            )
         try:
             _switch_snapshot_without_cli(target_snapshot_name)
         except Exception as exc:

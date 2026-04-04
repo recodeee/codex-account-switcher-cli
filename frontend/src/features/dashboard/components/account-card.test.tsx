@@ -223,7 +223,7 @@ describe("AccountCard", () => {
     expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
   });
 
-  it("treats deactivated accounts with active snapshots as active in card actions", () => {
+  it("keeps deactivated accounts deactivated in dashboard cards even when snapshot is active", () => {
     const account = createAccountSummary({
       status: "deactivated",
       usage: {
@@ -240,9 +240,8 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
-    expect(screen.queryByText("Deactivated")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
+    expect(screen.getByText("Deactivated")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
   });
 
   it("calls useLocal action when use this account button is clicked", async () => {
@@ -713,7 +712,8 @@ describe("AccountCard", () => {
     expect(within(card as HTMLElement).getByRole("button", { name: "Sessions" })).toBeDisabled();
   });
 
-  it("renders live quota debug raw and merged values", () => {
+  it("keeps live quota debug collapsed by default and expands on demand", async () => {
+    const user = userEvent.setup();
     const account = createAccountSummary({
       liveQuotaDebug: {
         snapshotsConsidered: ["snap-a"],
@@ -763,6 +763,11 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.getByText("Quota debug")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /show details/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Merged → 5h 17% · Weekly 77%/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /show details/i }));
+    expect(screen.getByRole("button", { name: /hide details/i })).toBeInTheDocument();
     expect(screen.getByText(/Merged → 5h 17% · Weekly 77%/)).toBeInTheDocument();
     expect(screen.queryByText("No raw terminal samples")).not.toBeInTheDocument();
   });

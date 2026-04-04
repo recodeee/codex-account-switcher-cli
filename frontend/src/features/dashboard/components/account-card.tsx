@@ -1,11 +1,13 @@
 import {
   Activity,
+  ChevronDown,
   Clock,
   ExternalLink,
   Play,
   RotateCcw,
   SquareTerminal,
 } from "lucide-react";
+import { useState } from "react";
 
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { Badge } from "@/components/ui/badge";
@@ -228,15 +230,17 @@ export function AccountCard({
   useLocalBusy = false,
   onAction,
 }: AccountCardProps) {
+  const [showQuotaDebug, setShowQuotaDebug] = useState(false);
   const blurred = usePrivacyStore((s) => s.blurred);
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
   const hasLiveSession = hasFreshLiveTelemetry(account);
   const isWorkingNow = isAccountWorkingNow(account);
-  const status = resolveEffectiveAccountStatus({
+  const effectiveStatus = resolveEffectiveAccountStatus({
     status: account.status,
     isActiveSnapshot,
     hasLiveSession,
   });
+  const status = account.status === "deactivated" ? "deactivated" : effectiveStatus;
   const primaryRemainingRaw = account.usage?.primaryRemainingPercent ?? null;
   const primaryTelemetryFresh = isFreshQuotaTelemetryTimestamp(
     account.lastUsageRecordedAtPrimary ?? null,
@@ -459,25 +463,46 @@ export function AccountCard({
           <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
             Quota debug
           </p>
-          <p className="mt-1 text-[11px] text-cyan-800 dark:text-cyan-200">
-            Merged → 5h {formatDebugPercent(mergedDebug?.primary?.remainingPercent)} · Weekly{" "}
-            {formatDebugPercent(mergedDebug?.secondary?.remainingPercent)}
-            {liveQuotaDebug.overrideReason ? ` (${liveQuotaDebug.overrideReason})` : ""}
-          </p>
-          {liveQuotaDebug.rawSamples.length > 0 ? (
-            <div className="mt-1.5 space-y-1">
-              {liveQuotaDebug.rawSamples.slice(0, 8).map((sample, index) => (
-                <p key={`${sample.source}-${sample.recordedAt}-${index}`} className="text-[10px] text-cyan-700/90 dark:text-cyan-200/90">
-                  {formatDebugSource(sample.source)} → 5h{" "}
-                  {formatDebugPercent(sample.primary?.remainingPercent)} · Weekly{" "}
-                  {formatDebugPercent(sample.secondary?.remainingPercent)}
-                  {sample.stale ? " · stale" : ""}
+          <button
+            type="button"
+            className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-700/90 hover:text-cyan-800 dark:text-cyan-200/90 dark:hover:text-cyan-100"
+            aria-expanded={showQuotaDebug}
+            onClick={() => setShowQuotaDebug((current) => !current)}
+          >
+            {showQuotaDebug ? "Hide details" : "Show details"}
+            <ChevronDown
+              className={cn("h-3 w-3 transition-transform duration-200", showQuotaDebug && "rotate-180")}
+            />
+          </button>
+
+          {showQuotaDebug ? (
+            <>
+              <p className="mt-1 text-[11px] text-cyan-800 dark:text-cyan-200">
+                Merged → 5h {formatDebugPercent(mergedDebug?.primary?.remainingPercent)} · Weekly{" "}
+                {formatDebugPercent(mergedDebug?.secondary?.remainingPercent)}
+                {liveQuotaDebug.overrideReason ? ` (${liveQuotaDebug.overrideReason})` : ""}
+              </p>
+              {liveQuotaDebug.rawSamples.length > 0 ? (
+                <div className="mt-1.5 space-y-1">
+                  {liveQuotaDebug.rawSamples.slice(0, 8).map((sample, index) => (
+                    <p
+                      key={`${sample.source}-${sample.recordedAt}-${index}`}
+                      className="text-[10px] text-cyan-700/90 dark:text-cyan-200/90"
+                    >
+                      {formatDebugSource(sample.source)} → 5h{" "}
+                      {formatDebugPercent(sample.primary?.remainingPercent)} · Weekly{" "}
+                      {formatDebugPercent(sample.secondary?.remainingPercent)}
+                      {sample.stale ? " · stale" : ""}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1.5 text-[10px] text-cyan-700/90 dark:text-cyan-200/90">
+                  No raw terminal samples
                 </p>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-1.5 text-[10px] text-cyan-700/90 dark:text-cyan-200/90">No raw terminal samples</p>
-          )}
+              )}
+            </>
+          ) : null}
         </div>
       ) : null}
 

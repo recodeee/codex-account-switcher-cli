@@ -183,6 +183,24 @@ def test_select_snapshot_name_prefers_active() -> None:
     assert selected == "beta"
 
 
+def test_select_snapshot_name_prefers_email_snapshot_over_active() -> None:
+    selected = select_snapshot_name(
+        ["viktoredix", "admin-edixai-com"],
+        "viktoredix",
+        email="admin@edixai.com",
+    )
+    assert selected == "admin-edixai-com"
+
+
+def test_select_snapshot_name_prefers_email_prefix_snapshot_over_active() -> None:
+    selected = select_snapshot_name(
+        ["viktoredix", "admin-snapshot"],
+        "viktoredix",
+        email="admin@edixai.com",
+    )
+    assert selected == "admin-snapshot"
+
+
 def test_select_snapshot_name_prefers_email_canonical_name_when_active_missing() -> None:
     selected = select_snapshot_name(
         ["main", "codexina"],
@@ -267,6 +285,48 @@ def test_resolve_snapshot_names_for_account_prefers_canonical_id_over_stale_pers
     )
 
     assert resolved == ["main-snapshot"]
+
+
+def test_resolve_snapshot_names_for_account_prefers_email_named_snapshot_on_conflict() -> None:
+    canonical_admin_id = generate_unique_account_id("shared-acc", "admin@edixai.com")
+    canonical_other_id = generate_unique_account_id("shared-acc", "denver@edixai.com")
+    index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={
+            canonical_admin_id: ["viktoredix"],
+            canonical_other_id: ["admin-edixai-com"],
+        },
+        active_snapshot_name=None,
+    )
+
+    resolved = resolve_snapshot_names_for_account(
+        snapshot_index=index,
+        account_id="legacy-admin-id",
+        chatgpt_account_id="shared-acc",
+        email="admin@edixai.com",
+    )
+
+    assert resolved == ["admin-edixai-com", "viktoredix"]
+
+
+def test_resolve_snapshot_names_for_account_prefers_email_prefix_snapshot_on_conflict() -> None:
+    canonical_admin_id = generate_unique_account_id("shared-acc", "admin@edixai.com")
+    canonical_other_id = generate_unique_account_id("shared-acc", "denver@edixai.com")
+    index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={
+            canonical_admin_id: ["viktoredix"],
+            canonical_other_id: ["admin-snapshot"],
+        },
+        active_snapshot_name=None,
+    )
+
+    resolved = resolve_snapshot_names_for_account(
+        snapshot_index=index,
+        account_id="legacy-admin-id",
+        chatgpt_account_id="shared-acc",
+        email="admin@edixai.com",
+    )
+
+    assert resolved == ["admin-snapshot", "viktoredix"]
 
 
 def test_switch_snapshot_falls_back_without_codex_auth(
