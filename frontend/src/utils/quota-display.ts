@@ -77,6 +77,17 @@ export function resetQuotaDisplayFloorCacheForTests(): void {
   quotaDisplayFloorCache.clear();
 }
 
+export function resetQuotaDisplayFloorCacheForAccount(
+  accountKey: string | null | undefined,
+): void {
+  const normalizedAccountKey = accountKey?.trim();
+  if (!normalizedAccountKey) {
+    return;
+  }
+  quotaDisplayFloorCache.delete(`primary:${normalizedAccountKey}`);
+  quotaDisplayFloorCache.delete(`secondary:${normalizedAccountKey}`);
+}
+
 export function normalizeRemainingPercentForDisplay({
   accountKey,
   windowKey,

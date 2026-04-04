@@ -371,6 +371,34 @@ describe("AccountCard", () => {
     expect(screen.getAllByText(/^live$/i).length).toBeGreaterThanOrEqual(1);
   });
 
+  it("shows usage-limit state when a live account reaches 0% in the 5h window", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 66,
+      },
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Rate limited")).toBeInTheDocument();
+    expect(screen.getAllByText("Usage limit hit").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Working now")).not.toBeInTheDocument();
+  });
+
   it("shows live-session fallback label when runtime sessions have no telemetry timestamps yet", () => {
     const account = createAccountSummary({
       usage: {

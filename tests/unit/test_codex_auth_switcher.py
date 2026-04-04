@@ -101,6 +101,31 @@ def test_build_snapshot_index_resolves_active_from_auth_payload_when_pointer_is_
     assert index.active_snapshot_name == "tokio"
 
 
+def test_build_snapshot_index_prefers_newer_plain_auth_payload_over_stale_current_selection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    codex_dir = tmp_path / ".codex"
+    accounts_dir = codex_dir / "accounts"
+    accounts_dir.mkdir(parents=True)
+    _write_auth_snapshot(accounts_dir / "tokio.json", email="tokio@example.com", account_id="acc-tokio")
+    _write_auth_snapshot(accounts_dir / "bia.json", email="bia@example.com", account_id="acc-bia")
+
+    current_path = codex_dir / "current"
+    current_path.write_text("bia", encoding="utf-8")
+    os.utime(current_path, (1, 1))
+
+    auth_path = codex_dir / "auth.json"
+    _write_auth_snapshot(auth_path, email="tokio@example.com", account_id="acc-tokio")
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(auth_path))
+
+    index = build_snapshot_index()
+
+    assert index.active_snapshot_name == "tokio"
+
+
 def test_build_snapshot_index_prefers_auth_pointer_over_registry_active_account_name(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

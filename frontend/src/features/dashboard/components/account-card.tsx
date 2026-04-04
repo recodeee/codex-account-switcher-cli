@@ -86,6 +86,7 @@ function QuotaBar({
   deactivated = false,
   isLive = false,
   telemetryPending = false,
+  usageLimitHit = false,
 }: {
   label: string;
   percent: number | null;
@@ -95,6 +96,7 @@ function QuotaBar({
   deactivated?: boolean;
   isLive?: boolean;
   telemetryPending?: boolean;
+  usageLimitHit?: boolean;
 }) {
   const clamped = percent === null ? 0 : Math.max(0, Math.min(100, percent));
   const hasPercent = percent !== null;
@@ -180,7 +182,9 @@ function QuotaBar({
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-cyan-700 dark:text-cyan-300">
             <Activity className="h-3 w-3" />
             <span>
-              {telemetryPending
+              {usageLimitHit
+                ? "Usage limit hit"
+                : telemetryPending
                 ? "Telemetry pending"
                 : liveTelemetryUnavailable
                   ? "Live session detected"
@@ -267,6 +271,20 @@ function buildQuotaDebugLogLines(
   return lines;
 }
 
+function isLiveUsageLimitHit(input: {
+  status: string;
+  hasLiveSession: boolean;
+  primaryRemainingPercent: number | null;
+}): boolean {
+  if (input.status === "rate_limited" || input.status === "quota_exceeded") {
+    return true;
+  }
+  if (!input.hasLiveSession || input.primaryRemainingPercent == null) {
+    return false;
+  }
+  return Math.round(Math.max(0, input.primaryRemainingPercent)) <= 0;
+}
+
 export function AccountCard({
   account,
   tokensUsed = null,
@@ -304,7 +322,6 @@ export function AccountCard({
     isActiveSnapshot,
     hasLiveSession,
   });
-  const status = effectiveStatus;
   const primaryRemainingRaw =
     mergedPrimaryRemainingPercent ??
     selectStableRemainingPercent({
@@ -378,6 +395,12 @@ export function AccountCard({
   const weeklyOnly =
     account.windowMinutesPrimary == null &&
     account.windowMinutesSecondary != null;
+  const usageLimitHit = isLiveUsageLimitHit({
+    status: account.status,
+    hasLiveSession,
+    primaryRemainingPercent: primaryRemaining,
+  });
+  const status = usageLimitHit && effectiveStatus === "active" ? "limited" : effectiveStatus;
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: primaryRemainingRaw,
@@ -501,7 +524,18 @@ export function AccountCard({
               {deactivatedLastSeenDisplay.label}
             </Badge>
           ) : null}
-          {isWorkingNow ? (
+          {usageLimitHit ? (
+            <Badge
+              variant="outline"
+              className="gap-1.5 border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300"
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-current"
+                aria-hidden
+              />
+              Usage limit hit
+            </Badge>
+          ) : isWorkingNow ? (
             <Badge
               variant="outline"
               className="gap-1.5 border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
@@ -574,6 +608,7 @@ export function AccountCard({
             deactivated={isDeactivated}
             isLive={hasLiveSession}
             telemetryPending={primaryTelemetryPending}
+            usageLimitHit={usageLimitHit}
           />
         )}
         <QuotaBar

@@ -307,10 +307,14 @@ def build_snapshot_index() -> CodexAuthSnapshotIndex:
         snapshot_names.sort()
 
     active_snapshot_name = _resolve_active_snapshot_name(accounts_dir)
-    if active_snapshot_name is None:
-        active_snapshot_name = _resolve_active_snapshot_name_from_active_auth_payload(
-            snapshots_by_account_id=snapshots_by_account_id
-        )
+    payload_active_snapshot_name = _resolve_active_snapshot_name_from_active_auth_payload(
+        snapshots_by_account_id=snapshots_by_account_id
+    )
+    if payload_active_snapshot_name and _should_prefer_payload_active_snapshot(
+        resolved_active_snapshot_name=active_snapshot_name,
+        payload_active_snapshot_name=payload_active_snapshot_name,
+    ):
+        active_snapshot_name = payload_active_snapshot_name
     return CodexAuthSnapshotIndex(
         snapshots_by_account_id=snapshots_by_account_id,
         active_snapshot_name=active_snapshot_name,
@@ -322,7 +326,11 @@ def _resolve_active_snapshot_name_from_active_auth_payload(
     snapshots_by_account_id: dict[str, list[str]],
 ) -> str | None:
     active_auth_path = _resolve_active_auth_path()
-    if not active_auth_path.exists() or not active_auth_path.is_file():
+    if (
+        not active_auth_path.exists()
+        or not active_auth_path.is_file()
+        or active_auth_path.is_symlink()
+    ):
         return None
 
     try:
@@ -337,6 +345,30 @@ def _resolve_active_snapshot_name_from_active_auth_payload(
     if not snapshot_names:
         return None
     return select_snapshot_name(snapshot_names, None, email=email)
+
+
+def _should_prefer_payload_active_snapshot(
+    *,
+    resolved_active_snapshot_name: str | None,
+    payload_active_snapshot_name: str,
+) -> bool:
+    if resolved_active_snapshot_name is None:
+        return True
+    if resolved_active_snapshot_name == payload_active_snapshot_name:
+        return False
+
+    active_auth_path = _resolve_active_auth_path()
+    if (
+        not active_auth_path.exists()
+        or not active_auth_path.is_file()
+        or active_auth_path.is_symlink()
+    ):
+        return False
+
+    current_path = _resolve_current_path()
+    active_auth_mtime = _safe_file_mtime(active_auth_path, follow_symlinks=False)
+    current_mtime = _safe_file_mtime(current_path)
+    return active_auth_mtime >= current_mtime
 
 
 def select_snapshot_name(

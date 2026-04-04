@@ -195,7 +195,32 @@ class AccountsRepository:
                 await self._session.commit()
                 await self._session.refresh(existing)
                 return existing
+            # In "import without overwrite" mode we still want explicit
+            # re-auth/import of a previously disconnected account to recover
+            # that same account record instead of silently creating a copy.
+            if (
+                existing.status == AccountStatus.DEACTIVATED
+                and account.status == AccountStatus.ACTIVE
+            ):
+                _apply_account_updates(existing, account)
+                await self._session.commit()
+                await self._session.refresh(existing)
+                return existing
             account.id = await self._next_available_account_id(account.id)
+
+        if not merge_by_email and account.status == AccountStatus.ACTIVE:
+            # Re-auth can return a different account-id payload over time.
+            # If there is exactly one account with this email and it is
+            # disconnected, recover that row instead of creating a copy.
+            try:
+                existing_by_email = await self._single_account_by_email(account.email)
+            except AccountIdentityConflictError:
+                existing_by_email = None
+            if existing_by_email and existing_by_email.status == AccountStatus.DEACTIVATED:
+                _apply_account_updates(existing_by_email, account)
+                await self._session.commit()
+                await self._session.refresh(existing_by_email)
+                return existing_by_email
 
         if merge_by_email:
             existing_by_email = await self._single_account_by_email(account.email)

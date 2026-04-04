@@ -8,6 +8,7 @@ import {
   useAccounts,
 } from "@/features/accounts/hooks/use-accounts";
 import { createAccountSummary } from "@/test/mocks/factories";
+import * as quotaDisplay from "@/utils/quota-display";
 
 function createTestQueryClient(): QueryClient {
   return new QueryClient({
@@ -125,6 +126,7 @@ describe("useAccounts", () => {
   it("loads accounts and invalidates related queries after mutations", async () => {
     const queryClient = createTestQueryClient();
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const resetQuotaFloorSpy = vi.spyOn(quotaDisplay, "resetQuotaDisplayFloorCacheForAccount");
     const { result } = renderHook(() => useAccounts(), {
       wrapper: createWrapper(queryClient),
     });
@@ -135,6 +137,7 @@ describe("useAccounts", () => {
 
     await result.current.pauseMutation.mutateAsync(firstAccountId as string);
     await result.current.resumeMutation.mutateAsync(firstAccountId as string);
+    await result.current.useLocalMutation.mutateAsync(firstAccountId as string);
 
     const imported = await result.current.importMutation.mutateAsync(
       new File(["{}"], "auth.json", { type: "application/json" }),
@@ -144,6 +147,7 @@ describe("useAccounts", () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["accounts", "list"] });
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["dashboard", "overview"] });
+      expect(resetQuotaFloorSpy).toHaveBeenCalledWith(firstAccountId);
     });
   });
 });

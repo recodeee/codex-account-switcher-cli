@@ -330,6 +330,42 @@ describe("AccountCards", () => {
     expect(titles[0]).toBe("non-zero@example.com");
   });
 
+  it("orders depleted 5h accounts by the nearest primary reset time", () => {
+    const now = Date.now();
+    const resetsSoon = createAccountSummary({
+      accountId: "acc_reset_soon",
+      email: "reset-soon@example.com",
+      displayName: "reset-soon@example.com",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 63,
+      },
+      resetAtPrimary: new Date(now + 26 * 60 * 1000).toISOString(),
+    });
+    const resetsLater = createAccountSummary({
+      accountId: "acc_reset_later",
+      email: "reset-later@example.com",
+      displayName: "reset-later@example.com",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      resetAtPrimary: new Date(now + 60 * 60 * 1000).toISOString(),
+    });
+
+    const { container } = render(
+      <AccountCards
+        accounts={[resetsLater, resetsSoon]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const cards = Array.from(container.querySelectorAll(".card-hover"));
+    const titles = cards.map((card) => card.querySelector("p.truncate.text-sm.font-semibold.leading-tight")?.textContent);
+    expect(titles).toEqual(["reset-soon@example.com", "reset-later@example.com"]);
+  });
+
   it("places deactivated accounts in the working-now section when live telemetry is present", () => {
     const nowIso = new Date().toISOString();
     const deactivatedLive = createAccountSummary({

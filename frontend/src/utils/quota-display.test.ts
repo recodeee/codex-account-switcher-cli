@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   normalizeRemainingPercentForDisplay,
+  resetQuotaDisplayFloorCacheForAccount,
   resetQuotaDisplayFloorCacheForTests,
 } from "@/utils/quota-display";
 
@@ -222,5 +223,28 @@ describe("normalizeRemainingPercentForDisplay", () => {
 
     expect(first).toBe(0);
     expect(second).toBe(69);
+  });
+
+  it("allows a fresh reading after clearing cache for switched account", () => {
+    const first = normalizeRemainingPercentForDisplay({
+      accountKey: "acc-switch",
+      windowKey: "primary",
+      remainingPercent: 10,
+      resetAt: "2026-01-01T05:00:00.000Z",
+      nowMs: new Date("2026-01-01T04:10:00.000Z").getTime(),
+    });
+
+    resetQuotaDisplayFloorCacheForAccount("acc-switch");
+
+    const second = normalizeRemainingPercentForDisplay({
+      accountKey: "acc-switch",
+      windowKey: "primary",
+      remainingPercent: 96,
+      resetAt: "2026-01-01T05:00:00.000Z",
+      nowMs: new Date("2026-01-01T04:12:00.000Z").getTime(),
+    });
+
+    expect(first).toBe(10);
+    expect(second).toBe(96);
   });
 });

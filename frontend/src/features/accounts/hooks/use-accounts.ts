@@ -14,6 +14,7 @@ import {
   useAccountLocally,
 } from "@/features/accounts/api";
 import type { AccountSummary } from "@/features/accounts/schemas";
+import { resetQuotaDisplayFloorCacheForAccount } from "@/utils/quota-display";
 import { isAccountWorkingNow } from "@/utils/account-working";
 
 const DEFAULT_ACCOUNTS_POLL_MS = 30_000;
@@ -47,8 +48,10 @@ export function resolveAccountsPollInterval(data: unknown): number {
 }
 
 function invalidateAccountRelatedQueries(queryClient: ReturnType<typeof useQueryClient>) {
-  void queryClient.invalidateQueries({ queryKey: ["accounts", "list"] });
-  void queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["accounts", "list"] }),
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] }),
+  ]);
 }
 
 /**
@@ -63,7 +66,7 @@ export function useAccountMutations() {
     mutationFn: importAccount,
     onSuccess: () => {
       toast.success("Account imported");
-      invalidateAccountRelatedQueries(queryClient);
+      void invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
       toast.error(error.message || "Import failed");
@@ -74,7 +77,7 @@ export function useAccountMutations() {
     mutationFn: pauseAccount,
     onSuccess: () => {
       toast.success("Account paused");
-      invalidateAccountRelatedQueries(queryClient);
+      void invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
       toast.error(error.message || "Pause failed");
@@ -85,7 +88,7 @@ export function useAccountMutations() {
     mutationFn: reactivateAccount,
     onSuccess: () => {
       toast.success("Account resumed");
-      invalidateAccountRelatedQueries(queryClient);
+      void invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
       toast.error(error.message || "Resume failed");
@@ -96,7 +99,7 @@ export function useAccountMutations() {
     mutationFn: deleteAccount,
     onSuccess: () => {
       toast.success("Account deleted");
-      invalidateAccountRelatedQueries(queryClient);
+      void invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
       toast.error(error.message || "Delete failed");
@@ -105,9 +108,10 @@ export function useAccountMutations() {
 
   const useLocalMutation = useMutation({
     mutationFn: useAccountLocally,
-    onSuccess: (response) => {
+    onSuccess: async (response) => {
+      resetQuotaDisplayFloorCacheForAccount(response.accountId);
       toast.success(`Switched to ${response.snapshotName}`);
-      invalidateAccountRelatedQueries(queryClient);
+      await invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
       toast.error(error.message || "Switch failed");
@@ -118,7 +122,7 @@ export function useAccountMutations() {
     mutationFn: refreshAccountAuth,
     onSuccess: (response) => {
       toast.success(`Re-authenticated ${response.email}`);
-      invalidateAccountRelatedQueries(queryClient);
+      void invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
       toast.error(error.message || "Re-authentication failed");
@@ -129,7 +133,7 @@ export function useAccountMutations() {
     mutationFn: openAccountTerminal,
     onSuccess: (response) => {
       toast.success(`Opened terminal for ${response.snapshotName}`);
-      invalidateAccountRelatedQueries(queryClient);
+      void invalidateAccountRelatedQueries(queryClient);
     },
   });
 
@@ -142,7 +146,7 @@ export function useAccountMutations() {
         ? `${response.previousSnapshotName} → ${response.snapshotName}`
         : response.snapshotName;
       toast.success(`${verb} snapshot ${detail}`);
-      invalidateAccountRelatedQueries(queryClient);
+      void invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
       toast.error(error.message || "Snapshot repair failed");

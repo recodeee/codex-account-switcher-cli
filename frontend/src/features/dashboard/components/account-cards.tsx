@@ -42,6 +42,20 @@ function compareNullableNumberDesc(left: number | null, right: number | null): n
   return right - left;
 }
 
+function compareNullableNumberAsc(left: number | null, right: number | null): number {
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
+  return left - right;
+}
+
+function parseTimestampMs(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
 function resolveSortableRemainingPercent(
   account: AccountSummary,
   windowKey: "primary" | "secondary",
@@ -84,12 +98,24 @@ function resolveSortableRemainingPercent(
   });
 }
 
+function resolveSortableResetAtMs(
+  account: AccountSummary,
+  windowKey: "primary" | "secondary",
+): number | null {
+  const deferredQuotaFallback = getRawQuotaWindowFallback(account, windowKey);
+  const baselineResetAt =
+    windowKey === "primary" ? account.resetAtPrimary : account.resetAtSecondary;
+  const effectiveResetAt = deferredQuotaFallback?.resetAt ?? baselineResetAt ?? null;
+  return parseTimestampMs(effectiveResetAt);
+}
+
 function sortAccountsByAvailableQuota(accounts: AccountSummary[]): AccountSummary[] {
   const sortMetricsByAccountId = new Map(
     accounts.map((account) => [
       account.accountId,
       {
         primaryRemaining: resolveSortableRemainingPercent(account, "primary"),
+        primaryResetAtMs: resolveSortableResetAtMs(account, "primary"),
         secondaryRemaining: resolveSortableRemainingPercent(account, "secondary"),
         title: account.displayName || account.email || account.accountId,
       },
@@ -108,6 +134,18 @@ function sortAccountsByAvailableQuota(accounts: AccountSummary[]): AccountSummar
       rightMetrics.primaryRemaining,
     );
     if (primaryDiff !== 0) return primaryDiff;
+
+    const leftPrimaryDepleted =
+      leftMetrics.primaryRemaining != null && leftMetrics.primaryRemaining <= 0;
+    const rightPrimaryDepleted =
+      rightMetrics.primaryRemaining != null && rightMetrics.primaryRemaining <= 0;
+    if (leftPrimaryDepleted && rightPrimaryDepleted) {
+      const primaryResetDiff = compareNullableNumberAsc(
+        leftMetrics.primaryResetAtMs,
+        rightMetrics.primaryResetAtMs,
+      );
+      if (primaryResetDiff !== 0) return primaryResetDiff;
+    }
 
     const secondaryDiff = compareNullableNumberDesc(
       leftMetrics.secondaryRemaining,
