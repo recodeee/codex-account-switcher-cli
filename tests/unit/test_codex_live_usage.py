@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import app.modules.accounts.codex_live_usage as codex_live_usage_module
 from app.modules.accounts.codex_live_usage import (
     has_recent_active_snapshot_process_fallback,
     read_live_codex_process_session_counts_by_snapshot,
@@ -20,6 +21,13 @@ from app.modules.accounts.codex_live_usage import (
     read_runtime_live_session_counts_by_snapshot,
     terminate_live_codex_processes_for_snapshot,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_unlabeled_process_owner_cache() -> None:
+    codex_live_usage_module._unlabeled_default_scope_process_owner_cache.clear()
+    yield
+    codex_live_usage_module._unlabeled_default_scope_process_owner_cache.clear()
 
 
 def _sessions_day_dir(root: Path, now: datetime) -> Path:
@@ -1035,6 +1043,175 @@ def test_read_live_codex_process_session_counts_by_snapshot_uses_explicit_defaul
 
     counts = read_live_codex_process_session_counts_by_snapshot()
     assert counts == {"work": 1}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_keeps_cached_unlabeled_mapping_after_switch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "default" / "current"
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text("tokio", encoding="utf-8")
+    os.utime(current_path, (900.0, 900.0))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+
+    start_times = {701: 1_000.0}
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(701, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._process_belongs_to_current_user",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda pid: start_times.get(pid),
+    )
+
+    counts_before_switch = read_live_codex_process_session_counts_by_snapshot()
+    assert counts_before_switch == {"tokio": 1}
+
+    current_path.write_text("unique", encoding="utf-8")
+    os.utime(current_path, (1_200.0, 1_200.0))
+
+    counts_after_switch = read_live_codex_process_session_counts_by_snapshot()
+    assert counts_after_switch == {"tokio": 1}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_skips_uncached_unlabeled_processes_started_before_switch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "default" / "current"
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text("unique", encoding="utf-8")
+    os.utime(current_path, (1_500.0, 1_500.0))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_LB_UNLABELED_PROCESS_START_TOLERANCE_SECONDS", "0")
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(801, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._process_belongs_to_current_user",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda _pid: 1_000.0,
+    )
+
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert counts == {}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_uses_previous_active_snapshot_from_registry_for_pre_switch_process(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "default" / "current"
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text("unique", encoding="utf-8")
+    os.utime(current_path, (1_500.0, 1_500.0))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_LB_UNLABELED_PROCESS_START_TOLERANCE_SECONDS", "0")
+
+    registry_path = tmp_path / "accounts" / "registry.json"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "activeAccountName": "unique",
+                "previousActiveAccountName": "tokio",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_AUTH_REGISTRY_PATH", str(registry_path))
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(851, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._process_belongs_to_current_user",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda _pid: 1_000.0,
+    )
+
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert counts == {"tokio": 1}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_preserves_previous_unlabeled_process_owners(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "default" / "current"
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text("tokio", encoding="utf-8")
+    os.utime(current_path, (1_000.0, 1_000.0))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_LB_UNLABELED_PROCESS_START_TOLERANCE_SECONDS", "0")
+
+    phase = {"value": 1}
+    start_times = {901: 1_010.0, 902: 1_011.0, 903: 2_005.0}
+
+    def iter_processes(_proc_root: Path) -> list[tuple[int, list[str]]]:
+        if phase["value"] == 1:
+            return [
+                (901, ["/usr/bin/codex", "model_instructions_file=agents"]),
+                (902, ["/usr/bin/codex", "model_instructions_file=agents"]),
+            ]
+        return [
+            (901, ["/usr/bin/codex", "model_instructions_file=agents"]),
+            (902, ["/usr/bin/codex", "model_instructions_file=agents"]),
+            (903, ["/usr/bin/codex", "model_instructions_file=agents"]),
+        ]
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        iter_processes,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._process_belongs_to_current_user",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda pid: start_times.get(pid),
+    )
+
+    counts_before_switch = read_live_codex_process_session_counts_by_snapshot()
+    assert counts_before_switch == {"tokio": 2}
+
+    current_path.write_text("nagy.viktordp@gmail.com", encoding="utf-8")
+    os.utime(current_path, (2_000.0, 2_000.0))
+    phase["value"] = 2
+
+    counts_after_switch = read_live_codex_process_session_counts_by_snapshot()
+    assert counts_after_switch == {"tokio": 2, "nagy.viktordp@gmail.com": 1}
 
 
 def test_read_local_codex_task_previews_by_snapshot_reads_default_and_runtime_profiles(

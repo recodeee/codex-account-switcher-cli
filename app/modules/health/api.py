@@ -4,7 +4,7 @@ from datetime import timedelta
 from hashlib import sha256
 from html import escape
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy import select as sa_select
 from sqlalchemy import text
@@ -13,12 +13,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config.settings import get_settings
 from app.core.utils.time import utcnow
 from app.db.models import BridgeRingMember
+from app.modules.accounts.codex_auth_switcher import (
+    build_email_snapshot_name,
+    build_snapshot_index,
+    resolve_snapshot_names_for_account,
+    select_snapshot_name,
+)
+from app.modules.accounts.codex_live_usage import (
+    read_live_codex_process_session_counts_by_snapshot,
+    read_runtime_live_session_counts_by_snapshot,
+)
+from app.modules.accounts.repository import AccountsRepository
 from app.db.session import get_session
-from app.modules.accounts.codex_live_usage import read_live_codex_process_session_counts_by_snapshot
 from app.modules.health.schemas import BridgeRingInfo, HealthCheckResponse, HealthResponse
 from app.modules.proxy.ring_membership import RING_STALE_THRESHOLD_SECONDS
 
 router = APIRouter(tags=["health"])
+_ACTIVE_CLI_SIGNAL_WINDOW = timedelta(minutes=5)
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -34,18 +45,45 @@ async def health_live() -> HealthCheckResponse:
 @router.get("/live_usage")
 async def live_usage() -> Response:
     counts_by_snapshot = read_live_codex_process_session_counts_by_snapshot()
+    task_previews_by_snapshot = await _read_live_usage_task_previews_by_snapshot()
     generated_at = utcnow().isoformat() + "Z"
     total_sessions = sum(max(0, count) for count in counts_by_snapshot.values())
+    total_task_previews = sum(
+        len(task_previews) for task_previews in task_previews_by_snapshot.values()
+    )
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<live_usage generated_at="{escape(generated_at, quote=True)}" total_sessions="{total_sessions}">',
+        "<live_usage"
+        f' generated_at="{escape(generated_at, quote=True)}"'
+        f' total_sessions="{total_sessions}"'
+        f' total_task_previews="{total_task_previews}"'
+        ">",
     ]
-    for snapshot_name, session_count in sorted(counts_by_snapshot.items()):
+    snapshot_names = sorted(
+        set(counts_by_snapshot.keys()) | set(task_previews_by_snapshot.keys())
+    )
+    for snapshot_name in snapshot_names:
+        session_count = max(0, counts_by_snapshot.get(snapshot_name, 0))
+        task_previews = task_previews_by_snapshot.get(snapshot_name, [])
         sanitized_snapshot_name = escape(snapshot_name, quote=True)
+        if not task_previews:
+            lines.append(
+                f'  <snapshot name="{sanitized_snapshot_name}" session_count="{session_count}" />'
+            )
+            continue
+
         lines.append(
-            f'  <snapshot name="{sanitized_snapshot_name}" session_count="{max(0, session_count)}" />'
+            f'  <snapshot name="{sanitized_snapshot_name}" session_count="{session_count}" task_preview_count="{len(task_previews)}">'
         )
+        for task_preview in task_previews:
+            lines.append(
+                "    <task_preview"
+                f' account_id="{escape(task_preview.account_id, quote=True)}"'
+                f' preview="{escape(task_preview.preview, quote=True)}"'
+                " />"
+            )
+        lines.append("  </snapshot>")
     lines.append("</live_usage>")
 
     return Response(
@@ -53,6 +91,228 @@ async def live_usage() -> Response:
         media_type="application/xml",
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.get("/live_usage/mapping")
+async def live_usage_mapping(
+    session: AsyncSession = Depends(get_session),
+    minimal: bool = False,
+) -> Response:
+    generated_at = utcnow().isoformat() + "Z"
+    snapshot_index = build_snapshot_index()
+    process_counts_by_snapshot = read_live_codex_process_session_counts_by_snapshot()
+    runtime_counts_by_snapshot = read_runtime_live_session_counts_by_snapshot()
+
+    repository = AccountsRepository(session)
+    accounts = await repository.list_accounts()
+    account_ids = [account.id for account in accounts]
+    tracked_session_counts = await repository.list_codex_session_counts_by_account(
+        account_ids=account_ids,
+        active_since=utcnow() - _ACTIVE_CLI_SIGNAL_WINDOW,
+    )
+    task_previews = await repository.list_codex_current_task_preview_by_account(
+        account_ids=account_ids,
+        active_since=utcnow() - _ACTIVE_CLI_SIGNAL_WINDOW,
+    )
+
+    mapped_snapshot_names: set[str] = set()
+    working_now_count = 0
+    account_lines: list[str] = []
+
+    for account in accounts:
+        snapshot_candidates = resolve_snapshot_names_for_account(
+            snapshot_index=snapshot_index,
+            account_id=account.id,
+            chatgpt_account_id=account.chatgpt_account_id,
+            email=account.email,
+        )
+        selected_snapshot_name = select_snapshot_name(
+            snapshot_candidates,
+            snapshot_index.active_snapshot_name,
+            email=account.email,
+        )
+        mapped_snapshot_names.update(snapshot_candidates)
+
+        process_session_count = (
+            max(0, process_counts_by_snapshot.get(selected_snapshot_name, 0))
+            if selected_snapshot_name
+            else 0
+        )
+        runtime_session_count = (
+            max(0, runtime_counts_by_snapshot.get(selected_snapshot_name, 0))
+            if selected_snapshot_name
+            else 0
+        )
+        # Process and runtime counts can describe the same live CLI session
+        # inventory from different collectors, so use max() instead of sum()
+        # to avoid double-counting during fresh telemetry transitions.
+        total_session_count = max(process_session_count, runtime_session_count)
+        tracked_session_count = max(0, tracked_session_counts.get(account.id, 0))
+        has_task_preview = bool((task_previews.get(account.id) or "").strip())
+        has_cli_signal = (
+            process_session_count > 0
+            or runtime_session_count > 0
+            or tracked_session_count > 0
+            or has_task_preview
+        )
+        status_value = (
+            account.status.value
+            if hasattr(account.status, "value")
+            else str(account.status)
+        )
+        is_working_now = has_cli_signal and status_value != "deactivated"
+        if is_working_now:
+            working_now_count += 1
+
+        is_active_snapshot = bool(
+            selected_snapshot_name
+            and snapshot_index.active_snapshot_name
+            and selected_snapshot_name == snapshot_index.active_snapshot_name
+        )
+
+        if minimal:
+            account_lines.append(
+                "  <account"
+                f' account_id="{escape(account.id, quote=True)}"'
+                f' mapped_snapshot="{escape(selected_snapshot_name or "", quote=True)}"'
+                f' process_session_count="{process_session_count}"'
+                f' runtime_session_count="{runtime_session_count}"'
+                f' total_session_count="{total_session_count}"'
+                f' has_cli_signal="{_xml_bool(has_cli_signal)}"'
+                f' working_now="{_xml_bool(is_working_now)}"'
+                " />"
+            )
+        else:
+            account_lines.append(
+                "  <account"
+                f' account_id="{escape(account.id, quote=True)}"'
+                f' email="{escape(account.email, quote=True)}"'
+                f' status="{escape(status_value, quote=True)}"'
+                f' expected_snapshot="{escape(build_email_snapshot_name(account.email), quote=True)}"'
+                f' mapped_snapshot="{escape(selected_snapshot_name or "", quote=True)}"'
+                f' snapshot_candidates="{escape(",".join(snapshot_candidates), quote=True)}"'
+                f' process_session_count="{process_session_count}"'
+                f' runtime_session_count="{runtime_session_count}"'
+                f' total_session_count="{total_session_count}"'
+                f' tracked_session_count="{tracked_session_count}"'
+                f' has_task_preview="{_xml_bool(has_task_preview)}"'
+                f' has_cli_signal="{_xml_bool(has_cli_signal)}"'
+                f' snapshot_active="{_xml_bool(is_active_snapshot)}"'
+                f' working_now="{_xml_bool(is_working_now)}"'
+                " />"
+            )
+
+    total_process_sessions = sum(max(0, count) for count in process_counts_by_snapshot.values())
+    total_runtime_sessions = sum(max(0, count) for count in runtime_counts_by_snapshot.values())
+    all_snapshot_names = set(process_counts_by_snapshot) | set(runtime_counts_by_snapshot)
+    unmapped_snapshot_names = sorted(name for name in all_snapshot_names if name not in mapped_snapshot_names)
+
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        "<live_usage_mapping"
+        f' generated_at="{escape(generated_at, quote=True)}"'
+        f' active_snapshot="{escape(snapshot_index.active_snapshot_name or "", quote=True)}"'
+        f' total_process_sessions="{total_process_sessions}"'
+        f' total_runtime_sessions="{total_runtime_sessions}"'
+        f' account_count="{len(accounts)}"'
+        f' working_now_count="{working_now_count}"'
+        f' minimal="{_xml_bool(minimal)}"'
+        ">",
+        f'  <accounts count="{len(accounts)}">',
+    ]
+    lines.extend(account_lines)
+    lines.append("  </accounts>")
+    lines.append(f'  <unmapped_cli_snapshots count="{len(unmapped_snapshot_names)}">')
+    for snapshot_name in unmapped_snapshot_names:
+        process_session_count = max(0, process_counts_by_snapshot.get(snapshot_name, 0))
+        runtime_session_count = max(0, runtime_counts_by_snapshot.get(snapshot_name, 0))
+        lines.append(
+            "    <snapshot"
+            f' name="{escape(snapshot_name, quote=True)}"'
+            f' process_session_count="{process_session_count}"'
+            f' runtime_session_count="{runtime_session_count}"'
+            f' total_session_count="{max(process_session_count, runtime_session_count)}"'
+            " />"
+        )
+    lines.append("  </unmapped_cli_snapshots>")
+    lines.append("</live_usage_mapping>")
+
+    return Response(
+        content="\n".join(lines),
+        media_type="application/xml",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def _xml_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+class _LiveUsageTaskPreview:
+    def __init__(self, account_id: str, preview: str) -> None:
+        self.account_id = account_id
+        self.preview = preview
+
+
+def _normalize_task_preview(value: str | None) -> str:
+    normalized = " ".join((value or "").split()).strip()
+    if not normalized:
+        return ""
+    # Keep the XML feed compact for MCP consumers while retaining enough
+    # context to identify the active CLI task.
+    return normalized[:160]
+
+
+async def _read_live_usage_task_previews_by_snapshot() -> dict[str, list[_LiveUsageTaskPreview]]:
+    try:
+        snapshot_index = build_snapshot_index()
+        async for session in get_session():
+            repository = AccountsRepository(session)
+            accounts = await repository.list_accounts()
+            if not accounts:
+                return {}
+
+            account_ids = [account.id for account in accounts]
+            task_previews = await repository.list_codex_current_task_preview_by_account(
+                account_ids=account_ids,
+                active_since=utcnow() - _ACTIVE_CLI_SIGNAL_WINDOW,
+            )
+
+            previews_by_snapshot: dict[str, list[_LiveUsageTaskPreview]] = {}
+            for account in accounts:
+                normalized_preview = _normalize_task_preview(task_previews.get(account.id))
+                if not normalized_preview:
+                    continue
+
+                snapshot_candidates = resolve_snapshot_names_for_account(
+                    snapshot_index=snapshot_index,
+                    account_id=account.id,
+                    chatgpt_account_id=account.chatgpt_account_id,
+                    email=account.email,
+                )
+                selected_snapshot_name = select_snapshot_name(
+                    snapshot_candidates,
+                    snapshot_index.active_snapshot_name,
+                    email=account.email,
+                )
+                if not selected_snapshot_name:
+                    continue
+
+                previews_by_snapshot.setdefault(selected_snapshot_name, []).append(
+                    _LiveUsageTaskPreview(
+                        account_id=account.id,
+                        preview=normalized_preview,
+                    )
+                )
+
+            for task_previews in previews_by_snapshot.values():
+                task_previews.sort(key=lambda preview: preview.account_id)
+
+            return previews_by_snapshot
+    except Exception:
+        return {}
+
+    return {}
 
 
 @router.get("/health/ready", response_model=HealthCheckResponse)

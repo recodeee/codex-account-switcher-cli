@@ -69,6 +69,18 @@ class LocalCodexLiveUsageSample:
     stale: bool = False
 
 
+@dataclass(frozen=True)
+class _UnlabeledDefaultScopeProcessOwner:
+    snapshot_name: str
+    started_at: float
+    observed_at: float
+
+
+_UNLABELED_DEFAULT_SCOPE_PROCESS_OWNER_CACHE_TTL_SECONDS = 6 * 60 * 60
+_UNLABELED_DEFAULT_SCOPE_PROCESS_OWNER_CACHE_MAX_ENTRIES = 2048
+_unlabeled_default_scope_process_owner_cache: dict[int, _UnlabeledDefaultScopeProcessOwner] = {}
+
+
 def read_local_codex_live_usage(*, now: datetime | None = None) -> LocalCodexLiveUsage | None:
     current = now or datetime.now(timezone.utc)
     sessions_dir = _resolve_sessions_dir()
@@ -171,15 +183,15 @@ def read_live_codex_process_session_counts_by_snapshot() -> dict[str, int]:
     processes: list[tuple[int, dict[str, str]]] = []
     for pid, _command in _iter_running_codex_commands(proc_root):
         processes.append((pid, _read_process_env(pid) or {}))
+    _prune_unlabeled_default_scope_process_owner_cache(active_pids={pid for pid, _env in processes})
 
     counts: dict[str, int] = {}
     for pid, env in processes:
-        snapshot_name = _resolve_process_snapshot_name(
+        snapshot_name = _resolve_process_snapshot_name_for_accounting(
             pid,
             env=env,
             default_current_path=default_current_path,
             default_auth_path=default_auth_path,
-            allow_unlabeled_default_scope_mapping=True,
         )
         if not snapshot_name:
             continue
@@ -202,15 +214,15 @@ def terminate_live_codex_processes_for_snapshot(snapshot_name: str) -> int:
     processes: list[tuple[int, dict[str, str]]] = []
     for pid, _command in _iter_running_codex_commands(proc_root):
         processes.append((pid, _read_process_env(pid) or {}))
+    _prune_unlabeled_default_scope_process_owner_cache(active_pids={pid for pid, _env in processes})
 
     target_pids: list[int] = []
     for pid, env in processes:
-        resolved_snapshot_name = _resolve_process_snapshot_name(
+        resolved_snapshot_name = _resolve_process_snapshot_name_for_accounting(
             pid,
             env=env,
             default_current_path=default_current_path,
             default_auth_path=default_auth_path,
-            allow_unlabeled_default_scope_mapping=True,
         )
         if resolved_snapshot_name == normalized_snapshot_name:
             target_pids.append(pid)
@@ -221,6 +233,108 @@ def terminate_live_codex_processes_for_snapshot(snapshot_name: str) -> int:
         if _terminate_codex_process(pid):
             terminated += 1
     return terminated
+
+
+def _resolve_process_snapshot_name_for_accounting(
+    pid: int,
+    *,
+    env: dict[str, str] | None,
+    default_current_path: Path,
+    default_auth_path: Path,
+) -> str | None:
+    snapshot_name = _resolve_process_snapshot_name(
+        pid,
+        env=env,
+        default_current_path=default_current_path,
+        default_auth_path=default_auth_path,
+        allow_unlabeled_default_scope_mapping=False,
+    )
+    if snapshot_name:
+        return snapshot_name
+
+    resolved_from_cache = _resolve_cached_unlabeled_default_scope_snapshot_name(pid)
+    if resolved_from_cache:
+        return resolved_from_cache
+
+    if not _is_eligible_unlabeled_default_scope_process(
+        pid=pid,
+        env=env or {},
+        default_current_path=default_current_path,
+        default_auth_path=default_auth_path,
+    ):
+        return None
+
+    fallback_snapshot = _resolve_process_snapshot_name(
+        pid,
+        env=env,
+        default_current_path=default_current_path,
+        default_auth_path=default_auth_path,
+        allow_unlabeled_default_scope_mapping=True,
+    )
+    if fallback_snapshot:
+        _remember_unlabeled_default_scope_snapshot_name(pid, fallback_snapshot)
+    return fallback_snapshot
+
+
+def _resolve_cached_unlabeled_default_scope_snapshot_name(pid: int) -> str | None:
+    owner = _unlabeled_default_scope_process_owner_cache.get(pid)
+    if owner is None:
+        return None
+
+    started_at = _read_process_started_at(pid)
+    if started_at is None:
+        _unlabeled_default_scope_process_owner_cache.pop(pid, None)
+        return None
+
+    if abs(started_at - owner.started_at) > 1e-6:
+        _unlabeled_default_scope_process_owner_cache.pop(pid, None)
+        return None
+
+    _unlabeled_default_scope_process_owner_cache[pid] = _UnlabeledDefaultScopeProcessOwner(
+        snapshot_name=owner.snapshot_name,
+        started_at=owner.started_at,
+        observed_at=time.time(),
+    )
+    return owner.snapshot_name
+
+
+def _remember_unlabeled_default_scope_snapshot_name(pid: int, snapshot_name: str) -> None:
+    started_at = _read_process_started_at(pid)
+    if started_at is None:
+        return
+
+    _unlabeled_default_scope_process_owner_cache[pid] = _UnlabeledDefaultScopeProcessOwner(
+        snapshot_name=snapshot_name,
+        started_at=started_at,
+        observed_at=time.time(),
+    )
+    _prune_unlabeled_default_scope_process_owner_cache()
+
+
+def _prune_unlabeled_default_scope_process_owner_cache(*, active_pids: set[int] | None = None) -> None:
+    if not _unlabeled_default_scope_process_owner_cache:
+        return
+
+    now_ts = time.time()
+    ttl_cutoff = now_ts - _UNLABELED_DEFAULT_SCOPE_PROCESS_OWNER_CACHE_TTL_SECONDS
+
+    for pid, owner in list(_unlabeled_default_scope_process_owner_cache.items()):
+        if active_pids is not None and pid not in active_pids:
+            _unlabeled_default_scope_process_owner_cache.pop(pid, None)
+            continue
+        if owner.observed_at < ttl_cutoff:
+            _unlabeled_default_scope_process_owner_cache.pop(pid, None)
+
+    overflow = len(_unlabeled_default_scope_process_owner_cache) - _UNLABELED_DEFAULT_SCOPE_PROCESS_OWNER_CACHE_MAX_ENTRIES
+    if overflow <= 0:
+        return
+
+    stale_pids = sorted(
+        _unlabeled_default_scope_process_owner_cache,
+        key=lambda pid: _unlabeled_default_scope_process_owner_cache[pid].observed_at,
+    )
+    for pid in stale_pids[:overflow]:
+        _unlabeled_default_scope_process_owner_cache.pop(pid, None)
 
 
 def read_runtime_live_session_counts_by_snapshot(*, now: datetime | None = None) -> dict[str, int]:
@@ -613,6 +727,20 @@ def _resolve_auth_path() -> Path:
     return (_resolve_default_home_path() / ".codex" / "auth.json").resolve()
 
 
+def _resolve_accounts_dir() -> Path:
+    raw = os.environ.get("CODEX_AUTH_ACCOUNTS_DIR")
+    if raw:
+        return _resolve_path(raw)
+    return (_resolve_default_home_path() / ".codex" / "accounts").resolve()
+
+
+def _resolve_registry_path() -> Path:
+    raw = os.environ.get("CODEX_AUTH_REGISTRY_PATH")
+    if raw:
+        return _resolve_path(raw)
+    return _resolve_accounts_dir() / "registry.json"
+
+
 def _resolve_default_home_path() -> Path:
     try:
         pw_home = pwd.getpwuid(os.getuid()).pw_dir
@@ -789,7 +917,38 @@ def _resolve_unlabeled_default_scope_snapshot_name(
     if not snapshot_name:
         return None
 
+    selection_changed_at = _safe_mtime(default_current_path)
+    if selection_changed_at > 0:
+        started_at = _read_process_started_at(pid)
+        if started_at is not None:
+            tolerance_seconds = float(_unlabeled_process_start_tolerance_seconds())
+            if (started_at + tolerance_seconds) < selection_changed_at:
+                previous_snapshot_name = _read_previous_active_snapshot_name_from_registry()
+                if previous_snapshot_name and previous_snapshot_name != snapshot_name:
+                    return previous_snapshot_name
+                return None
+
     return snapshot_name
+
+
+def _read_previous_active_snapshot_name_from_registry() -> str | None:
+    registry_path = _resolve_registry_path()
+    if not registry_path.exists() or not registry_path.is_file():
+        return None
+
+    try:
+        payload = json.loads(registry_path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError, TypeError):
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    previous_snapshot_name = payload.get("previousActiveAccountName")
+    if not isinstance(previous_snapshot_name, str):
+        return None
+    normalized = previous_snapshot_name.strip()
+    return normalized or None
 
 
 def _is_eligible_unlabeled_default_scope_process(
@@ -817,10 +976,10 @@ def _is_eligible_unlabeled_default_scope_process(
     if explicit_snapshot:
         return False
 
-    return _resolve_unlabeled_default_scope_snapshot_name(
-        pid=pid,
-        default_current_path=default_current_path,
-    ) is not None
+    if not _process_belongs_to_current_user(pid):
+        return False
+
+    return _read_current_snapshot_name(default_current_path) is not None
 
 
 def _read_process_started_at(pid: int) -> float | None:
@@ -987,7 +1146,53 @@ def _iter_running_codex_commands(proc_root: Path) -> list[tuple[int, list[str]]]
             continue
         if _is_codex_session_command(command):
             running.append((pid, command))
-    return running
+
+    # The node launcher process and the native codex process can represent the
+    # same terminal session. Keep the native child process as source-of-truth
+    # and suppress only wrappers that are confirmed parents of a native child.
+    native_child_parent_pids: set[int] = set()
+    for pid, command in running:
+        if Path(command[0]).name != "codex":
+            continue
+        ppid = _read_process_ppid(pid)
+        if ppid is not None:
+            native_child_parent_pids.add(ppid)
+
+    deduplicated: list[tuple[int, list[str]]] = []
+    for pid, command in running:
+        if _is_node_codex_wrapper_command(command) and pid in native_child_parent_pids:
+            continue
+        deduplicated.append((pid, command))
+
+    return deduplicated
+
+
+def _read_process_ppid(pid: int) -> int | None:
+    status_path = _resolve_proc_root() / str(pid) / "status"
+    try:
+        raw = status_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+
+    for line in raw.splitlines():
+        if not line.startswith("PPid:"):
+            continue
+        value = line.partition(":")[2].strip()
+        if not value:
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _is_node_codex_wrapper_command(command: list[str]) -> bool:
+    if len(command) < 2:
+        return False
+    if Path(command[0]).name not in {"node", "nodejs"}:
+        return False
+    return Path(command[1]).name == "codex"
 
 
 def _read_process_cmdline(pid: int) -> list[str]:

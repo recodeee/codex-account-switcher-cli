@@ -162,6 +162,11 @@ def resolve_snapshot_names_for_account(
 
         _add(filtered_email_named_matches)
 
+    # Legacy fallback: when persisted account metadata drifted and snapshot names
+    # are custom (non email-shaped), resolve by snapshot payload email identity.
+    if not resolved:
+        _add(_email_owned_snapshot_name_candidates(email))
+
     resolved = _filter_snapshot_names_by_email_identity(
         snapshot_names=resolved,
         email=email,
@@ -250,6 +255,23 @@ def _read_snapshot_email(snapshot_name: str, *, accounts_dir: Path) -> str | Non
     if not email or email == DEFAULT_EMAIL.lower():
         return None
     return email
+
+
+def _email_owned_snapshot_name_candidates(email: str | None) -> list[str]:
+    normalized_email = (email or "").strip().lower()
+    if not normalized_email:
+        return []
+
+    accounts_dir = _resolve_accounts_dir()
+    if not accounts_dir.exists() or not accounts_dir.is_dir():
+        return []
+
+    matches: list[str] = []
+    for snapshot_path in sorted(accounts_dir.glob("*.json"), key=lambda path: path.name):
+        snapshot_email = _read_snapshot_email(snapshot_path.stem, accounts_dir=accounts_dir)
+        if snapshot_email == normalized_email:
+            matches.append(snapshot_path.stem)
+    return matches
 
 
 def _resolve_accounts_dir() -> Path:
@@ -682,6 +704,14 @@ def _set_registry_active_snapshot(snapshot_name: str, *, accounts_dir: Path) -> 
         payload = decoded if isinstance(decoded, dict) else {}
     else:
         payload = {}
+
+    previous_active_name = payload.get("activeAccountName")
+    if (
+        isinstance(previous_active_name, str)
+        and previous_active_name.strip()
+        and previous_active_name != snapshot_name
+    ):
+        payload["previousActiveAccountName"] = previous_active_name
 
     payload["activeAccountName"] = snapshot_name
     registry_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -39,6 +40,10 @@ async def test_live_usage_returns_xml_payload():
             return_value={"viktoredixaicom": 8},
         ),
         patch(
+            "app.modules.health.api._read_live_usage_task_previews_by_snapshot",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
             "app.modules.health.api.utcnow",
             return_value=datetime(2026, 4, 5, 0, 0, 0),
         ),
@@ -48,8 +53,189 @@ async def test_live_usage_returns_xml_payload():
     assert response.media_type == "application/xml"
     assert response.headers.get("cache-control") == "no-store"
     body = response.body.decode("utf-8")
-    assert '<live_usage generated_at="2026-04-05T00:00:00Z" total_sessions="8">' in body
+    assert (
+        '<live_usage generated_at="2026-04-05T00:00:00Z" total_sessions="8" total_task_previews="0">'
+        in body
+    )
     assert '<snapshot name="viktoredixaicom" session_count="8" />' in body
+
+
+@pytest.mark.asyncio
+async def test_live_usage_includes_task_previews_mapped_to_snapshot():
+    from app.modules.health.api import live_usage
+
+    with (
+        patch(
+            "app.modules.health.api.read_live_codex_process_session_counts_by_snapshot",
+            return_value={"unique": 4},
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_task_previews_by_snapshot",
+            new=AsyncMock(
+                return_value={
+                    "unique": [
+                        SimpleNamespace(
+                            account_id="acc-1",
+                            preview="Investigate merged telemetry",
+                        )
+                    ]
+                }
+            ),
+        ),
+        patch(
+            "app.modules.health.api.utcnow",
+            return_value=datetime(2026, 4, 5, 0, 0, 0),
+        ),
+    ):
+        response = await live_usage()
+
+    body = response.body.decode("utf-8")
+    assert (
+        '<live_usage generated_at="2026-04-05T00:00:00Z" total_sessions="4" total_task_previews="1">'
+        in body
+    )
+    assert '<snapshot name="unique" session_count="4" task_preview_count="1">' in body
+    assert (
+        '<task_preview account_id="acc-1" preview="Investigate merged telemetry" />'
+        in body
+    )
+
+
+@pytest.mark.asyncio
+async def test_live_usage_mapping_returns_xml_payload():
+    from app.db.models import AccountStatus
+    from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
+    from app.modules.health.api import live_usage_mapping
+
+    now = datetime(2026, 4, 5, 0, 0, 0)
+    account = SimpleNamespace(
+        id="acc-1",
+        email="owner@example.com",
+        chatgpt_account_id="chatgpt-1",
+        status=AccountStatus.ACTIVE,
+    )
+    repo = AsyncMock()
+    repo.list_accounts = AsyncMock(return_value=[account])
+    repo.list_codex_session_counts_by_account = AsyncMock(return_value={"acc-1": 2})
+    repo.list_codex_current_task_preview_by_account = AsyncMock(
+        return_value={"acc-1": "Investigating session routing"},
+    )
+
+    with (
+        patch("app.modules.health.api.AccountsRepository", return_value=repo),
+        patch(
+            "app.modules.health.api.build_snapshot_index",
+            return_value=CodexAuthSnapshotIndex(
+                snapshots_by_account_id={"acc-1": ["owner-example-com"]},
+                active_snapshot_name="owner-example-com",
+            ),
+        ),
+        patch(
+            "app.modules.health.api.resolve_snapshot_names_for_account",
+            return_value=["owner-example-com"],
+        ),
+        patch(
+            "app.modules.health.api.select_snapshot_name",
+            return_value="owner-example-com",
+        ),
+        patch(
+            "app.modules.health.api.read_live_codex_process_session_counts_by_snapshot",
+            return_value={"owner-example-com": 1, "orphan-snapshot": 3},
+        ),
+        patch(
+            "app.modules.health.api.read_runtime_live_session_counts_by_snapshot",
+            return_value={"owner-example-com": 4},
+        ),
+        patch("app.modules.health.api.utcnow", return_value=now),
+    ):
+        response = await live_usage_mapping(session=AsyncMock())
+
+    assert response.media_type == "application/xml"
+    assert response.headers.get("cache-control") == "no-store"
+    body = response.body.decode("utf-8")
+    assert '<live_usage_mapping generated_at="2026-04-05T00:00:00Z"' in body
+    assert 'active_snapshot="owner-example-com"' in body
+    assert 'working_now_count="1"' in body
+    assert 'minimal="false"' in body
+    assert '<account account_id="acc-1"' in body
+    assert 'email="owner@example.com"' in body
+    assert 'status="active"' in body
+    assert 'expected_snapshot="owner-example-com"' in body
+    assert 'mapped_snapshot="owner-example-com"' in body
+    assert 'snapshot_candidates="owner-example-com"' in body
+    assert 'process_session_count="1"' in body
+    assert 'runtime_session_count="4"' in body
+    assert 'total_session_count="4"' in body
+    assert 'tracked_session_count="2"' in body
+    assert 'has_task_preview="true"' in body
+    assert 'has_cli_signal="true"' in body
+    assert 'snapshot_active="true"' in body
+    assert 'working_now="true"' in body
+    assert (
+        '<snapshot name="orphan-snapshot" process_session_count="3" runtime_session_count="0" total_session_count="3" />'
+    ) in body
+
+
+@pytest.mark.asyncio
+async def test_live_usage_mapping_minimal_returns_compact_account_rows():
+    from app.db.models import AccountStatus
+    from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
+    from app.modules.health.api import live_usage_mapping
+
+    now = datetime(2026, 4, 5, 0, 0, 0)
+    account = SimpleNamespace(
+        id="acc-1",
+        email="owner@example.com",
+        chatgpt_account_id="chatgpt-1",
+        status=AccountStatus.ACTIVE,
+    )
+    repo = AsyncMock()
+    repo.list_accounts = AsyncMock(return_value=[account])
+    repo.list_codex_session_counts_by_account = AsyncMock(return_value={"acc-1": 2})
+    repo.list_codex_current_task_preview_by_account = AsyncMock(
+        return_value={"acc-1": "Investigating session routing"},
+    )
+
+    with (
+        patch("app.modules.health.api.AccountsRepository", return_value=repo),
+        patch(
+            "app.modules.health.api.build_snapshot_index",
+            return_value=CodexAuthSnapshotIndex(
+                snapshots_by_account_id={"acc-1": ["owner-example-com"]},
+                active_snapshot_name="owner-example-com",
+            ),
+        ),
+        patch(
+            "app.modules.health.api.resolve_snapshot_names_for_account",
+            return_value=["owner-example-com"],
+        ),
+        patch(
+            "app.modules.health.api.select_snapshot_name",
+            return_value="owner-example-com",
+        ),
+        patch(
+            "app.modules.health.api.read_live_codex_process_session_counts_by_snapshot",
+            return_value={"owner-example-com": 1},
+        ),
+        patch(
+            "app.modules.health.api.read_runtime_live_session_counts_by_snapshot",
+            return_value={"owner-example-com": 4},
+        ),
+        patch("app.modules.health.api.utcnow", return_value=now),
+    ):
+        response = await live_usage_mapping(session=AsyncMock(), minimal=True)
+
+    assert response.media_type == "application/xml"
+    assert response.headers.get("cache-control") == "no-store"
+    body = response.body.decode("utf-8")
+    assert '<live_usage_mapping generated_at="2026-04-05T00:00:00Z"' in body
+    assert 'minimal="true"' in body
+    assert (
+        '<account account_id="acc-1" mapped_snapshot="owner-example-com" process_session_count="1" '
+        'runtime_session_count="4" total_session_count="4" has_cli_signal="true" working_now="true" />'
+    ) in body
+    assert 'snapshot_candidates=' not in body
+    assert 'expected_snapshot=' not in body
 
 
 @pytest.mark.asyncio

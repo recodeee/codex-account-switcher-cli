@@ -320,6 +320,30 @@ def test_resolve_snapshot_names_for_account_handles_email_case_drift(
     assert resolved == ["main"]
 
 
+def test_resolve_snapshot_names_for_account_recovers_custom_snapshot_name_by_email_identity(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    (tmp_path / "current").write_text("tokio")
+    _write_auth_snapshot(accounts_dir / "tokio.json", email="main@example.com", account_id="acc-main")
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    index = build_snapshot_index()
+
+    resolved = resolve_snapshot_names_for_account(
+        snapshot_index=index,
+        account_id="legacy-main-id",
+        chatgpt_account_id=None,
+        email="main@example.com",
+    )
+
+    assert resolved == ["tokio"]
+
+
 def test_resolve_snapshot_names_for_account_prefers_canonical_id_over_stale_persisted_id() -> None:
     canonical_id = generate_unique_account_id("acc-main", "main@example.com")
     index = CodexAuthSnapshotIndex(
@@ -441,6 +465,7 @@ def test_switch_snapshot_falls_back_without_codex_auth(
     assert auth_path.resolve() == (accounts_dir / "main.json").resolve()
     registry_payload = json.loads((accounts_dir / "registry.json").read_text(encoding="utf-8"))
     assert registry_payload["activeAccountName"] == "main"
+    assert registry_payload["previousActiveAccountName"] == "bia"
 
 
 def test_switch_snapshot_raises_when_codex_auth_missing_and_fallback_fails(
@@ -513,6 +538,7 @@ def test_switch_snapshot_repairs_broken_pointer_after_cli_success(
     assert not os.readlink(auth_path).startswith("/")
     registry_payload = json.loads((accounts_dir / "registry.json").read_text(encoding="utf-8"))
     assert registry_payload["activeAccountName"] == "main"
+    assert registry_payload["previousActiveAccountName"] == "bia"
 
 
 def test_switch_snapshot_normalizes_absolute_pointer_after_cli_success(
