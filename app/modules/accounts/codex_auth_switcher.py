@@ -321,16 +321,31 @@ def select_snapshot_name(
 ) -> str | None:
     if not snapshot_names:
         return None
-    for candidate_name in _email_snapshot_name_candidates(email):
-        if candidate_name in snapshot_names:
-            return candidate_name
-    for candidate_name in _email_prefix_snapshot_name_candidates(
+
+    snapshot_name_set = set(snapshot_names)
+    prefix_candidates = _email_prefix_snapshot_name_candidates(
         email=email,
-        snapshot_names=set(snapshot_names),
+        snapshot_names=snapshot_name_set,
+    )
+
+    # When multiple local-part-prefixed snapshots exist (for example
+    # "codexina" + "codexinaforever"), prefer the active one if it is part of
+    # that ambiguity instead of flipping back to the shortest alias.
+    if (
+        active_snapshot_name
+        and active_snapshot_name in snapshot_name_set
+        and active_snapshot_name in prefix_candidates
+        and len(prefix_candidates) > 1
     ):
-        if candidate_name in snapshot_names:
+        return active_snapshot_name
+
+    for candidate_name in _email_snapshot_name_candidates(email):
+        if candidate_name in snapshot_name_set:
             return candidate_name
-    if active_snapshot_name and active_snapshot_name in snapshot_names:
+    for candidate_name in prefix_candidates:
+        if candidate_name in snapshot_name_set:
+            return candidate_name
+    if active_snapshot_name and active_snapshot_name in snapshot_name_set:
         return active_snapshot_name
     return snapshot_names[0]
 

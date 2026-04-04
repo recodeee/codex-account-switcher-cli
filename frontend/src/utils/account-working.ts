@@ -43,8 +43,16 @@ export function getMergedQuotaRemainingPercent(
   account: Pick<AccountSummary, "liveQuotaDebug">,
   windowKey: "primary" | "secondary",
 ): number | null {
-  const merged = account.liveQuotaDebug?.merged;
+  const liveQuotaDebug = account.liveQuotaDebug;
+  const merged = liveQuotaDebug?.merged;
   if (!merged || merged.stale === true) {
+    return null;
+  }
+
+  const overrideReason = (liveQuotaDebug?.overrideReason ?? "").trim();
+  const deferredMixedDefaultSessions =
+    overrideReason.startsWith("deferred_active_snapshot_mixed_default_sessions");
+  if (deferredMixedDefaultSessions && liveQuotaDebug?.overrideApplied !== true) {
     return null;
   }
 

@@ -210,6 +210,15 @@ def test_select_snapshot_name_prefers_email_canonical_name_when_active_missing()
     assert selected == "codexina"
 
 
+def test_select_snapshot_name_prefers_active_when_multiple_email_prefix_snapshots_match() -> None:
+    selected = select_snapshot_name(
+        ["codexina", "codexinaforever"],
+        "codexinaforever",
+        email="codexina@nagyviktor.com",
+    )
+    assert selected == "codexinaforever"
+
+
 def test_select_snapshot_name_falls_back_to_first_when_no_canonical_match() -> None:
     selected = select_snapshot_name(
         ["main", "runtime"],

@@ -48,7 +48,7 @@ describe("AccountListItem", () => {
     expect(screen.getByTestId("mini-quota-weekly-fill")).toHaveStyle({ width: "73%" });
   });
 
-  it("prefers merged debug weekly percent in sidebar row", () => {
+  it("ignores deferred mixed-session merged weekly percent in sidebar row when override was not applied", () => {
     const account = createAccountSummary({
       usage: {
         primaryRemainingPercent: 24,
@@ -90,7 +90,7 @@ describe("AccountListItem", () => {
       />,
     );
 
-    expect(screen.getByTestId("mini-quota-weekly-fill")).toHaveStyle({ width: "66%" });
+    expect(screen.getByTestId("mini-quota-weekly-fill")).toHaveStyle({ width: "0%" });
   });
 
   it("renders 5h quota row above weekly row", () => {

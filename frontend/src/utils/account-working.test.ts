@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createAccountSummary } from "@/test/mocks/factories";
-import { isAccountWorkingNow } from "@/utils/account-working";
+import { getMergedQuotaRemainingPercent, isAccountWorkingNow } from "@/utils/account-working";
 
 describe("isAccountWorkingNow", () => {
   it("returns true when codex auth reports a live session with fresh telemetry", () => {
@@ -153,5 +153,49 @@ describe("isAccountWorkingNow", () => {
       lastUsageRecordedAtSecondary: null,
     });
     expect(isAccountWorkingNow(account)).toBe(false);
+  });
+
+  it("ignores deferred mixed-session merged quotas when override was not applied", () => {
+    const account = createAccountSummary({
+      liveQuotaDebug: {
+        snapshotsConsidered: ["korona"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: {
+          source: "merged",
+          snapshotName: "korona",
+          recordedAt: "2026-04-04T11:58:00.000Z",
+          stale: false,
+          primary: { usedPercent: 84, remainingPercent: 16, resetAt: 1760000000, windowMinutes: 300 },
+          secondary: { usedPercent: 10, remainingPercent: 90, resetAt: 1760600000, windowMinutes: 10080 },
+        },
+        rawSamples: [],
+      },
+    });
+
+    expect(getMergedQuotaRemainingPercent(account, "primary")).toBeNull();
+    expect(getMergedQuotaRemainingPercent(account, "secondary")).toBeNull();
+  });
+
+  it("keeps merged quotas when override was applied", () => {
+    const account = createAccountSummary({
+      liveQuotaDebug: {
+        snapshotsConsidered: ["korona"],
+        overrideApplied: true,
+        overrideReason: "applied_live_usage_windows",
+        merged: {
+          source: "merged",
+          snapshotName: "korona",
+          recordedAt: "2026-04-04T11:58:00.000Z",
+          stale: false,
+          primary: { usedPercent: 84, remainingPercent: 16, resetAt: 1760000000, windowMinutes: 300 },
+          secondary: { usedPercent: 10, remainingPercent: 90, resetAt: 1760600000, windowMinutes: 10080 },
+        },
+        rawSamples: [],
+      },
+    });
+
+    expect(getMergedQuotaRemainingPercent(account, "primary")).toBe(16);
+    expect(getMergedQuotaRemainingPercent(account, "secondary")).toBe(90);
   });
 });

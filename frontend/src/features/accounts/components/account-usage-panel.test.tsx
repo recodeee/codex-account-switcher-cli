@@ -117,7 +117,7 @@ describe("AccountUsagePanel", () => {
     expect(screen.getByText("2%")).toBeInTheDocument();
   });
 
-  it("prefers merged debug weekly percent over stale usage weekly percent", () => {
+  it("ignores deferred mixed-session merged weekly percent when override was not applied", () => {
     const account = createAccountSummary({
       usage: {
         primaryRemainingPercent: 24,
@@ -152,6 +152,7 @@ describe("AccountUsagePanel", () => {
     render(<AccountUsagePanel account={account} trends={null} />);
 
     expect(screen.getAllByText("24%").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("66%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("66%")).not.toBeInTheDocument();
+    expect(screen.getAllByText("0%").length).toBeGreaterThanOrEqual(1);
   });
 });

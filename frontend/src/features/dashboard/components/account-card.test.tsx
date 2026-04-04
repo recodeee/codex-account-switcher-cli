@@ -776,7 +776,7 @@ describe("AccountCard", () => {
     expect(progressTrack).toHaveClass("bg-zinc-500/10");
   });
 
-  it("prefers merged quota debug percentages over stale usage percentages", () => {
+  it("ignores deferred mixed-session merged percentages when override was not applied", () => {
     const account = createAccountSummary({
       accountId: "acc_debug_merged_values",
       usage: {
@@ -818,11 +818,13 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getAllByText("51%").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("69%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("51%")).not.toBeInTheDocument();
+    expect(screen.queryByText("69%")).not.toBeInTheDocument();
+    expect(screen.getAllByText("93%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("0%").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("does not keep a stale 0% floor when merged quota debug values are available", () => {
+  it("does not keep a stale 0% floor when trusted merged quota debug values are available", () => {
     const accountId = "acc_debug_floor_recovery";
     const base = createAccountSummary({
       accountId,
@@ -847,8 +849,8 @@ describe("AccountCard", () => {
       },
       liveQuotaDebug: {
         snapshotsConsidered: ["viktor"],
-        overrideApplied: false,
-        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        overrideApplied: true,
+        overrideReason: "applied_live_usage_windows",
         merged: {
           source: "merged",
           snapshotName: "viktor",
