@@ -582,7 +582,7 @@ describe("AccountCards", () => {
     expect(screen.queryByText("live sessions")).not.toBeInTheDocument();
   });
 
-  it("places accounts with only fresh debug samples in the working-now section", () => {
+  it("keeps deferred mixed-session debug-only accounts out of working-now", () => {
     const sampled = createAccountSummary({
       accountId: "acc_sampled",
       email: "sampled@example.com",
@@ -636,7 +636,7 @@ describe("AccountCards", () => {
 
     render(<AccountCards accounts={[idle, sampled]} primaryWindow={null} secondaryWindow={null} />);
 
-    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Working now" })).not.toBeInTheDocument();
     expect(screen.getByText("sampled@example.com")).toBeInTheDocument();
   });
 

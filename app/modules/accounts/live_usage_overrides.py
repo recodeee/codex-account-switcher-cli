@@ -1055,6 +1055,9 @@ def _build_default_sample_debug_overrides(
         baseline_secondary_usage=baseline_secondary_usage,
         sample_sources=[sample.source for sample in default_scope_samples],
         preferred_account_id=active_account_id,
+        # Deferred debug/session hints should only reflect confident ownership
+        # so stale/ambiguous default-scope samples don't mark extra accounts
+        # as "Working now".
         allow_low_confidence_assignments=False,
         # Keep immediate attribution for a brand-new single default-scope
         # sample (common right after switching), but avoid spreading
@@ -1094,6 +1097,15 @@ def _build_default_sample_debug_overrides(
                 observed_at=sample.recorded_at,
             )
 
+    _prime_unattributed_default_scope_sample_owners(
+        default_scope_samples=default_scope_samples,
+        assignments=assignments,
+        active_account_id=active_account_id,
+        candidate_accounts=candidate_accounts,
+        baseline_primary_usage=baseline_primary_usage,
+        baseline_secondary_usage=baseline_secondary_usage,
+    )
+
     for samples in debug_samples_by_account.values():
         samples.sort(key=lambda sample: sample.recorded_at, reverse=True)
     for samples in confident_samples_by_account.values():
@@ -1126,6 +1138,56 @@ def _build_debug_sample(
         primary=_build_debug_window(primary),
         secondary=_build_debug_window(secondary),
     )
+
+
+def _prime_unattributed_default_scope_sample_owners(
+    *,
+    default_scope_samples: list[LocalCodexLiveUsageSample],
+    assignments: dict[int, _SampleMatchResult],
+    active_account_id: str | None,
+    candidate_accounts: list[Account],
+    baseline_primary_usage: dict[str, UsageHistory],
+    baseline_secondary_usage: dict[str, UsageHistory],
+) -> None:
+    if not active_account_id:
+        return
+
+    candidate_account_ids = [account.id for account in candidate_accounts]
+    if active_account_id not in candidate_account_ids:
+        return
+
+    for sample_index, sample in enumerate(default_scope_samples):
+        if sample_index in assignments:
+            continue
+        if sample.stale:
+            continue
+        if sample.primary is None and sample.secondary is None:
+            continue
+        if _lookup_sample_source_owner(
+            source=sample.source,
+            allowed_account_ids=candidate_account_ids,
+        ):
+            continue
+
+        sample_match = _match_sample_to_account(
+            sample=LocalCodexLiveUsage(
+                recorded_at=sample.recorded_at,
+                active_session_count=1,
+                primary=sample.primary,
+                secondary=sample.secondary,
+            ),
+            accounts=candidate_accounts,
+            baseline_primary_usage=baseline_primary_usage,
+            baseline_secondary_usage=baseline_secondary_usage,
+        )
+        if sample_match is not None:
+            continue
+
+        _remember_sample_source_owner(
+            source=sample.source,
+            account_id=active_account_id,
+            observed_at=sample.recorded_at,
+        )
 
 
 def _build_debug_window(window: LocalUsageWindow | None) -> AccountLiveQuotaDebugWindow | None:
@@ -1331,26 +1393,23 @@ def _apply_local_default_session_fingerprint_overrides(
         baseline_secondary_usage=baseline_secondary_usage,
         sample_sources=sample_sources,
         preferred_account_id=active_account_id,
+        # Default-scope fallback is presence-only attribution. Keep it strict:
+        # only confident ownership can create per-account live-session hints.
+        allow_low_confidence_assignments=False,
         # Conservative in mixed default-scope fallback mode: do not force-map
         # unresolved fingerprint samples to an account, because that can mark
         # the wrong account as "Working now" when multiple snapshots are
         # active in the default sessions directory.
         allow_ambiguous_fallback_assignments=False,
     )
-    if not allow_quota_override and active_account_id is not None:
-        # Deferred mixed-default mode prioritizes avoiding false positives on
-        # non-active accounts over recovering every concurrent fallback match.
-        # Keep attribution scoped to the active snapshot owner. Still allow
-        # quota overrides for high-confidence matches so the active account
-        # reflects the best-known live fingerprint while inactive accounts stay
-        # untouched.
+    if not allow_quota_override:
+        # Keep per-sample ownership attribution dynamic, but disable quota
+        # window overrides in conservative fallback mode.
         sample_matches_by_index = {
             sample_index: _SampleMatchResult(
-                account_id=active_account_id,
+                account_id=match.account_id,
                 confidence=match.confidence,
-                allows_quota_override=(
-                    match.allows_quota_override or match.confidence == "high"
-                ),
+                allows_quota_override=False,
             )
             for sample_index, match in sample_matches_by_index.items()
         }
@@ -1408,8 +1467,8 @@ def _apply_local_default_session_fingerprint_overrides(
         if latest_attribution is None:
             continue
 
-        can_apply_quota_override = latest_attribution.match.allows_quota_override and (
-            allow_quota_override or account_id == active_account_id
+        can_apply_quota_override = (
+            latest_attribution.match.allows_quota_override and allow_quota_override
         )
         if not can_apply_quota_override:
             # Ambiguous or presence-only attribution still contributes to

@@ -13,6 +13,7 @@ from app.modules.accounts.codex_live_usage import (
     LocalUsageWindow,
 )
 from app.modules.accounts.live_usage_overrides import (
+    _build_default_sample_debug_overrides,
     _apply_local_default_session_fingerprint_overrides,
     _match_sample_to_account,
     _resolve_sample_account_assignments,
@@ -351,7 +352,7 @@ def test_apply_local_live_usage_overrides_disables_default_session_fingerprint_f
         codex_live_session_counts_by_account=codex_session_counts_by_account,
     )
 
-    assert codex_session_counts_by_account[account_a.id] == 2
+    assert codex_session_counts_by_account[account_a.id] == 0
     assert codex_session_counts_by_account[account_b.id] == 0
     assert codex_auth_by_account[account_a.id].has_live_session is False
     assert codex_auth_by_account[account_b.id].has_live_session is False
@@ -562,10 +563,10 @@ def test_apply_local_live_usage_overrides_uses_mixed_default_session_fallback_wi
         codex_live_session_counts_by_account=codex_session_counts_by_account,
     )
 
-    assert codex_session_counts_by_account[account_a.id] == 2
-    assert codex_session_counts_by_account[account_b.id] == 0
+    assert codex_session_counts_by_account[account_a.id] == 1
+    assert codex_session_counts_by_account[account_b.id] == 1
     assert codex_auth_by_account[account_a.id].has_live_session is True
-    assert codex_auth_by_account[account_b.id].has_live_session is False
+    assert codex_auth_by_account[account_b.id].has_live_session is True
 
 
 def test_apply_local_live_usage_overrides_uses_mixed_default_session_fallback_with_process_visibility(
@@ -670,9 +671,10 @@ def test_apply_local_live_usage_overrides_uses_mixed_default_session_fallback_wi
         codex_live_session_counts_by_account=codex_session_counts_by_account,
     )
 
-    # Process-level visibility keeps only active snapshot process volume.
+    # Process-level visibility is primary; inferred fallback remains for
+    # accounts with attributed live-session ownership.
     assert codex_session_counts_by_account[account_a.id] == 2
-    assert codex_session_counts_by_account[account_b.id] == 0
+    assert codex_session_counts_by_account[account_b.id] == 1
     assert codex_auth_by_account[account_a.id].has_live_session is True
     assert codex_auth_by_account[account_b.id].has_live_session is True
 
@@ -893,13 +895,125 @@ def test_fallback_mapping_distributes_low_confidence_fingerprint_samples_determi
         codex_session_counts_by_account=codex_session_counts_by_account,
     )
 
-    assert codex_session_counts_by_account == {account_a.id: 1, account_b.id: 1}
-    assert codex_auth_by_account[account_a.id].has_live_session is True
-    assert codex_auth_by_account[account_b.id].has_live_session is True
+    assert codex_session_counts_by_account == {account_a.id: 0, account_b.id: 0}
+    assert codex_auth_by_account[account_a.id].has_live_session is False
+    assert codex_auth_by_account[account_b.id].has_live_session is False
     assert primary_usage[account_a.id].used_percent == baseline_primary[account_a.id].used_percent
     assert secondary_usage[account_a.id].used_percent == baseline_secondary[account_a.id].used_percent
     assert primary_usage[account_b.id].used_percent == baseline_primary[account_b.id].used_percent
     assert secondary_usage[account_b.id].used_percent == baseline_secondary[account_b.id].used_percent
+
+
+def test_default_scope_debug_assignment_keeps_source_owner_stable_across_active_snapshot_switches() -> None:
+    csoves = _make_account("acc-csoves", "csoves@example.com")
+    odin = _make_account("acc-odin", "odin@example.com")
+    accounts = [csoves, odin]
+    baseline_primary: dict[str, UsageHistory] = {}
+    baseline_secondary: dict[str, UsageHistory] = {}
+    sample_source = "/tmp/rollout-stable-owner.jsonl"
+    first_seen = datetime(2026, 4, 4, 18, 0, tzinfo=timezone.utc)
+
+    by_account_first, confident_first, hints_first = _build_default_sample_debug_overrides(
+        accounts=accounts,
+        snapshot_index=CodexAuthSnapshotIndex(
+            snapshots_by_account_id={csoves.id: ["csoves"], odin.id: ["odin"]},
+            active_snapshot_name="csoves",
+        ),
+        codex_auth_by_account={
+            csoves.id: AccountCodexAuthStatus(
+                has_snapshot=True,
+                snapshot_name="csoves",
+                active_snapshot_name="csoves",
+                is_active_snapshot=True,
+                has_live_session=False,
+            ),
+            odin.id: AccountCodexAuthStatus(
+                has_snapshot=True,
+                snapshot_name="odin",
+                active_snapshot_name="csoves",
+                is_active_snapshot=False,
+                has_live_session=False,
+            ),
+        },
+        baseline_primary_usage=baseline_primary,
+        baseline_secondary_usage=baseline_secondary,
+        live_usage_samples_by_snapshot={
+            "csoves": [
+                LocalCodexLiveUsageSample(
+                    source=sample_source,
+                    recorded_at=first_seen,
+                    primary=LocalUsageWindow(
+                        used_percent=67.0,
+                        reset_at=1_761_000_000,
+                        window_minutes=300,
+                    ),
+                    secondary=LocalUsageWindow(
+                        used_percent=43.0,
+                        reset_at=1_761_600_000,
+                        window_minutes=10_080,
+                    ),
+                    stale=False,
+                )
+            ]
+        },
+        should_defer_active_snapshot_usage=True,
+    )
+
+    assert confident_first == {}
+    assert hints_first == {}
+    assert by_account_first == {}
+
+    by_account_second, confident_second, hints_second = _build_default_sample_debug_overrides(
+        accounts=accounts,
+        snapshot_index=CodexAuthSnapshotIndex(
+            snapshots_by_account_id={csoves.id: ["csoves"], odin.id: ["odin"]},
+            active_snapshot_name="odin",
+        ),
+        codex_auth_by_account={
+            csoves.id: AccountCodexAuthStatus(
+                has_snapshot=True,
+                snapshot_name="csoves",
+                active_snapshot_name="odin",
+                is_active_snapshot=False,
+                has_live_session=False,
+            ),
+            odin.id: AccountCodexAuthStatus(
+                has_snapshot=True,
+                snapshot_name="odin",
+                active_snapshot_name="odin",
+                is_active_snapshot=True,
+                has_live_session=False,
+            ),
+        },
+        baseline_primary_usage=baseline_primary,
+        baseline_secondary_usage=baseline_secondary,
+        live_usage_samples_by_snapshot={
+            "odin": [
+                LocalCodexLiveUsageSample(
+                    source=sample_source,
+                    recorded_at=first_seen + timedelta(seconds=30),
+                    primary=LocalUsageWindow(
+                        used_percent=66.0,
+                        reset_at=1_761_000_000,
+                        window_minutes=300,
+                    ),
+                    secondary=LocalUsageWindow(
+                        used_percent=42.0,
+                        reset_at=1_761_600_000,
+                        window_minutes=10_080,
+                    ),
+                    stale=False,
+                )
+            ]
+        },
+        should_defer_active_snapshot_usage=True,
+    )
+
+    assert confident_second == {}
+    assert hints_second == {csoves.id: 1}
+    assert csoves.id in by_account_second
+    assert odin.id not in by_account_second
+    assert by_account_second[csoves.id][0].source == sample_source
 
 
 def test_fallback_mapping_applies_quota_overrides_when_reset_matches_are_unique() -> None:
@@ -2012,10 +2126,188 @@ def test_apply_local_live_usage_overrides_keeps_cached_source_ownership_across_s
 
     cica_debug = debug_by_account[cica.id]
     amodeus_debug = debug_by_account[amodeus.id]
-    assert switched_auth_by_account[cica.id].has_live_session is False
+    assert switched_auth_by_account[cica.id].has_live_session is True
     assert switched_auth_by_account[amodeus.id].has_live_session is True
     assert cica_debug.raw_samples == []
     assert amodeus_debug.raw_samples == []
+
+
+def test_apply_local_live_usage_overrides_keeps_active_snapshot_idle_when_only_cached_old_session_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old_owner = _make_account("acc-old", "old@example.com")
+    active = _make_account("acc-active", "active@example.com")
+    accounts = [old_owner, active]
+    now = datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc)
+
+    seed_snapshot_index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={old_owner.id: ["old"], active.id: ["active"]},
+        active_snapshot_name="old",
+    )
+    seed_auth_by_account = {
+        old_owner.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="old",
+            active_snapshot_name="old",
+            is_active_snapshot=True,
+            has_live_session=False,
+        ),
+        active.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="active",
+            active_snapshot_name="old",
+            is_active_snapshot=False,
+            has_live_session=False,
+        ),
+    }
+
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_by_snapshot",
+        lambda: {
+            "old": LocalCodexLiveUsage(
+                recorded_at=now,
+                active_session_count=1,
+                primary=LocalUsageWindow(used_percent=80.0, reset_at=2_600_100, window_minutes=300),
+                secondary=LocalUsageWindow(used_percent=70.0, reset_at=2_603_700, window_minutes=10_080),
+            ),
+            "active": LocalCodexLiveUsage(
+                recorded_at=now,
+                active_session_count=1,
+                primary=LocalUsageWindow(used_percent=10.0, reset_at=2_600_900, window_minutes=300),
+                secondary=LocalUsageWindow(used_percent=20.0, reset_at=2_604_500, window_minutes=10_080),
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_samples_by_snapshot",
+        lambda: {
+            "old": [
+                LocalCodexLiveUsageSample(
+                    source="rollout-old-owner.jsonl",
+                    recorded_at=now,
+                    primary=LocalUsageWindow(used_percent=80.0, reset_at=2_600_100, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=70.0, reset_at=2_603_700, window_minutes=10_080),
+                    stale=False,
+                )
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_live_codex_process_session_counts_by_snapshot",
+        lambda: {"old": 1},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_runtime_live_session_counts_by_snapshot",
+        lambda: {},
+    )
+
+    apply_local_live_usage_overrides(
+        accounts=accounts,
+        snapshot_index=seed_snapshot_index,
+        codex_auth_by_account=seed_auth_by_account,
+        primary_usage={},
+        secondary_usage={},
+        codex_live_session_counts_by_account={old_owner.id: 0, active.id: 0},
+        live_quota_debug_by_account={},
+    )
+
+    switched_snapshot_index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={old_owner.id: ["old"], active.id: ["active"]},
+        active_snapshot_name="active",
+    )
+    switched_auth_by_account = {
+        old_owner.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="old",
+            active_snapshot_name="active",
+            is_active_snapshot=False,
+            has_live_session=False,
+        ),
+        active.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="active",
+            active_snapshot_name="active",
+            is_active_snapshot=True,
+            has_live_session=False,
+        ),
+    }
+
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_by_snapshot",
+        lambda: {
+            "active": LocalCodexLiveUsage(
+                recorded_at=now + timedelta(seconds=5),
+                active_session_count=2,
+                primary=LocalUsageWindow(used_percent=10.0, reset_at=2_600_900, window_minutes=300),
+                secondary=LocalUsageWindow(used_percent=20.0, reset_at=2_604_500, window_minutes=10_080),
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_samples_by_snapshot",
+        lambda: {
+            "active": [
+                LocalCodexLiveUsageSample(
+                    source="rollout-old-owner.jsonl",
+                    recorded_at=now + timedelta(seconds=5),
+                    primary=LocalUsageWindow(used_percent=80.0, reset_at=2_600_100, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=70.0, reset_at=2_603_700, window_minutes=10_080),
+                    stale=False,
+                )
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_live_codex_process_session_counts_by_snapshot",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.has_recent_active_snapshot_process_fallback",
+        lambda: False,
+    )
+
+    apply_local_live_usage_overrides(
+        accounts=accounts,
+        snapshot_index=switched_snapshot_index,
+        codex_auth_by_account=switched_auth_by_account,
+        primary_usage={
+            old_owner.id: _usage_entry(
+                account_id=old_owner.id,
+                window="primary",
+                used_percent=80.0,
+                reset_at=2_600_100,
+                window_minutes=300,
+            ),
+            active.id: _usage_entry(
+                account_id=active.id,
+                window="primary",
+                used_percent=10.0,
+                reset_at=2_600_900,
+                window_minutes=300,
+            ),
+        },
+        secondary_usage={
+            old_owner.id: _usage_entry(
+                account_id=old_owner.id,
+                window="secondary",
+                used_percent=70.0,
+                reset_at=2_603_700,
+                window_minutes=10_080,
+            ),
+            active.id: _usage_entry(
+                account_id=active.id,
+                window="secondary",
+                used_percent=20.0,
+                reset_at=2_604_500,
+                window_minutes=10_080,
+            ),
+        },
+        codex_live_session_counts_by_account={old_owner.id: 0, active.id: 0},
+        live_quota_debug_by_account={},
+    )
+
+    assert switched_auth_by_account[old_owner.id].has_live_session is True
+    assert switched_auth_by_account[active.id].has_live_session is False
 
 
 def test_apply_local_live_usage_overrides_clears_active_baseline_when_deferred_samples_exist(
@@ -2355,7 +2647,7 @@ def test_apply_local_live_usage_overrides_skips_deferred_sample_floor_when_runti
         live_quota_debug_by_account=debug_by_account,
     )
 
-    assert codex_session_counts_by_account[active.id] == 0
+    assert codex_session_counts_by_account[active.id] == 1
     assert primary_usage[active.id].used_percent == pytest.approx(36.0)
     assert secondary_usage[active.id].used_percent == pytest.approx(4.0)
     assert len(candidates) == 2
@@ -2464,6 +2756,8 @@ def test_apply_local_live_usage_overrides_keeps_baseline_for_ambiguous_deferred_
 
     assert primary_usage[account.id].used_percent == pytest.approx(55.0)
     assert secondary_usage[account.id].used_percent == pytest.approx(55.0)
+    assert codex_auth_by_account[account.id].has_live_session is True
+    assert codex_auth_by_account[other.id].has_live_session is False
     debug = debug_by_account[account.id]
     assert debug.override_applied is False
     assert debug.override_reason == "deferred_active_snapshot_mixed_default_sessions"
@@ -2574,6 +2868,7 @@ def test_apply_local_live_usage_overrides_keeps_baseline_for_scoped_deferred_deb
                     )
                 ]
             },
+            {},
             {},
         ),
     )
@@ -2730,6 +3025,7 @@ def test_apply_local_live_usage_overrides_keeps_baseline_for_multiple_scoped_def
                     ),
                 ]
             },
+            {},
             {},
         ),
     )

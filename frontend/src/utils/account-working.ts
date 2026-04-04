@@ -121,8 +121,7 @@ function canUseRawQuotaFallback(reason: string): boolean {
   return (
     reason === "live_session_without_windows" ||
     reason === "missing_live_usage_payload" ||
-    reason === "no_live_telemetry" ||
-    reason.startsWith("deferred_active_snapshot_mixed_default_sessions")
+    reason === "no_live_telemetry"
   );
 }
 
