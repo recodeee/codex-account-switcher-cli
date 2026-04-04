@@ -61,8 +61,8 @@ describe("UsageDonuts", () => {
 
     await user.click(screen.getByRole("button", { name: "Weekly Remaining accounts" }));
 
-    expect(screen.getByText("143.64M")).toBeInTheDocument();
-    expect(screen.getByText("1.89M")).toBeInTheDocument();
+    expect(screen.getByText("14.36M")).toBeInTheDocument();
+    expect(screen.getByText("189K")).toBeInTheDocument();
   });
 
   it("handles empty data gracefully", () => {

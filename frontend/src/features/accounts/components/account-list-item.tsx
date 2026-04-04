@@ -17,6 +17,7 @@ import {
   getMergedQuotaRemainingPercent,
   getRawQuotaWindowFallback,
   isAccountWorkingNow,
+  selectStableRemainingPercent,
 } from "@/utils/account-working";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 import {
@@ -130,9 +131,12 @@ export function AccountListItem({
     windowKey: "secondary",
     remainingPercent:
       mergedSecondaryRemainingPercent ??
-      secondaryRawQuotaFallback?.remainingPercent ??
-      account.usage?.secondaryRemainingPercent ??
-      null,
+      selectStableRemainingPercent({
+        fallbackRemainingPercent: secondaryRawQuotaFallback?.remainingPercent,
+        fallbackResetAt: secondaryRawQuotaFallback?.resetAt,
+        baselineRemainingPercent: account.usage?.secondaryRemainingPercent,
+        baselineResetAt: account.resetAtSecondary,
+      }),
     resetAt: secondaryRawQuotaFallback?.resetAt ?? account.resetAtSecondary ?? null,
     hasLiveSession,
     lastRecordedAt:
@@ -143,9 +147,12 @@ export function AccountListItem({
   });
   const primaryRemainingRaw =
     mergedPrimaryRemainingPercent ??
-    primaryRawQuotaFallback?.remainingPercent ??
-    account.usage?.primaryRemainingPercent ??
-    null;
+    selectStableRemainingPercent({
+      fallbackRemainingPercent: primaryRawQuotaFallback?.remainingPercent,
+      fallbackResetAt: primaryRawQuotaFallback?.resetAt,
+      baselineRemainingPercent: account.usage?.primaryRemainingPercent,
+      baselineResetAt: account.resetAtPrimary,
+    });
   const primaryRemaining = normalizeRemainingPercentForDisplay({
     accountKey: account.accountId,
     windowKey: "primary",

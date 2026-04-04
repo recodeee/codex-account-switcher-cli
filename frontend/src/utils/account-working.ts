@@ -1,6 +1,7 @@
 import type { AccountSummary } from "@/features/accounts/schemas";
 
 const LIVE_TELEMETRY_STALE_AFTER_MS = 5 * 60 * 1000;
+const RESET_ALIGNMENT_TOLERANCE_MS = 30 * 1000;
 
 function parseRecordedAtMs(value: string | null | undefined): number | null {
   if (!value) return null;
@@ -96,6 +97,50 @@ function canUseRawQuotaFallback(reason: string): boolean {
   );
 }
 
+function parseResetAtMs(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const timestampMs = Date.parse(value);
+  if (!Number.isFinite(timestampMs)) return null;
+  return timestampMs;
+}
+
+export function selectStableRemainingPercent({
+  fallbackRemainingPercent,
+  fallbackResetAt,
+  baselineRemainingPercent,
+  baselineResetAt,
+}: {
+  fallbackRemainingPercent: number | null | undefined;
+  fallbackResetAt: string | null | undefined;
+  baselineRemainingPercent: number | null | undefined;
+  baselineResetAt: string | null | undefined;
+}): number | null {
+  const fallback =
+    typeof fallbackRemainingPercent === "number" &&
+    Number.isFinite(fallbackRemainingPercent)
+      ? fallbackRemainingPercent
+      : null;
+  const baseline =
+    typeof baselineRemainingPercent === "number" &&
+    Number.isFinite(baselineRemainingPercent)
+      ? baselineRemainingPercent
+      : null;
+
+  if (fallback == null) return baseline;
+  if (baseline == null) return fallback;
+
+  const fallbackResetMs = parseResetAtMs(fallbackResetAt);
+  const baselineResetMs = parseResetAtMs(baselineResetAt);
+  if (fallbackResetMs != null && baselineResetMs != null) {
+    const delta = Math.abs(fallbackResetMs - baselineResetMs);
+    if (delta > RESET_ALIGNMENT_TOLERANCE_MS) {
+      return fallbackResetMs > baselineResetMs ? fallback : baseline;
+    }
+  }
+
+  return Math.min(fallback, baseline);
+}
+
 export function getRawQuotaWindowFallback(
   account: Pick<AccountSummary, "liveQuotaDebug" | "codexAuth">,
   windowKey: "primary" | "secondary",
@@ -122,12 +167,12 @@ export function getRawQuotaWindowFallback(
       }
       const window = windowKey === "primary" ? sample.primary : sample.secondary;
       return window != null && typeof window.remainingPercent === "number";
-    })
-    .sort((left, right) => {
-      const leftMs = parseRecordedAtMs(left.recordedAt) ?? 0;
-      const rightMs = parseRecordedAtMs(right.recordedAt) ?? 0;
-      return rightMs - leftMs;
     });
+
+  // Keep UI fallback ordering aligned with backend debug ordering.
+  // Backend already emits rawSamples in priority order (newest/most reliable
+  // candidate first), and re-sorting here can make the quota bar disagree with
+  // the "sample#1" line shown in QUOTA LOGS.
 
   if (candidates.length === 0) {
     return null;
@@ -157,7 +202,38 @@ export function getRawQuotaWindowFallback(
     return null;
   }
 
-  const selectedSample = scoped[0];
+  const getWindow = (sample: (typeof scoped)[number]) =>
+    windowKey === "primary" ? sample.primary : sample.secondary;
+
+  const withResetAt = scoped.filter((sample) => {
+    const resetAt = getWindow(sample)?.resetAt;
+    return typeof resetAt === "number" && Number.isFinite(resetAt) && resetAt > 0;
+  });
+
+  let cycleScoped = scoped;
+  if (withResetAt.length > 0) {
+    const latestResetAt = Math.max(
+      ...withResetAt.map((sample) => getWindow(sample)?.resetAt ?? 0),
+    );
+    cycleScoped = withResetAt.filter(
+      (sample) => (getWindow(sample)?.resetAt ?? null) === latestResetAt,
+    );
+  }
+
+  const selectedSample = [...cycleScoped].sort((left, right) => {
+    const leftRemaining = getWindow(left)?.remainingPercent ?? Number.POSITIVE_INFINITY;
+    const rightRemaining = getWindow(right)?.remainingPercent ?? Number.POSITIVE_INFINITY;
+    if (leftRemaining !== rightRemaining) {
+      return leftRemaining - rightRemaining;
+    }
+    const leftMs = parseRecordedAtMs(left.recordedAt) ?? 0;
+    const rightMs = parseRecordedAtMs(right.recordedAt) ?? 0;
+    return rightMs - leftMs;
+  })[0];
+  if (!selectedSample) {
+    return null;
+  }
+
   const selectedWindow = windowKey === "primary" ? selectedSample.primary : selectedSample.secondary;
   if (!selectedWindow || typeof selectedWindow.remainingPercent !== "number") {
     return null;
@@ -238,10 +314,6 @@ export function isAccountWorkingNow(
   }
 
   if (hasFreshLiveTelemetry(account, nowMs)) {
-    return true;
-  }
-
-  if (getFreshDebugRawSampleCount(account, nowMs) > 0) {
     return true;
   }
 

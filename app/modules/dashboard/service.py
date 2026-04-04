@@ -68,11 +68,10 @@ class DashboardService:
             )
             for account_id, row in request_usage_rows.items()
         }
-        active_codex_window_start = now - _ACTIVE_CODEX_TASK_WINDOW
         codex_tracked_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(
             account_ids,
-            active_since=active_codex_window_start,
         )
+        active_codex_window_start = now - _ACTIVE_CODEX_TASK_WINDOW
         codex_live_session_counts_by_account = {account_id: 0 for account_id in account_ids}
         codex_current_task_preview_by_account = await self._repo.list_codex_current_task_preview_by_account(
             account_ids,

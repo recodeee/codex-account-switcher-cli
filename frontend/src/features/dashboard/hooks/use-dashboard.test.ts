@@ -165,7 +165,7 @@ describe("useDashboard", () => {
     }
   });
 
-  it("uses fast polling when fresh debug samples exist without live/tracked sessions", async () => {
+  it("uses default polling when only fresh debug samples exist without live/tracked sessions", async () => {
     server.use(
       http.get("/api/dashboard/overview", () =>
         HttpResponse.json(
@@ -222,9 +222,9 @@ describe("useDashboard", () => {
     const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
       ?.refetchInterval;
     if (typeof refetchInterval === "function") {
-      expect(refetchInterval(query as never)).toBe(1_000);
+      expect(refetchInterval(query as never)).toBe(30_000);
     } else {
-      expect(refetchInterval).toBe(1_000);
+      expect(refetchInterval).toBe(30_000);
     }
   });
 

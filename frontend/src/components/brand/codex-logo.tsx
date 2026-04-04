@@ -14,12 +14,32 @@ export function CodexLogo({ className, size = 32 }: CodexLogoProps) {
       fill="none"
       viewBox="0 0 32 32"
       className={cn("shrink-0", className)}
+      role="img"
+      aria-label="Codexina logo"
     >
+      <rect
+        x="2"
+        y="2"
+        width="28"
+        height="28"
+        rx="9"
+        fill="currentColor"
+        fillOpacity="0.08"
+      />
       <path
         stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="2.484"
-        d="M22.356 19.797H17.17M9.662 12.29l1.979 3.576a.511.511 0 0 1-.005.504l-1.974 3.409M30.758 16c0 8.15-6.607 14.758-14.758 14.758-8.15 0-14.758-6.607-14.758-14.758C1.242 7.85 7.85 1.242 16 1.242c8.15 0 14.758 6.608 14.758 14.758Z"
+        strokeWidth="2"
+        d="M12.4 11.8H10a1 1 0 0 0-.92.61L7.7 15.7a1 1 0 0 0-.07.37v1.43a2 2 0 0 0 2 2h2.07a2 2 0 0 0 2-2v-2.77a2.92 2.92 0 0 0-1.3-2.43Zm9.6 0h-2.4a1 1 0 0 0-.92.61l-1.38 3.3a1 1 0 0 0-.08.37v1.43a2 2 0 0 0 2 2h2.08a2 2 0 0 0 2-2v-2.77a2.92 2.92 0 0 0-1.3-2.43Z"
+      />
+      <rect
+        x="2"
+        y="2"
+        width="28"
+        height="28"
+        rx="9"
+        stroke="currentColor"
+        strokeOpacity="0.24"
+        strokeWidth="1.5"
       />
     </svg>
   );

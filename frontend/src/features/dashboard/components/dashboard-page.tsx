@@ -4,6 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
 import { AlertMessage } from "@/components/alert-message";
+import { CodexLogo } from "@/components/brand/codex-logo";
+import { Badge } from "@/components/ui/badge";
 import { useAccountMutations } from "@/features/accounts/hooks/use-accounts";
 import { AccountCards } from "@/features/dashboard/components/account-cards";
 import { DashboardSkeleton } from "@/features/dashboard/components/dashboard-skeleton";
@@ -161,10 +163,18 @@ export function DashboardPage() {
     <div className="animate-fade-in-up space-y-8">
       {/* Page header */}
       <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Overview, account health, and recent request logs.
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/20 bg-gradient-to-br from-primary/20 via-primary/10 to-background">
+              <CodexLogo size={18} className="text-primary" />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+            <Badge variant="secondary" className="border border-border/70 bg-muted/70 text-[11px]">
+              Live
+            </Badge>
+          </div>
+          <p className="max-w-xl text-sm text-muted-foreground">
+            Overview, account health, and recent request logs in one place.
           </p>
         </div>
         <button

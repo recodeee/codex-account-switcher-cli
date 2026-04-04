@@ -107,6 +107,7 @@ def apply_local_live_usage_overrides(
         live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
         should_defer_active_snapshot_usage=should_defer_active_snapshot_usage,
     )
+    live_process_session_counts_by_account: dict[str, int] = {}
 
     for account in accounts:
         codex_auth_status = codex_auth_by_account.get(account.id)
@@ -115,44 +116,57 @@ def apply_local_live_usage_overrides(
 
         selected_snapshot_name = codex_auth_status.snapshot_name
         snapshot_names_from_index = snapshot_index.snapshots_by_account_id.get(account.id, [])
+        is_effective_active_snapshot = codex_auth_status.is_active_snapshot or _account_matches_active_snapshot(
+            active_snapshot_name=snapshot_index.active_snapshot_name,
+            selected_snapshot_name=selected_snapshot_name,
+            snapshot_names_from_index=snapshot_names_from_index,
+        )
+        effective_selected_snapshot_name = selected_snapshot_name
         if selected_snapshot_name:
-            # Prefer the selected snapshot whenever it has direct telemetry so
-            # we do not merge stale aliases from snapshot-index history.
-            # If the selected name has no direct signal yet (legacy mismatch
-            # or delayed snapshot metadata), include index aliases as a
-            # compatibility fallback to avoid dropping live attribution.
-            selected_has_direct_live_data = _snapshot_has_direct_live_data(
-                snapshot_name=selected_snapshot_name,
-                live_usage_by_snapshot=live_usage_by_snapshot,
-                live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
-                live_process_session_counts_by_snapshot=live_process_session_counts_by_snapshot,
-                runtime_live_session_counts_by_snapshot=runtime_live_session_counts_by_snapshot,
-            )
-            if selected_has_direct_live_data:
-                snapshot_names = [selected_snapshot_name]
-            else:
-                snapshot_names = [selected_snapshot_name, *snapshot_names_from_index]
+            # Single-snapshot policy: once account resolution selects a
+            # snapshot, downstream live-usage/debug attribution must stick to
+            # that one name and must not fan out to stale aliases.
+            snapshot_names = [selected_snapshot_name]
         else:
             snapshot_names = snapshot_names_from_index
         snapshots_considered = _resolve_snapshot_candidates(
             snapshot_names=snapshot_names,
-            selected_snapshot_name=selected_snapshot_name,
+            selected_snapshot_name=effective_selected_snapshot_name,
         )
         live_usage = _resolve_live_usage_for_account(
             snapshot_names=snapshot_names,
-            selected_snapshot_name=selected_snapshot_name,
+            selected_snapshot_name=effective_selected_snapshot_name,
             live_usage_by_snapshot=live_usage_by_snapshot,
         )
         live_process_session_count = _resolve_live_process_session_count_for_account(
             snapshot_names=snapshot_names,
-            selected_snapshot_name=selected_snapshot_name,
+            selected_snapshot_name=effective_selected_snapshot_name,
             live_process_session_counts_by_snapshot=live_process_session_counts_by_snapshot,
         )
         live_runtime_session_count = _resolve_live_runtime_session_count_for_account(
             snapshot_names=snapshot_names,
-            selected_snapshot_name=selected_snapshot_name,
+            selected_snapshot_name=effective_selected_snapshot_name,
             runtime_live_session_counts_by_snapshot=runtime_live_session_counts_by_snapshot,
         )
+        active_snapshot_name = snapshot_index.active_snapshot_name
+        if (
+            active_snapshot_name
+            and is_effective_active_snapshot
+            and active_snapshot_name != effective_selected_snapshot_name
+        ):
+            # Compatibility fallback for stale selected-snapshot pointers:
+            # keep live process/session visibility aligned with the currently
+            # active codex-auth snapshot, without broadening quota/debug
+            # snapshot attribution beyond the single selected snapshot.
+            live_process_session_count = max(
+                live_process_session_count,
+                max(0, live_process_session_counts_by_snapshot.get(active_snapshot_name, 0)),
+            )
+            live_runtime_session_count = max(
+                live_runtime_session_count,
+                max(0, runtime_live_session_counts_by_snapshot.get(active_snapshot_name, 0)),
+            )
+        live_process_session_counts_by_account[account.id] = max(0, live_process_session_count)
         has_live_process_session = live_process_session_count > 0
         has_live_runtime_session = live_runtime_session_count > 0
         has_live_telemetry = bool(live_usage and live_usage.active_session_count > 0)
@@ -167,10 +181,9 @@ def apply_local_live_usage_overrides(
                 account_id=account.id,
                 samples=owned_samples,
             )
-        # "Working now" must reflect live CLI processes only. Session-file
-        # telemetry can still update quota windows, but it must not elevate
-        # account live/session status by itself unless runtime-scoped session
-        # files explicitly map to the account snapshot.
+        # Treat runtime-scoped live sessions as live-presence hints for UI
+        # grouping ("Working now"), while keeping numeric session counters
+        # normalized to process presence later.
         codex_auth_status.has_live_session = has_live_process_session or has_live_runtime_session
         account_id = account.id
         override_reason: str | None = None
@@ -186,7 +199,7 @@ def apply_local_live_usage_overrides(
             )
         elif not has_live_telemetry:
             debug_live_usage = live_usage
-            if codex_auth_status.is_active_snapshot:
+            if is_effective_active_snapshot:
                 (
                     applied_confident_sample_override,
                     confident_sample_live_usage,
@@ -224,20 +237,6 @@ def apply_local_live_usage_overrides(
                         override_reason = "no_live_telemetry"
             else:
                 override_reason = "no_live_telemetry"
-
-            if (
-                not should_defer_active_snapshot_usage
-                and _has_fresh_quota_sample_for_account(
-                    snapshots_considered=snapshots_considered,
-                    live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
-                    raw_samples_override=raw_samples_override,
-                )
-            ):
-                codex_auth_status.has_live_session = True
-                codex_live_session_counts_by_account[account_id] = max(
-                    codex_live_session_counts_by_account.get(account_id, 0),
-                    1,
-                )
 
             _set_live_quota_debug(
                 account_id=account_id,
@@ -287,7 +286,7 @@ def apply_local_live_usage_overrides(
             not has_live_process_session
             and not has_live_runtime_session
             and should_defer_active_snapshot_usage
-            and codex_auth_status.is_active_snapshot
+            and is_effective_active_snapshot
         ):
             debug_live_usage = live_usage
             # The default sessions directory can include active sessions from
@@ -461,7 +460,34 @@ def apply_local_live_usage_overrides(
             codex_session_counts_by_account=codex_live_session_counts_by_account,
             allow_quota_override=not should_defer_active_snapshot_usage,
         )
+
+    _normalize_live_session_counts_to_process_presence(
+        accounts=accounts,
+        codex_live_session_counts_by_account=codex_live_session_counts_by_account,
+        live_process_session_counts_by_account=live_process_session_counts_by_account,
+    )
     return _coalesce_persist_candidates(persist_candidates)
+
+
+def _normalize_live_session_counts_to_process_presence(
+    *,
+    accounts: list[Account],
+    codex_live_session_counts_by_account: dict[str, int],
+    live_process_session_counts_by_account: dict[str, int],
+) -> None:
+    """Keep API live-session counters tied to observable codex processes.
+
+    Runtime/session-file attribution still informs quota window overrides and debug
+    payloads, but `codexLiveSessionCount` / `codexSessionCount` should represent
+    process-level presence so UI "working now" indicators clear immediately after
+    Ctrl+C.
+    """
+
+    for account in accounts:
+        codex_live_session_counts_by_account[account.id] = max(
+            0,
+            live_process_session_counts_by_account.get(account.id, 0),
+        )
 
 
 def _apply_deferred_conservative_floor(
@@ -808,37 +834,39 @@ def _source_session_start_key(source: str) -> str:
     return match.group(1)
 
 
+def _normalize_snapshot_name(value: str | None) -> str | None:
+    normalized = (value or "").strip().lower()
+    return normalized or None
+
+
+def _account_matches_active_snapshot(
+    *,
+    active_snapshot_name: str | None,
+    selected_snapshot_name: str | None,
+    snapshot_names_from_index: list[str],
+) -> bool:
+    normalized_active_snapshot_name = _normalize_snapshot_name(active_snapshot_name)
+    if normalized_active_snapshot_name is None:
+        return False
+
+    if _normalize_snapshot_name(selected_snapshot_name) == normalized_active_snapshot_name:
+        return True
+
+    return any(
+        _normalize_snapshot_name(snapshot_name) == normalized_active_snapshot_name
+        for snapshot_name in snapshot_names_from_index
+    )
+
+
 def _resolve_snapshot_candidates(
     *,
     snapshot_names: list[str],
     selected_snapshot_name: str | None,
 ) -> list[str]:
     candidate_names = [name for name in [selected_snapshot_name, *snapshot_names] if name]
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for snapshot_name in candidate_names:
-        if snapshot_name in seen:
-            continue
-        seen.add(snapshot_name)
-        ordered.append(snapshot_name)
-    return ordered
-
-
-def _snapshot_has_direct_live_data(
-    *,
-    snapshot_name: str,
-    live_usage_by_snapshot: dict[str, LocalCodexLiveUsage],
-    live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]],
-    live_process_session_counts_by_snapshot: dict[str, int],
-    runtime_live_session_counts_by_snapshot: dict[str, int],
-) -> bool:
-    if snapshot_name in live_usage_by_snapshot:
-        return True
-    if live_process_session_counts_by_snapshot.get(snapshot_name, 0) > 0:
-        return True
-    if runtime_live_session_counts_by_snapshot.get(snapshot_name, 0) > 0:
-        return True
-    return bool(live_usage_samples_by_snapshot.get(snapshot_name))
+    if not candidate_names:
+        return []
+    return [candidate_names[0]]
 
 
 def _set_live_quota_debug(
@@ -965,6 +993,7 @@ def _build_default_sample_debug_overrides(
 
     active_account_id = _resolve_active_snapshot_account_id(
         accounts=accounts,
+        snapshot_index=snapshot_index,
         codex_auth_by_account=codex_auth_by_account,
         active_snapshot_name=active_snapshot_name,
     )
@@ -1233,6 +1262,7 @@ def _apply_local_default_session_fingerprint_overrides(
 
     active_account_id = _resolve_active_snapshot_account_id(
         accounts=accounts,
+        snapshot_index=snapshot_index,
         codex_auth_by_account=codex_auth_by_account,
         active_snapshot_name=active_snapshot_name,
     )
@@ -1464,14 +1494,27 @@ def _normalize_observed_at(value: datetime) -> datetime:
 def _resolve_active_snapshot_account_id(
     *,
     accounts: list[Account],
+    snapshot_index: CodexAuthSnapshotIndex,
     codex_auth_by_account: dict[str, AccountCodexAuthStatus],
     active_snapshot_name: str,
 ) -> str | None:
+    normalized_active_snapshot_name = _normalize_snapshot_name(active_snapshot_name)
+    if normalized_active_snapshot_name is None:
+        return None
+
     for account in accounts:
         status = codex_auth_by_account.get(account.id)
         if status is None:
             continue
-        if status.snapshot_name == active_snapshot_name:
+        if _normalize_snapshot_name(status.snapshot_name) == normalized_active_snapshot_name:
+            return account.id
+
+    for account in accounts:
+        snapshot_names = snapshot_index.snapshots_by_account_id.get(account.id, [])
+        if any(
+            _normalize_snapshot_name(snapshot_name) == normalized_active_snapshot_name
+            for snapshot_name in snapshot_names
+        ):
             return account.id
 
     for account in accounts:

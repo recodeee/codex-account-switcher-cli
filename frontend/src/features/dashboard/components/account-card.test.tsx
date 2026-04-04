@@ -578,13 +578,13 @@ describe("AccountCard", () => {
             primary: {
               usedPercent: 84,
               remainingPercent: 16,
-              resetAt: 1760000000,
+              resetAt: null,
               windowMinutes: 300,
             },
             secondary: {
               usedPercent: 60,
               remainingPercent: 40,
-              resetAt: 1760600000,
+              resetAt: null,
               windowMinutes: 10080,
             },
           },
@@ -656,7 +656,7 @@ describe("AccountCard", () => {
     expect(screen.getByText("Working now")).toBeInTheDocument();
   });
 
-  it("shows working indicator when fresh debug raw samples exist", () => {
+  it("does not show working indicator when only fresh debug raw samples exist", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
       codexTrackedSessionCount: 0,
@@ -690,10 +690,10 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Working now")).toBeInTheDocument();
+    expect(screen.queryByText("Working now")).not.toBeInTheDocument();
   });
 
-  it("shows codex session count from fresh debug raw samples when counters are zero", () => {
+  it("does not infer codex session count from debug raw samples when counters are zero", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
       codexTrackedSessionCount: 0,
@@ -740,7 +740,7 @@ describe("AccountCard", () => {
     const sessionsLabel = within(card as HTMLElement).getByText("Codex CLI sessions");
     const sessionsValue = sessionsLabel.parentElement?.querySelector("p.mt-0\\.5.text-xs.font-semibold.tabular-nums");
     expect(sessionsValue).not.toBeNull();
-    expect(sessionsValue).toHaveTextContent(/^2$/);
+    expect(sessionsValue).toHaveTextContent(/^0$/);
   });
 
   it("shows working indicator when tracked codex sessions exist without live telemetry", () => {

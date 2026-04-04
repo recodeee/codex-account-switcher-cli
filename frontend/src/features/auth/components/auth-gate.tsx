@@ -45,7 +45,7 @@ export function AuthGate({ children }: PropsWithChildren) {
 
         <div className="relative w-full max-w-sm animate-fade-in-up">
           <div className="mb-8 flex flex-col items-center gap-3 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 shadow-sm ring-2 ring-primary/10 ring-offset-2 ring-offset-background">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/20 via-primary/10 to-background shadow-sm ring-2 ring-primary/10 ring-offset-2 ring-offset-background">
               <CodexLogo size={28} className="text-primary" />
             </div>
             <div>
@@ -53,10 +53,10 @@ export function AuthGate({ children }: PropsWithChildren) {
                 Codexina
               </h1>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Codex account manager + switcher
+                Live account switchboard
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground/80">
-                Monitor usage and token usage. Secure device and API env storage coming soon.
+                Track usage, switch sessions quickly, and keep account routing tidy.
               </p>
             </div>
           </div>

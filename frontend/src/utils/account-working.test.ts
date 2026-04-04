@@ -5,6 +5,7 @@ import {
   getMergedQuotaRemainingPercent,
   getRawQuotaWindowFallback,
   isAccountWorkingNow,
+  selectStableRemainingPercent,
 } from "@/utils/account-working";
 
 describe("isAccountWorkingNow", () => {
@@ -123,7 +124,7 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account)).toBe(true);
   });
 
-  it("returns true when fresh debug raw samples exist", () => {
+  it("returns false when only fresh debug raw samples exist", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
       codexTrackedSessionCount: 0,
@@ -156,7 +157,7 @@ describe("isAccountWorkingNow", () => {
     });
 
     const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
-    expect(isAccountWorkingNow(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(false);
   });
 
   it("returns false when account is active snapshot without live sessions", () => {
@@ -320,6 +321,131 @@ describe("isAccountWorkingNow", () => {
     expect(getRawQuotaWindowFallback(account, "secondary")?.remainingPercent).toBe(58);
   });
 
+  it("uses the smallest remaining fallback sample within the same quota cycle", () => {
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "codexina",
+        activeSnapshotName: "codexina",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["codexina"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/rollout-1.jsonl",
+            snapshotName: "codexina",
+            recordedAt: "2026-04-04T18:16:09.000Z",
+            stale: false,
+            primary: { usedPercent: 24, remainingPercent: 76, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 53, remainingPercent: 47, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+          {
+            source: "/tmp/rollout-2.jsonl",
+            snapshotName: "codexina",
+            recordedAt: "2026-04-04T18:12:07.000Z",
+            stale: false,
+            primary: { usedPercent: 59, remainingPercent: 41, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 57, remainingPercent: 43, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+          {
+            source: "/tmp/rollout-3.jsonl",
+            snapshotName: "codexina",
+            recordedAt: "2026-04-04T18:08:59.000Z",
+            stale: false,
+            primary: { usedPercent: 7, remainingPercent: 93, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 51, remainingPercent: 49, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+        ],
+      },
+    });
+
+    expect(getRawQuotaWindowFallback(account, "primary")?.remainingPercent).toBe(41);
+    expect(getRawQuotaWindowFallback(account, "secondary")?.remainingPercent).toBe(43);
+  });
+
+  it("prefers samples from the latest reset cycle over older lower values", () => {
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "codexina",
+        activeSnapshotName: "codexina",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["codexina"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/rollout-latest-cycle.jsonl",
+            snapshotName: "codexina",
+            recordedAt: "2026-04-04T20:00:00.000Z",
+            stale: false,
+            primary: { usedPercent: 2, remainingPercent: 98, resetAt: 1761000000, windowMinutes: 300 },
+            secondary: { usedPercent: 5, remainingPercent: 95, resetAt: 1761600000, windowMinutes: 10080 },
+          },
+          {
+            source: "/tmp/rollout-older-cycle.jsonl",
+            snapshotName: "codexina",
+            recordedAt: "2026-04-04T17:00:00.000Z",
+            stale: false,
+            primary: { usedPercent: 90, remainingPercent: 10, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 87, remainingPercent: 13, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+        ],
+      },
+    });
+
+    expect(getRawQuotaWindowFallback(account, "primary")?.remainingPercent).toBe(98);
+    expect(getRawQuotaWindowFallback(account, "secondary")?.remainingPercent).toBe(95);
+  });
+
+  it("uses the most depleted fallback sample in the current cycle per window", () => {
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "codexina",
+        activeSnapshotName: "codexina",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["codexina"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/rollout-priority-first.jsonl",
+            snapshotName: "codexina",
+            recordedAt: "2026-04-04T11:50:00.000Z",
+            stale: false,
+            primary: { usedPercent: 24, remainingPercent: 76, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 53, remainingPercent: 47, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+          {
+            source: "/tmp/rollout-later-recorded.jsonl",
+            snapshotName: "codexina",
+            recordedAt: "2026-04-04T11:59:00.000Z",
+            stale: false,
+            primary: { usedPercent: 4, remainingPercent: 96, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 56, remainingPercent: 44, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+        ],
+      },
+    });
+
+    expect(getRawQuotaWindowFallback(account, "primary")?.remainingPercent).toBe(76);
+    expect(getRawQuotaWindowFallback(account, "secondary")?.remainingPercent).toBe(44);
+  });
+
   it("rejects raw sample fallback when only mismatched snapshot samples are available", () => {
     const nowIso = "2026-04-04T11:58:00.000Z";
     const account = createAccountSummary({
@@ -385,5 +511,27 @@ describe("isAccountWorkingNow", () => {
     });
 
     expect(isAccountWorkingNow(account)).toBe(false);
+  });
+
+  it("keeps the lower remaining value when fallback and baseline share reset cycle", () => {
+    expect(
+      selectStableRemainingPercent({
+        fallbackRemainingPercent: 76,
+        fallbackResetAt: "2026-04-04T22:00:00.000Z",
+        baselineRemainingPercent: 13,
+        baselineResetAt: "2026-04-04T22:00:00.000Z",
+      }),
+    ).toBe(13);
+  });
+
+  it("uses newer reset cycle instead of older lower baseline", () => {
+    expect(
+      selectStableRemainingPercent({
+        fallbackRemainingPercent: 96,
+        fallbackResetAt: "2026-04-05T03:00:00.000Z",
+        baselineRemainingPercent: 13,
+        baselineResetAt: "2026-04-04T22:00:00.000Z",
+      }),
+    ).toBe(96);
   });
 });

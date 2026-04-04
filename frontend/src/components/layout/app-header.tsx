@@ -50,22 +50,22 @@ export function AppHeader({
   return (
     <header
       className={cn(
-        "sticky top-0 z-20 border-b border-white/[0.08] bg-background/50 px-4 py-2.5 shadow-[0_1px_12px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-[1.8] supports-[backdrop-filter]:bg-background/40 dark:shadow-[0_1px_12px_rgba(0,0,0,0.25)]",
+        "sticky top-0 z-20 border-b border-white/[0.08] bg-background/55 px-4 py-2.5 shadow-[0_1px_12px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-[1.8] supports-[backdrop-filter]:bg-background/45 dark:shadow-[0_1px_12px_rgba(0,0,0,0.25)]",
         className,
       )}
     >
       <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-4">
         {/* Brand */}
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary/15 to-primary/5">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-gradient-to-br from-primary/20 via-primary/10 to-background shadow-[0_4px_16px_-10px_hsl(var(--primary))]">
             <CodexLogo size={20} className="text-primary" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-0.5">
             <p className="truncate text-sm font-semibold tracking-tight">
               Codexina
             </p>
             <p className="hidden truncate text-[11px] text-muted-foreground md:block">
-              Codex account manager + switcher
+              Live account switchboard
             </p>
           </div>
         </div>

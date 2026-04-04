@@ -16,6 +16,7 @@ import {
 import {
   getMergedQuotaRemainingPercent,
   getRawQuotaWindowFallback,
+  selectStableRemainingPercent,
 } from "@/utils/account-working";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 
@@ -142,9 +143,12 @@ export function AccountUsagePanel({ account, trends }: AccountUsagePanelProps) {
     windowKey: "primary",
     remainingPercent:
       mergedPrimaryRemainingPercent ??
-      primaryRawQuotaFallback?.remainingPercent ??
-      account.usage?.primaryRemainingPercent ??
-      null,
+      selectStableRemainingPercent({
+        fallbackRemainingPercent: primaryRawQuotaFallback?.remainingPercent,
+        fallbackResetAt: primaryRawQuotaFallback?.resetAt,
+        baselineRemainingPercent: account.usage?.primaryRemainingPercent,
+        baselineResetAt: account.resetAtPrimary,
+      }),
     resetAt: primaryRawQuotaFallback?.resetAt ?? account.resetAtPrimary ?? null,
     hasLiveSession,
     lastRecordedAt:
@@ -158,9 +162,12 @@ export function AccountUsagePanel({ account, trends }: AccountUsagePanelProps) {
     windowKey: "secondary",
     remainingPercent:
       mergedSecondaryRemainingPercent ??
-      secondaryRawQuotaFallback?.remainingPercent ??
-      account.usage?.secondaryRemainingPercent ??
-      null,
+      selectStableRemainingPercent({
+        fallbackRemainingPercent: secondaryRawQuotaFallback?.remainingPercent,
+        fallbackResetAt: secondaryRawQuotaFallback?.resetAt,
+        baselineRemainingPercent: account.usage?.secondaryRemainingPercent,
+        baselineResetAt: account.resetAtSecondary,
+      }),
     resetAt: secondaryRawQuotaFallback?.resetAt ?? account.resetAtSecondary ?? null,
     hasLiveSession,
     lastRecordedAt:

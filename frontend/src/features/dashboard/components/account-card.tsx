@@ -37,6 +37,7 @@ import {
   hasFreshLiveTelemetry,
   isAccountWorkingNow,
   isFreshQuotaTelemetryTimestamp,
+  selectStableRemainingPercent,
 } from "@/utils/account-working";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 import {
@@ -302,14 +303,20 @@ export function AccountCard({
   const status = effectiveStatus;
   const primaryRemainingRaw =
     mergedPrimaryRemainingPercent ??
-    deferredPrimaryQuotaFallback?.remainingPercent ??
-    account.usage?.primaryRemainingPercent ??
-    null;
+    selectStableRemainingPercent({
+      fallbackRemainingPercent: deferredPrimaryQuotaFallback?.remainingPercent,
+      fallbackResetAt: deferredPrimaryQuotaFallback?.resetAt,
+      baselineRemainingPercent: account.usage?.primaryRemainingPercent,
+      baselineResetAt: account.resetAtPrimary,
+    });
   const secondaryRemainingRaw =
     mergedSecondaryRemainingPercent ??
-    deferredSecondaryQuotaFallback?.remainingPercent ??
-    account.usage?.secondaryRemainingPercent ??
-    null;
+    selectStableRemainingPercent({
+      fallbackRemainingPercent: deferredSecondaryQuotaFallback?.remainingPercent,
+      fallbackResetAt: deferredSecondaryQuotaFallback?.resetAt,
+      baselineRemainingPercent: account.usage?.secondaryRemainingPercent,
+      baselineResetAt: account.resetAtSecondary,
+    });
   const primaryLastRecordedAt =
     deferredPrimaryQuotaFallback?.recordedAt ??
     account.lastUsageRecordedAtPrimary ??
@@ -424,7 +431,7 @@ export function AccountCard({
     : formatTokenUsageCompact(totalTokensUsed);
   const codexLiveSessionCount = hasLiveSession
     ? Math.max(account.codexLiveSessionCount ?? 0, 1)
-    : Math.max(account.codexLiveSessionCount ?? 0, freshDebugRawSampleCount, 0);
+    : Math.max(account.codexLiveSessionCount ?? 0, 0);
   const codexTrackedSessionCount = Math.max(
     account.codexTrackedSessionCount ?? 0,
     0,
