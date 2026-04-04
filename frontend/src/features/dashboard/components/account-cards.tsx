@@ -2,15 +2,23 @@ import { useMemo } from "react";
 import { Users } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
-import { AccountCard, type AccountCardProps } from "@/features/dashboard/components/account-card";
+import {
+  AccountCard,
+  type AccountCardProps,
+} from "@/features/dashboard/components/account-card";
 import type { AccountSummary, UsageWindow } from "@/features/dashboard/schemas";
 import { buildDuplicateAccountIdSet } from "@/utils/account-identifiers";
-import { hasFreshLiveTelemetry, isAccountWorkingNow } from "@/utils/account-working";
+import {
+  hasFreshLiveTelemetry,
+  isAccountWorkingNow,
+} from "@/utils/account-working";
 import { resolveEffectiveAccountStatus } from "@/utils/account-status";
 import { formatWindowLabel } from "@/utils/formatters";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 
-function roundAveragePercent(values: Array<number | null | undefined>): number | null {
+function roundAveragePercent(
+  values: Array<number | null | undefined>,
+): number | null {
   const normalized = values
     .filter((value): value is number => value != null)
     .map((value) => Math.max(0, Math.min(100, value)));
@@ -19,7 +27,8 @@ function roundAveragePercent(values: Array<number | null | undefined>): number |
     return null;
   }
 
-  const average = normalized.reduce((sum, value) => sum + value, 0) / normalized.length;
+  const average =
+    normalized.reduce((sum, value) => sum + value, 0) / normalized.length;
   return Math.round(average);
 }
 
@@ -31,7 +40,9 @@ export type AccountCardsProps = {
   onAction?: AccountCardProps["onAction"];
 };
 
-function buildConsumedByAccount(window: UsageWindow | null): Map<string, number> {
+function buildConsumedByAccount(
+  window: UsageWindow | null,
+): Map<string, number> {
   const consumedByAccount = new Map<string, number>();
   if (!window) return consumedByAccount;
 
@@ -39,7 +50,10 @@ function buildConsumedByAccount(window: UsageWindow | null): Map<string, number>
     if (row.remainingPercentAvg == null) {
       continue;
     }
-    consumedByAccount.set(row.accountId, Math.max(0, row.capacityCredits - row.remainingCredits));
+    consumedByAccount.set(
+      row.accountId,
+      Math.max(0, row.capacityCredits - row.remainingCredits),
+    );
   }
 
   return consumedByAccount;
@@ -50,7 +64,9 @@ function resolveCardTokensUsed(
   primaryConsumedByAccount: Map<string, number>,
   secondaryConsumedByAccount: Map<string, number>,
 ): number {
-  const weeklyOnly = account.windowMinutesPrimary == null && account.windowMinutesSecondary != null;
+  const weeklyOnly =
+    account.windowMinutesPrimary == null &&
+    account.windowMinutesSecondary != null;
   const primaryConsumed = primaryConsumedByAccount.get(account.accountId);
   const secondaryConsumed = secondaryConsumedByAccount.get(account.accountId);
 
@@ -80,9 +96,18 @@ export function AccountCards({
     "primary",
     primaryWindow?.windowMinutes ?? null,
   );
-  const duplicateAccountIds = useMemo(() => buildDuplicateAccountIdSet(accounts), [accounts]);
-  const primaryConsumedByAccount = useMemo(() => buildConsumedByAccount(primaryWindow), [primaryWindow]);
-  const secondaryConsumedByAccount = useMemo(() => buildConsumedByAccount(secondaryWindow), [secondaryWindow]);
+  const duplicateAccountIds = useMemo(
+    () => buildDuplicateAccountIdSet(accounts),
+    [accounts],
+  );
+  const primaryConsumedByAccount = useMemo(
+    () => buildConsumedByAccount(primaryWindow),
+    [primaryWindow],
+  );
+  const secondaryConsumedByAccount = useMemo(
+    () => buildConsumedByAccount(secondaryWindow),
+    [secondaryWindow],
+  );
   const groupedAccounts = useMemo(() => {
     const working: AccountSummary[] = [];
     const active: AccountSummary[] = [];
@@ -167,7 +192,11 @@ export function AccountCards({
         >
           <AccountCard
             account={account}
-            tokensUsed={resolveCardTokensUsed(account, primaryConsumedByAccount, secondaryConsumedByAccount)}
+            tokensUsed={resolveCardTokensUsed(
+              account,
+              primaryConsumedByAccount,
+              secondaryConsumedByAccount,
+            )}
             showAccountId={duplicateAccountIds.has(account.accountId)}
             useLocalBusy={useLocalBusy}
             onAction={onAction}
@@ -190,7 +219,8 @@ export function AccountCards({
               Working now
             </h3>
             <p className="text-xs text-muted-foreground">
-              Accounts with active CLI sessions are grouped first so you can switch faster.
+              Accounts with active CLI sessions are grouped first so you can
+              switch faster.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">

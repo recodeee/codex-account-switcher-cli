@@ -13,7 +13,10 @@ import {
   formatResetRelative,
   formatWindowLabel,
 } from "@/utils/formatters";
-import { getMergedQuotaRemainingPercent } from "@/utils/account-working";
+import {
+  getMergedQuotaRemainingPercent,
+  getRawQuotaWindowFallback,
+} from "@/utils/account-working";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 
 export type AccountUsagePanelProps = {
@@ -132,23 +135,32 @@ export function AccountUsagePanel({ account, trends }: AccountUsagePanelProps) {
   const hasLiveSession = account.codexAuth?.hasLiveSession ?? false;
   const mergedPrimaryRemainingPercent = getMergedQuotaRemainingPercent(account, "primary");
   const mergedSecondaryRemainingPercent = getMergedQuotaRemainingPercent(account, "secondary");
+  const primaryRawQuotaFallback = getRawQuotaWindowFallback(account, "primary");
+  const secondaryRawQuotaFallback = getRawQuotaWindowFallback(account, "secondary");
   const primary = normalizeRemainingPercentForDisplay({
     accountKey: account.accountId,
     windowKey: "primary",
-    remainingPercent: mergedPrimaryRemainingPercent ?? account.usage?.primaryRemainingPercent ?? null,
-    resetAt: account.resetAtPrimary ?? null,
+    remainingPercent:
+      mergedPrimaryRemainingPercent ??
+      account.usage?.primaryRemainingPercent ??
+      primaryRawQuotaFallback?.remainingPercent ??
+      null,
+    resetAt: account.resetAtPrimary ?? primaryRawQuotaFallback?.resetAt ?? null,
     hasLiveSession,
-    lastRecordedAt: account.lastUsageRecordedAtPrimary ?? null,
+    lastRecordedAt: account.lastUsageRecordedAtPrimary ?? primaryRawQuotaFallback?.recordedAt ?? null,
     applyCycleFloor: mergedPrimaryRemainingPercent == null,
   });
   const secondary = normalizeRemainingPercentForDisplay({
     accountKey: account.accountId,
     windowKey: "secondary",
     remainingPercent:
-      mergedSecondaryRemainingPercent ?? account.usage?.secondaryRemainingPercent ?? null,
-    resetAt: account.resetAtSecondary ?? null,
+      mergedSecondaryRemainingPercent ??
+      account.usage?.secondaryRemainingPercent ??
+      secondaryRawQuotaFallback?.remainingPercent ??
+      null,
+    resetAt: account.resetAtSecondary ?? secondaryRawQuotaFallback?.resetAt ?? null,
     hasLiveSession,
-    lastRecordedAt: account.lastUsageRecordedAtSecondary ?? null,
+    lastRecordedAt: account.lastUsageRecordedAtSecondary ?? secondaryRawQuotaFallback?.recordedAt ?? null,
     applyCycleFloor: mergedSecondaryRemainingPercent == null,
   });
   const requestUsage = account.requestUsage ?? null;

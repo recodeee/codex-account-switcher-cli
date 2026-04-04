@@ -171,17 +171,26 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
                 INSERT INTO sticky_sessions (
                     key, account_id, kind, created_at, updated_at, task_preview, task_updated_at
                 )
-                VALUES (
-                    :key, :account_id, :kind, :timestamp, :timestamp, :task_preview, :timestamp
-                )
+                VALUES
+                    (
+                        :active_key, :account_id, :kind, :active_timestamp, :active_timestamp,
+                        :active_task_preview, :active_timestamp
+                    ),
+                    (
+                        :stale_key, :account_id, :kind, :stale_timestamp, :stale_timestamp,
+                        :stale_task_preview, :stale_timestamp
+                    )
                 """
             ),
             {
-                "key": "dashboard-session-1",
+                "active_key": "dashboard-session-active",
+                "stale_key": "dashboard-session-stale",
                 "account_id": "acc_dash",
                 "kind": "codex_session",
-                "timestamp": now - timedelta(minutes=1),
-                "task_preview": "Investigate dashboard quota drift",
+                "active_timestamp": now - timedelta(minutes=1),
+                "stale_timestamp": now - timedelta(hours=2),
+                "active_task_preview": "Investigate dashboard quota drift",
+                "stale_task_preview": "This stale preview should not appear",
             },
         )
         await session.commit()

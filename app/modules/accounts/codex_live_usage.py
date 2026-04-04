@@ -565,8 +565,6 @@ def _resolve_process_snapshot_name(
     env = _read_process_env(pid) or {}
 
     explicit_snapshot = env.get("CODEX_AUTH_ACTIVE_SNAPSHOT", "").strip()
-    if explicit_snapshot:
-        return explicit_snapshot
 
     current_override = _resolve_process_path(env.get("CODEX_AUTH_CURRENT_PATH"), pid)
     auth_override = _resolve_process_path(env.get("CODEX_AUTH_JSON_PATH"), pid)
@@ -585,9 +583,19 @@ def _resolve_process_snapshot_name(
         if snapshot_from_current:
             return snapshot_from_current
 
-        return _infer_snapshot_name_from_auth_path(
+        snapshot_from_auth_path = _infer_snapshot_name_from_auth_path(
             auth_override if auth_override is not None else default_auth_path
         )
+        if snapshot_from_auth_path:
+            return snapshot_from_auth_path
+
+        if explicit_snapshot:
+            return explicit_snapshot
+
+        return None
+
+    if explicit_snapshot:
+        return explicit_snapshot
 
     # Some host terminals run against the default auth scope and do not expose
     # explicit snapshot/runtime env metadata. In that case, cautiously attribute

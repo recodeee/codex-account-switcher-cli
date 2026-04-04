@@ -91,11 +91,15 @@ class AccountsService:
             await self._usage_updater.refresh_accounts(accounts, primary_usage)
             primary_usage = await self._usage_repo.latest_by_account(window="primary")
         secondary_usage = await self._usage_repo.latest_by_account(window="secondary") if self._usage_repo else {}
-        codex_tracked_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(account_ids)
+        active_codex_window_start = utcnow() - _ACTIVE_CODEX_TASK_WINDOW
+        codex_tracked_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(
+            account_ids,
+            active_since=active_codex_window_start,
+        )
         codex_live_session_counts_by_account = {account_id: 0 for account_id in account_ids}
         codex_current_task_preview_by_account = await self._repo.list_codex_current_task_preview_by_account(
             account_ids,
-            active_since=utcnow() - _ACTIVE_CODEX_TASK_WINDOW,
+            active_since=active_codex_window_start,
         )
         request_usage_rows = await self._repo.list_request_usage_summary_by_account(account_ids)
         request_usage_by_account = {

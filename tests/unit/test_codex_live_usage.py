@@ -670,6 +670,34 @@ def test_read_live_codex_process_session_counts_by_snapshot_uses_explicit_snapsh
     assert counts == {"work": 1}
 
 
+def test_read_live_codex_process_session_counts_prefers_current_path_over_stale_explicit_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "current"
+    current_path.write_text("odin", encoding="utf-8")
+    auth_path = tmp_path / "auth.json"
+    auth_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(auth_path))
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(111, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {
+            "CODEX_AUTH_ACTIVE_SNAPSHOT": "bia",
+            "CODEX_AUTH_CURRENT_PATH": str(current_path),
+            "CODEX_AUTH_JSON_PATH": str(auth_path),
+        },
+    )
+
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert counts == {"odin": 1}
+
+
 def test_read_live_codex_process_session_counts_by_snapshot_uses_runtime_current_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

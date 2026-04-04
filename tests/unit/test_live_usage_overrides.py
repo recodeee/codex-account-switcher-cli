@@ -2126,3 +2126,81 @@ def test_apply_local_live_usage_overrides_hides_presence_only_debug_samples(
     assert debug.override_reason == "live_session_without_windows"
     assert debug.raw_samples == []
     assert debug.merged is None
+
+
+def test_apply_local_live_usage_overrides_applies_sample_override_without_live_telemetry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    account = _make_account("acc-odin", "odin@example.com")
+    accounts = [account]
+    snapshot_index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={account.id: ["odin"]},
+        active_snapshot_name="odin",
+    )
+    codex_auth_by_account = {
+        account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="odin",
+            active_snapshot_name="odin",
+            is_active_snapshot=True,
+            has_live_session=False,
+        )
+    }
+    primary_usage: dict[str, UsageHistory] = {}
+    secondary_usage: dict[str, UsageHistory] = {}
+    session_counts = {account.id: 0}
+    debug_by_account: dict[str, AccountLiveQuotaDebug] = {}
+    now = datetime(2026, 4, 4, 17, 17, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_by_snapshot",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_samples_by_snapshot",
+        lambda: {
+            "odin": [
+                LocalCodexLiveUsageSample(
+                    source="/tmp/rollout-2026-04-04T17-17-06-019d5911-b523-76d1-b6b8-08959f6c44f1.jsonl",
+                    recorded_at=now,
+                    primary=LocalUsageWindow(used_percent=1.0, reset_at=None, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=38.0, reset_at=None, window_minutes=10_080),
+                    stale=False,
+                )
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_live_codex_process_session_counts_by_snapshot",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_runtime_live_session_counts_by_snapshot",
+        lambda: {},
+    )
+
+    apply_local_live_usage_overrides(
+        accounts=accounts,
+        snapshot_index=snapshot_index,
+        codex_auth_by_account=codex_auth_by_account,
+        primary_usage=primary_usage,
+        secondary_usage=secondary_usage,
+        codex_live_session_counts_by_account=session_counts,
+        live_quota_debug_by_account=debug_by_account,
+    )
+
+    assert primary_usage[account.id].used_percent == pytest.approx(1.0)
+    assert secondary_usage[account.id].used_percent == pytest.approx(38.0)
+    assert codex_auth_by_account[account.id].has_live_session is True
+    assert session_counts[account.id] == 1
+    debug = debug_by_account[account.id]
+    assert debug.override_applied is True
+    assert debug.override_reason in {
+        "no_live_telemetry_confident_sample_override",
+        "no_live_telemetry_sample_floor_override",
+    }
+    assert debug.merged is not None
+    assert debug.merged.primary is not None
+    assert debug.merged.primary.remaining_percent == pytest.approx(99.0)
+    assert debug.merged.secondary is not None
+    assert debug.merged.secondary.remaining_percent == pytest.approx(62.0)

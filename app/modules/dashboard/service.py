@@ -68,11 +68,15 @@ class DashboardService:
             )
             for account_id, row in request_usage_rows.items()
         }
-        codex_tracked_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(account_ids)
+        active_codex_window_start = now - _ACTIVE_CODEX_TASK_WINDOW
+        codex_tracked_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(
+            account_ids,
+            active_since=active_codex_window_start,
+        )
         codex_live_session_counts_by_account = {account_id: 0 for account_id in account_ids}
         codex_current_task_preview_by_account = await self._repo.list_codex_current_task_preview_by_account(
             account_ids,
-            active_since=utcnow() - _ACTIVE_CODEX_TASK_WINDOW,
+            active_since=active_codex_window_start,
         )
         snapshot_index = build_snapshot_index()
         codex_auth_by_account = {

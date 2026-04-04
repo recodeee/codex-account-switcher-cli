@@ -172,11 +172,63 @@ def apply_local_live_usage_overrides(
                 codex_live_session_counts_by_account.get(account_id, 0),
             )
         elif not has_live_telemetry:
-            override_reason = "no_live_telemetry"
+            debug_live_usage = live_usage
+            if codex_auth_status.is_active_snapshot:
+                (
+                    applied_confident_sample_override,
+                    confident_sample_live_usage,
+                ) = _apply_deferred_confident_sample_override(
+                    account_id=account_id,
+                    raw_samples_override=confident_raw_samples_override,
+                    primary_usage=primary_usage,
+                    secondary_usage=secondary_usage,
+                    persist_candidates=persist_candidates,
+                )
+                if applied_confident_sample_override:
+                    override_applied = True
+                    override_reason = "no_live_telemetry_confident_sample_override"
+                    if confident_sample_live_usage is not None:
+                        debug_live_usage = confident_sample_live_usage
+                else:
+                    (
+                        applied_sample_floor_override,
+                        sample_floor_live_usage,
+                    ) = _apply_deferred_sample_floor_override(
+                        account_id=account_id,
+                        snapshots_considered=snapshots_considered,
+                        live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                        primary_usage=primary_usage,
+                        secondary_usage=secondary_usage,
+                        persist_candidates=persist_candidates,
+                    )
+                    if applied_sample_floor_override:
+                        override_applied = True
+                        override_reason = "no_live_telemetry_sample_floor_override"
+                        if sample_floor_live_usage is not None:
+                            debug_live_usage = sample_floor_live_usage
+                    else:
+                        override_reason = "no_live_telemetry"
+            else:
+                override_reason = "no_live_telemetry"
+
+            if (
+                not should_defer_active_snapshot_usage
+                and _has_fresh_quota_sample_for_account(
+                    snapshots_considered=snapshots_considered,
+                    live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                    raw_samples_override=raw_samples_override,
+                )
+            ):
+                codex_auth_status.has_live_session = True
+                codex_live_session_counts_by_account[account_id] = max(
+                    codex_live_session_counts_by_account.get(account_id, 0),
+                    1,
+                )
+
             _set_live_quota_debug(
                 account_id=account_id,
                 snapshots_considered=snapshots_considered,
-                live_usage=live_usage,
+                live_usage=debug_live_usage,
                 live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
                 raw_samples_override=raw_samples_override,
                 override_applied=override_applied,
@@ -186,7 +238,7 @@ def apply_local_live_usage_overrides(
             _log_live_quota_debug(
                 account=account,
                 snapshots_considered=snapshots_considered,
-                live_usage=live_usage,
+                live_usage=debug_live_usage,
                 live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
                 live_process_session_count=live_process_session_count,
                 override_applied=override_applied,
@@ -778,6 +830,28 @@ def _resolve_debug_raw_samples(
                 raw_samples.append(debug_sample)
     raw_samples.sort(key=lambda sample: sample.recorded_at, reverse=True)
     return raw_samples
+
+
+def _has_fresh_quota_sample_for_account(
+    *,
+    snapshots_considered: list[str],
+    live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]],
+    raw_samples_override: list[AccountLiveQuotaDebugSample] | None,
+) -> bool:
+    if raw_samples_override is not None:
+        return any(
+            not sample.stale and (sample.primary is not None or sample.secondary is not None)
+            for sample in raw_samples_override
+        )
+
+    for snapshot_name in snapshots_considered:
+        for sample in live_usage_samples_by_snapshot.get(snapshot_name, []):
+            if sample.stale:
+                continue
+            if sample.primary is None and sample.secondary is None:
+                continue
+            return True
+    return False
 
 
 def _build_default_sample_debug_overrides(

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { createAccountSummary } from "@/test/mocks/factories";
-import { getMergedQuotaRemainingPercent, isAccountWorkingNow } from "@/utils/account-working";
+import {
+  getMergedQuotaRemainingPercent,
+  getRawQuotaWindowFallback,
+  isAccountWorkingNow,
+} from "@/utils/account-working";
 
 describe("isAccountWorkingNow", () => {
   it("returns true when codex auth reports a live session with fresh telemetry", () => {
@@ -243,6 +247,77 @@ describe("isAccountWorkingNow", () => {
 
     expect(getMergedQuotaRemainingPercent(account, "primary")).toBe(16);
     expect(getMergedQuotaRemainingPercent(account, "secondary")).toBe(90);
+  });
+
+  it("uses raw sample fallback when merged payload has no windows", () => {
+    const nowIso = "2026-04-04T11:58:00.000Z";
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "odin",
+        activeSnapshotName: "odin",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["odin"],
+        overrideApplied: false,
+        overrideReason: "live_session_without_windows",
+        merged: {
+          source: "merged",
+          snapshotName: "odin",
+          recordedAt: nowIso,
+          stale: false,
+          primary: null,
+          secondary: null,
+        },
+        rawSamples: [
+          {
+            source: "/tmp/rollout-odin.jsonl",
+            snapshotName: "odin",
+            recordedAt: nowIso,
+            stale: false,
+            primary: { usedPercent: 61, remainingPercent: 39, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 42, remainingPercent: 58, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+        ],
+      },
+    });
+
+    expect(getRawQuotaWindowFallback(account, "primary")?.remainingPercent).toBe(39);
+    expect(getRawQuotaWindowFallback(account, "secondary")?.remainingPercent).toBe(58);
+  });
+
+  it("rejects raw sample fallback when only mismatched snapshot samples are available", () => {
+    const nowIso = "2026-04-04T11:58:00.000Z";
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "odin",
+        activeSnapshotName: "odin",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["odin", "bia"],
+        overrideApplied: false,
+        overrideReason: "live_session_without_windows",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/rollout-bia.jsonl",
+            snapshotName: "bia",
+            recordedAt: nowIso,
+            stale: false,
+            primary: { usedPercent: 88, remainingPercent: 12, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 70, remainingPercent: 30, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+        ],
+      },
+    });
+
+    expect(getRawQuotaWindowFallback(account, "primary")).toBeNull();
+    expect(getRawQuotaWindowFallback(account, "secondary")).toBeNull();
   });
 
   it("returns false when merged 5h is depleted", () => {

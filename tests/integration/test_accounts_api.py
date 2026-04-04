@@ -187,7 +187,7 @@ async def test_accounts_list_exposes_latest_active_codex_task_preview(async_clie
     accounts = {item["accountId"]: item for item in list_response.json()["accounts"]}
     assert accounts[expected_account_id]["codexCurrentTaskPreview"] == "Ship active session preview to dashboard"
     assert accounts[expected_account_id]["codexLiveSessionCount"] == 0
-    assert accounts[expected_account_id]["codexTrackedSessionCount"] == 2
+    assert accounts[expected_account_id]["codexTrackedSessionCount"] == 1
     assert accounts[expected_account_id]["codexSessionCount"] == 0
 
 

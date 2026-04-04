@@ -33,6 +33,7 @@ import {
 import {
   getFreshDebugRawSampleCount,
   getMergedQuotaRemainingPercent,
+  getRawQuotaWindowFallback,
   hasFreshLiveTelemetry,
   isAccountWorkingNow,
   isFreshQuotaTelemetryTimestamp,
@@ -107,7 +108,9 @@ function QuotaBar({
 
   const percentPillClass = cn(
     "rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-    isLive && !deactivated && "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+    isLive &&
+      !deactivated &&
+      "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
     tone === "healthy" &&
       "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
     tone === "warning" &&
@@ -196,14 +199,16 @@ function QuotaBar({
   );
 }
 
-function resolveLastSeenDisplay(
-  label: string | null | undefined,
-): { label: string | null; upToDate: boolean } {
+function resolveLastSeenDisplay(label: string | null | undefined): {
+  label: string | null;
+  upToDate: boolean;
+} {
   if (!label) {
     return { label: null, upToDate: false };
   }
   const normalized = label.trim().toLowerCase();
-  const upToDate = normalized === "last seen now" || /\b0m ago$/.test(normalized);
+  const upToDate =
+    normalized === "last seen now" || /\b0m ago$/.test(normalized);
   if (upToDate) {
     return { label: "Up to date", upToDate: true };
   }
@@ -226,7 +231,9 @@ function formatDebugSource(source: string): string {
   return parts[parts.length - 1] || normalized;
 }
 
-function buildQuotaDebugLogLines(liveQuotaDebug: NonNullable<AccountSummary["liveQuotaDebug"]>): string[] {
+function buildQuotaDebugLogLines(
+  liveQuotaDebug: NonNullable<AccountSummary["liveQuotaDebug"]>,
+): string[] {
   const merged = liveQuotaDebug.merged;
   const lines: string[] = [
     `$ merged 5h=${formatDebugPercent(merged?.primary?.remainingPercent)} weekly=${formatDebugPercent(merged?.secondary?.remainingPercent)}`,
@@ -245,7 +252,9 @@ function buildQuotaDebugLogLines(liveQuotaDebug: NonNullable<AccountSummary["liv
 
   liveQuotaDebug.rawSamples.slice(0, 24).forEach((sample, index) => {
     const staleSuffix = sample.stale ? " stale=true" : "";
-    const snapshotSuffix = sample.snapshotName ? ` snapshot=${sample.snapshotName}` : "";
+    const snapshotSuffix = sample.snapshotName
+      ? ` snapshot=${sample.snapshotName}`
+      : "";
     lines.push(
       `$ sample#${index + 1} src=${formatDebugSource(sample.source)} 5h=${formatDebugPercent(sample.primary?.remainingPercent)} weekly=${formatDebugPercent(sample.secondary?.remainingPercent)}${snapshotSuffix}${staleSuffix}`,
     );
@@ -262,10 +271,22 @@ export function AccountCard({
 }: AccountCardProps) {
   const [showQuotaDebug, setShowQuotaDebug] = useState(false);
   const liveQuotaDebug = account.liveQuotaDebug ?? null;
-  const mergedPrimaryRemainingPercent =
-    getMergedQuotaRemainingPercent(account, "primary");
-  const mergedSecondaryRemainingPercent =
-    getMergedQuotaRemainingPercent(account, "secondary");
+  const mergedPrimaryRemainingPercent = getMergedQuotaRemainingPercent(
+    account,
+    "primary",
+  );
+  const mergedSecondaryRemainingPercent = getMergedQuotaRemainingPercent(
+    account,
+    "secondary",
+  );
+  const deferredPrimaryQuotaFallback = getRawQuotaWindowFallback(
+    account,
+    "primary",
+  );
+  const deferredSecondaryQuotaFallback = getRawQuotaWindowFallback(
+    account,
+    "secondary",
+  );
   const freshDebugRawSampleCount = getFreshDebugRawSampleCount(account);
   const blurred = usePrivacyStore((s) => s.blurred);
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
@@ -278,12 +299,36 @@ export function AccountCard({
   });
   const status = effectiveStatus;
   const primaryRemainingRaw =
-    mergedPrimaryRemainingPercent ?? account.usage?.primaryRemainingPercent ?? null;
+    mergedPrimaryRemainingPercent ??
+    account.usage?.primaryRemainingPercent ??
+    deferredPrimaryQuotaFallback?.remainingPercent ??
+    null;
+  const secondaryRemainingRaw =
+    mergedSecondaryRemainingPercent ??
+    account.usage?.secondaryRemainingPercent ??
+    deferredSecondaryQuotaFallback?.remainingPercent ??
+    null;
+  const primaryLastRecordedAt =
+    account.lastUsageRecordedAtPrimary ??
+    deferredPrimaryQuotaFallback?.recordedAt ??
+    null;
+  const secondaryLastRecordedAt =
+    account.lastUsageRecordedAtSecondary ??
+    deferredSecondaryQuotaFallback?.recordedAt ??
+    null;
+  const primaryResetAt =
+    account.resetAtPrimary ?? deferredPrimaryQuotaFallback?.resetAt ?? null;
+  const secondaryResetAt =
+    account.resetAtSecondary ?? deferredSecondaryQuotaFallback?.resetAt ?? null;
+  const primaryWindowMinutes =
+    account.windowMinutesPrimary ??
+    deferredPrimaryQuotaFallback?.windowMinutes ??
+    null;
   const primaryTelemetryFresh = isFreshQuotaTelemetryTimestamp(
-    account.lastUsageRecordedAtPrimary ?? null,
+    primaryLastRecordedAt,
   );
   const secondaryTelemetryFresh = isFreshQuotaTelemetryTimestamp(
-    account.lastUsageRecordedAtSecondary ?? null,
+    secondaryLastRecordedAt,
   );
   const primaryTelemetryPending = hasLiveSession && !primaryTelemetryFresh;
   const secondaryTelemetryPending = hasLiveSession && !secondaryTelemetryFresh;
@@ -291,19 +336,18 @@ export function AccountCard({
     accountKey: account.accountId,
     windowKey: "primary",
     remainingPercent: primaryRemainingRaw,
-    resetAt: account.resetAtPrimary ?? null,
+    resetAt: primaryResetAt,
     hasLiveSession,
-    lastRecordedAt: account.lastUsageRecordedAtPrimary ?? null,
+    lastRecordedAt: primaryLastRecordedAt,
     applyCycleFloor: mergedPrimaryRemainingPercent == null,
   });
   const secondaryRemaining = normalizeRemainingPercentForDisplay({
     accountKey: account.accountId,
     windowKey: "secondary",
-    remainingPercent:
-      mergedSecondaryRemainingPercent ?? account.usage?.secondaryRemainingPercent ?? null,
-    resetAt: account.resetAtSecondary ?? null,
+    remainingPercent: secondaryRemainingRaw,
+    resetAt: secondaryResetAt,
     hasLiveSession,
-    lastRecordedAt: account.lastUsageRecordedAtSecondary ?? null,
+    lastRecordedAt: secondaryLastRecordedAt,
     applyCycleFloor: mergedSecondaryRemainingPercent == null,
   });
   const weeklyOnly =
@@ -324,26 +368,26 @@ export function AccountCard({
     codexSessionCount: account.codexSessionCount,
   });
 
-  const primaryReset = formatQuotaResetLabel(account.resetAtPrimary ?? null);
-  const secondaryReset = formatQuotaResetLabel(
-    account.resetAtSecondary ?? null,
-  );
-  const primaryWindowLabel = formatWindowLabel(
-    "primary",
-    account.windowMinutesPrimary ?? null,
-  );
+  const primaryReset = formatQuotaResetLabel(primaryResetAt);
+  const secondaryReset = formatQuotaResetLabel(secondaryResetAt);
+  const primaryWindowLabel = formatWindowLabel("primary", primaryWindowMinutes);
   const isDeactivated = status === "deactivated";
-  const primaryLastSeen = formatLastUsageLabel(account.lastUsageRecordedAtPrimary ?? null);
-  const secondaryLastSeen = formatLastUsageLabel(account.lastUsageRecordedAtSecondary ?? null);
+  const primaryLastSeen = formatLastUsageLabel(primaryLastRecordedAt);
+  const secondaryLastSeen = formatLastUsageLabel(secondaryLastRecordedAt);
   const primaryLastSeenDisplay = resolveLastSeenDisplay(primaryLastSeen);
   const secondaryLastSeenDisplay = resolveLastSeenDisplay(secondaryLastSeen);
-  const stalePrimaryLastSeen = !hasLiveSession ? primaryLastSeenDisplay : { label: null, upToDate: false };
+  const stalePrimaryLastSeen = !hasLiveSession
+    ? primaryLastSeenDisplay
+    : { label: null, upToDate: false };
   const staleSecondaryLastSeen = !hasLiveSession
     ? secondaryLastSeenDisplay
     : { label: null, upToDate: false };
   const deactivatedLastSeenDisplay =
-    isDeactivated && (primaryLastSeenDisplay.label || secondaryLastSeenDisplay.label)
-      ? (primaryLastSeenDisplay.label ? primaryLastSeenDisplay : secondaryLastSeenDisplay)
+    isDeactivated &&
+    (primaryLastSeenDisplay.label || secondaryLastSeenDisplay.label)
+      ? primaryLastSeenDisplay.label
+        ? primaryLastSeenDisplay
+        : secondaryLastSeenDisplay
       : null;
 
   const title = account.displayName || account.email;
@@ -353,9 +397,12 @@ export function AccountCard({
     account.codexAuth?.snapshotName,
   );
   const snapshotName = account.codexAuth?.snapshotName?.trim() ?? null;
-  const expectedSnapshotName = account.codexAuth?.expectedSnapshotName?.trim() ?? null;
+  const expectedSnapshotName =
+    account.codexAuth?.expectedSnapshotName?.trim() ?? null;
   const hasSnapshotMismatch = Boolean(
-    snapshotName && expectedSnapshotName && snapshotName !== expectedSnapshotName,
+    snapshotName &&
+    expectedSnapshotName &&
+    snapshotName !== expectedSnapshotName,
   );
   const totalTokensUsed = tokensUsed ?? account.requestUsage?.totalTokens ?? 0;
   const tokenUsageLabel = isWorkingNow
@@ -364,11 +411,17 @@ export function AccountCard({
   const codexLiveSessionCount = hasLiveSession
     ? Math.max(account.codexLiveSessionCount ?? 0, 1)
     : Math.max(account.codexLiveSessionCount ?? 0, freshDebugRawSampleCount, 0);
-  const codexTrackedSessionCount = Math.max(account.codexTrackedSessionCount ?? 0, 0);
-  const hasSessionInventory = codexLiveSessionCount > 0 || codexTrackedSessionCount > 0;
-  const codexCurrentTaskPreview = account.codexCurrentTaskPreview?.trim() || null;
+  const codexTrackedSessionCount = Math.max(
+    account.codexTrackedSessionCount ?? 0,
+    0,
+  );
+  const hasSessionInventory =
+    codexLiveSessionCount > 0 || codexTrackedSessionCount > 0;
+  const codexCurrentTaskPreview =
+    account.codexCurrentTaskPreview?.trim() || null;
   const quotaDebugLogText = useMemo(
-    () => (liveQuotaDebug ? buildQuotaDebugLogLines(liveQuotaDebug).join("\n") : ""),
+    () =>
+      liveQuotaDebug ? buildQuotaDebugLogLines(liveQuotaDebug).join("\n") : "",
     [liveQuotaDebug],
   );
   const emailSubtitle =
@@ -477,7 +530,12 @@ export function AccountCard({
       ) : null}
 
       {/* Quota bars */}
-      <div className={cn("mt-3.5 grid gap-2.5", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
+      <div
+        className={cn(
+          "mt-3.5 grid gap-2.5",
+          weeklyOnly ? "grid-cols-1" : "grid-cols-2",
+        )}
+      >
         {!weeklyOnly && (
           <QuotaBar
             label={primaryWindowLabel}
@@ -511,7 +569,10 @@ export function AccountCard({
           >
             Debug
             <ChevronDown
-              className={cn("h-3 w-3 transition-transform duration-200", showQuotaDebug && "rotate-180")}
+              className={cn(
+                "h-3 w-3 transition-transform duration-200",
+                showQuotaDebug && "rotate-180",
+              )}
             />
           </button>
 

@@ -9,6 +9,11 @@ function parseRecordedAtMs(value: string | null | undefined): number | null {
   return timestampMs;
 }
 
+function normalizeSnapshotName(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized ? normalized : null;
+}
+
 function isFreshTimestamp(
   value: string | null | undefined,
   nowMs: number,
@@ -66,6 +71,106 @@ export function getMergedQuotaRemainingPercent(
   }
 
   return candidate;
+}
+
+type RawQuotaWindowFallback = {
+  remainingPercent: number;
+  resetAt: string | null;
+  windowMinutes: number | null;
+  recordedAt: string;
+};
+
+function toIsoFromEpochSeconds(value: number | null | undefined): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return new Date(value * 1000).toISOString();
+}
+
+function canUseRawQuotaFallback(reason: string): boolean {
+  return (
+    reason === "live_session_without_windows" ||
+    reason === "missing_live_usage_payload" ||
+    reason.startsWith("deferred_active_snapshot_mixed_default_sessions")
+  );
+}
+
+export function getRawQuotaWindowFallback(
+  account: Pick<AccountSummary, "liveQuotaDebug" | "codexAuth">,
+  windowKey: "primary" | "secondary",
+): RawQuotaWindowFallback | null {
+  const liveQuotaDebug = account.liveQuotaDebug;
+  if (!liveQuotaDebug) {
+    return null;
+  }
+
+  const overrideReason = (liveQuotaDebug.overrideReason ?? "").trim().toLowerCase();
+  if (liveQuotaDebug.overrideApplied !== true && !canUseRawQuotaFallback(overrideReason)) {
+    return null;
+  }
+
+  const targetSnapshot = normalizeSnapshotName(account.codexAuth?.snapshotName);
+  const consideredSnapshots = (liveQuotaDebug.snapshotsConsidered ?? [])
+    .map((value) => normalizeSnapshotName(value))
+    .filter((value): value is string => value != null);
+
+  const candidates = liveQuotaDebug.rawSamples
+    .filter((sample) => {
+      if (sample.stale === true) {
+        return false;
+      }
+      const window = windowKey === "primary" ? sample.primary : sample.secondary;
+      return window != null && typeof window.remainingPercent === "number";
+    })
+    .sort((left, right) => {
+      const leftMs = parseRecordedAtMs(left.recordedAt) ?? 0;
+      const rightMs = parseRecordedAtMs(right.recordedAt) ?? 0;
+      return rightMs - leftMs;
+    });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  let scoped = candidates;
+
+  if (targetSnapshot) {
+    const exactSnapshotMatch = candidates.filter(
+      (sample) => normalizeSnapshotName(sample.snapshotName) === targetSnapshot,
+    );
+    if (exactSnapshotMatch.length > 0) {
+      scoped = exactSnapshotMatch;
+    } else {
+      const unnamedSamples = candidates.filter(
+        (sample) => normalizeSnapshotName(sample.snapshotName) == null,
+      );
+      const consideredOnlyTarget =
+        consideredSnapshots.length === 0 ||
+        consideredSnapshots.every((snapshot) => snapshot === targetSnapshot);
+      if (!consideredOnlyTarget || unnamedSamples.length === 0) {
+        return null;
+      }
+      scoped = unnamedSamples;
+    }
+  } else if (consideredSnapshots.length > 1) {
+    return null;
+  }
+
+  const selectedSample = scoped[0];
+  const selectedWindow = windowKey === "primary" ? selectedSample.primary : selectedSample.secondary;
+  if (!selectedWindow || typeof selectedWindow.remainingPercent !== "number") {
+    return null;
+  }
+
+  return {
+    remainingPercent: selectedWindow.remainingPercent,
+    resetAt: toIsoFromEpochSeconds(selectedWindow.resetAt),
+    windowMinutes:
+      typeof selectedWindow.windowMinutes === "number"
+        ? selectedWindow.windowMinutes
+        : null,
+    recordedAt: selectedSample.recordedAt,
+  };
 }
 
 export function isFreshQuotaTelemetryTimestamp(

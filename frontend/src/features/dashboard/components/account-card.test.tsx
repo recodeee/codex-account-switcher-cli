@@ -406,6 +406,142 @@ describe("AccountCard", () => {
     expect(screen.queryByText("Syncing live telemetry")).not.toBeInTheDocument();
   });
 
+  it("uses raw live quota samples when merged windows are unavailable", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: null,
+        secondaryRemainingPercent: null,
+      },
+      resetAtPrimary: null,
+      resetAtSecondary: null,
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "odin",
+        activeSnapshotName: "odin",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["odin"],
+        overrideApplied: false,
+        overrideReason: "live_session_without_windows",
+        merged: {
+          source: "merged",
+          snapshotName: "odin",
+          recordedAt: nowIso,
+          stale: false,
+          primary: null,
+          secondary: null,
+        },
+        rawSamples: [
+          {
+            source: "/tmp/rollout-odin.jsonl",
+            snapshotName: "odin",
+            recordedAt: nowIso,
+            stale: false,
+            primary: {
+              usedPercent: 83,
+              remainingPercent: 17,
+              resetAt: 1760000000,
+              windowMinutes: 300,
+            },
+            secondary: {
+              usedPercent: 23,
+              remainingPercent: 77,
+              resetAt: 1760600000,
+              windowMinutes: 10080,
+            },
+          },
+        ],
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getAllByText("17%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("77%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Telemetry pending")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Live token status").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("uses deferred mixed-session raw samples as live quota fallback when baseline usage is missing", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: null,
+        secondaryRemainingPercent: null,
+      },
+      resetAtPrimary: null,
+      resetAtSecondary: null,
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "odin",
+        activeSnapshotName: "odin",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["odin"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: {
+          source: "merged",
+          snapshotName: "odin",
+          recordedAt: nowIso,
+          stale: false,
+          primary: {
+            usedPercent: 91,
+            remainingPercent: 9,
+            resetAt: 1760000000,
+            windowMinutes: 300,
+          },
+          secondary: {
+            usedPercent: 74,
+            remainingPercent: 26,
+            resetAt: 1760600000,
+            windowMinutes: 10080,
+          },
+        },
+        rawSamples: [
+          {
+            source: "/tmp/rollout-odin.jsonl",
+            snapshotName: "odin",
+            recordedAt: nowIso,
+            stale: false,
+            primary: {
+              usedPercent: 91,
+              remainingPercent: 9,
+              resetAt: 1760000000,
+              windowMinutes: 300,
+            },
+            secondary: {
+              usedPercent: 74,
+              remainingPercent: 26,
+              resetAt: 1760600000,
+              windowMinutes: 10080,
+            },
+          },
+        ],
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getAllByText("9%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("26%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Telemetry pending")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Live token status").length).toBeGreaterThanOrEqual(1);
+  });
+
   it("renders current task preview for working accounts when provided", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 2,

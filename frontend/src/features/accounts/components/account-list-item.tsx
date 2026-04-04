@@ -13,7 +13,11 @@ import {
 } from "@/utils/account-status";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
 import { formatPercentNullable, formatSlug } from "@/utils/formatters";
-import { getMergedQuotaRemainingPercent, isAccountWorkingNow } from "@/utils/account-working";
+import {
+  getMergedQuotaRemainingPercent,
+  getRawQuotaWindowFallback,
+  isAccountWorkingNow,
+} from "@/utils/account-working";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 import {
   canUseLocalAccount,
@@ -119,25 +123,33 @@ export function AccountListItem({
     : "";
   const mergedPrimaryRemainingPercent = getMergedQuotaRemainingPercent(account, "primary");
   const mergedSecondaryRemainingPercent = getMergedQuotaRemainingPercent(account, "secondary");
+  const primaryRawQuotaFallback = getRawQuotaWindowFallback(account, "primary");
+  const secondaryRawQuotaFallback = getRawQuotaWindowFallback(account, "secondary");
   const secondary = normalizeRemainingPercentForDisplay({
     accountKey: account.accountId,
     windowKey: "secondary",
     remainingPercent:
-      mergedSecondaryRemainingPercent ?? account.usage?.secondaryRemainingPercent ?? null,
-    resetAt: account.resetAtSecondary ?? null,
+      mergedSecondaryRemainingPercent ??
+      account.usage?.secondaryRemainingPercent ??
+      secondaryRawQuotaFallback?.remainingPercent ??
+      null,
+    resetAt: account.resetAtSecondary ?? secondaryRawQuotaFallback?.resetAt ?? null,
     hasLiveSession,
-    lastRecordedAt: account.lastUsageRecordedAtSecondary ?? null,
+    lastRecordedAt: account.lastUsageRecordedAtSecondary ?? secondaryRawQuotaFallback?.recordedAt ?? null,
     applyCycleFloor: mergedSecondaryRemainingPercent == null,
   });
   const primaryRemainingRaw =
-    mergedPrimaryRemainingPercent ?? account.usage?.primaryRemainingPercent ?? null;
+    mergedPrimaryRemainingPercent ??
+    account.usage?.primaryRemainingPercent ??
+    primaryRawQuotaFallback?.remainingPercent ??
+    null;
   const primaryRemaining = normalizeRemainingPercentForDisplay({
     accountKey: account.accountId,
     windowKey: "primary",
     remainingPercent: primaryRemainingRaw,
-    resetAt: account.resetAtPrimary ?? null,
+    resetAt: account.resetAtPrimary ?? primaryRawQuotaFallback?.resetAt ?? null,
     hasLiveSession,
-    lastRecordedAt: account.lastUsageRecordedAtPrimary ?? null,
+    lastRecordedAt: account.lastUsageRecordedAtPrimary ?? primaryRawQuotaFallback?.recordedAt ?? null,
     applyCycleFloor: mergedPrimaryRemainingPercent == null,
   });
   const hasResolvedSnapshot = Boolean(account.codexAuth?.snapshotName?.trim());

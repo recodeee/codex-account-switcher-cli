@@ -2,7 +2,6 @@ import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
-import { toast } from "sonner";
 
 import { AlertMessage } from "@/components/alert-message";
 import { useAccountMutations } from "@/features/accounts/hooks/use-accounts";
@@ -11,6 +10,7 @@ import { DashboardSkeleton } from "@/features/dashboard/components/dashboard-ske
 import { RequestFilters } from "@/features/dashboard/components/filters/request-filters";
 import { RequestLogUsageDonuts } from "@/features/dashboard/components/request-log-usage-donuts";
 import { RecentRequestsTable } from "@/features/dashboard/components/recent-requests-table";
+import { useTerminalWorkspace } from "@/features/dashboard/components/terminal-workspace-context";
 import { mergeRequestLogUsageSummaryWithLiveFallback } from "@/features/dashboard/request-log-usage-fallback";
 import { UsageDonuts } from "@/features/dashboard/components/usage-donuts";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
@@ -29,11 +29,11 @@ export function DashboardPage() {
   const queryClient = useQueryClient();
   const isDark = useThemeStore((s) => s.theme === "dark");
   const dashboardQuery = useDashboard();
+  const { openTerminal } = useTerminalWorkspace();
   const { filters, logsQuery, optionsQuery, usageSummaryQuery, updateFilters } = useRequestLogs();
   const {
     resumeMutation,
     useLocalMutation,
-    openTerminalMutation,
     repairSnapshotMutation,
   } = useAccountMutations();
 
@@ -65,10 +65,9 @@ export function DashboardPage() {
           });
           break;
         case "terminal":
-          openTerminalMutation.mutate(account.accountId, {
-            onError: (error) => {
-              toast.error(error instanceof Error ? error.message : "Terminal launch failed");
-            },
+          openTerminal({
+            accountId: account.accountId,
+            email: account.email,
           });
           break;
         case "sessions":
@@ -90,7 +89,7 @@ export function DashboardPage() {
     },
     [
       navigate,
-      openTerminalMutation,
+      openTerminal,
       repairSnapshotMutation,
       resumeMutation,
       useLocalMutation,
