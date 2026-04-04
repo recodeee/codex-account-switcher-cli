@@ -40,6 +40,7 @@ _RESET_FINGERPRINT_MATCH_TOLERANCE_SECONDS = 30
 _PERCENT_PATTERN_HIGH_CONFIDENCE_MAX_DISTANCE = 8.0
 _PERCENT_PATTERN_HIGH_CONFIDENCE_MARGIN = 4.0
 _LIVE_USAGE_DEBUG_ENV = "CODEX_LB_LIVE_USAGE_DEBUG"
+_DEFAULT_SESSION_FINGERPRINT_FALLBACK_ENV = "CODEX_LB_DEFAULT_SESSION_FINGERPRINT_FALLBACK_ENABLED"
 logger = logging.getLogger(__name__)
 
 
@@ -257,11 +258,15 @@ def apply_local_live_usage_overrides(
             override_reason=override_reason,
         )
 
-    # When process-level session attribution is available, prefer it over
-    # mixed default-session fingerprint heuristics. The fallback can spread
-    # unlabeled sessions across accounts and surface random "working now"
-    # badges unrelated to the actual active snapshot.
-    if not live_process_session_counts_by_snapshot:
+    # When process-level session attribution is unavailable, mixed
+    # default-session fingerprint heuristics can be enabled as a compatibility
+    # fallback. Keep it opt-in because unlabeled sessions may be spread across
+    # accounts and surface random "working now" badges unrelated to the active
+    # snapshot.
+    if (
+        not live_process_session_counts_by_snapshot
+        and _default_session_fingerprint_fallback_enabled()
+    ):
         _apply_local_default_session_fingerprint_overrides(
             accounts=accounts,
             snapshot_index=snapshot_index,
@@ -396,6 +401,11 @@ def _build_debug_window(window: LocalUsageWindow | None) -> AccountLiveQuotaDebu
 
 def _live_usage_debug_enabled() -> bool:
     raw = (os.environ.get(_LIVE_USAGE_DEBUG_ENV) or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _default_session_fingerprint_fallback_enabled() -> bool:
+    raw = (os.environ.get(_DEFAULT_SESSION_FINGERPRINT_FALLBACK_ENV) or "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
 
 

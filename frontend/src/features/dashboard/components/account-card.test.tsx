@@ -380,6 +380,32 @@ describe("AccountCard", () => {
     expect(screen.queryByText("Syncing live telemetry")).not.toBeInTheDocument();
   });
 
+  it("shows telemetry pending when live timestamps are fresh but quota percentages are missing", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: null,
+        secondaryRemainingPercent: null,
+      },
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getAllByText("Telemetry pending").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Syncing live telemetry")).not.toBeInTheDocument();
+  });
+
   it("renders current task preview for working accounts when provided", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 2,

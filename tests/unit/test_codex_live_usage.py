@@ -549,7 +549,23 @@ def test_read_live_codex_process_session_counts_by_snapshot_uses_runtime_current
     assert counts == {"personal": 1}
 
 
-def test_read_live_codex_process_session_counts_by_snapshot_maps_default_scope_processes_to_active_snapshot(
+def test_read_live_codex_process_session_counts_by_snapshot_ignores_unlabeled_processes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(303, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert counts == {}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_uses_explicit_default_scope_env_paths(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -566,7 +582,10 @@ def test_read_live_codex_process_session_counts_by_snapshot_maps_default_scope_p
     )
     monkeypatch.setattr(
         "app.modules.accounts.codex_live_usage._read_process_env",
-        lambda _pid: {},
+        lambda _pid: {
+            "CODEX_AUTH_CURRENT_PATH": str(current_path),
+            "CODEX_AUTH_JSON_PATH": str(auth_path),
+        },
     )
 
     counts = read_live_codex_process_session_counts_by_snapshot()

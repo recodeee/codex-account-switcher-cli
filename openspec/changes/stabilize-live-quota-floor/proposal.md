@@ -7,6 +7,7 @@ Live quota percentages can oscillate upward on refresh when concurrent terminals
 - Add frontend quota-display stabilization that keeps the lowest observed remaining percent per account/window within the same reset cycle.
 - Reset the floor automatically when the window reset timestamp changes.
 - Apply stabilized values across dashboard cards and accounts list/detail views.
+- When a card is "Working now" from live session presence but no fresh per-window usage timestamp exists, show `Telemetry pending` instead of indefinite `Syncing live telemetry`.
 - For runtime-profile session telemetry, aggregate concurrent session files per snapshot/window using the highest observed `used_percent` within the same active cycle (equivalent to lowest remaining).
 - Expose per-account debug telemetry (raw terminal samples + merged selection) in API/card overlay and add env-gated merge decision logs for diagnosis.
 - Add test coverage for floor behavior and reset-cycle rollover.

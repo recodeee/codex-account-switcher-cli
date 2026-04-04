@@ -4,6 +4,7 @@
 - [x] 1.2 Reset floor when reset cycle changes and keep stale-telemetry null behavior.
 - [x] 1.3 Wire account IDs into dashboard/accounts call sites so the floor applies consistently.
 - [x] 1.4 Add cache reset hooks for test isolation.
+- [x] 1.5 Replace indefinite `Syncing live telemetry` card copy with `Telemetry pending` when live sessions exist but per-window telemetry timestamps are missing/stale.
 
 ## 2. Validation
 

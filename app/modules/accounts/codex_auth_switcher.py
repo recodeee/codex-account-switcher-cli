@@ -338,7 +338,11 @@ def repair_snapshot_for_account(
         chatgpt_account_id=chatgpt_account_id,
         email=email,
     )
-    selected_snapshot_name = select_snapshot_name(snapshot_names, snapshot_index.active_snapshot_name)
+    selected_snapshot_name = select_snapshot_name(
+        snapshot_names,
+        snapshot_index.active_snapshot_name,
+        email=email,
+    )
     if selected_snapshot_name is None:
         raise CodexAuthSnapshotNotFoundError(
             f"No codex-auth snapshot found for {email}. Run `codex-auth save <snapshot-name>` first."

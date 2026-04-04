@@ -89,8 +89,7 @@ function QuotaBar({
 }) {
   const clamped = percent === null ? 0 : Math.max(0, Math.min(100, percent));
   const hasPercent = percent !== null;
-  const liveTelemetryStale =
-    isLive && !deactivated && percent === null && !telemetryPending;
+  const liveTelemetryUnavailable = isLive && !deactivated && percent === null;
   const tone = deactivated
     ? "deactivated"
     : !hasPercent
@@ -168,13 +167,11 @@ function QuotaBar({
       <div className="min-h-[16px]">
         {isLive && !deactivated ? (
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-cyan-700 dark:text-cyan-300">
-            <Activity className={cn("h-3 w-3", liveTelemetryStale && "animate-pulse")} />
+            <Activity className="h-3 w-3" />
             <span>
-              {telemetryPending
+              {liveTelemetryUnavailable || telemetryPending
                 ? "Telemetry pending"
-                : liveTelemetryStale
-                  ? "Syncing live telemetry"
-                  : "Live token status"}
+                : "Live token status"}
             </span>
           </div>
         ) : lastSeenLabel ? (
