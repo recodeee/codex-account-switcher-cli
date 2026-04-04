@@ -76,11 +76,15 @@ def _build_startup_input(*, cwd: Path, command: str) -> str:
 
 def open_host_terminal(*, snapshot_name: str) -> TerminalLaunchConfig:
     launch = resolve_terminal_launch_config()
+    system = platform.system().lower()
     if not launch.cwd.is_dir():
-        raise TerminalLaunchError(f"Terminal working directory does not exist: {launch.cwd}")
+        # When running in a containerized runtime, host-terminal launch can still work via
+        # bridge commands (for example flatpak-spawn --host) even if the cwd is not visible
+        # inside the container filesystem.
+        if not (system == "linux" and _is_containerized_runtime()):
+            raise TerminalLaunchError(f"Terminal working directory does not exist: {launch.cwd}")
 
     command = f"cd {shlex.quote(str(launch.cwd))} && {launch.command}"
-    system = platform.system().lower()
     if system == "darwin":
         _open_macos_terminal(command)
         return launch
@@ -179,6 +183,9 @@ def _open_linux_terminal(shell: str, command: str) -> None:
 
     detail = "; ".join(errors) if errors else "No supported terminal app found in PATH."
     if is_containerized:
+        bridge_hint = _linux_bridge_missing_hint()
+        if bridge_hint:
+            detail += f" {bridge_hint}"
         detail += (
             " Detected containerized runtime; host terminal apps may be unavailable in this environment."
             " Set CODEX_LB_LINUX_TERMINAL_LAUNCHER or CODEX_LB_LINUX_TERMINAL_BRIDGE to a host-aware launcher."
@@ -286,6 +293,23 @@ def _linux_host_bridge_prefixes() -> list[list[str]]:
         prefixes.append([executable, *bridge[1:]])
 
     return prefixes
+
+
+def _linux_bridge_missing_hint() -> str:
+    explicit_bridge = os.environ.get("CODEX_LB_LINUX_TERMINAL_BRIDGE", "").strip()
+    if not explicit_bridge:
+        return ""
+
+    try:
+        parts = shlex.split(explicit_bridge)
+    except ValueError:
+        return "Configured CODEX_LB_LINUX_TERMINAL_BRIDGE has invalid shell syntax."
+    if not parts:
+        return "Configured CODEX_LB_LINUX_TERMINAL_BRIDGE is empty after parsing."
+
+    if _resolve_executable(parts[0]) is None:
+        return f"Configured CODEX_LB_LINUX_TERMINAL_BRIDGE executable not found in PATH: {parts[0]}."
+    return ""
 
 
 def _open_macos_terminal(command: str) -> None:

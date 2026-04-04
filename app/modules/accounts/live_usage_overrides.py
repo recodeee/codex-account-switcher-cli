@@ -1297,6 +1297,11 @@ def _apply_local_default_session_fingerprint_overrides(
         baseline_secondary_usage=baseline_secondary_usage,
         sample_sources=sample_sources,
         preferred_account_id=active_account_id,
+        # Conservative in mixed default-scope fallback mode: do not force-map
+        # unresolved fingerprint samples to an account, because that can mark
+        # the wrong account as "Working now" when multiple snapshots are
+        # active in the default sessions directory.
+        allow_ambiguous_fallback_assignments=False,
     )
     if not sample_matches_by_index:
         return
@@ -1612,6 +1617,14 @@ def _resolve_sample_account_assignments(
     # Pass 1: preserve previously observed per-source ownership.
     if sample_sources is not None:
         for sample_index in _sorted_sample_indexes(samples, unresolved_sample_indexes):
+            sample = samples[sample_index]
+            if not _sample_has_fingerprint(sample):
+                # Presence-only samples (no quota windows) are common right
+                # after switching snapshots while old rollout files are still
+                # in the active default scope. Reusing cached source ownership
+                # for those samples can resurrect stale account mappings and
+                # incorrectly mark inactive accounts as "working now".
+                continue
             if sample_index < 0 or sample_index >= len(sample_sources):
                 continue
             source = sample_sources[sample_index]

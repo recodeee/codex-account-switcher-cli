@@ -8,6 +8,42 @@ from app.modules.accounts import terminal
 from app.modules.accounts.terminal import TerminalLaunchError
 
 
+def test_open_host_terminal_skips_missing_cwd_validation_when_containerized(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    missing_cwd = tmp_path / "missing-workspace"
+    launch = terminal.TerminalLaunchConfig(command="codex", cwd=missing_cwd, shell="/bin/bash")
+    launched_commands: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(terminal, "resolve_terminal_launch_config", lambda: launch)
+    monkeypatch.setattr(terminal.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(terminal, "_is_containerized_runtime", lambda: True)
+    monkeypatch.setattr(
+        terminal,
+        "_open_linux_terminal",
+        lambda shell, command: launched_commands.append((shell, command)),
+    )
+
+    result = terminal.open_host_terminal(snapshot_name="work")
+
+    assert result == launch
+    assert launched_commands == [("/bin/bash", f"cd {missing_cwd} && codex")]
+
+
+def test_open_host_terminal_keeps_missing_cwd_validation_outside_container(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    missing_cwd = tmp_path / "missing-workspace"
+    launch = terminal.TerminalLaunchConfig(command="codex", cwd=missing_cwd, shell="/bin/bash")
+
+    monkeypatch.setattr(terminal, "resolve_terminal_launch_config", lambda: launch)
+    monkeypatch.setattr(terminal.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(terminal, "_is_containerized_runtime", lambda: False)
+
+    with pytest.raises(TerminalLaunchError, match=f"Terminal working directory does not exist: {missing_cwd}"):
+        terminal.open_host_terminal(snapshot_name="work")
+
+
 def test_resolve_executable_falls_back_to_known_linux_dirs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_bin_dir = tmp_path / "bin"
     fake_bin_dir.mkdir(parents=True, exist_ok=True)
@@ -65,6 +101,18 @@ def test_open_linux_terminal_reports_container_hint_when_no_launcher(monkeypatch
     message = str(excinfo.value)
     assert "No supported terminal app found in PATH" in message
     assert "Detected containerized runtime" in message
+
+
+def test_open_linux_terminal_reports_missing_explicit_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CODEX_LB_LINUX_TERMINAL_BRIDGE", "flatpak-spawn --host")
+    monkeypatch.setattr(terminal, "_resolve_executable", lambda _name: None)
+    monkeypatch.setattr(terminal, "_is_containerized_runtime", lambda: True)
+
+    with pytest.raises(TerminalLaunchError) as excinfo:
+        terminal._open_linux_terminal("/bin/bash", "echo test")
+
+    message = str(excinfo.value)
+    assert "Configured CODEX_LB_LINUX_TERMINAL_BRIDGE executable not found in PATH" in message
 
 
 def test_open_linux_terminal_uses_override_launcher(monkeypatch: pytest.MonkeyPatch) -> None:

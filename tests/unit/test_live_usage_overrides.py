@@ -747,7 +747,7 @@ def test_match_sample_high_confidence_percent_fallback_does_not_allow_quota_over
     assert matched.allows_quota_override is False
 
 
-def test_fallback_mapping_updates_live_session_counts_but_keeps_quota_baseline_for_ambiguous_reset() -> None:
+def test_fallback_mapping_does_not_assign_ambiguous_fingerprint_samples() -> None:
     account_a = _make_account("acc-a", "a@example.com")
     account_b = _make_account("acc-b", "b@example.com")
     accounts = [account_a, account_b]
@@ -808,8 +808,8 @@ def test_fallback_mapping_updates_live_session_counts_but_keeps_quota_baseline_f
         codex_session_counts_by_account=codex_session_counts_by_account,
     )
 
-    assert codex_session_counts_by_account == {account_a.id: 2, account_b.id: 0}
-    assert codex_auth_by_account[account_a.id].has_live_session is True
+    assert codex_session_counts_by_account == {account_a.id: 0, account_b.id: 0}
+    assert codex_auth_by_account[account_a.id].has_live_session is False
     assert codex_auth_by_account[account_b.id].has_live_session is False
     assert primary_usage[account_a.id].used_percent == baseline_primary[account_a.id].used_percent
     assert secondary_usage[account_a.id].used_percent == baseline_secondary[account_a.id].used_percent

@@ -553,6 +553,13 @@ export function isAccountWorkingNow(
 
   const freshDebugRawSampleCount = getFreshDebugRawSampleCount(account, nowMs);
   if (freshDebugRawSampleCount > 0) {
+    const overrideReason = (account.liveQuotaDebug?.overrideReason ?? "").trim().toLowerCase();
+    const deferredMixedDefaultSessions =
+      overrideReason.startsWith("deferred_active_snapshot_mixed_default_sessions");
+    if (deferredMixedDefaultSessions && !hasActiveCliSessionSignal) {
+      return false;
+    }
+
     const primaryFallbackRecordedAt = getRawQuotaWindowFallback(account, "primary")?.recordedAt;
     if (isFreshTimestamp(primaryFallbackRecordedAt, nowMs)) {
       return true;
