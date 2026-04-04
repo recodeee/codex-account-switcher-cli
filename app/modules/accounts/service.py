@@ -41,6 +41,7 @@ from app.modules.accounts.schemas import (
     AccountAdditionalQuota,
     AccountAdditionalWindow,
     AccountCodexAuthStatus,
+    AccountLiveQuotaDebug,
     AccountImportResponse,
     AccountRefreshAuthResponse,
     AccountRequestUsage,
@@ -150,6 +151,7 @@ class AccountsService:
             )
             for account in accounts
         }
+        live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug] = {}
         persist_candidates = apply_local_live_usage_overrides(
             accounts=accounts,
             snapshot_index=snapshot_index,
@@ -157,6 +159,7 @@ class AccountsService:
             primary_usage=primary_usage,
             secondary_usage=secondary_usage,
             codex_live_session_counts_by_account=codex_live_session_counts_by_account,
+            live_quota_debug_by_account=live_quota_debug_by_account,
         )
         if self._usage_repo and persist_candidates:
             await persist_live_usage_overrides(
@@ -172,6 +175,7 @@ class AccountsService:
             codex_live_session_counts_by_account=codex_live_session_counts_by_account,
             codex_tracked_session_counts_by_account=codex_tracked_session_counts_by_account,
             codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+            live_quota_debug_by_account=live_quota_debug_by_account,
             additional_quotas_by_account=additional_quotas_by_account,
             codex_auth_by_account=codex_auth_by_account,
             encryptor=self._encryptor,

@@ -17,7 +17,7 @@ from app.modules.accounts.codex_auth_switcher import (
 from app.modules.accounts.live_usage_overrides import apply_local_live_usage_overrides
 from app.modules.accounts.live_usage_persistence import persist_live_usage_overrides
 from app.modules.accounts.mappers import build_account_summaries
-from app.modules.accounts.schemas import AccountCodexAuthStatus, AccountRequestUsage
+from app.modules.accounts.schemas import AccountCodexAuthStatus, AccountLiveQuotaDebug, AccountRequestUsage
 from app.modules.dashboard.repository import DashboardRepository
 from app.modules.dashboard.schemas import (
     DashboardOverviewResponse,
@@ -70,6 +70,7 @@ class DashboardService:
             account.id: _build_codex_auth_status(account=account, snapshot_index=snapshot_index)
             for account in accounts
         }
+        live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug] = {}
         persist_candidates = apply_local_live_usage_overrides(
             accounts=accounts,
             snapshot_index=snapshot_index,
@@ -77,6 +78,7 @@ class DashboardService:
             primary_usage=primary_usage,
             secondary_usage=secondary_usage,
             codex_live_session_counts_by_account=codex_live_session_counts_by_account,
+            live_quota_debug_by_account=live_quota_debug_by_account,
         )
         if persist_candidates:
             await persist_live_usage_overrides(
@@ -92,6 +94,7 @@ class DashboardService:
             codex_live_session_counts_by_account=codex_live_session_counts_by_account,
             codex_tracked_session_counts_by_account=codex_tracked_session_counts_by_account,
             codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+            live_quota_debug_by_account=live_quota_debug_by_account,
             codex_auth_by_account=codex_auth_by_account,
             encryptor=self._encryptor,
             include_auth=False,

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import logging
+import os
 from typing import Literal
 
 from app.core.utils.time import to_utc_naive
@@ -9,12 +11,19 @@ from app.db.models import Account, UsageHistory
 from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
 from app.modules.accounts.codex_live_usage import (
     LocalCodexLiveUsage,
+    LocalCodexLiveUsageSample,
     LocalUsageWindow,
     read_live_codex_process_session_counts_by_snapshot,
     read_local_codex_live_usage_by_snapshot,
+    read_local_codex_live_usage_samples_by_snapshot,
     read_local_codex_live_usage_samples,
 )
-from app.modules.accounts.schemas import AccountCodexAuthStatus
+from app.modules.accounts.schemas import (
+    AccountCodexAuthStatus,
+    AccountLiveQuotaDebug,
+    AccountLiveQuotaDebugSample,
+    AccountLiveQuotaDebugWindow,
+)
 
 
 @dataclass(frozen=True)
@@ -30,18 +39,21 @@ class LiveUsageOverridePersistCandidate:
 _RESET_FINGERPRINT_MATCH_TOLERANCE_SECONDS = 30
 _PERCENT_PATTERN_HIGH_CONFIDENCE_MAX_DISTANCE = 8.0
 _PERCENT_PATTERN_HIGH_CONFIDENCE_MARGIN = 4.0
+_LIVE_USAGE_DEBUG_ENV = "CODEX_LB_LIVE_USAGE_DEBUG"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class _SampleMatchResult:
     account_id: str
     confidence: Literal["high", "low"]
+    allows_quota_override: bool = False
 
 
 @dataclass(frozen=True)
 class _SampleAttribution:
     sample: LocalCodexLiveUsage
-    confidence: Literal["high", "low"]
+    match: _SampleMatchResult
 
 
 def apply_local_live_usage_overrides(
@@ -52,6 +64,7 @@ def apply_local_live_usage_overrides(
     primary_usage: dict[str, UsageHistory],
     secondary_usage: dict[str, UsageHistory],
     codex_live_session_counts_by_account: dict[str, int],
+    live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug] | None = None,
 ) -> list[LiveUsageOverridePersistCandidate]:
     baseline_primary_usage = dict(primary_usage)
     baseline_secondary_usage = dict(secondary_usage)
@@ -334,7 +347,16 @@ def _apply_local_default_session_fingerprint_overrides(
         )
 
         latest_attribution = latest_attribution_by_account.get(account_id)
-        if latest_attribution is None or not latest_attribution.match.allows_quota_override:
+        if latest_attribution is None:
+            continue
+
+        if not _has_unique_reset_fingerprint_match(
+            sample=latest_attribution.sample,
+            account_id=account_id,
+            accounts=candidate_accounts,
+            baseline_primary_usage=baseline_primary_usage,
+            baseline_secondary_usage=baseline_secondary_usage,
+        ):
             # Ambiguous or presence-only attribution still contributes to
             # live/session recall, but quota windows remain conservative.
             continue
@@ -385,27 +407,6 @@ def _should_defer_active_snapshot_usage_override(
         if _account_has_snapshot(codex_auth_by_account.get(account.id))
     )
     return accounts_with_snapshot > 1
-
-
-def _account_has_usage_fingerprint(
-    *,
-    account_id: str,
-    baseline_primary_usage: dict[str, UsageHistory],
-    baseline_secondary_usage: dict[str, UsageHistory],
-) -> bool:
-    primary_entry = baseline_primary_usage.get(account_id)
-    secondary_entry = baseline_secondary_usage.get(account_id)
-    if primary_entry is not None:
-        if primary_entry.reset_at is not None:
-            return True
-        if primary_entry.used_percent is not None:
-            return True
-    if secondary_entry is not None:
-        if secondary_entry.reset_at is not None:
-            return True
-        if secondary_entry.used_percent is not None:
-            return True
-    return False
 
 
 def _sample_has_fingerprint(sample: LocalCodexLiveUsage) -> bool:
@@ -747,3 +748,22 @@ def _resolve_unique_reset_match_account_id(
         return None
 
     return primary_unique or secondary_unique
+
+
+def _has_unique_reset_fingerprint_match(
+    *,
+    sample: LocalCodexLiveUsage,
+    account_id: str,
+    accounts: list[Account],
+    baseline_primary_usage: dict[str, UsageHistory],
+    baseline_secondary_usage: dict[str, UsageHistory],
+) -> bool:
+    return (
+        _resolve_unique_reset_match_account_id(
+            sample=sample,
+            accounts=accounts,
+            baseline_primary_usage=baseline_primary_usage,
+            baseline_secondary_usage=baseline_secondary_usage,
+        )
+        == account_id
+    )

@@ -13,6 +13,7 @@ from app.modules.accounts.schemas import (
     AccountAdditionalQuota,
     AccountAuthStatus,
     AccountCodexAuthStatus,
+    AccountLiveQuotaDebug,
     AccountRequestUsage,
     AccountSummary,
     AccountTokenStatus,
@@ -31,6 +32,7 @@ def build_account_summaries(
     codex_live_session_counts_by_account: dict[str, int] | None = None,
     codex_tracked_session_counts_by_account: dict[str, int] | None = None,
     codex_current_task_preview_by_account: dict[str, str] | None = None,
+    live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug] | None = None,
     additional_quotas_by_account: dict[str, list[AccountAdditionalQuota]] | None = None,
     codex_auth_by_account: dict[str, AccountCodexAuthStatus] | None = None,
     encryptor: TokenEncryptor,
@@ -51,6 +53,7 @@ def build_account_summaries(
             codex_current_task_preview_by_account.get(account.id)
             if codex_current_task_preview_by_account
             else None,
+            live_quota_debug_by_account.get(account.id) if live_quota_debug_by_account else None,
             additional_quotas_by_account.get(account.id) if additional_quotas_by_account else None,
             codex_auth_by_account.get(account.id) if codex_auth_by_account else None,
             encryptor,
@@ -68,6 +71,7 @@ def _account_to_summary(
     codex_live_session_count: int,
     codex_tracked_session_count: int,
     codex_current_task_preview: str | None,
+    live_quota_debug: AccountLiveQuotaDebug | None,
     additional_quotas: list[AccountAdditionalQuota] | None,
     codex_auth: AccountCodexAuthStatus | None,
     encryptor: TokenEncryptor,
@@ -137,6 +141,7 @@ def _account_to_summary(
         # Compatibility alias while clients migrate to split counters.
         codex_session_count=max(0, int(codex_live_session_count)),
         codex_current_task_preview=codex_current_task_preview,
+        live_quota_debug=live_quota_debug,
         additional_quotas=additional_quotas or [],
         deactivation_reason=account.deactivation_reason,
         auth=auth_status,

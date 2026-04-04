@@ -35,6 +35,15 @@ class LocalCodexLiveUsage:
     secondary: LocalUsageWindow | None
 
 
+@dataclass(frozen=True)
+class LocalCodexLiveUsageSample:
+    source: str
+    recorded_at: datetime
+    primary: LocalUsageWindow | None
+    secondary: LocalUsageWindow | None
+    stale: bool = False
+
+
 def read_local_codex_live_usage(*, now: datetime | None = None) -> LocalCodexLiveUsage | None:
     current = now or datetime.now(timezone.utc)
     sessions_dir = _resolve_sessions_dir()
@@ -85,6 +94,46 @@ def read_local_codex_live_usage_by_snapshot(*, now: datetime | None = None) -> d
         usage_by_snapshot[snapshot_name] = _merge_live_usage(previous, runtime_usage)
 
     return usage_by_snapshot
+
+
+def read_local_codex_live_usage_samples_by_snapshot(
+    *,
+    now: datetime | None = None,
+) -> dict[str, list[LocalCodexLiveUsageSample]]:
+    current = now or datetime.now(timezone.utc)
+    samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]] = {}
+
+    active_snapshot_name = build_snapshot_index().active_snapshot_name
+    if active_snapshot_name:
+        default_samples = _read_local_codex_live_usage_sample_entries_for_sessions_dir(
+            sessions_dir=_resolve_sessions_dir(),
+            now=current,
+        )
+        if default_samples:
+            samples_by_snapshot[active_snapshot_name] = default_samples
+
+    runtime_root = _resolve_runtime_root()
+    if not runtime_root.exists() or not runtime_root.is_dir():
+        return samples_by_snapshot
+
+    for runtime_dir in runtime_root.iterdir():
+        if not runtime_dir.is_dir():
+            continue
+
+        snapshot_name = _read_runtime_current_snapshot(runtime_dir)
+        if not snapshot_name:
+            continue
+
+        runtime_samples = _read_local_codex_live_usage_sample_entries_for_sessions_dir(
+            sessions_dir=runtime_dir / "sessions",
+            now=current,
+        )
+        if not runtime_samples:
+            continue
+
+        samples_by_snapshot.setdefault(snapshot_name, []).extend(runtime_samples)
+
+    return samples_by_snapshot
 
 
 def read_live_codex_process_session_counts_by_snapshot() -> dict[str, int]:
@@ -230,6 +279,57 @@ def _read_local_codex_live_usage_samples_for_sessions_dir(
     return samples
 
 
+def _read_local_codex_live_usage_sample_entries_for_sessions_dir(
+    *,
+    sessions_dir: Path,
+    now: datetime,
+) -> list[LocalCodexLiveUsageSample]:
+    active_window_seconds = _active_window_seconds()
+    if not sessions_dir.exists() or not sessions_dir.is_dir():
+        return []
+
+    candidates = _candidate_rollout_files(sessions_dir, now)
+    if not candidates:
+        return []
+
+    cutoff_ts = (now - timedelta(seconds=active_window_seconds)).timestamp()
+    active_files = [path for path in candidates if _safe_mtime(path) >= cutoff_ts]
+    if not active_files:
+        return []
+
+    samples: list[LocalCodexLiveUsageSample] = []
+    sample_cutoff = now - timedelta(seconds=active_window_seconds)
+    for path in _prefer_newest_sessions(active_files):
+        source = str(path)
+        snapshot = _extract_latest_rate_limit_from_file(path)
+        if snapshot is None:
+            mtime = _safe_mtime(path)
+            recorded_at = datetime.fromtimestamp(mtime, tz=timezone.utc) if mtime > 0 else now
+            samples.append(
+                LocalCodexLiveUsageSample(
+                    source=source,
+                    recorded_at=recorded_at,
+                    primary=None,
+                    secondary=None,
+                    stale=False,
+                )
+            )
+            continue
+
+        recorded_at, primary, secondary = snapshot
+        samples.append(
+            LocalCodexLiveUsageSample(
+                source=source,
+                recorded_at=recorded_at,
+                primary=primary,
+                secondary=secondary,
+                stale=recorded_at < sample_cutoff,
+            )
+        )
+
+    return samples
+
+
 def _merge_live_usage(
     previous: LocalCodexLiveUsage | None,
     current: LocalCodexLiveUsage,
@@ -333,6 +433,10 @@ def _resolve_auth_path() -> Path:
 
 def _read_runtime_current_snapshot(runtime_dir: Path) -> str | None:
     current_path = runtime_dir / "current"
+    return _read_snapshot_name_from_current_path(current_path)
+
+
+def _read_snapshot_name_from_current_path(current_path: Path) -> str | None:
     if not current_path.exists() or not current_path.is_file():
         return None
     try:

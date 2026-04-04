@@ -67,6 +67,30 @@ class AccountAdditionalQuota(DashboardModel):
     secondary_window: AccountAdditionalWindow | None = None
 
 
+class AccountLiveQuotaDebugWindow(DashboardModel):
+    used_percent: float
+    remaining_percent: float
+    reset_at: int | None = None
+    window_minutes: int | None = None
+
+
+class AccountLiveQuotaDebugSample(DashboardModel):
+    source: str
+    snapshot_name: str | None = None
+    recorded_at: datetime
+    stale: bool = False
+    primary: AccountLiveQuotaDebugWindow | None = None
+    secondary: AccountLiveQuotaDebugWindow | None = None
+
+
+class AccountLiveQuotaDebug(DashboardModel):
+    snapshots_considered: list[str] = Field(default_factory=list)
+    raw_samples: list[AccountLiveQuotaDebugSample] = Field(default_factory=list)
+    merged: AccountLiveQuotaDebugSample | None = None
+    override_applied: bool = False
+    override_reason: str | None = None
+
+
 class AccountSummary(DashboardModel):
     account_id: str
     email: str
@@ -86,8 +110,11 @@ class AccountSummary(DashboardModel):
     capacity_credits_secondary: float | None = None
     remaining_credits_secondary: float | None = None
     request_usage: AccountRequestUsage | None = None
+    codex_live_session_count: int = 0
+    codex_tracked_session_count: int = 0
     codex_session_count: int = 0
     codex_current_task_preview: str | None = None
+    live_quota_debug: AccountLiveQuotaDebug | None = None
     additional_quotas: list[AccountAdditionalQuota] = Field(default_factory=list)
     deactivation_reason: str | None = None
     auth: AccountAuthStatus | None = None
