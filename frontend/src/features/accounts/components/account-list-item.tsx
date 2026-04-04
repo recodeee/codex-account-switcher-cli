@@ -16,6 +16,7 @@ import { formatPercentNullable, formatSlug } from "@/utils/formatters";
 import {
   getMergedQuotaRemainingPercent,
   getRawQuotaWindowFallback,
+  hasRecentUsageSignal,
   isAccountWorkingNow,
   selectStableRemainingPercent,
 } from "@/utils/account-working";
@@ -104,11 +105,14 @@ export function AccountListItem({
   const blurred = usePrivacyStore((s) => s.blurred);
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
   const hasLiveSession = account.codexAuth?.hasLiveSession ?? false;
+  const recentUsageSignal =
+    (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account);
   const isWorkingNow = isAccountWorkingNow(account);
   const status = resolveEffectiveAccountStatus({
     status: account.status,
     isActiveSnapshot,
     hasLiveSession,
+    hasRecentUsageSignal: recentUsageSignal,
   });
   const title = account.displayName || account.email;
   const titleIsEmail = isEmailLabel(title, account.email);
@@ -171,6 +175,7 @@ export function AccountListItem({
     primaryRemainingPercent: primaryRemainingRaw,
     isActiveSnapshot,
     hasLiveSession,
+    hasRecentUsageSignal: recentUsageSignal,
     codexSessionCount: account.codexSessionCount,
   });
   const disabledReason = getUseLocalAccountDisabledReason({
@@ -178,6 +183,7 @@ export function AccountListItem({
     primaryRemainingPercent: primaryRemainingRaw,
     isActiveSnapshot,
     hasLiveSession,
+    hasRecentUsageSignal: recentUsageSignal,
     codexSessionCount: account.codexSessionCount,
   });
 

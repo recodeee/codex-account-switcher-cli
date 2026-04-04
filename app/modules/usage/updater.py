@@ -119,6 +119,11 @@ class _MergedAdditionalWindow:
 # entry). Used as a fast path to avoid DB queries on every pass within the same
 # process. Updated only after a successful refresh that wrote data.
 _last_successful_refresh: dict[str, datetime] = {}
+# Failed refreshes can be expensive (upstream 401 + refresh attempts). Keep a
+# short cooldown so dashboard polling does not hammer the same disconnected
+# account on every request.
+_last_failed_refresh: dict[str, datetime] = {}
+_FAILED_REFRESH_BACKOFF_SECONDS = 15
 
 
 class _UsageRefreshSingleflight:
@@ -186,6 +191,9 @@ class UsageUpdater:
         for account in accounts:
             if account.status == AccountStatus.DEACTIVATED:
                 continue
+            failed_at = _last_failed_refresh.get(account.id)
+            if failed_at and (now - failed_at).total_seconds() < _FAILED_REFRESH_BACKOFF_SECONDS:
+                continue
             latest = latest_usage.get(account.id)
             if _latest_usage_is_fresh(latest, now=now, interval_seconds=interval):
                 continue
@@ -226,6 +234,9 @@ class UsageUpdater:
                 # suppress retries within the interval.
                 if result.fetch_succeeded:
                     _last_successful_refresh[account.id] = now
+                    _last_failed_refresh.pop(account.id, None)
+                else:
+                    _last_failed_refresh[account.id] = now
             except Exception as exc:
                 logger.warning(
                     "Usage refresh failed account_id=%s request_id=%s error=%s",
@@ -234,6 +245,7 @@ class UsageUpdater:
                     exc,
                     exc_info=True,
                 )
+                _last_failed_refresh[account.id] = now
                 # swallow per-account failures so the whole refresh loop keeps going
                 continue
         return refreshed
@@ -283,7 +295,9 @@ class UsageUpdater:
                     account_id=usage_account_id,
                 )
             except UsageFetchError as retry_exc:
-                if _should_deactivate_for_usage_error(retry_exc.status_code):
+                if retry_exc.status_code == 401:
+                    await self._deactivate_for_client_error(account, retry_exc)
+                elif _should_deactivate_for_usage_error(retry_exc.status_code):
                     await self._deactivate_for_client_error(account, retry_exc)
                 return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
 

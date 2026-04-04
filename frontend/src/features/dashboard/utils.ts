@@ -11,6 +11,7 @@ import {
   formatWindowLabel,
 } from "@/utils/formatters";
 import { resolveEffectiveAccountStatus } from "@/utils/account-status";
+import { hasRecentUsageSignal } from "@/utils/account-working";
 
 import type {
   AccountSummary,
@@ -178,6 +179,8 @@ function buildGroupedWindowEntries(
       status: account.status,
       isActiveSnapshot: account.codexAuth?.isActiveSnapshot,
       hasLiveSession: account.codexAuth?.hasLiveSession,
+      hasRecentUsageSignal:
+        (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account),
     });
     return effectiveStatus !== "deactivated";
   });
@@ -358,6 +361,8 @@ export function buildDashboardView(
       status: account.status,
       isActiveSnapshot: account.codexAuth?.isActiveSnapshot,
       hasLiveSession: account.codexAuth?.hasLiveSession,
+      hasRecentUsageSignal:
+        (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account),
     });
     return effectiveStatus === "active";
   });

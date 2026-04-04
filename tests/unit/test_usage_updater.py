@@ -13,7 +13,7 @@ from app.core.crypto import TokenEncryptor
 from app.core.usage.models import UsagePayload
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.usage.additional_quota_keys import canonicalize_additional_quota_key
-from app.modules.usage.updater import UsageUpdater, _last_successful_refresh
+from app.modules.usage.updater import UsageUpdater, _last_failed_refresh, _last_successful_refresh
 
 pytestmark = pytest.mark.unit
 
@@ -22,8 +22,10 @@ pytestmark = pytest.mark.unit
 def _clear_refresh_cache():
     """Clear the module-level freshness cache between tests."""
     _last_successful_refresh.clear()
+    _last_failed_refresh.clear()
     yield
     _last_successful_refresh.clear()
+    _last_failed_refresh.clear()
 
 
 @dataclass(frozen=True, slots=True)
@@ -454,6 +456,47 @@ async def test_usage_updater_does_not_deactivate_on_401(monkeypatch) -> None:
     await updater.refresh_accounts([acc], latest_usage={})
 
     assert len(accounts_repo.status_updates) == 0
+
+
+@pytest.mark.asyncio
+async def test_usage_updater_deactivates_on_401_after_forced_refresh_retry(monkeypatch) -> None:
+    monkeypatch.setenv("CODEX_LB_USAGE_REFRESH_ENABLED", "true")
+    from app.core.clients.usage import UsageFetchError
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    calls = 0
+
+    async def stub_fetch_usage_401(**_: Any) -> UsagePayload:
+        nonlocal calls
+        calls += 1
+        raise UsageFetchError(401, "Unauthorized after forced refresh")
+
+    monkeypatch.setattr("app.modules.usage.updater.fetch_usage", stub_fetch_usage_401)
+
+    usage_repo = StubUsageRepository()
+    accounts_repo = StubAccountsRepository()
+    updater = UsageUpdater(usage_repo, accounts_repo=accounts_repo)
+    assert updater._auth_manager is not None
+
+    async def stub_ensure_fresh(account: Account, *, force: bool = False) -> Account:
+        assert force is True
+        return account
+
+    monkeypatch.setattr(updater._auth_manager, "ensure_fresh", stub_ensure_fresh)
+
+    acc = _make_account("acc_401_retry_deactivate", "workspace_401_retry_deactivate", email="retry401@example.com")
+    accounts_repo.accounts_by_id[acc.id] = acc
+
+    await updater.refresh_accounts([acc], latest_usage={})
+
+    assert calls == 2
+    assert len(accounts_repo.status_updates) == 1
+    update = accounts_repo.status_updates[0]
+    assert update["account_id"] == acc.id
+    assert update["status"] == AccountStatus.DEACTIVATED
+    assert "401" in (update["deactivation_reason"] or "")
 
 
 @pytest.mark.asyncio

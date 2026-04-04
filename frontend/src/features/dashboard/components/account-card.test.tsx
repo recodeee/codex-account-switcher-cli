@@ -261,6 +261,33 @@ describe("AccountCard", () => {
     expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
   });
 
+  it("treats deactivated snapshot accounts with recent usage as active", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      status: "deactivated",
+      usage: {
+        primaryRemainingPercent: 44,
+        secondaryRemainingPercent: 73,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "webubusiness",
+        activeSnapshotName: "different",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
+  });
+
   it("calls useLocal action when use this account button is clicked", async () => {
     const user = userEvent.setup({ delay: null });
     const account = createAccountSummary();

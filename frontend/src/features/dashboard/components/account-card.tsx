@@ -34,6 +34,7 @@ import {
   getFreshDebugRawSampleCount,
   getMergedQuotaRemainingPercent,
   getRawQuotaWindowFallback,
+  hasRecentUsageSignal,
   hasFreshLiveTelemetry,
   isAccountWorkingNow,
   isFreshQuotaTelemetryTimestamp,
@@ -359,11 +360,14 @@ export function AccountCard({
   const blurred = usePrivacyStore((s) => s.blurred);
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
   const hasLiveSession = hasFreshLiveTelemetry(account);
+  const recentUsageSignal =
+    (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account);
   const isWorkingNow = isAccountWorkingNow(account);
   const effectiveStatus = resolveEffectiveAccountStatus({
     status: account.status,
     isActiveSnapshot,
     hasLiveSession,
+    hasRecentUsageSignal: recentUsageSignal,
   });
   const primaryRemainingRaw =
     mergedPrimaryRemainingPercent ??
@@ -449,6 +453,7 @@ export function AccountCard({
     primaryRemainingPercent: primaryRemainingRaw,
     isActiveSnapshot,
     hasLiveSession,
+    hasRecentUsageSignal: recentUsageSignal,
     codexSessionCount: account.codexSessionCount,
   });
   const useLocalDisabledReason = getUseLocalAccountDisabledReason({
@@ -456,6 +461,7 @@ export function AccountCard({
     primaryRemainingPercent: primaryRemainingRaw,
     isActiveSnapshot,
     hasLiveSession,
+    hasRecentUsageSignal: recentUsageSignal,
     codexSessionCount: account.codexSessionCount,
   });
 

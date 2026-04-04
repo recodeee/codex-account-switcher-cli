@@ -27,6 +27,15 @@ function asAuthObject(payload: Record<string, unknown> | null): Record<string, u
   return authClaim as Record<string, unknown>;
 }
 
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const normalized = asNonEmptyString(value);
+    if (normalized) return normalized;
+  }
+
+  return undefined;
+}
+
 export function parseAuthSnapshotData(data: unknown): ParsedAuthSnapshot {
   if (!data || typeof data !== "object") {
     return { authMode: "unknown" };
@@ -49,11 +58,30 @@ export function parseAuthSnapshotData(data: unknown): ParsedAuthSnapshot {
   const payload = idToken ? decodeJwtPayload(idToken) : null;
   const authObject = asAuthObject(payload);
 
-  const email = asNonEmptyString(payload?.email)?.toLowerCase();
-  const accountFromToken = asNonEmptyString(tokenRecord.account_id);
-  const accountFromClaims = asNonEmptyString(authObject?.chatgpt_account_id);
-  const accountId = accountFromToken ?? accountFromClaims;
-  const userId = asNonEmptyString(authObject?.chatgpt_user_id) ?? asNonEmptyString(authObject?.user_id);
+  const email = firstNonEmptyString(payload?.email, root.email)?.toLowerCase();
+  const accountId = firstNonEmptyString(
+    tokenRecord.account_id,
+    tokenRecord.chatgpt_account_id,
+    tokenRecord.default_account_id,
+    authObject?.chatgpt_account_id,
+    authObject?.account_id,
+    authObject?.default_account_id,
+    root.account_id,
+    root.chatgpt_account_id,
+  );
+  const userId = firstNonEmptyString(
+    authObject?.chatgpt_user_id,
+    authObject?.user_id,
+    payload?.sub,
+    payload?.user_id,
+    root.user_id,
+    root.chatgpt_user_id,
+  );
+  const planType = firstNonEmptyString(
+    authObject?.chatgpt_plan_type,
+    payload?.chatgpt_plan_type,
+    root.chatgpt_plan_type,
+  );
 
   return {
     authMode: "chatgpt",
@@ -61,7 +89,7 @@ export function parseAuthSnapshotData(data: unknown): ParsedAuthSnapshot {
     accessToken: asNonEmptyString(tokenRecord.access_token),
     accountId,
     userId,
-    planType: asNonEmptyString(authObject?.chatgpt_plan_type),
+    planType,
   };
 }
 

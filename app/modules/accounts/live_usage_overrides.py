@@ -668,30 +668,35 @@ def _apply_deferred_sample_floor_override(
         if not candidate_samples:
             return False, None
 
-        # When account-attributed debug samples are available, keep both
-        # windows anchored to the newest rollout-session sample to avoid
-        # cross-source window mixing that can make merged values disagree with
-        # the top debug sample shown in the UI.
-        selected_sample = next(
-            (sample for sample in candidate_samples if not sample.stale),
-            candidate_samples[0],
+        non_stale_samples = [sample for sample in candidate_samples if not sample.stale]
+        usable_samples = non_stale_samples if non_stale_samples else candidate_samples
+        primary_samples = [sample for sample in usable_samples if sample.primary is not None]
+        secondary_samples = [sample for sample in usable_samples if sample.secondary is not None]
+
+        # Deferred sample-floor mode should be conservative: when multiple
+        # live CLI sessions exist for the same account snapshot, keep each
+        # quota window on the lowest remaining (highest used) sample so the
+        # UI doesn't oscillate upward to a fresher-but-less-depleted session.
+        primary_sample = max(
+            primary_samples,
+            key=lambda sample: (
+                float(sample.primary.used_percent),
+                _source_session_start_key(sample.source),
+                sample.recorded_at.timestamp(),
+                sample.source,
+            ),
+            default=None,
         )
-        primary_sample = (
-            selected_sample if selected_sample.primary is not None else None
+        secondary_sample = max(
+            secondary_samples,
+            key=lambda sample: (
+                float(sample.secondary.used_percent),
+                _source_session_start_key(sample.source),
+                sample.recorded_at.timestamp(),
+                sample.source,
+            ),
+            default=None,
         )
-        secondary_sample = (
-            selected_sample if selected_sample.secondary is not None else None
-        )
-        if primary_sample is None:
-            primary_sample = next(
-                (sample for sample in candidate_samples if sample.primary is not None),
-                None,
-            )
-        if secondary_sample is None:
-            secondary_sample = next(
-                (sample for sample in candidate_samples if sample.secondary is not None),
-                None,
-            )
     else:
         candidate_samples = []
         for snapshot_name in snapshots_considered:
@@ -707,13 +712,14 @@ def _apply_deferred_sample_floor_override(
         if not primary_samples and not secondary_samples:
             return False, None
 
-        # Prefer the freshest sample for each window.
+        # Sample-floor mode: prefer the most depleted (highest used) window to
+        # avoid optimistic spikes when parallel sessions disagree.
         primary_sample = max(
             primary_samples,
             key=lambda sample: (
+                float(sample.primary.used_percent),
                 _source_session_start_key(sample.source),
                 sample.recorded_at.timestamp(),
-                -float(sample.primary.used_percent),
                 sample.source,
             ),
             default=None,
@@ -721,9 +727,9 @@ def _apply_deferred_sample_floor_override(
         secondary_sample = max(
             secondary_samples,
             key=lambda sample: (
+                float(sample.secondary.used_percent),
                 _source_session_start_key(sample.source),
                 sample.recorded_at.timestamp(),
-                -float(sample.secondary.used_percent),
                 sample.source,
             ),
             default=None,

@@ -1,6 +1,7 @@
 import type { AccountSummary } from "@/features/accounts/schemas";
 
 const LIVE_TELEMETRY_STALE_AFTER_MS = 5 * 60 * 1000;
+const RECENT_USAGE_SIGNAL_STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 const RESET_ALIGNMENT_TOLERANCE_MS = 30 * 1000;
 
 function parseRecordedAtMs(value: string | null | undefined): number | null {
@@ -283,10 +284,36 @@ export function hasFreshLiveTelemetry(
   );
 }
 
+export function hasRecentUsageSignal(
+  account: Pick<
+    AccountSummary,
+    "lastUsageRecordedAtPrimary" | "lastUsageRecordedAtSecondary"
+  >,
+  nowMs: number = Date.now(),
+): boolean {
+  const hasRecentTimestamp = (
+    value: string | null | undefined,
+    staleAfterMs: number,
+  ): boolean => {
+    const recordedAtMs = parseRecordedAtMs(value);
+    if (recordedAtMs == null) return false;
+    return nowMs - recordedAtMs <= staleAfterMs;
+  };
+
+  return (
+    hasRecentTimestamp(account.lastUsageRecordedAtPrimary, RECENT_USAGE_SIGNAL_STALE_AFTER_MS) ||
+    hasRecentTimestamp(
+      account.lastUsageRecordedAtSecondary,
+      RECENT_USAGE_SIGNAL_STALE_AFTER_MS,
+    )
+  );
+}
+
 export function isAccountWorkingNow(
   account: Pick<
     AccountSummary,
     | "codexAuth"
+    | "status"
     | "codexLiveSessionCount"
     | "codexSessionCount"
     | "codexTrackedSessionCount"
@@ -297,6 +324,13 @@ export function isAccountWorkingNow(
   >,
   nowMs: number = Date.now(),
 ): boolean {
+  const hasFreshLiveSession = hasFreshLiveTelemetry(account, nowMs);
+  // Keep disconnected accounts out of "Working now" unless they still have a
+  // verifiable live session signal.
+  if (account.status === "deactivated" && !hasFreshLiveSession) {
+    return false;
+  }
+
   const mergedPrimaryRemaining = getMergedQuotaRemainingPercent(account, "primary");
   const primaryRemaining =
     typeof mergedPrimaryRemaining === "number"
@@ -313,7 +347,7 @@ export function isAccountWorkingNow(
     return false;
   }
 
-  if (hasFreshLiveTelemetry(account, nowMs)) {
+  if (hasFreshLiveSession) {
     return true;
   }
 

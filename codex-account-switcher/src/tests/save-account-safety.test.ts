@@ -16,12 +16,14 @@ function encodeBase64Url(input: string): string {
     .replace(/=+$/g, "");
 }
 
-function buildAuthPayload(email: string): string {
+function buildAuthPayload(email: string, options?: { accountId?: string; userId?: string }): string {
+  const accountId = options?.accountId ?? "acct-1";
+  const userId = options?.userId ?? "user-1";
   const idTokenPayload = {
     email,
     "https://api.openai.com/auth": {
-      chatgpt_account_id: "acct-1",
-      chatgpt_user_id: "user-1",
+      chatgpt_account_id: accountId,
+      chatgpt_user_id: userId,
       chatgpt_plan_type: "team",
     },
   };
@@ -35,7 +37,7 @@ function buildAuthPayload(email: string): string {
         access_token: `token-${email}`,
         refresh_token: `refresh-${email}`,
         id_token: idToken,
-        account_id: "acct-1",
+        account_id: accountId,
       },
     },
     null,
@@ -121,5 +123,65 @@ test("saveAccount still overwrites when existing snapshot belongs to same email"
     await assert.doesNotReject(() => service.saveAccount("codexina"));
     const parsed = await parseAuthSnapshotFile(destinationPath);
     assert.equal(parsed.email, "codexina@edixai.com");
+  });
+});
+
+test("saveAccount blocks overwrite when emails match but account identity differs", async (t) => {
+  await withIsolatedCodexDir(t, async ({ accountsDir, authPath }) => {
+    const service = new AccountService();
+    const destinationPath = path.join(accountsDir, "work.json");
+
+    await fsp.writeFile(
+      destinationPath,
+      buildAuthPayload("codexina@edixai.com", {
+        accountId: "acct-a",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload("codexina@edixai.com", {
+        accountId: "acct-b",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+
+    await assert.rejects(
+      () => service.saveAccount("work"),
+      (error: unknown) =>
+        error instanceof SnapshotEmailMismatchError &&
+        error.message.includes("account:acct-a") &&
+        error.message.includes("account:acct-b"),
+    );
+  });
+});
+
+test("inferAccountNameFromCurrentAuth returns unique suffix for same-email different account identities", async (t) => {
+  await withIsolatedCodexDir(t, async ({ accountsDir, authPath }) => {
+    const service = new AccountService();
+    const firstSnapshotPath = path.join(accountsDir, "codexina.json");
+
+    await fsp.writeFile(
+      firstSnapshotPath,
+      buildAuthPayload("codexina@edixai.com", {
+        accountId: "acct-a",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload("codexina@edixai.com", {
+        accountId: "acct-b",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+
+    const inferred = await service.inferAccountNameFromCurrentAuth();
+    assert.equal(inferred, "codexina-edixai-com");
   });
 });

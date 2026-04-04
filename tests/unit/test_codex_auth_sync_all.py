@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 from pathlib import Path
 
 import pytest
@@ -14,6 +16,25 @@ from app.tools.codex_auth_sync_all import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+def _encode_jwt(payload: dict[str, object]) -> str:
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    body = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+    return f"header.{body}.sig"
+
+
+def _write_auth_json(path: Path, *, email: str, account_id: str, access_token: str = "access") -> None:
+    payload = {"email": email}
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": access_token,
+            "refreshToken": "refresh",
+            "accountId": account_id,
+        },
+    }
+    path.write_text(json.dumps(auth_json), encoding="utf-8")
 
 
 def test_iter_snapshot_files_returns_sorted_json_files(tmp_path: Path) -> None:
@@ -85,3 +106,47 @@ def test_collect_import_sources_deduplicates_when_active_auth_points_to_snapshot
 
     sources = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active_link)
     assert [path.name for path in sources] == ["work.json"]
+
+
+def test_collect_import_sources_materializes_active_auth_to_new_email_snapshot(tmp_path: Path) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    active = tmp_path / "auth.json"
+    _write_auth_json(active, email="new.user@example.com", account_id="acc-new", access_token="token-new")
+
+    sources = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active)
+
+    assert [path.name for path in sources] == ["new.user-example-com.json"]
+    materialized = accounts_dir / "new.user-example-com.json"
+    assert materialized.exists()
+    assert json.loads(materialized.read_text(encoding="utf-8"))["tokens"]["accessToken"] == "token-new"
+
+
+def test_collect_import_sources_refreshes_existing_generic_snapshot_for_same_account(tmp_path: Path) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    existing = accounts_dir / "work.json"
+    _write_auth_json(existing, email="old.user@example.com", account_id="acc-old", access_token="token-old")
+    active = tmp_path / "auth.json"
+    _write_auth_json(active, email="old.user@example.com", account_id="acc-old", access_token="token-fresh")
+
+    sources = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active)
+
+    assert [path.name for path in sources] == ["work.json"]
+    assert json.loads(existing.read_text(encoding="utf-8"))["tokens"]["accessToken"] == "token-fresh"
+
+
+def test_collect_import_sources_refreshes_existing_snapshot_matched_by_email_when_account_id_drifted(
+    tmp_path: Path,
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    existing = accounts_dir / "work.json"
+    _write_auth_json(existing, email="same.user@example.com", account_id="acc-legacy", access_token="token-old")
+    active = tmp_path / "auth.json"
+    _write_auth_json(active, email="same.user@example.com", account_id="acc-new", access_token="token-fresh")
+
+    sources = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active)
+
+    assert [path.name for path in sources] == ["work.json"]
+    assert json.loads(existing.read_text(encoding="utf-8"))["tokens"]["accessToken"] == "token-fresh"

@@ -6,6 +6,7 @@ type UseLocalAccountInput = {
   primaryRemainingPercent: number | null | undefined;
   isActiveSnapshot?: boolean;
   hasLiveSession?: boolean;
+  hasRecentUsageSignal?: boolean;
   codexSessionCount?: number | null;
 };
 
@@ -28,6 +29,7 @@ export function canUseLocalAccount(input: UseLocalAccountInput): boolean {
       status: input.status,
       isActiveSnapshot: input.isActiveSnapshot,
       hasLiveSession: input.hasLiveSession,
+      hasRecentUsageSignal: input.hasRecentUsageSignal,
     }) === "active" && hasFiveHourQuota(input.primaryRemainingPercent)
   );
 }
@@ -41,6 +43,7 @@ export function getUseLocalAccountDisabledReason(input: UseLocalAccountInput): s
       status: input.status,
       isActiveSnapshot: input.isActiveSnapshot,
       hasLiveSession: input.hasLiveSession,
+      hasRecentUsageSignal: input.hasRecentUsageSignal,
     }) !== "active"
   ) {
     return "Account must be active.";

@@ -11,6 +11,7 @@ import { buildDuplicateAccountIdSet } from "@/utils/account-identifiers";
 import {
   getMergedQuotaRemainingPercent,
   getRawQuotaWindowFallback,
+  hasRecentUsageSignal,
   hasFreshLiveTelemetry,
   isAccountWorkingNow,
   selectStableRemainingPercent,
@@ -241,6 +242,8 @@ export function AccountCards({
         status: account.status,
         isActiveSnapshot: account.codexAuth?.isActiveSnapshot,
         hasLiveSession,
+        hasRecentUsageSignal:
+          (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account),
       });
 
       if (isAccountWorkingNow(account)) {

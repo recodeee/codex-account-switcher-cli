@@ -4,9 +4,12 @@ import argparse
 import http.cookiejar
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import HTTPCookieProcessor, build_opener
 
+from app.core.auth import DEFAULT_EMAIL, claims_from_auth, generate_unique_account_id, parse_auth_json
+from app.modules.accounts.codex_auth_auto_import import _select_snapshot_name_for_account
 from app.tools.codex_auth_switch import (
     DEFAULT_LB_URL,
     SwitchToolError,
@@ -14,6 +17,12 @@ from app.tools.codex_auth_switch import (
     _import_account_snapshot,
     _validate_lb_url,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _AuthIdentity:
+    account_id: str
+    email: str
 
 
 def _parse_args() -> argparse.Namespace:
@@ -117,16 +126,78 @@ def _resolve_active_auth_path(raw: str | None, *, skip_active_auth: bool) -> Pat
 
 
 def _collect_import_sources(*, accounts_dir: Path, active_auth_path: Path | None) -> list[Path]:
-    snapshots = _iter_optional_snapshot_files(accounts_dir)
-    sources = list(snapshots)
+    materialized_active_auth_path = _materialize_active_auth_snapshot_if_possible(
+        accounts_dir=accounts_dir,
+        active_auth_path=active_auth_path,
+    )
 
-    if active_auth_path is not None:
-        snapshot_targets = {snapshot.resolve() for snapshot in snapshots}
-        active_target = active_auth_path.resolve()
+    # Materialization may create/update snapshot files; re-read the list so the
+    # sync source set reflects the same snapshot policy as dashboard auto-import.
+    sources = _iter_optional_snapshot_files(accounts_dir)
+
+    if materialized_active_auth_path is not None:
+        snapshot_targets = {snapshot.resolve() for snapshot in sources}
+        active_target = materialized_active_auth_path.resolve()
         if active_target not in snapshot_targets:
-            sources.append(active_auth_path)
+            sources.append(materialized_active_auth_path)
 
     return sources
+
+
+def _materialize_active_auth_snapshot_if_possible(
+    *,
+    accounts_dir: Path,
+    active_auth_path: Path | None,
+) -> Path | None:
+    if active_auth_path is None or not active_auth_path.exists() or not active_auth_path.is_file():
+        return active_auth_path
+
+    snapshots = _iter_optional_snapshot_files(accounts_dir)
+    snapshot_targets = {snapshot.resolve() for snapshot in snapshots}
+    active_target = active_auth_path.resolve()
+    if active_target in snapshot_targets:
+        return active_auth_path
+
+    try:
+        raw = active_auth_path.read_bytes()
+    except OSError:
+        return active_auth_path
+
+    identity = _parse_auth_identity(raw)
+    if identity is None:
+        return active_auth_path
+
+    snapshot_name = _select_snapshot_name_for_account(
+        account_id=identity.account_id,
+        email=identity.email,
+        accounts_dir=accounts_dir,
+    )
+    if not snapshot_name:
+        return active_auth_path
+
+    snapshot_path = accounts_dir / f"{snapshot_name}.json"
+    try:
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        if snapshot_path.exists() and snapshot_path.read_bytes() == raw:
+            return snapshot_path
+        snapshot_path.write_bytes(raw)
+    except OSError:
+        return active_auth_path
+    return snapshot_path
+
+
+def _parse_auth_identity(raw: bytes) -> _AuthIdentity | None:
+    try:
+        auth = parse_auth_json(raw)
+    except Exception:
+        return None
+
+    claims = claims_from_auth(auth)
+    email = (claims.email or DEFAULT_EMAIL).strip().lower()
+    if not email or email == DEFAULT_EMAIL:
+        return None
+    account_id = generate_unique_account_id(claims.account_id, email)
+    return _AuthIdentity(account_id=account_id, email=email)
 
 
 def main() -> int:

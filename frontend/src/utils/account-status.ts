@@ -46,8 +46,12 @@ export function resolveEffectiveAccountStatus(input: {
   status: string;
   isActiveSnapshot?: boolean;
   hasLiveSession?: boolean;
+  hasRecentUsageSignal?: boolean;
 }): DashboardAccountStatus {
-  if ((input.hasLiveSession || input.isActiveSnapshot) && input.status === "deactivated") {
+  if (
+    (input.hasLiveSession || input.isActiveSnapshot || input.hasRecentUsageSignal) &&
+    input.status === "deactivated"
+  ) {
     return "active";
   }
   return normalizeStatus(input.status);

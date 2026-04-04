@@ -45,3 +45,29 @@ test("parseAuthSnapshotData detects API key mode", () => {
   assert.equal(parsed.authMode, "apikey");
   assert.equal(parsed.accessToken, undefined);
 });
+
+test("parseAuthSnapshotData falls back to root/sub/default_account_id metadata when auth claim is partial", () => {
+  const payload = {
+    sub: "user-from-sub",
+  };
+  const idToken = `${encodeBase64Url(JSON.stringify({ alg: "none" }))}.${encodeBase64Url(
+    JSON.stringify(payload),
+  )}.sig`;
+
+  const parsed = parseAuthSnapshotData({
+    email: "Fallback@Example.com",
+    chatgpt_plan_type: "plus",
+    tokens: {
+      access_token: "token-xyz",
+      id_token: idToken,
+      default_account_id: "acct-default",
+    },
+  });
+
+  assert.equal(parsed.authMode, "chatgpt");
+  assert.equal(parsed.email, "fallback@example.com");
+  assert.equal(parsed.accountId, "acct-default");
+  assert.equal(parsed.userId, "user-from-sub");
+  assert.equal(parsed.planType, "plus");
+  assert.equal(parsed.accessToken, "token-xyz");
+});

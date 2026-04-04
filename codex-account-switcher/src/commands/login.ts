@@ -2,16 +2,18 @@ import { Args, Flags } from "@oclif/core";
 import { spawn } from "node:child_process";
 import { BaseCommand } from "../lib/base-command";
 import { CodexAuthError } from "../lib/accounts";
+import { parseAuthSnapshotFile } from "../lib/accounts/auth-parser";
+import { resolveAuthPath } from "../lib/config/paths";
 
 export default class LoginCommand extends BaseCommand {
   static description =
-    "Run `codex login` and save the resulting ~/.codex/auth.json as a named account";
+    "Run `codex login` and save the resulting ~/.codex/auth.json as a named account (or infer one from auth email)";
 
   static args = {
     name: Args.string({
       name: "name",
-      required: true,
-      description: "Name for the account snapshot to save after login",
+      required: false,
+      description: "Optional account snapshot name. If omitted, inferred from auth email",
     }),
   } as const;
 
@@ -20,17 +22,29 @@ export default class LoginCommand extends BaseCommand {
       description: "Pass through to `codex login --device-auth`",
       default: false,
     }),
+    force: Flags.boolean({
+      char: "f",
+      description:
+        "Force overwrite when the existing snapshot name belongs to a different detected account identity",
+      default: false,
+    }),
   } as const;
 
   async run(): Promise<void> {
     await this.runSafe(async () => {
       const { args, flags } = await this.parse(LoginCommand);
-      const name = args.name as string;
+      const providedName = args.name as string | undefined;
 
       await this.runCodexLogin(Boolean(flags["device-auth"]));
+      await this.waitForCodexAuthSnapshot();
 
-      const savedName = await this.accounts.saveAccount(name);
-      this.log(`Saved current Codex auth tokens as "${savedName}".`);
+      const accountName = providedName ?? (await this.accounts.inferAccountNameFromCurrentAuth());
+      const savedName = await this.accounts.saveAccount(accountName, {
+        force: Boolean(flags.force),
+      });
+
+      const suffix = providedName ? "" : " (inferred from auth email)";
+      this.log(`Saved current Codex auth tokens as "${savedName}"${suffix}.`);
     });
   }
 
@@ -69,5 +83,25 @@ export default class LoginCommand extends BaseCommand {
         reject(new CodexAuthError(`\`codex ${loginArgs.join(" ")}\` was terminated by signal ${signal ?? "unknown"}.`));
       });
     });
+  }
+
+  private async waitForCodexAuthSnapshot(): Promise<void> {
+    const authPath = resolveAuthPath();
+    const timeoutMs = 5_000;
+    const pollMs = 200;
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() <= deadline) {
+      const parsed = await parseAuthSnapshotFile(authPath);
+      if (parsed.authMode !== "unknown") {
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    throw new CodexAuthError(
+      "Timed out waiting for refreshed Codex auth snapshot after login. Retry `codex-auth login`.",
+    );
   }
 }

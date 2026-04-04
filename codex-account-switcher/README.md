@@ -23,10 +23,13 @@ npm i -g @imdeadpool/codex-account-switcher
 
 ```sh
 # login to Codex and immediately snapshot the refreshed auth session
-codex-auth login <name>
+codex-auth login [name]
 
 # headless/remote login flow + snapshot
-codex-auth login <name> --device-auth
+codex-auth login [name] --device-auth
+
+# force overwrite when reusing a name across different detected identities
+codex-auth login [name] --force
 
 # save the current logged-in token as a named account
 codex-auth save <name>
@@ -73,7 +76,7 @@ codex-auth daemon --watch
 ### Command reference
 
 - `codex-auth save <name> [--force]` – Validates `<name>`, ensures `auth.json` exists, then snapshots it to `~/.codex/accounts/<name>.json`. By default, it blocks overwriting a name when the existing snapshot email differs from current auth.
-- `codex-auth login <name> [--device-auth]` – Runs `codex login` (optionally with device auth) and automatically snapshots the resulting `auth.json` to `~/.codex/accounts/<name>.json`.
+- `codex-auth login [name] [--device-auth] [--force]` – Runs `codex login` (optionally with device auth), waits for refreshed auth snapshot detection, then saves it. If `name` is omitted, an account name is inferred from auth email with unique-suffix handling for multi-workspace identities.
 - `codex-auth use [name]` – Accepts a name or launches an interactive selector with the current account pre-selected. Copies on Windows, creates a symlink elsewhere, and records the active name.
 - `codex-auth list` – Lists all saved snapshots alphabetically and marks the active one with `*`.
 - `codex-auth current` – Prints the active account name, or a friendly message if none is active.

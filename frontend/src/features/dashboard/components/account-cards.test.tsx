@@ -499,6 +499,62 @@ describe("AccountCards", () => {
     expect(screen.getByText("sampled@example.com")).toBeInTheDocument();
   });
 
+  it("keeps disconnected accounts with debug-only telemetry out of working-now", () => {
+    const disconnected = createAccountSummary({
+      accountId: "acc_disconnected_debug",
+      email: "disconnected-debug@example.com",
+      displayName: "disconnected-debug@example.com",
+      status: "deactivated",
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "tokio",
+        activeSnapshotName: "webubusiness",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["tokio"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/runtime-rollout.jsonl",
+            snapshotName: "tokio",
+            recordedAt: new Date().toISOString(),
+            stale: false,
+            primary: {
+              usedPercent: 73,
+              remainingPercent: 27,
+              resetAt: 1760000100,
+              windowMinutes: 300,
+            },
+            secondary: {
+              usedPercent: 51,
+              remainingPercent: 49,
+              resetAt: 1760600100,
+              windowMinutes: 10080,
+            },
+          },
+        ],
+      },
+    });
+
+    render(
+      <AccountCards accounts={[disconnected]} primaryWindow={null} secondaryWindow={null} />,
+    );
+
+    expect(screen.queryByRole("heading", { name: "Working now" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText("disconnected-debug@example.com"),
+    ).toBeInTheDocument();
+  });
+
   it("shows unknown token remaining when window row is unknown", () => {
     const account = createAccountSummary({
       accountId: "acc_unknown",

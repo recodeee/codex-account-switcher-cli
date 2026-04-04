@@ -2302,7 +2302,7 @@ def test_apply_local_live_usage_overrides_skips_deferred_sample_floor_when_runti
     assert debug.override_reason == "applied_live_usage_windows"
 
 
-def test_apply_local_live_usage_overrides_prefers_newest_rollout_source_for_deferred_sample_floor(
+def test_apply_local_live_usage_overrides_uses_conservative_sample_floor_for_deferred_active_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     account = _make_account("acc-newest", "newest@example.com")
@@ -2402,7 +2402,7 @@ def test_apply_local_live_usage_overrides_prefers_newest_rollout_source_for_defe
     )
 
     assert primary_usage[account.id].used_percent == pytest.approx(39.0)
-    assert secondary_usage[account.id].used_percent == pytest.approx(5.0)
+    assert secondary_usage[account.id].used_percent == pytest.approx(53.0)
 
 
 def test_apply_local_live_usage_overrides_scopes_deferred_sample_floor_to_account_debug_samples(

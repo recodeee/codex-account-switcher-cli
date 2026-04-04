@@ -25,6 +25,7 @@ import {
 } from "./registry";
 import {
   AutoSwitchRunResult,
+  ParsedAuthSnapshot,
   RegistryData,
   StatusReport,
   UsageSnapshot,
@@ -91,9 +92,13 @@ export class AccountService {
     if (!normalized) return [];
 
     const choices = await this.listAccountChoices();
+    const registry = await this.loadReconciledRegistry();
     return choices.filter((choice) => {
       if (choice.name.toLowerCase().includes(normalized)) return true;
       if (choice.email && choice.email.toLowerCase().includes(normalized)) return true;
+      const meta = registry.accounts[choice.name];
+      if (meta?.accountId?.toLowerCase().includes(normalized)) return true;
+      if (meta?.userId?.toLowerCase().includes(normalized)) return true;
       return false;
     });
   }
@@ -164,7 +169,7 @@ export class AccountService {
     }
 
     const baseCandidate = this.normalizeAccountName(baseName);
-    const uniqueName = await this.resolveUniqueInferredName(baseCandidate, domainName, email);
+    const uniqueName = await this.resolveUniqueInferredName(baseCandidate, domainName, parsed);
     return uniqueName;
   }
 
@@ -504,13 +509,17 @@ export class AccountService {
     const existingEmail = existingSnapshot.email?.trim().toLowerCase();
     const incomingEmail = incomingSnapshot.email?.trim().toLowerCase();
 
-    if (!existingEmail || !incomingEmail) {
-      return;
-    }
-
-    if (existingEmail !== incomingEmail) {
+    if (existingEmail && incomingEmail && existingEmail !== incomingEmail) {
       throw new SnapshotEmailMismatchError(input.accountName, existingEmail, incomingEmail);
     }
+
+    if (this.snapshotsShareIdentity(existingSnapshot, incomingSnapshot)) return;
+
+    if (!existingEmail || !incomingEmail) return;
+
+    const existingIdentity = this.renderSnapshotIdentity(existingSnapshot, existingEmail);
+    const incomingIdentity = this.renderSnapshotIdentity(incomingSnapshot, incomingEmail);
+    throw new SnapshotEmailMismatchError(input.accountName, existingIdentity, incomingIdentity);
   }
 
   private async replaceSymlink(target: string, linkPath: string): Promise<void> {
@@ -581,18 +590,22 @@ export class AccountService {
     return noEdgePunctuation;
   }
 
-  private async resolveUniqueInferredName(baseName: string, domainName: string, email: string): Promise<string> {
+  private async resolveUniqueInferredName(
+    baseName: string,
+    domainName: string,
+    incomingSnapshot: ParsedAuthSnapshot,
+  ): Promise<string> {
     const accountPathFor = (name: string): string => this.accountFilePath(name);
-    const hasMatchingEmail = async (name: string): Promise<boolean> => {
+    const hasMatchingIdentity = async (name: string): Promise<boolean> => {
       const parsed = await parseAuthSnapshotFile(accountPathFor(name));
-      return parsed.email?.trim().toLowerCase() === email;
+      return this.snapshotsShareIdentity(parsed, incomingSnapshot);
     };
 
     const basePath = accountPathFor(baseName);
     if (!(await this.pathExists(basePath))) {
       return baseName;
     }
-    if (await hasMatchingEmail(baseName)) {
+    if (await hasMatchingIdentity(baseName)) {
       return baseName;
     }
 
@@ -601,7 +614,7 @@ export class AccountService {
     if (!(await this.pathExists(domainPath))) {
       return domainCandidate;
     }
-    if (await hasMatchingEmail(domainCandidate)) {
+    if (await hasMatchingIdentity(domainCandidate)) {
       return domainCandidate;
     }
 
@@ -611,7 +624,7 @@ export class AccountService {
       if (!(await this.pathExists(candidatePath))) {
         return candidate;
       }
-      if (await hasMatchingEmail(candidate)) {
+      if (await hasMatchingIdentity(candidate)) {
         return candidate;
       }
     }
@@ -656,5 +669,38 @@ export class AccountService {
     const authPath = resolveAuthPath();
     await this.removeIfExists(currentPath);
     await this.removeIfExists(authPath);
+  }
+
+  private snapshotsShareIdentity(a: ParsedAuthSnapshot, b: ParsedAuthSnapshot): boolean {
+    if (a.authMode !== "chatgpt" || b.authMode !== "chatgpt") {
+      return false;
+    }
+
+    if (a.userId && b.userId && a.accountId && b.accountId) {
+      return a.userId === b.userId && a.accountId === b.accountId;
+    }
+
+    if (a.accountId && b.accountId) {
+      return a.accountId === b.accountId;
+    }
+
+    if (a.userId && b.userId) {
+      return a.userId === b.userId;
+    }
+
+    const aEmail = a.email?.trim().toLowerCase();
+    const bEmail = b.email?.trim().toLowerCase();
+    if (aEmail && bEmail) {
+      return aEmail === bEmail;
+    }
+
+    return false;
+  }
+
+  private renderSnapshotIdentity(snapshot: ParsedAuthSnapshot, fallbackEmail: string): string {
+    const parts = [fallbackEmail];
+    if (snapshot.accountId) parts.push(`account:${snapshot.accountId}`);
+    if (snapshot.userId) parts.push(`user:${snapshot.userId}`);
+    return parts.join(" | ");
   }
 }
