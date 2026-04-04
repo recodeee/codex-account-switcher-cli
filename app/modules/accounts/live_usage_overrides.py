@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import logging
 import os
 from typing import Literal
 
 from app.core.utils.time import to_utc_naive
-from app.db.models import Account, UsageHistory
+from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
 from app.modules.accounts.codex_live_usage import (
     LocalCodexLiveUsage,
     LocalCodexLiveUsageSample,
     LocalUsageWindow,
+    has_recent_active_snapshot_process_fallback,
     read_live_codex_process_session_counts_by_snapshot,
     read_local_codex_live_usage_by_snapshot,
-    read_local_codex_live_usage_samples_by_snapshot,
     read_local_codex_live_usage_samples,
+    read_local_codex_live_usage_samples_by_snapshot,
     read_runtime_live_session_counts_by_snapshot,
 )
 from app.modules.accounts.schemas import (
@@ -58,6 +59,17 @@ class _SampleAttribution:
     match: _SampleMatchResult
 
 
+@dataclass(frozen=True)
+class _SampleSourceOwner:
+    account_id: str
+    observed_at: datetime
+
+
+_SAMPLE_SOURCE_OWNER_TTL = timedelta(hours=24)
+_SAMPLE_SOURCE_OWNER_MAX_ENTRIES = 512
+_sample_source_owner_cache: dict[str, _SampleSourceOwner] = {}
+
+
 def apply_local_live_usage_overrides(
     *,
     accounts: list[Account],
@@ -81,30 +93,47 @@ def apply_local_live_usage_overrides(
         codex_auth_by_account=codex_auth_by_account,
         live_usage_by_snapshot=live_usage_by_snapshot,
     )
+    debug_raw_samples_by_account = _build_default_sample_debug_overrides(
+        accounts=accounts,
+        snapshot_index=snapshot_index,
+        codex_auth_by_account=codex_auth_by_account,
+        baseline_primary_usage=baseline_primary_usage,
+        baseline_secondary_usage=baseline_secondary_usage,
+        live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+        should_defer_active_snapshot_usage=should_defer_active_snapshot_usage,
+    )
 
     for account in accounts:
         codex_auth_status = codex_auth_by_account.get(account.id)
         if codex_auth_status is None:
             continue
 
-        snapshot_names = snapshot_index.snapshots_by_account_id.get(account.id, [])
+        selected_snapshot_name = codex_auth_status.snapshot_name
+        snapshot_names_from_index = snapshot_index.snapshots_by_account_id.get(account.id, [])
+        if selected_snapshot_name and selected_snapshot_name in snapshot_names_from_index:
+            # Account status already resolves a single effective snapshot name.
+            # Reuse it here so live-usage attribution/debug telemetry does not
+            # accidentally merge stale aliases from snapshot index buckets.
+            snapshot_names = [selected_snapshot_name]
+        else:
+            snapshot_names = snapshot_names_from_index
         snapshots_considered = _resolve_snapshot_candidates(
             snapshot_names=snapshot_names,
-            selected_snapshot_name=codex_auth_status.snapshot_name,
+            selected_snapshot_name=selected_snapshot_name,
         )
         live_usage = _resolve_live_usage_for_account(
             snapshot_names=snapshot_names,
-            selected_snapshot_name=codex_auth_status.snapshot_name,
+            selected_snapshot_name=selected_snapshot_name,
             live_usage_by_snapshot=live_usage_by_snapshot,
         )
         live_process_session_count = _resolve_live_process_session_count_for_account(
             snapshot_names=snapshot_names,
-            selected_snapshot_name=codex_auth_status.snapshot_name,
+            selected_snapshot_name=selected_snapshot_name,
             live_process_session_counts_by_snapshot=live_process_session_counts_by_snapshot,
         )
         live_runtime_session_count = _resolve_live_runtime_session_count_for_account(
             snapshot_names=snapshot_names,
-            selected_snapshot_name=codex_auth_status.snapshot_name,
+            selected_snapshot_name=selected_snapshot_name,
             runtime_live_session_counts_by_snapshot=runtime_live_session_counts_by_snapshot,
         )
         has_live_process_session = live_process_session_count > 0
@@ -118,6 +147,7 @@ def apply_local_live_usage_overrides(
         account_id = account.id
         override_reason: str | None = None
         override_applied = False
+        raw_samples_override = debug_raw_samples_by_account.get(account_id)
 
         if has_live_process_session or has_live_runtime_session:
             codex_live_session_counts_by_account[account_id] = max(
@@ -132,6 +162,7 @@ def apply_local_live_usage_overrides(
                 snapshots_considered=snapshots_considered,
                 live_usage=live_usage,
                 live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                raw_samples_override=raw_samples_override,
                 override_applied=override_applied,
                 override_reason=override_reason,
                 live_quota_debug_by_account=live_quota_debug_by_account,
@@ -154,6 +185,7 @@ def apply_local_live_usage_overrides(
                 snapshots_considered=snapshots_considered,
                 live_usage=live_usage,
                 live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                raw_samples_override=raw_samples_override,
                 override_applied=override_applied,
                 override_reason=override_reason,
                 live_quota_debug_by_account=live_quota_debug_by_account,
@@ -179,12 +211,41 @@ def apply_local_live_usage_overrides(
             # split yet, keep quota windows on their baseline account values
             # instead of attributing another snapshot's limits to the active
             # account.
-            override_reason = "deferred_active_snapshot_mixed_default_sessions"
+            if account.status == AccountStatus.DEACTIVATED:
+                applied_conservative_floor = _apply_deferred_conservative_floor(
+                    account=account,
+                    account_id=account_id,
+                    live_usage=live_usage,
+                    primary_usage=primary_usage,
+                    secondary_usage=secondary_usage,
+                    persist_candidates=persist_candidates,
+                )
+                override_applied = applied_conservative_floor
+                override_reason = (
+                    "deferred_active_snapshot_mixed_default_sessions_conservative_floor"
+                    if applied_conservative_floor
+                    else "deferred_active_snapshot_mixed_default_sessions"
+                )
+            else:
+                applied_confident_sample_override = _apply_deferred_confident_sample_override(
+                    account_id=account_id,
+                    raw_samples_override=raw_samples_override,
+                    primary_usage=primary_usage,
+                    secondary_usage=secondary_usage,
+                    persist_candidates=persist_candidates,
+                )
+                override_applied = applied_confident_sample_override
+                override_reason = (
+                    "deferred_active_snapshot_confident_sample_override"
+                    if applied_confident_sample_override
+                    else "deferred_active_snapshot_mixed_default_sessions"
+                )
             _set_live_quota_debug(
                 account_id=account_id,
                 snapshots_considered=snapshots_considered,
                 live_usage=live_usage,
                 live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                raw_samples_override=raw_samples_override,
                 override_applied=override_applied,
                 override_reason=override_reason,
                 live_quota_debug_by_account=live_quota_debug_by_account,
@@ -246,6 +307,7 @@ def apply_local_live_usage_overrides(
             snapshots_considered=snapshots_considered,
             live_usage=live_usage,
             live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+            raw_samples_override=raw_samples_override,
             override_applied=override_applied,
             override_reason=override_reason,
             live_quota_debug_by_account=live_quota_debug_by_account,
@@ -261,18 +323,22 @@ def apply_local_live_usage_overrides(
         )
 
     # When process-level session attribution is unavailable, mixed
-    # default-session fingerprint heuristics can be enabled as a compatibility
-    # fallback. Keep it opt-in because unlabeled sessions may be spread across
-    # accounts and surface random "working now" badges unrelated to the active
-    # snapshot.
+    # default-session fingerprint heuristics can still recover per-account
+    # attribution during a recent snapshot switch while legacy/default-scope
+    # sessions are still active. The explicit env flag remains supported as a
+    # manual override.
     if (
         not live_process_session_counts_by_snapshot
-        and _default_session_fingerprint_fallback_enabled()
+        and (
+            _default_session_fingerprint_fallback_enabled()
+            or has_recent_active_snapshot_process_fallback()
+        )
     ):
         _apply_local_default_session_fingerprint_overrides(
             accounts=accounts,
             snapshot_index=snapshot_index,
             live_usage_by_snapshot=live_usage_by_snapshot,
+            live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
             codex_auth_by_account=codex_auth_by_account,
             baseline_primary_usage=baseline_primary_usage,
             baseline_secondary_usage=baseline_secondary_usage,
@@ -281,6 +347,132 @@ def apply_local_live_usage_overrides(
             codex_session_counts_by_account=codex_live_session_counts_by_account,
         )
     return _coalesce_persist_candidates(persist_candidates)
+
+
+def _apply_deferred_conservative_floor(
+    *,
+    account: Account,
+    account_id: str,
+    live_usage: LocalCodexLiveUsage,
+    primary_usage: dict[str, UsageHistory],
+    secondary_usage: dict[str, UsageHistory],
+    persist_candidates: list[LiveUsageOverridePersistCandidate],
+) -> bool:
+    if account.status != AccountStatus.DEACTIVATED:
+        return False
+
+    applied = False
+    recorded_at = to_utc_naive(live_usage.recorded_at)
+
+    if live_usage.primary is not None:
+        applied = True
+        primary_usage[account_id] = _usage_history_from_live_window(
+            account_id=account_id,
+            window="primary",
+            recorded_at=recorded_at,
+            usage_window=live_usage.primary,
+        )
+        persist_candidates.append(
+            LiveUsageOverridePersistCandidate(
+                account_id=account_id,
+                window="primary",
+                used_percent=float(live_usage.primary.used_percent),
+                reset_at=live_usage.primary.reset_at,
+                window_minutes=live_usage.primary.window_minutes,
+                recorded_at=recorded_at,
+            )
+        )
+
+    if live_usage.secondary is not None:
+        applied = True
+        secondary_usage[account_id] = _usage_history_from_live_window(
+            account_id=account_id,
+            window="secondary",
+            recorded_at=recorded_at,
+            usage_window=live_usage.secondary,
+        )
+        persist_candidates.append(
+            LiveUsageOverridePersistCandidate(
+                account_id=account_id,
+                window="secondary",
+                used_percent=float(live_usage.secondary.used_percent),
+                reset_at=live_usage.secondary.reset_at,
+                window_minutes=live_usage.secondary.window_minutes,
+                recorded_at=recorded_at,
+            )
+        )
+
+    return applied
+
+
+def _apply_deferred_confident_sample_override(
+    *,
+    account_id: str,
+    raw_samples_override: list[AccountLiveQuotaDebugSample] | None,
+    primary_usage: dict[str, UsageHistory],
+    secondary_usage: dict[str, UsageHistory],
+    persist_candidates: list[LiveUsageOverridePersistCandidate],
+) -> bool:
+    if not raw_samples_override:
+        return False
+
+    selected_sample = next(
+        (
+            sample
+            for sample in raw_samples_override
+            if not sample.stale and (sample.primary is not None or sample.secondary is not None)
+        ),
+        None,
+    )
+    if selected_sample is None:
+        return False
+
+    recorded_at = to_utc_naive(selected_sample.recorded_at)
+    applied = False
+
+    if selected_sample.primary is not None:
+        applied = True
+        primary_usage[account_id] = UsageHistory(
+            account_id=account_id,
+            window="primary",
+            used_percent=float(selected_sample.primary.used_percent),
+            reset_at=selected_sample.primary.reset_at,
+            window_minutes=selected_sample.primary.window_minutes,
+            recorded_at=recorded_at,
+        )
+        persist_candidates.append(
+            LiveUsageOverridePersistCandidate(
+                account_id=account_id,
+                window="primary",
+                used_percent=float(selected_sample.primary.used_percent),
+                reset_at=selected_sample.primary.reset_at,
+                window_minutes=selected_sample.primary.window_minutes,
+                recorded_at=recorded_at,
+            )
+        )
+
+    if selected_sample.secondary is not None:
+        applied = True
+        secondary_usage[account_id] = UsageHistory(
+            account_id=account_id,
+            window="secondary",
+            used_percent=float(selected_sample.secondary.used_percent),
+            reset_at=selected_sample.secondary.reset_at,
+            window_minutes=selected_sample.secondary.window_minutes,
+            recorded_at=recorded_at,
+        )
+        persist_candidates.append(
+            LiveUsageOverridePersistCandidate(
+                account_id=account_id,
+                window="secondary",
+                used_percent=float(selected_sample.secondary.used_percent),
+                reset_at=selected_sample.secondary.reset_at,
+                window_minutes=selected_sample.secondary.window_minutes,
+                recorded_at=recorded_at,
+            )
+        )
+
+    return applied
 
 
 def _coalesce_persist_candidates(
@@ -317,6 +509,7 @@ def _set_live_quota_debug(
     snapshots_considered: list[str],
     live_usage: LocalCodexLiveUsage | None,
     live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]],
+    raw_samples_override: list[AccountLiveQuotaDebugSample] | None = None,
     override_applied: bool,
     override_reason: str | None,
     live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug] | None,
@@ -324,10 +517,17 @@ def _set_live_quota_debug(
     if live_quota_debug_by_account is None:
         return
 
-    raw_samples = _resolve_debug_raw_samples(
-        snapshots_considered=snapshots_considered,
-        live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
-    )
+    if raw_samples_override is not None:
+        raw_samples = sorted(
+            raw_samples_override,
+            key=lambda sample: sample.recorded_at,
+            reverse=True,
+        )
+    else:
+        raw_samples = _resolve_debug_raw_samples(
+            snapshots_considered=snapshots_considered,
+            live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+        )
     merged = _build_debug_sample(
         source="merged",
         snapshot_name=snapshots_considered[0] if snapshots_considered else None,
@@ -365,6 +565,92 @@ def _resolve_debug_raw_samples(
                 raw_samples.append(debug_sample)
     raw_samples.sort(key=lambda sample: sample.recorded_at, reverse=True)
     return raw_samples
+
+
+def _build_default_sample_debug_overrides(
+    *,
+    accounts: list[Account],
+    snapshot_index: CodexAuthSnapshotIndex,
+    codex_auth_by_account: dict[str, AccountCodexAuthStatus],
+    baseline_primary_usage: dict[str, UsageHistory],
+    baseline_secondary_usage: dict[str, UsageHistory],
+    live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]],
+    should_defer_active_snapshot_usage: bool,
+) -> dict[str, list[AccountLiveQuotaDebugSample]]:
+    if not should_defer_active_snapshot_usage:
+        return {}
+
+    active_snapshot_name = snapshot_index.active_snapshot_name
+    if not active_snapshot_name:
+        return {}
+
+    default_scope_samples = list(live_usage_samples_by_snapshot.get(active_snapshot_name, []))
+    if not default_scope_samples:
+        return {}
+
+    candidate_accounts = [
+        account
+        for account in accounts
+        if _account_has_snapshot(codex_auth_by_account.get(account.id))
+    ]
+    if len(candidate_accounts) <= 1:
+        return {}
+
+    active_account_id = _resolve_active_snapshot_account_id(
+        accounts=accounts,
+        codex_auth_by_account=codex_auth_by_account,
+        active_snapshot_name=active_snapshot_name,
+    )
+
+    assignment_samples = [
+        LocalCodexLiveUsage(
+            recorded_at=sample.recorded_at,
+            active_session_count=1,
+            primary=sample.primary,
+            secondary=sample.secondary,
+        )
+        for sample in default_scope_samples
+    ]
+    assignments = _resolve_sample_account_assignments(
+        samples=assignment_samples,
+        accounts=candidate_accounts,
+        baseline_primary_usage=baseline_primary_usage,
+        baseline_secondary_usage=baseline_secondary_usage,
+        sample_sources=[sample.source for sample in default_scope_samples],
+        preferred_account_id=active_account_id,
+    )
+
+    debug_samples_by_account: dict[str, list[AccountLiveQuotaDebugSample]] = {
+        account.id: []
+        for account in candidate_accounts
+    }
+    if not assignments:
+        return debug_samples_by_account
+
+    for sample_index, match in assignments.items():
+        if not match.allows_quota_override:
+            continue
+        if sample_index < 0 or sample_index >= len(default_scope_samples):
+            continue
+        sample = default_scope_samples[sample_index]
+        match_status = codex_auth_by_account.get(match.account_id)
+        snapshot_name = match_status.snapshot_name if match_status is not None else active_snapshot_name
+        debug_sample = _build_debug_sample(
+            source=sample.source,
+            snapshot_name=snapshot_name,
+            recorded_at=sample.recorded_at,
+            primary=sample.primary,
+            secondary=sample.secondary,
+            stale=sample.stale,
+        )
+        if debug_sample is None:
+            continue
+        debug_samples_by_account.setdefault(match.account_id, []).append(debug_sample)
+
+    for samples in debug_samples_by_account.values():
+        samples.sort(key=lambda sample: sample.recorded_at, reverse=True)
+
+    return debug_samples_by_account
 
 
 def _build_debug_sample(
@@ -538,6 +824,7 @@ def _apply_local_default_session_fingerprint_overrides(
     accounts: list[Account],
     snapshot_index: CodexAuthSnapshotIndex,
     live_usage_by_snapshot: dict[str, LocalCodexLiveUsage],
+    live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]] | None = None,
     codex_auth_by_account: dict[str, AccountCodexAuthStatus],
     baseline_primary_usage: dict[str, UsageHistory],
     baseline_secondary_usage: dict[str, UsageHistory],
@@ -554,9 +841,21 @@ def _apply_local_default_session_fingerprint_overrides(
     if len(live_usage_by_snapshot) != 1 or active_snapshot_live_usage.active_session_count <= 1:
         return
 
-    samples = read_local_codex_live_usage_samples()
-    if len(samples) <= 1:
-        return
+    default_scope_samples = list((live_usage_samples_by_snapshot or {}).get(active_snapshot_name, []))
+    if len(default_scope_samples) <= 1:
+        fallback_samples = read_local_codex_live_usage_samples()
+        if len(fallback_samples) <= 1:
+            return
+        default_scope_samples = [
+            LocalCodexLiveUsageSample(
+                source=f"default-sample-{index}",
+                recorded_at=sample.recorded_at,
+                primary=sample.primary,
+                secondary=sample.secondary,
+                stale=False,
+            )
+            for index, sample in enumerate(fallback_samples)
+        ]
 
     candidate_accounts = [
         account
@@ -566,6 +865,20 @@ def _apply_local_default_session_fingerprint_overrides(
     if len(candidate_accounts) <= 1:
         return
 
+    active_account_id = _resolve_active_snapshot_account_id(
+        accounts=accounts,
+        codex_auth_by_account=codex_auth_by_account,
+        active_snapshot_name=active_snapshot_name,
+    )
+    samples = [
+        LocalCodexLiveUsage(
+            recorded_at=sample.recorded_at,
+            active_session_count=1,
+            primary=sample.primary,
+            secondary=sample.secondary,
+        )
+        for sample in default_scope_samples
+    ]
     sample_matches_by_index = _resolve_sample_account_assignments(
         samples=samples,
         accounts=candidate_accounts,
@@ -676,6 +989,107 @@ def _sample_has_fingerprint(sample: LocalCodexLiveUsage) -> bool:
     return sample.primary is not None or sample.secondary is not None
 
 
+def _remember_snapshot_sample_owners_for_account(
+    *,
+    account_id: str,
+    samples: list[LocalCodexLiveUsageSample],
+) -> None:
+    for sample in samples:
+        if sample.primary is None and sample.secondary is None:
+            continue
+        _remember_sample_source_owner(
+            source=sample.source,
+            account_id=account_id,
+            observed_at=sample.recorded_at,
+        )
+
+
+def _remember_sample_source_owner(
+    *,
+    source: str,
+    account_id: str,
+    observed_at: datetime,
+) -> None:
+    if not source:
+        return
+    normalized_observed_at = _normalize_observed_at(observed_at)
+    existing = _sample_source_owner_cache.get(source)
+    if existing is not None and existing.observed_at > normalized_observed_at:
+        return
+    _sample_source_owner_cache[source] = _SampleSourceOwner(
+        account_id=account_id,
+        observed_at=normalized_observed_at,
+    )
+    _prune_sample_source_owner_cache(normalized_observed_at)
+
+
+def _lookup_sample_source_owner(
+    *,
+    source: str,
+    allowed_account_ids: list[str],
+) -> str | None:
+    if not source:
+        return None
+    owner = _sample_source_owner_cache.get(source)
+    if owner is None:
+        return None
+
+    now = datetime.now(timezone.utc)
+    if _normalize_observed_at(owner.observed_at) < _normalize_observed_at(now) - _SAMPLE_SOURCE_OWNER_TTL:
+        _sample_source_owner_cache.pop(source, None)
+        return None
+    if owner.account_id not in allowed_account_ids:
+        return None
+    return owner.account_id
+
+
+def _prune_sample_source_owner_cache(now: datetime) -> None:
+    cutoff = _normalize_observed_at(now) - _SAMPLE_SOURCE_OWNER_TTL
+    stale_keys = [
+        key
+        for key, value in _sample_source_owner_cache.items()
+        if _normalize_observed_at(value.observed_at) < cutoff
+    ]
+    for key in stale_keys:
+        _sample_source_owner_cache.pop(key, None)
+
+    if len(_sample_source_owner_cache) <= _SAMPLE_SOURCE_OWNER_MAX_ENTRIES:
+        return
+    ordered = sorted(
+        _sample_source_owner_cache.items(),
+        key=lambda item: _normalize_observed_at(item[1].observed_at),
+        reverse=True,
+    )
+    _sample_source_owner_cache.clear()
+    _sample_source_owner_cache.update(ordered[:_SAMPLE_SOURCE_OWNER_MAX_ENTRIES])
+
+
+def _normalize_observed_at(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def _resolve_active_snapshot_account_id(
+    *,
+    accounts: list[Account],
+    codex_auth_by_account: dict[str, AccountCodexAuthStatus],
+    active_snapshot_name: str,
+) -> str | None:
+    for account in accounts:
+        status = codex_auth_by_account.get(account.id)
+        if status is None:
+            continue
+        if status.is_active_snapshot:
+            return account.id
+
+    for account in accounts:
+        status = codex_auth_by_account.get(account.id)
+        if status is None:
+            continue
+        if status.snapshot_name == active_snapshot_name:
+            return account.id
+    return None
+
+
 def _match_sample_to_account(
     *,
     sample: LocalCodexLiveUsage,
@@ -732,6 +1146,8 @@ def _resolve_sample_account_assignments(
     accounts: list[Account],
     baseline_primary_usage: dict[str, UsageHistory],
     baseline_secondary_usage: dict[str, UsageHistory],
+    sample_sources: list[str] | None = None,
+    preferred_account_id: str | None = None,
 ) -> dict[int, _SampleMatchResult]:
     assignments: dict[int, _SampleMatchResult] = {}
     if not samples or not accounts:
@@ -742,7 +1158,27 @@ def _resolve_sample_account_assignments(
     assigned_counts: dict[str, int] = {account_id: 0 for account_id in account_ids}
     unresolved_sample_indexes = set(range(len(samples)))
 
-    # Pass 1: hard anchors from unique reset fingerprint matches.
+    # Pass 1: preserve previously observed per-source ownership.
+    if sample_sources is not None:
+        for sample_index in _sorted_sample_indexes(samples, unresolved_sample_indexes):
+            if sample_index < 0 or sample_index >= len(sample_sources):
+                continue
+            source = sample_sources[sample_index]
+            cached_account_id = _lookup_sample_source_owner(
+                source=source,
+                allowed_account_ids=account_ids,
+            )
+            if cached_account_id is None:
+                continue
+            assignments[sample_index] = _SampleMatchResult(
+                account_id=cached_account_id,
+                confidence="high",
+                allows_quota_override=False,
+            )
+            assigned_counts[cached_account_id] += 1
+            unresolved_sample_indexes.remove(sample_index)
+
+    # Pass 2: hard anchors from unique reset fingerprint matches.
     for sample_index in _sorted_sample_indexes(samples, unresolved_sample_indexes):
         sample = samples[sample_index]
         unique_account_id = _resolve_unique_reset_match_account_id(
@@ -761,68 +1197,14 @@ def _resolve_sample_account_assignments(
         assigned_counts[unique_account_id] += 1
         unresolved_sample_indexes.remove(sample_index)
 
-    # Pass 2: deterministic coverage pass for unresolved fingerprint samples.
-    unresolved_fingerprint_indexes = [
-        sample_index
-        for sample_index in _sorted_sample_indexes(samples, unresolved_sample_indexes)
-        if _sample_has_fingerprint(samples[sample_index])
-    ]
-    uncovered_account_ids = {
-        account_id
-        for account_id, count in assigned_counts.items()
-        if count == 0
-    }
-
-    while unresolved_fingerprint_indexes and uncovered_account_ids:
-        best_candidate: tuple[float, float, str, int, _SampleMatchResult] | None = None
-        for sample_index in unresolved_fingerprint_indexes:
-            sample = samples[sample_index]
-            for account_id in sorted(uncovered_account_ids):
-                match_metrics = _build_sample_match_metrics(
-                    sample=sample,
-                    account_id=account_id,
-                    accounts=sorted_accounts,
-                    baseline_primary_usage=baseline_primary_usage,
-                    baseline_secondary_usage=baseline_secondary_usage,
-                )
-                if match_metrics is None:
-                    continue
-                distance, margin, confidence = match_metrics
-                candidate = (
-                    distance,
-                    -margin,
-                    account_id,
-                    sample_index,
-                    _SampleMatchResult(
-                        account_id=account_id,
-                        confidence=confidence,
-                        allows_quota_override=False,
-                    ),
-                )
-                if best_candidate is None or candidate < best_candidate:
-                    best_candidate = candidate
-
-        if best_candidate is None:
-            break
-
-        _, _, account_id, sample_index, match = best_candidate
-        assignments[sample_index] = match
-        assigned_counts[account_id] += 1
-        unresolved_sample_indexes.remove(sample_index)
-        unresolved_fingerprint_indexes = [
-            index
-            for index in unresolved_fingerprint_indexes
-            if index != sample_index
-        ]
-        uncovered_account_ids.discard(account_id)
-
     # Pass 3: deterministic cost-based assignment for remaining fingerprint samples.
     for sample_index in _sorted_sample_indexes(samples, unresolved_sample_indexes):
         sample = samples[sample_index]
         if not _sample_has_fingerprint(sample):
             continue
 
-        best_match: tuple[float, float, float, str, _SampleMatchResult] | None = None
+        best_match_key: tuple[float, float, float, str] | None = None
+        best_match: _SampleMatchResult | None = None
         for account_id in account_ids:
             match_metrics = _build_sample_match_metrics(
                 sample=sample,
@@ -835,34 +1217,36 @@ def _resolve_sample_account_assignments(
                 continue
             distance, margin, confidence = match_metrics
             score = distance + (assigned_counts[account_id] * 0.25)
-            candidate = (
+            candidate_key = (
                 score,
                 distance,
                 -margin,
                 account_id,
-                _SampleMatchResult(
+            )
+            if best_match_key is None or candidate_key < best_match_key:
+                best_match_key = candidate_key
+                best_match = _SampleMatchResult(
                     account_id=account_id,
                     confidence=confidence,
                     allows_quota_override=False,
-                ),
-            )
-            if best_match is None or candidate < best_match:
-                best_match = candidate
+                )
 
         if best_match is None:
             continue
 
-        _, _, _, account_id, match = best_match
-        assignments[sample_index] = match
+        assignments[sample_index] = best_match
+        account_id = best_match.account_id
         assigned_counts[account_id] += 1
         unresolved_sample_indexes.remove(sample_index)
 
-    # Pass 4: recall-biased fallback for unresolved presence-only samples.
+    # Pass 4: conservative fallback for unresolved samples.
     for sample_index in _sorted_sample_indexes(samples, unresolved_sample_indexes):
-        account_id = min(
-            account_ids,
-            key=lambda item: (assigned_counts[item], item),
-        )
+        account_id = preferred_account_id if preferred_account_id in assigned_counts else None
+        if account_id is None:
+            account_id = min(
+                account_ids,
+                key=lambda item: (assigned_counts[item], item),
+            )
         assignments[sample_index] = _SampleMatchResult(
             account_id=account_id,
             confidence="low",

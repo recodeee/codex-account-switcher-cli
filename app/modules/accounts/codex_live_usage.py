@@ -65,7 +65,7 @@ def read_local_codex_live_usage_by_snapshot(*, now: datetime | None = None) -> d
         default_usage = _read_local_codex_live_usage_for_sessions_dir(
             sessions_dir=_resolve_sessions_dir(),
             now=current,
-            aggregation_mode="latest",
+            aggregation_mode="max_used",
         )
         if default_usage is not None:
             usage_by_snapshot[active_snapshot_name] = default_usage
@@ -522,20 +522,33 @@ def _has_running_default_scope_codex_process() -> bool:
 
     default_current_path = _resolve_current_path()
     default_auth_path = _resolve_auth_path()
+    home_default_current_path = (Path.home() / ".codex" / "current").resolve()
+    home_default_auth_path = (Path.home() / ".codex" / "auth.json").resolve()
+    using_custom_auth_scope = (
+        default_current_path != home_default_current_path
+        or default_auth_path != home_default_auth_path
+    )
     for pid, command in _iter_running_codex_commands(proc_root):
+        env = _read_process_env(pid)
+        if not env:
+            continue
         if _is_non_default_auth_scope_process(
             pid,
             default_current_path=default_current_path,
             default_auth_path=default_auth_path,
+            env=env,
         ):
             continue
-        snapshot_name = _resolve_process_snapshot_name(
-            pid,
-            default_current_path=default_current_path,
-            default_auth_path=default_auth_path,
-        )
-        if not snapshot_name:
-            continue
+        if using_custom_auth_scope:
+            has_scope_hint = (
+                "CODEX_AUTH_ACTIVE_SNAPSHOT" in env
+                or "CODEX_AUTH_CURRENT_PATH" in env
+                or "CODEX_AUTH_JSON_PATH" in env
+            )
+            if not has_scope_hint:
+                # Avoid matching unrelated host-level Codex processes when a
+                # test/runtime config points to a dedicated auth scope.
+                continue
         if command:
             return True
     return False
@@ -663,13 +676,14 @@ def _is_non_default_auth_scope_process(
     *,
     default_current_path: Path,
     default_auth_path: Path,
+    env: dict[str, str] | None = None,
 ) -> bool:
-    env = _read_process_env(pid)
-    if not env:
+    resolved_env = env if env is not None else _read_process_env(pid)
+    if not resolved_env:
         return False
 
-    current_override = _resolve_process_path(env.get("CODEX_AUTH_CURRENT_PATH"), pid)
-    auth_override = _resolve_process_path(env.get("CODEX_AUTH_JSON_PATH"), pid)
+    current_override = _resolve_process_path(resolved_env.get("CODEX_AUTH_CURRENT_PATH"), pid)
+    auth_override = _resolve_process_path(resolved_env.get("CODEX_AUTH_JSON_PATH"), pid)
 
     if current_override is not None and current_override != default_current_path:
         return True

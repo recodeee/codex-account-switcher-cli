@@ -292,6 +292,45 @@ def test_read_local_codex_live_usage_by_snapshot_reads_multiple_runtime_profiles
     assert usage_by_snapshot["personal"].secondary.used_percent == 40.0
 
 
+def test_read_local_codex_live_usage_by_snapshot_default_scope_prefers_highest_used_within_cycle(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    sessions_root = tmp_path / "sessions"
+    runtime_root = tmp_path / "runtimes"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(runtime_root))
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage.build_snapshot_index",
+        lambda: SimpleNamespace(active_snapshot_name="viktor"),
+    )
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    _write_rollout(
+        day_dir / "rollout-2026-04-03T16-13-25-older-session.jsonl",
+        timestamp=now - timedelta(seconds=12),
+        primary_used=95.0,
+        secondary_used=37.0,
+    )
+    _write_rollout(
+        day_dir / "rollout-2026-04-03T16-22-44-newer-session.jsonl",
+        timestamp=now - timedelta(seconds=6),
+        primary_used=76.0,
+        secondary_used=34.0,
+    )
+
+    usage_by_snapshot = read_local_codex_live_usage_by_snapshot(now=now)
+
+    assert set(usage_by_snapshot.keys()) == {"viktor"}
+    usage = usage_by_snapshot["viktor"]
+    assert usage.active_session_count == 2
+    assert usage.primary is not None
+    assert usage.secondary is not None
+    assert usage.primary.used_percent == 95.0
+    assert usage.secondary.used_percent == 37.0
+
+
 def test_read_runtime_live_session_counts_by_snapshot_reads_runtime_profiles(
     monkeypatch,
     tmp_path: Path,

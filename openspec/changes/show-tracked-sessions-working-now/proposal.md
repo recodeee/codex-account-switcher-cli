@@ -10,6 +10,9 @@ Users with active Codex CLI terminals can still appear outside the `Working now`
 - Continue grouping working accounts above other accounts.
 - Prefer `liveQuotaDebug.merged` percentages for card quota display to avoid stale `0%` floor artifacts.
 - Treat non-stale `liveQuotaDebug.rawSamples` as a working-now signal so sampled accounts appear in the top section.
+- Apply merged quota percentages on the Accounts page sidebar/detail usage rows as well, not only dashboard cards.
+- When raw samples exist but counters are zero, surface a fallback `Codex CLI sessions` count from fresh sample inventory.
+- For disconnected accounts under mixed default-session telemetry, use conservative merged live quotas (lowest remaining in-cycle) and persist those provisional windows so refreshes do not bounce back to stale floors.
 
 ## Impact
 

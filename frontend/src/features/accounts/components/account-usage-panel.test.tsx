@@ -116,4 +116,42 @@ describe("AccountUsagePanel", () => {
 
     expect(screen.getByText("2%")).toBeInTheDocument();
   });
+
+  it("prefers merged debug weekly percent over stale usage weekly percent", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 24,
+        secondaryRemainingPercent: 0,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["viktor"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: {
+          source: "merged",
+          snapshotName: "viktor",
+          recordedAt: "2026-01-01T00:00:00.000Z",
+          stale: false,
+          primary: {
+            usedPercent: 76,
+            remainingPercent: 24,
+            resetAt: 1760000000,
+            windowMinutes: 300,
+          },
+          secondary: {
+            usedPercent: 34,
+            remainingPercent: 66,
+            resetAt: 1760600000,
+            windowMinutes: 10080,
+          },
+        },
+        rawSamples: [],
+      },
+    });
+
+    render(<AccountUsagePanel account={account} trends={null} />);
+
+    expect(screen.getAllByText("24%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("66%").length).toBeGreaterThanOrEqual(1);
+  });
 });

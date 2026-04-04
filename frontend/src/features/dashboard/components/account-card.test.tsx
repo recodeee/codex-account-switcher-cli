@@ -499,6 +499,56 @@ describe("AccountCard", () => {
     expect(screen.getByText("Working now")).toBeInTheDocument();
   });
 
+  it("shows codex session count from fresh debug raw samples when counters are zero", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "viktor",
+        activeSnapshotName: "viktor",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["viktor"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/rollout-1.jsonl",
+            snapshotName: "viktor",
+            recordedAt: new Date().toISOString(),
+            stale: false,
+            primary: { usedPercent: 56, remainingPercent: 44, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 32, remainingPercent: 68, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+          {
+            source: "/tmp/rollout-2.jsonl",
+            snapshotName: "viktor",
+            recordedAt: new Date().toISOString(),
+            stale: false,
+            primary: { usedPercent: 55, remainingPercent: 45, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 32, remainingPercent: 68, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+        ],
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const card = screen.getByText(account.email).closest(".card-hover");
+    expect(card).not.toBeNull();
+    const sessionsLabel = within(card as HTMLElement).getByText("Codex CLI sessions");
+    const sessionsValue = sessionsLabel.parentElement?.querySelector("p.mt-0\\.5.text-xs.font-semibold.tabular-nums");
+    expect(sessionsValue).not.toBeNull();
+    expect(sessionsValue).toHaveTextContent(/^2$/);
+  });
+
   it("shows working indicator when tracked codex sessions exist without live telemetry", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,

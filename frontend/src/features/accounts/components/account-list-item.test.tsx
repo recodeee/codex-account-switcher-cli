@@ -48,6 +48,51 @@ describe("AccountListItem", () => {
     expect(screen.getByTestId("mini-quota-weekly-fill")).toHaveStyle({ width: "73%" });
   });
 
+  it("prefers merged debug weekly percent in sidebar row", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 24,
+        secondaryRemainingPercent: 0,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["viktor"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: {
+          source: "merged",
+          snapshotName: "viktor",
+          recordedAt: "2026-01-01T00:00:00.000Z",
+          stale: false,
+          primary: {
+            usedPercent: 76,
+            remainingPercent: 24,
+            resetAt: 1760000000,
+            windowMinutes: 300,
+          },
+          secondary: {
+            usedPercent: 34,
+            remainingPercent: 66,
+            resetAt: 1760600000,
+            windowMinutes: 10080,
+          },
+        },
+        rawSamples: [],
+      },
+    });
+
+    render(
+      <AccountListItem
+        account={account}
+        selected={false}
+        onSelect={vi.fn()}
+        onUseLocal={vi.fn()}
+        useLocalBusy={false}
+      />,
+    );
+
+    expect(screen.getByTestId("mini-quota-weekly-fill")).toHaveStyle({ width: "66%" });
+  });
+
   it("renders 5h quota row above weekly row", () => {
     const account = createAccountSummary({
       usage: {
