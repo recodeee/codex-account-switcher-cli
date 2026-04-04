@@ -1016,7 +1016,7 @@ def test_default_scope_debug_assignment_keeps_source_owner_stable_across_active_
     assert by_account_second[csoves.id][0].source == sample_source
 
 
-def test_default_scope_debug_assignment_primes_only_newest_unattributed_sample() -> None:
+def test_default_scope_debug_assignment_does_not_prime_mixed_unattributed_samples() -> None:
     old_owner = _make_account("acc-old", "old@example.com")
     active = _make_account("acc-active", "active@example.com")
     accounts = [old_owner, active]
@@ -1181,9 +1181,9 @@ def test_default_scope_debug_assignment_primes_only_newest_unattributed_sample()
         should_defer_active_snapshot_usage=True,
     )
 
-    assert hints == {old_owner.id: 1, active.id: 1}
+    assert hints == {old_owner.id: 1}
     assert [sample.source for sample in by_account[old_owner.id]] == [seeded_source]
-    assert [sample.source for sample in by_account[active.id]] == [newest_unattributed]
+    assert active.id not in by_account
 
 
 def test_fallback_mapping_applies_quota_overrides_when_reset_matches_are_unique() -> None:

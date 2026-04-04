@@ -201,6 +201,7 @@ def apply_local_live_usage_overrides(
             and should_defer_active_snapshot_usage
             and is_effective_active_snapshot
             and has_live_telemetry
+            and not deferred_default_scope_session_hints_by_account
             and any(live_usage_samples_by_snapshot.get(name) for name in snapshots_considered)
         ):
             # In strict deferred mode, keep active-snapshot session presence
@@ -1164,67 +1165,51 @@ def _prime_unattributed_default_scope_sample_owners(
     if active_account_id not in candidate_account_ids:
         return
 
-    # Prime at most one new source for the active account only when no sample
-    # was attributed to it in the current pass. This prevents gradual remapping
-    # of older unresolved sessions to the newly active account across refreshes.
+    # Prime a sticky owner only for a single-sample default-scope fallback.
+    # Mixed sample batches are too ambiguous and can remap other accounts.
+    if len(default_scope_samples) != 1:
+        return
+
+    # Do not prime when attribution already produced an active-account match.
     has_active_assignment = any(
         match.account_id == active_account_id for match in assignments.values()
     )
     if has_active_assignment:
         return
 
-    # Never bulk-prime mixed default-scope samples to the currently active
-    # account. Only prime the single newest unmatched sample so a just-started
-    # session can stay sticky across the next refresh/switch without dragging
-    # older sessions away from their previous owners.
-    unresolved_sample_indexes = sorted(
-        (
-            sample_index
-            for sample_index in range(len(default_scope_samples))
-            if sample_index not in assignments
+    if 0 in assignments:
+        return
+
+    sample = default_scope_samples[0]
+    if sample.stale:
+        return
+    if sample.primary is None and sample.secondary is None:
+        return
+    if _lookup_sample_source_owner(
+        source=sample.source,
+        allowed_account_ids=candidate_account_ids,
+    ):
+        return
+
+    sample_match = _match_sample_to_account(
+        sample=LocalCodexLiveUsage(
+            recorded_at=sample.recorded_at,
+            active_session_count=1,
+            primary=sample.primary,
+            secondary=sample.secondary,
         ),
-        key=lambda sample_index: (
-            _source_session_start_key(default_scope_samples[sample_index].source),
-            default_scope_samples[sample_index].recorded_at.timestamp(),
-            default_scope_samples[sample_index].source,
-        ),
-        reverse=True,
+        accounts=candidate_accounts,
+        baseline_primary_usage=baseline_primary_usage,
+        baseline_secondary_usage=baseline_secondary_usage,
     )
-    remaining_prime_budget = 1
-    for sample_index in unresolved_sample_indexes:
-        if remaining_prime_budget <= 0:
-            break
-        sample = default_scope_samples[sample_index]
-        if sample.stale:
-            continue
-        if sample.primary is None and sample.secondary is None:
-            continue
-        if _lookup_sample_source_owner(
-            source=sample.source,
-            allowed_account_ids=candidate_account_ids,
-        ):
-            continue
+    if sample_match is not None:
+        return
 
-        sample_match = _match_sample_to_account(
-            sample=LocalCodexLiveUsage(
-                recorded_at=sample.recorded_at,
-                active_session_count=1,
-                primary=sample.primary,
-                secondary=sample.secondary,
-            ),
-            accounts=candidate_accounts,
-            baseline_primary_usage=baseline_primary_usage,
-            baseline_secondary_usage=baseline_secondary_usage,
-        )
-        if sample_match is not None:
-            continue
-
-        _remember_sample_source_owner(
-            source=sample.source,
-            account_id=active_account_id,
-            observed_at=sample.recorded_at,
-        )
-        remaining_prime_budget -= 1
+    _remember_sample_source_owner(
+        source=sample.source,
+        account_id=active_account_id,
+        observed_at=sample.recorded_at,
+    )
 
 
 def _build_debug_window(window: LocalUsageWindow | None) -> AccountLiveQuotaDebugWindow | None:

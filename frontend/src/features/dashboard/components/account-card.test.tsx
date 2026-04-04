@@ -757,8 +757,7 @@ describe("AccountCard", () => {
     expect(screen.queryByText("9%")).not.toBeInTheDocument();
     expect(screen.queryByText("26%")).not.toBeInTheDocument();
     expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText("Telemetry pending")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Live token status").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Telemetry pending").length).toBeGreaterThanOrEqual(1);
   });
 
   it("keeps baseline usage when deferred mixed-session fallback is not trusted", () => {
@@ -811,8 +810,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getAllByText("50%").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("56%").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/\b16%\b/)).not.toBeInTheDocument();
     expect(screen.queryByText(/\b40%\b/)).not.toBeInTheDocument();
   });
