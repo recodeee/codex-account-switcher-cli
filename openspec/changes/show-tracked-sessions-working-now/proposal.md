@@ -9,6 +9,7 @@ Users with active Codex CLI terminals can still appear outside the `Working now`
 - Keep live-only telemetry affordances (live chips and live session summary) tied to fresh live telemetry.
 - Continue grouping working accounts above other accounts.
 - Prefer `liveQuotaDebug.merged` percentages for card quota display to avoid stale `0%` floor artifacts.
+- Treat non-stale `liveQuotaDebug.rawSamples` as a working-now signal so sampled accounts appear in the top section.
 
 ## Impact
 

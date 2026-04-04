@@ -165,6 +165,69 @@ describe("useDashboard", () => {
     }
   });
 
+  it("uses fast polling when fresh debug samples exist without live/tracked sessions", async () => {
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_debug_samples",
+                email: "debug-samples@example.com",
+                displayName: "debug-samples@example.com",
+                codexLiveSessionCount: 0,
+                codexTrackedSessionCount: 0,
+                codexSessionCount: 0,
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "viktor",
+                  activeSnapshotName: "viktor",
+                  isActiveSnapshot: true,
+                  hasLiveSession: false,
+                },
+                lastUsageRecordedAtPrimary: null,
+                lastUsageRecordedAtSecondary: null,
+                liveQuotaDebug: {
+                  snapshotsConsidered: ["viktor"],
+                  overrideApplied: false,
+                  overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+                  merged: null,
+                  rawSamples: [
+                    {
+                      source: "/tmp/rollout-a.jsonl",
+                      snapshotName: "viktor",
+                      recordedAt: new Date().toISOString(),
+                      stale: false,
+                      primary: { usedPercent: 56, remainingPercent: 44, resetAt: 1760000000, windowMinutes: 300 },
+                      secondary: { usedPercent: 32, remainingPercent: 68, resetAt: 1760600000, windowMinutes: 10080 },
+                    },
+                  ],
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useDashboard(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const query = queryClient.getQueryCache().find({ queryKey: ["dashboard", "overview"] });
+    expect(query).toBeDefined();
+    const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
+      ?.refetchInterval;
+    if (typeof refetchInterval === "function") {
+      expect(refetchInterval(query as never)).toBe(2_000);
+    } else {
+      expect(refetchInterval).toBe(2_000);
+    }
+  });
+
   it("exposes error state on request failure", async () => {
     server.use(
       http.get("/api/dashboard/overview", () =>

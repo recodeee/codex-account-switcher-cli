@@ -12,7 +12,9 @@ from sqlalchemy import text
 
 import app.modules.accounts.auth_manager as auth_manager_module
 from app.core.auth import generate_unique_account_id
+from app.core.crypto import TokenEncryptor
 from app.core.auth.refresh import RefreshError, TokenRefreshResult
+from app.db.models import Account
 from app.db.session import SessionLocal
 from app.modules.usage.repository import UsageRepository
 
@@ -26,17 +28,26 @@ def _encode_jwt(payload: dict) -> str:
     return f"header.{body}.sig"
 
 
-def _write_auth_snapshot(path: Path, *, email: str, account_id: str) -> None:
+def _write_auth_snapshot(
+    path: Path,
+    *,
+    email: str,
+    account_id: str,
+    access_token: str = "access",
+    refresh_token: str = "refresh",
+    id_token: str | None = None,
+) -> None:
     payload = {
         "email": email,
         "chatgpt_account_id": account_id,
         "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
     }
+    resolved_id_token = id_token or _encode_jwt(payload)
     auth_json = {
         "tokens": {
-            "idToken": _encode_jwt(payload),
-            "accessToken": "access",
-            "refreshToken": "refresh",
+            "idToken": resolved_id_token,
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
             "accountId": account_id,
         },
     }
@@ -213,6 +224,58 @@ async def test_accounts_list_auto_imports_codex_auth_snapshots(
     second = await async_client.get("/api/accounts")
     assert second.status_code == 200
     assert len(second.json()["accounts"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_auto_import_refreshes_tokens_for_existing_active_account(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(
+        accounts_dir / "tokio.json",
+        email="tokio@example.com",
+        account_id="acc_tokio",
+        access_token="fresh_access",
+        refresh_token="fresh_refresh",
+    )
+    (tmp_path / "current").write_text("tokio")
+
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    payload = {
+        "email": "tokio@example.com",
+        "chatgpt_account_id": "acc_tokio",
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    stale_auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "stale_access",
+            "refreshToken": "stale_refresh",
+            "accountId": "acc_tokio",
+        },
+    }
+    files = {"auth_json": ("auth.json", json.dumps(stale_auth_json), "application/json")}
+    imported = await async_client.post("/api/accounts/import", files=files)
+    assert imported.status_code == 200
+
+    listed = await async_client.get("/api/accounts")
+    assert listed.status_code == 200
+
+    expected_account_id = generate_unique_account_id("acc_tokio", "tokio@example.com")
+    encryptor = TokenEncryptor()
+    async with SessionLocal() as session:
+        persisted = await session.get(Account, expected_account_id)
+        assert persisted is not None
+        assert encryptor.decrypt(persisted.access_token_encrypted) == "fresh_access"
+        assert encryptor.decrypt(persisted.refresh_token_encrypted) == "fresh_refresh"
 
 
 @pytest.mark.asyncio
@@ -419,6 +482,74 @@ async def test_accounts_list_keeps_usage_api_disconnected_account_deactivated(
     accounts = {item["accountId"]: item for item in listed.json()["accounts"]}
     assert accounts[expected_account_id]["status"] == "deactivated"
     assert accounts[expected_account_id]["deactivationReason"] == disconnected_reason
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_reactivates_usage_api_disconnected_account_when_snapshot_tokens_change(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(
+        accounts_dir / "tokio.json",
+        email="tokio@example.com",
+        account_id="acc_tokio",
+        access_token="fresh_access",
+        refresh_token="fresh_refresh",
+    )
+    (tmp_path / "current").write_text("tokio")
+
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    payload = {
+        "email": "tokio@example.com",
+        "chatgpt_account_id": "acc_tokio",
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    stale_auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "stale_access",
+            "refreshToken": "stale_refresh",
+            "accountId": "acc_tokio",
+        },
+    }
+    files = {"auth_json": ("auth.json", json.dumps(stale_auth_json), "application/json")}
+    imported = await async_client.post("/api/accounts/import", files=files)
+    assert imported.status_code == 200
+
+    expected_account_id = generate_unique_account_id("acc_tokio", "tokio@example.com")
+    disconnected_reason = "Usage API error: HTTP 403 - Forbidden"
+    async with SessionLocal() as session:
+        await session.execute(
+            text(
+                """
+                UPDATE accounts
+                SET status = 'deactivated', deactivation_reason = :reason
+                WHERE id = :account_id
+                """
+            ),
+            {"account_id": expected_account_id, "reason": disconnected_reason},
+        )
+        await session.commit()
+
+    listed = await async_client.get("/api/accounts")
+    assert listed.status_code == 200
+    accounts = {item["accountId"]: item for item in listed.json()["accounts"]}
+    assert accounts[expected_account_id]["status"] == "active"
+    assert accounts[expected_account_id]["deactivationReason"] is None
+
+    encryptor = TokenEncryptor()
+    async with SessionLocal() as session:
+        persisted = await session.get(Account, expected_account_id)
+        assert persisted is not None
+        assert encryptor.decrypt(persisted.refresh_token_encrypted) == "fresh_refresh"
 
 
 @pytest.mark.asyncio

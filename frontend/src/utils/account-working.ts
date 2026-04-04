@@ -18,6 +18,27 @@ function isFreshTimestamp(
   return nowMs - recordedAtMs <= LIVE_TELEMETRY_STALE_AFTER_MS;
 }
 
+function hasFreshDebugRawSamples(
+  account: Pick<AccountSummary, "liveQuotaDebug">,
+  nowMs: number,
+): boolean {
+  const rawSamples = account.liveQuotaDebug?.rawSamples ?? [];
+  if (rawSamples.length === 0) {
+    return false;
+  }
+
+  return rawSamples.some((sample) => {
+    if (sample.stale === true) {
+      return false;
+    }
+    const recordedAtMs = parseRecordedAtMs(sample.recordedAt);
+    if (recordedAtMs == null) {
+      return true;
+    }
+    return nowMs - recordedAtMs <= LIVE_TELEMETRY_STALE_AFTER_MS;
+  });
+}
+
 export function isFreshQuotaTelemetryTimestamp(
   value: string | null | undefined,
   nowMs: number = Date.now(),
@@ -30,6 +51,7 @@ export function hasFreshLiveTelemetry(
     AccountSummary,
     | "codexAuth"
     | "codexLiveSessionCount"
+    | "liveQuotaDebug"
     | "lastUsageRecordedAtPrimary"
     | "lastUsageRecordedAtSecondary"
   >,
@@ -57,12 +79,17 @@ export function isAccountWorkingNow(
     | "codexLiveSessionCount"
     | "codexSessionCount"
     | "codexTrackedSessionCount"
+    | "liveQuotaDebug"
     | "lastUsageRecordedAtPrimary"
     | "lastUsageRecordedAtSecondary"
   >,
   nowMs: number = Date.now(),
 ): boolean {
   if (hasFreshLiveTelemetry(account, nowMs)) {
+    return true;
+  }
+
+  if (hasFreshDebugRawSamples(account, nowMs)) {
     return true;
   }
 

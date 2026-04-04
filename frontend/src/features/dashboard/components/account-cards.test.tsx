@@ -316,6 +316,64 @@ describe("AccountCards", () => {
     expect(screen.queryByText("live sessions")).not.toBeInTheDocument();
   });
 
+  it("places accounts with fresh debug samples in the working-now section", () => {
+    const sampled = createAccountSummary({
+      accountId: "acc_sampled",
+      email: "sampled@example.com",
+      displayName: "sampled@example.com",
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "viktor",
+        activeSnapshotName: "viktor",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["viktor"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/rollout-a.jsonl",
+            snapshotName: "viktor",
+            recordedAt: new Date().toISOString(),
+            stale: false,
+            primary: { usedPercent: 56, remainingPercent: 44, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 32, remainingPercent: 68, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+        ],
+      },
+    });
+    const idle = createAccountSummary({
+      accountId: "acc_idle_3",
+      email: "idle-3@example.com",
+      displayName: "idle-3@example.com",
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "idle-3",
+        activeSnapshotName: "other",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
+    render(<AccountCards accounts={[idle, sampled]} primaryWindow={null} secondaryWindow={null} />);
+
+    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.getByText("sampled@example.com")).toBeInTheDocument();
+  });
+
   it("falls back to request-usage tokens when window row is unknown", () => {
     const account = createAccountSummary({
       accountId: "acc_unknown",

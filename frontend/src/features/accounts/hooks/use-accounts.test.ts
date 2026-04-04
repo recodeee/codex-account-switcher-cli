@@ -85,6 +85,43 @@ describe("useAccounts", () => {
     expect(resolveAccountsPollInterval(trackedAccounts)).toBe(2_000);
   });
 
+  it("uses fast polling when fresh debug raw samples are present", () => {
+    const sampledAccounts = [
+      createAccountSummary({
+        codexLiveSessionCount: 0,
+        codexTrackedSessionCount: 0,
+        codexSessionCount: 0,
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "viktor",
+          activeSnapshotName: "viktor",
+          isActiveSnapshot: true,
+          hasLiveSession: false,
+        },
+        lastUsageRecordedAtPrimary: null,
+        lastUsageRecordedAtSecondary: null,
+        liveQuotaDebug: {
+          snapshotsConsidered: ["viktor"],
+          overrideApplied: false,
+          overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+          merged: null,
+          rawSamples: [
+            {
+              source: "/tmp/rollout-a.jsonl",
+              snapshotName: "viktor",
+              recordedAt: new Date().toISOString(),
+              stale: false,
+              primary: { usedPercent: 56, remainingPercent: 44, resetAt: 1760000000, windowMinutes: 300 },
+              secondary: { usedPercent: 32, remainingPercent: 68, resetAt: 1760600000, windowMinutes: 10080 },
+            },
+          ],
+        },
+      }),
+    ];
+
+    expect(resolveAccountsPollInterval(sampledAccounts)).toBe(2_000);
+  });
+
   it("loads accounts and invalidates related queries after mutations", async () => {
     const queryClient = createTestQueryClient();
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");

@@ -21,6 +21,12 @@ The Dashboard page SHALL display: summary metric cards (requests 7d, tokens, cos
 - **THEN** dashboard card quota bars SHALL prefer merged percentages for display
 - **AND** merged display values SHALL bypass cycle-floor clamping for that render.
 
+#### Scenario: Raw debug samples mark account as working now
+- **WHEN** account payload includes non-stale `liveQuotaDebug.rawSamples`
+- **AND** live/tracked counters are currently zero
+- **THEN** the account SHALL still be treated as `Working now`
+- **AND** the account SHALL be grouped in the top working section.
+
 ### Requirement: Dashboard page auto-refresh
 Dashboard/account polling SHALL switch to fast refresh only while at least one account is actively working.
 

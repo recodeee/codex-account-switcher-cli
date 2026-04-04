@@ -462,6 +462,43 @@ describe("AccountCard", () => {
     expect(screen.getByText("Working now")).toBeInTheDocument();
   });
 
+  it("shows working indicator when fresh debug raw samples exist", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "viktor",
+        activeSnapshotName: "viktor",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["viktor"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/rollout-a.jsonl",
+            snapshotName: "viktor",
+            recordedAt: new Date().toISOString(),
+            stale: false,
+            primary: { usedPercent: 56, remainingPercent: 44, resetAt: 1760000000, windowMinutes: 300 },
+            secondary: { usedPercent: 32, remainingPercent: 68, resetAt: 1760600000, windowMinutes: 10080 },
+          },
+        ],
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Working now")).toBeInTheDocument();
+  });
+
   it("shows working indicator when tracked codex sessions exist without live telemetry", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,

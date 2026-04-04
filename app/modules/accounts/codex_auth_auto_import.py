@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import NamedTuple
 
 from pydantic import ValidationError
 
@@ -23,6 +24,13 @@ from app.modules.accounts.repository import AccountIdentityConflictError, Accoun
 from app.modules.proxy.account_cache import get_account_selection_cache
 
 
+class ParsedSnapshotAuth(NamedTuple):
+    account: Account
+    access_token: str
+    refresh_token: str
+    id_token: str
+
+
 async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor: TokenEncryptor) -> None:
     if not get_settings().codex_auth_auto_import_on_accounts_list:
         return
@@ -35,15 +43,31 @@ async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor
         except OSError:
             continue
 
-        account = _parse_account_from_auth_bytes(raw=raw, encryptor=encryptor)
-        if account is None:
+        parsed = _parse_account_from_auth_bytes(raw=raw, encryptor=encryptor)
+        if parsed is None:
             continue
+        account = parsed.account
         if account.id in ignored_account_ids:
             continue
 
         existing = await repo.get_by_id(account.id)
         if existing is not None:
-            if existing.status == AccountStatus.DEACTIVATED and _should_reactivate_deactivated_account(existing):
+            snapshot_tokens_changed = not _existing_tokens_match(
+                existing=existing,
+                access_token=parsed.access_token,
+                refresh_token=parsed.refresh_token,
+                id_token=parsed.id_token,
+                encryptor=encryptor,
+            )
+            if existing.status == AccountStatus.DEACTIVATED and (
+                _should_reactivate_deactivated_account(existing) or snapshot_tokens_changed
+            ):
+                try:
+                    await repo.upsert(account)
+                except AccountIdentityConflictError:
+                    continue
+                changed_any = True
+            elif snapshot_tokens_changed:
                 try:
                     await repo.upsert(account)
                 except AccountIdentityConflictError:
@@ -61,7 +85,7 @@ async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor
         get_account_selection_cache().invalidate()
 
 
-def _parse_account_from_auth_bytes(*, raw: bytes, encryptor: TokenEncryptor) -> Account | None:
+def _parse_account_from_auth_bytes(*, raw: bytes, encryptor: TokenEncryptor) -> ParsedSnapshotAuth | None:
     try:
         auth = parse_auth_json(raw)
     except (json.JSONDecodeError, ValidationError, UnicodeDecodeError, TypeError):
@@ -73,17 +97,43 @@ def _parse_account_from_auth_bytes(*, raw: bytes, encryptor: TokenEncryptor) -> 
     account_id = generate_unique_account_id(raw_account_id, email)
     plan_type = coerce_account_plan_type(claims.plan_type, DEFAULT_PLAN)
     last_refresh = to_utc_naive(auth.last_refresh_at) if auth.last_refresh_at else utcnow()
-    return Account(
-        id=account_id,
-        chatgpt_account_id=raw_account_id,
-        email=email,
-        plan_type=plan_type,
-        access_token_encrypted=encryptor.encrypt(auth.tokens.access_token),
-        refresh_token_encrypted=encryptor.encrypt(auth.tokens.refresh_token),
-        id_token_encrypted=encryptor.encrypt(auth.tokens.id_token),
-        last_refresh=last_refresh,
-        status=AccountStatus.ACTIVE,
-        deactivation_reason=None,
+    return ParsedSnapshotAuth(
+        account=Account(
+            id=account_id,
+            chatgpt_account_id=raw_account_id,
+            email=email,
+            plan_type=plan_type,
+            access_token_encrypted=encryptor.encrypt(auth.tokens.access_token),
+            refresh_token_encrypted=encryptor.encrypt(auth.tokens.refresh_token),
+            id_token_encrypted=encryptor.encrypt(auth.tokens.id_token),
+            last_refresh=last_refresh,
+            status=AccountStatus.ACTIVE,
+            deactivation_reason=None,
+        ),
+        access_token=auth.tokens.access_token,
+        refresh_token=auth.tokens.refresh_token,
+        id_token=auth.tokens.id_token,
+    )
+
+
+def _existing_tokens_match(
+    *,
+    existing: Account,
+    access_token: str,
+    refresh_token: str,
+    id_token: str,
+    encryptor: TokenEncryptor,
+) -> bool:
+    try:
+        existing_access = encryptor.decrypt(existing.access_token_encrypted)
+        existing_refresh = encryptor.decrypt(existing.refresh_token_encrypted)
+        existing_id = encryptor.decrypt(existing.id_token_encrypted)
+    except Exception:
+        return False
+    return (
+        existing_access == access_token
+        and existing_refresh == refresh_token
+        and existing_id == id_token
     )
 
 
