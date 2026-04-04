@@ -1528,3 +1528,131 @@ def test_apply_local_live_usage_overrides_applies_confident_deferred_sample_over
     debug = debug_by_account[amodeus.id]
     assert debug.override_applied is True
     assert debug.override_reason == "deferred_active_snapshot_confident_sample_override"
+
+
+def test_apply_local_live_usage_overrides_applies_sample_floor_for_deferred_active_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    korona = _make_account("acc-korona", "korona@example.com")
+    other = _make_account("acc-other", "other@example.com")
+    accounts = [korona, other]
+    snapshot_index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={
+            korona.id: ["korona"],
+            other.id: ["other"],
+        },
+        active_snapshot_name="korona",
+    )
+    codex_auth_by_account = {
+        korona.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="korona",
+            active_snapshot_name="korona",
+            is_active_snapshot=True,
+            has_live_session=False,
+        ),
+        other.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="other",
+            active_snapshot_name="korona",
+            is_active_snapshot=False,
+            has_live_session=False,
+        ),
+    }
+    primary_usage = {
+        korona.id: _usage_entry(
+            account_id=korona.id,
+            window="primary",
+            used_percent=16.0,
+            reset_at=4_000_100,
+            window_minutes=300,
+        ),
+        other.id: _usage_entry(
+            account_id=other.id,
+            window="primary",
+            used_percent=5.0,
+            reset_at=4_000_900,
+            window_minutes=300,
+        ),
+    }
+    secondary_usage = {
+        korona.id: _usage_entry(
+            account_id=korona.id,
+            window="secondary",
+            used_percent=90.0,
+            reset_at=4_003_700,
+            window_minutes=10_080,
+        ),
+        other.id: _usage_entry(
+            account_id=other.id,
+            window="secondary",
+            used_percent=4.0,
+            reset_at=4_004_500,
+            window_minutes=10_080,
+        ),
+    }
+    codex_session_counts_by_account = {korona.id: 0, other.id: 0}
+    debug_by_account = {}
+    now = datetime(2026, 4, 4, 16, 0, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_by_snapshot",
+        lambda: {
+            "korona": LocalCodexLiveUsage(
+                recorded_at=now,
+                active_session_count=2,
+                primary=LocalUsageWindow(used_percent=16.0, reset_at=4_000_100, window_minutes=300),
+                secondary=LocalUsageWindow(used_percent=90.0, reset_at=4_003_700, window_minutes=10_080),
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_samples_by_snapshot",
+        lambda: {
+            "korona": [
+                LocalCodexLiveUsageSample(
+                    source="rollout-a.jsonl",
+                    recorded_at=now,
+                    primary=LocalUsageWindow(used_percent=99.0, reset_at=None, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=100.0, reset_at=None, window_minutes=10_080),
+                    stale=False,
+                ),
+                LocalCodexLiveUsageSample(
+                    source="rollout-b.jsonl",
+                    recorded_at=now,
+                    primary=LocalUsageWindow(used_percent=90.0, reset_at=None, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=99.0, reset_at=None, window_minutes=10_080),
+                    stale=False,
+                ),
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_live_codex_process_session_counts_by_snapshot",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_runtime_live_session_counts_by_snapshot",
+        lambda: {},
+    )
+
+    candidates = apply_local_live_usage_overrides(
+        accounts=accounts,
+        snapshot_index=snapshot_index,
+        codex_auth_by_account=codex_auth_by_account,
+        primary_usage=primary_usage,
+        secondary_usage=secondary_usage,
+        codex_live_session_counts_by_account=codex_session_counts_by_account,
+        live_quota_debug_by_account=debug_by_account,
+    )
+
+    assert primary_usage[korona.id].used_percent == pytest.approx(90.0)
+    assert secondary_usage[korona.id].used_percent == pytest.approx(99.0)
+    assert len(candidates) == 2
+    debug = debug_by_account[korona.id]
+    assert debug.override_applied is True
+    assert debug.override_reason == "deferred_active_snapshot_sample_floor_override"
+    assert debug.merged.primary is not None
+    assert debug.merged.secondary is not None
+    assert debug.merged.primary.used_percent == pytest.approx(90.0)
+    assert debug.merged.secondary.used_percent == pytest.approx(99.0)

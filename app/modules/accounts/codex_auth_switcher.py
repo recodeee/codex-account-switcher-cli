@@ -327,15 +327,25 @@ def select_snapshot_name(
         email=email,
         snapshot_names=snapshot_name_set,
     )
+    canonical_local_part = _canonical_snapshot_name_from_email(email)
 
     # When multiple local-part-prefixed snapshots exist (for example
     # "codexina" + "codexinaforever"), prefer the active one if it is part of
     # that ambiguity instead of flipping back to the shortest alias.
+    local_part_collisions = (
+        [
+            candidate
+            for candidate in snapshot_names
+            if canonical_local_part and candidate.startswith(canonical_local_part)
+        ]
+        if canonical_local_part
+        else []
+    )
     if (
         active_snapshot_name
         and active_snapshot_name in snapshot_name_set
-        and active_snapshot_name in prefix_candidates
-        and len(prefix_candidates) > 1
+        and active_snapshot_name in local_part_collisions
+        and len(local_part_collisions) > 1
     ):
         return active_snapshot_name
 

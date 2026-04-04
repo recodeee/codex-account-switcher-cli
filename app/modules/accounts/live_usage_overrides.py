@@ -92,7 +92,10 @@ def apply_local_live_usage_overrides(
         codex_auth_by_account=codex_auth_by_account,
         live_usage_by_snapshot=live_usage_by_snapshot,
     )
-    debug_raw_samples_by_account = _build_default_sample_debug_overrides(
+    (
+        debug_raw_samples_by_account,
+        _confident_raw_samples_by_account,
+    ) = _build_default_sample_debug_overrides(
         accounts=accounts,
         snapshot_index=snapshot_index,
         codex_auth_by_account=codex_auth_by_account,
@@ -215,6 +218,7 @@ def apply_local_live_usage_overrides(
             and should_defer_active_snapshot_usage
             and codex_auth_status.is_active_snapshot
         ):
+            debug_live_usage = live_usage
             # The default sessions directory can include active sessions from
             # multiple snapshots. When that mixed telemetry cannot be reliably
             # split yet, keep quota windows on their baseline account values
@@ -236,23 +240,16 @@ def apply_local_live_usage_overrides(
                     else "deferred_active_snapshot_mixed_default_sessions"
                 )
             else:
-                applied_confident_sample_override = _apply_deferred_confident_sample_override(
-                    account_id=account_id,
-                    raw_samples_override=raw_samples_override,
-                    primary_usage=primary_usage,
-                    secondary_usage=secondary_usage,
-                    persist_candidates=persist_candidates,
-                )
-                override_applied = applied_confident_sample_override
-                override_reason = (
-                    "deferred_active_snapshot_confident_sample_override"
-                    if applied_confident_sample_override
-                    else "deferred_active_snapshot_mixed_default_sessions"
-                )
+                # After a manual "Use this account" switch, default-session
+                # samples can still contain mixed fingerprints from another
+                # snapshot. For active accounts we keep baseline 5h/weekly
+                # windows until process-scoped attribution is available.
+                override_applied = False
+                override_reason = "deferred_active_snapshot_mixed_default_sessions"
             _set_live_quota_debug(
                 account_id=account_id,
                 snapshots_considered=snapshots_considered,
-                live_usage=live_usage,
+                live_usage=debug_live_usage,
                 live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
                 raw_samples_override=raw_samples_override,
                 override_applied=override_applied,
@@ -262,7 +259,7 @@ def apply_local_live_usage_overrides(
             _log_live_quota_debug(
                 account=account,
                 snapshots_considered=snapshots_considered,
-                live_usage=live_usage,
+                live_usage=debug_live_usage,
                 live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
                 live_process_session_count=live_process_session_count,
                 override_applied=override_applied,
@@ -421,9 +418,9 @@ def _apply_deferred_confident_sample_override(
     primary_usage: dict[str, UsageHistory],
     secondary_usage: dict[str, UsageHistory],
     persist_candidates: list[LiveUsageOverridePersistCandidate],
-) -> bool:
+) -> tuple[bool, LocalCodexLiveUsage | None]:
     if not raw_samples_override:
-        return False
+        return False, None
 
     selected_sample = next(
         (
@@ -434,7 +431,7 @@ def _apply_deferred_confident_sample_override(
         None,
     )
     if selected_sample is None:
-        return False
+        return False, None
 
     recorded_at = to_utc_naive(selected_sample.recorded_at)
     applied = False
@@ -481,7 +478,145 @@ def _apply_deferred_confident_sample_override(
             )
         )
 
-    return applied
+    if not applied:
+        return False, None
+
+    sample_live_usage = LocalCodexLiveUsage(
+        recorded_at=selected_sample.recorded_at,
+        active_session_count=1,
+        primary=(
+            LocalUsageWindow(
+                used_percent=float(selected_sample.primary.used_percent),
+                reset_at=selected_sample.primary.reset_at,
+                window_minutes=selected_sample.primary.window_minutes,
+            )
+            if selected_sample.primary is not None
+            else None
+        ),
+        secondary=(
+            LocalUsageWindow(
+                used_percent=float(selected_sample.secondary.used_percent),
+                reset_at=selected_sample.secondary.reset_at,
+                window_minutes=selected_sample.secondary.window_minutes,
+            )
+            if selected_sample.secondary is not None
+            else None
+        ),
+    )
+    return True, sample_live_usage
+
+
+def _apply_deferred_sample_floor_override(
+    *,
+    account_id: str,
+    snapshots_considered: list[str],
+    live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]],
+    primary_usage: dict[str, UsageHistory],
+    secondary_usage: dict[str, UsageHistory],
+    persist_candidates: list[LiveUsageOverridePersistCandidate],
+) -> tuple[bool, LocalCodexLiveUsage | None]:
+    candidate_samples: list[LocalCodexLiveUsageSample] = []
+    for snapshot_name in snapshots_considered:
+        candidate_samples.extend(live_usage_samples_by_snapshot.get(snapshot_name, []))
+
+    if not candidate_samples:
+        return False, None
+
+    non_stale_samples = [sample for sample in candidate_samples if not sample.stale]
+    usable_samples = non_stale_samples if non_stale_samples else candidate_samples
+    primary_samples = [sample for sample in usable_samples if sample.primary is not None]
+    secondary_samples = [sample for sample in usable_samples if sample.secondary is not None]
+
+    if not primary_samples and not secondary_samples:
+        return False, None
+
+    primary_sample = min(
+        primary_samples,
+        key=lambda sample: (
+            float(sample.primary.used_percent),
+            -sample.recorded_at.timestamp(),
+            sample.source,
+        ),
+        default=None,
+    )
+    secondary_sample = min(
+        secondary_samples,
+        key=lambda sample: (
+            float(sample.secondary.used_percent),
+            -sample.recorded_at.timestamp(),
+            sample.source,
+        ),
+        default=None,
+    )
+
+    applied = False
+
+    if primary_sample is not None:
+        primary_window = primary_sample.primary
+        assert primary_window is not None
+        recorded_at = to_utc_naive(primary_sample.recorded_at)
+        primary_usage[account_id] = UsageHistory(
+            account_id=account_id,
+            window="primary",
+            used_percent=float(primary_window.used_percent),
+            reset_at=primary_window.reset_at,
+            window_minutes=primary_window.window_minutes,
+            recorded_at=recorded_at,
+        )
+        persist_candidates.append(
+            LiveUsageOverridePersistCandidate(
+                account_id=account_id,
+                window="primary",
+                used_percent=float(primary_window.used_percent),
+                reset_at=primary_window.reset_at,
+                window_minutes=primary_window.window_minutes,
+                recorded_at=recorded_at,
+            )
+        )
+        applied = True
+
+    if secondary_sample is not None:
+        secondary_window = secondary_sample.secondary
+        assert secondary_window is not None
+        recorded_at = to_utc_naive(secondary_sample.recorded_at)
+        secondary_usage[account_id] = UsageHistory(
+            account_id=account_id,
+            window="secondary",
+            used_percent=float(secondary_window.used_percent),
+            reset_at=secondary_window.reset_at,
+            window_minutes=secondary_window.window_minutes,
+            recorded_at=recorded_at,
+        )
+        persist_candidates.append(
+            LiveUsageOverridePersistCandidate(
+                account_id=account_id,
+                window="secondary",
+                used_percent=float(secondary_window.used_percent),
+                reset_at=secondary_window.reset_at,
+                window_minutes=secondary_window.window_minutes,
+                recorded_at=recorded_at,
+            )
+        )
+        applied = True
+
+    if not applied:
+        return False, None
+
+    debug_recorded_at = max(
+        (
+            sample.recorded_at
+            for sample in (primary_sample, secondary_sample)
+            if sample is not None
+        ),
+        default=datetime.now(timezone.utc),
+    )
+    sample_floor_live_usage = LocalCodexLiveUsage(
+        recorded_at=debug_recorded_at,
+        active_session_count=1,
+        primary=primary_sample.primary if primary_sample is not None else None,
+        secondary=secondary_sample.secondary if secondary_sample is not None else None,
+    )
+    return True, sample_floor_live_usage
 
 
 def _coalesce_persist_candidates(
@@ -585,17 +720,20 @@ def _build_default_sample_debug_overrides(
     baseline_secondary_usage: dict[str, UsageHistory],
     live_usage_samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]],
     should_defer_active_snapshot_usage: bool,
-) -> dict[str, list[AccountLiveQuotaDebugSample]]:
+) -> tuple[
+    dict[str, list[AccountLiveQuotaDebugSample]],
+    dict[str, list[AccountLiveQuotaDebugSample]],
+]:
     if not should_defer_active_snapshot_usage:
-        return {}
+        return {}, {}
 
     active_snapshot_name = snapshot_index.active_snapshot_name
     if not active_snapshot_name:
-        return {}
+        return {}, {}
 
     default_scope_samples = list(live_usage_samples_by_snapshot.get(active_snapshot_name, []))
     if not default_scope_samples:
-        return {}
+        return {}, {}
 
     candidate_accounts = [
         account
@@ -603,7 +741,7 @@ def _build_default_sample_debug_overrides(
         if _account_has_snapshot(codex_auth_by_account.get(account.id))
     ]
     if len(candidate_accounts) <= 1:
-        return {}
+        return {}, {}
 
     active_account_id = _resolve_active_snapshot_account_id(
         accounts=accounts,
@@ -629,9 +767,10 @@ def _build_default_sample_debug_overrides(
         preferred_account_id=active_account_id,
     )
     if not assignments:
-        return {}
+        return {}, {}
 
     debug_samples_by_account: dict[str, list[AccountLiveQuotaDebugSample]] = {}
+    confident_samples_by_account: dict[str, list[AccountLiveQuotaDebugSample]] = {}
     for sample_index, match in assignments.items():
         if match.confidence != "high":
             continue
@@ -651,6 +790,8 @@ def _build_default_sample_debug_overrides(
         if debug_sample is None:
             continue
         debug_samples_by_account.setdefault(match.account_id, []).append(debug_sample)
+        if match.allows_quota_override:
+            confident_samples_by_account.setdefault(match.account_id, []).append(debug_sample)
         _remember_sample_source_owner(
             source=sample.source,
             account_id=match.account_id,
@@ -659,8 +800,10 @@ def _build_default_sample_debug_overrides(
 
     for samples in debug_samples_by_account.values():
         samples.sort(key=lambda sample: sample.recorded_at, reverse=True)
+    for samples in confident_samples_by_account.values():
+        samples.sort(key=lambda sample: sample.recorded_at, reverse=True)
 
-    return debug_samples_by_account
+    return debug_samples_by_account, confident_samples_by_account
 
 
 def _build_debug_sample(
