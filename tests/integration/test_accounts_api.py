@@ -537,7 +537,7 @@ async def test_accounts_list_keeps_usage_api_disconnected_account_deactivated(
 
 
 @pytest.mark.asyncio
-async def test_accounts_list_reactivates_usage_api_disconnected_account_when_snapshot_tokens_change(
+async def test_accounts_list_keeps_usage_api_disconnected_account_deactivated_when_snapshot_tokens_change(
     async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     accounts_dir = tmp_path / "accounts"
@@ -594,8 +594,8 @@ async def test_accounts_list_reactivates_usage_api_disconnected_account_when_sna
     listed = await async_client.get("/api/accounts")
     assert listed.status_code == 200
     accounts = {item["accountId"]: item for item in listed.json()["accounts"]}
-    assert accounts[expected_account_id]["status"] == "active"
-    assert accounts[expected_account_id]["deactivationReason"] is None
+    assert accounts[expected_account_id]["status"] == "deactivated"
+    assert accounts[expected_account_id]["deactivationReason"] == disconnected_reason
 
     encryptor = TokenEncryptor()
     async with SessionLocal() as session:

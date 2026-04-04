@@ -261,6 +261,56 @@ describe("AccountCard", () => {
     expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
   });
 
+  it("treats deactivated accounts with fresh CLI debug samples as active in dashboard cards", () => {
+    const account = createAccountSummary({
+      status: "deactivated",
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "tokio",
+        activeSnapshotName: "webubusiness",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["tokio"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/runtime-rollout.jsonl",
+            snapshotName: "tokio",
+            recordedAt: new Date().toISOString(),
+            stale: false,
+            primary: {
+              usedPercent: 73,
+              remainingPercent: 27,
+              resetAt: 1760000100,
+              windowMinutes: 300,
+            },
+            secondary: {
+              usedPercent: 51,
+              remainingPercent: 49,
+              resetAt: 1760600100,
+              windowMinutes: 10080,
+            },
+          },
+        ],
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
+  });
+
   it("treats deactivated snapshot accounts with recent usage as active", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({

@@ -393,6 +393,63 @@ describe("AccountListItem", () => {
     expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
   });
 
+  it("treats deactivated accounts with fresh CLI debug samples as active in list rows", () => {
+    const account = createAccountSummary({
+      status: "deactivated",
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "tokio",
+        activeSnapshotName: "webubusiness",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["tokio"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/runtime-rollout.jsonl",
+            snapshotName: "tokio",
+            recordedAt: new Date().toISOString(),
+            stale: false,
+            primary: {
+              usedPercent: 73,
+              remainingPercent: 27,
+              resetAt: 1760000100,
+              windowMinutes: 300,
+            },
+            secondary: {
+              usedPercent: 51,
+              remainingPercent: 49,
+              resetAt: 1760600100,
+              windowMinutes: 10080,
+            },
+          },
+        ],
+      },
+    });
+
+    render(
+      <AccountListItem
+        account={account}
+        selected={false}
+        onSelect={vi.fn()}
+        onUseLocal={vi.fn()}
+        useLocalBusy={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
+    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+  });
+
   it("shows live badge and live background when account is working now", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({

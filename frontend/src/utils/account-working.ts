@@ -297,6 +297,10 @@ export function hasActiveCliSessionSignal(
   >,
   nowMs: number = Date.now(),
 ): boolean {
+  if (account.codexAuth?.hasLiveSession ?? false) {
+    return true;
+  }
+
   if (hasFreshLiveTelemetry(account, nowMs)) {
     return true;
   }

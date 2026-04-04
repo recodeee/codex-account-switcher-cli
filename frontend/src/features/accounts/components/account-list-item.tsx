@@ -112,6 +112,7 @@ export function AccountListItem({
   const isWorkingNow = isAccountWorkingNow(account);
   const status = resolveEffectiveAccountStatus({
     status: account.status,
+    hasSnapshot: account.codexAuth?.hasSnapshot,
     isActiveSnapshot,
     hasLiveSession: hasActiveCliSession,
     hasRecentUsageSignal: recentUsageSignal,
@@ -175,6 +176,7 @@ export function AccountListItem({
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: primaryRemainingRaw,
+    hasSnapshot: account.codexAuth?.hasSnapshot,
     isActiveSnapshot,
     hasLiveSession: hasActiveCliSession,
     hasRecentUsageSignal: recentUsageSignal,
@@ -183,6 +185,7 @@ export function AccountListItem({
   const disabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: primaryRemainingRaw,
+    hasSnapshot: account.codexAuth?.hasSnapshot,
     isActiveSnapshot,
     hasLiveSession: hasActiveCliSession,
     hasRecentUsageSignal: recentUsageSignal,

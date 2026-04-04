@@ -11,7 +11,7 @@ import {
   formatWindowLabel,
 } from "@/utils/formatters";
 import { resolveEffectiveAccountStatus } from "@/utils/account-status";
-import { hasRecentUsageSignal } from "@/utils/account-working";
+import { hasActiveCliSessionSignal, hasRecentUsageSignal } from "@/utils/account-working";
 
 import type {
   AccountSummary,
@@ -178,7 +178,7 @@ function buildGroupedWindowEntries(
     const effectiveStatus = resolveEffectiveAccountStatus({
       status: account.status,
       isActiveSnapshot: account.codexAuth?.isActiveSnapshot,
-      hasLiveSession: account.codexAuth?.hasLiveSession,
+      hasLiveSession: hasActiveCliSessionSignal(account),
       hasRecentUsageSignal:
         (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account),
     });
@@ -360,7 +360,7 @@ export function buildDashboardView(
     const effectiveStatus = resolveEffectiveAccountStatus({
       status: account.status,
       isActiveSnapshot: account.codexAuth?.isActiveSnapshot,
-      hasLiveSession: account.codexAuth?.hasLiveSession,
+      hasLiveSession: hasActiveCliSessionSignal(account),
       hasRecentUsageSignal:
         (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account),
     });

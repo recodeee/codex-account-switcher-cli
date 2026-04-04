@@ -241,6 +241,7 @@ export function AccountCards({
       const hasActiveCliSession = hasActiveCliSessionSignal(account);
       const effectiveStatus = resolveEffectiveAccountStatus({
         status: account.status,
+        hasSnapshot: account.codexAuth?.hasSnapshot,
         isActiveSnapshot: account.codexAuth?.isActiveSnapshot,
         hasLiveSession: hasActiveCliSession,
         hasRecentUsageSignal:

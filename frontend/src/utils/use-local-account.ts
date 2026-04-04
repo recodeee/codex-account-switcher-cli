@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api-client";
 type UseLocalAccountInput = {
   status: string;
   primaryRemainingPercent: number | null | undefined;
+  hasSnapshot?: boolean;
   isActiveSnapshot?: boolean;
   hasLiveSession?: boolean;
   hasRecentUsageSignal?: boolean;
@@ -27,6 +28,7 @@ export function canUseLocalAccount(input: UseLocalAccountInput): boolean {
   return (
     resolveEffectiveAccountStatus({
       status: input.status,
+      hasSnapshot: input.hasSnapshot,
       isActiveSnapshot: input.isActiveSnapshot,
       hasLiveSession: input.hasLiveSession,
       hasRecentUsageSignal: input.hasRecentUsageSignal,
@@ -41,6 +43,7 @@ export function getUseLocalAccountDisabledReason(input: UseLocalAccountInput): s
   if (
     resolveEffectiveAccountStatus({
       status: input.status,
+      hasSnapshot: input.hasSnapshot,
       isActiveSnapshot: input.isActiveSnapshot,
       hasLiveSession: input.hasLiveSession,
       hasRecentUsageSignal: input.hasRecentUsageSignal,

@@ -68,14 +68,28 @@ async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor
                 id_token=parsed.id_token,
                 encryptor=encryptor,
             )
-            if existing.status == AccountStatus.DEACTIVATED and (
-                _should_reactivate_deactivated_account(existing) or snapshot_tokens_changed
-            ):
-                try:
-                    await repo.upsert(account)
-                except AccountIdentityConflictError:
-                    continue
-                changed_any = True
+            if existing.status == AccountStatus.DEACTIVATED:
+                if _should_reactivate_deactivated_account(existing):
+                    try:
+                        await repo.upsert(account)
+                    except AccountIdentityConflictError:
+                        continue
+                    changed_any = True
+                elif snapshot_tokens_changed:
+                    # Keep Usage API-disconnected accounts deactivated even when
+                    # a newer local snapshot appears. Update tokens in-place so
+                    # manual reactivation uses the newest credentials.
+                    await repo.update_tokens(
+                        existing.id,
+                        access_token_encrypted=account.access_token_encrypted,
+                        refresh_token_encrypted=account.refresh_token_encrypted,
+                        id_token_encrypted=account.id_token_encrypted,
+                        last_refresh=account.last_refresh,
+                        plan_type=existing.plan_type or account.plan_type,
+                        email=existing.email or account.email,
+                        chatgpt_account_id=existing.chatgpt_account_id or account.chatgpt_account_id,
+                    )
+                    changed_any = True
             elif snapshot_tokens_changed:
                 try:
                     await repo.upsert(account)

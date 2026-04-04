@@ -80,6 +80,55 @@ describe("AccountActions", () => {
     expect(screen.queryByRole("button", { name: "Re-authenticate" })).not.toBeInTheDocument();
   });
 
+  it("treats deactivated accounts with fresh CLI debug samples as active", () => {
+    renderAccountActions({
+      status: "deactivated",
+      usage: {
+        primaryRemainingPercent: 44,
+        secondaryRemainingPercent: 73,
+      },
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "tokio",
+        activeSnapshotName: "webubusiness",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      liveQuotaDebug: {
+        snapshotsConsidered: ["tokio"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/runtime-rollout.jsonl",
+            snapshotName: "tokio",
+            recordedAt: new Date().toISOString(),
+            stale: false,
+            primary: {
+              usedPercent: 73,
+              remainingPercent: 27,
+              resetAt: 1760000100,
+              windowMinutes: 300,
+            },
+            secondary: {
+              usedPercent: 51,
+              remainingPercent: 49,
+              resetAt: 1760600100,
+              windowMinutes: 10080,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Re-authenticate" })).not.toBeInTheDocument();
+  });
+
   it("disables Use this when 5h quota is unavailable", () => {
     renderAccountActions({
       status: "active",

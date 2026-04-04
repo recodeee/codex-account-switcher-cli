@@ -37,6 +37,7 @@ export function AccountActions({
     (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account);
   const effectiveStatus = resolveEffectiveAccountStatus({
     status: account.status,
+    hasSnapshot: account.codexAuth?.hasSnapshot,
     isActiveSnapshot,
     hasLiveSession: hasActiveCliSession,
     hasRecentUsageSignal: recentUsageSignal,
@@ -44,6 +45,7 @@ export function AccountActions({
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: account.usage?.primaryRemainingPercent,
+    hasSnapshot: account.codexAuth?.hasSnapshot,
     isActiveSnapshot,
     hasLiveSession: hasActiveCliSession,
     hasRecentUsageSignal: recentUsageSignal,
@@ -52,6 +54,7 @@ export function AccountActions({
   const disabledReason = getUseLocalAccountDisabledReason({
     status: account.status,
     primaryRemainingPercent: account.usage?.primaryRemainingPercent,
+    hasSnapshot: account.codexAuth?.hasSnapshot,
     isActiveSnapshot,
     hasLiveSession: hasActiveCliSession,
     hasRecentUsageSignal: recentUsageSignal,
