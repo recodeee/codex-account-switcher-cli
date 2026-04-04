@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { AccountCards } from "@/features/dashboard/components/account-cards";
 import { createAccountSummary } from "@/test/mocks/factories";
@@ -178,6 +178,57 @@ describe("AccountCards", () => {
     expect(screen.getByText("reset@example.com")).toBeInTheDocument();
   });
 
+  it("ages out usage-limit-hit accounts from working-now after 1 minute", () => {
+    vi.useFakeTimers();
+    const now = new Date("2026-04-04T21:04:00.000Z");
+    vi.setSystemTime(now);
+    const working = createAccountSummary({
+      accountId: "acc_limit_hit",
+      email: "limit-hit@example.com",
+      displayName: "limit-hit@example.com",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 87,
+      },
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "korona",
+        activeSnapshotName: "korona",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: now.toISOString(),
+      lastUsageRecordedAtSecondary: now.toISOString(),
+    });
+
+    try {
+      render(
+        <AccountCards
+          accounts={[working]}
+          primaryWindow={buildWindow("primary", "acc_limit_hit", 1000, 0)}
+          secondaryWindow={buildWindow("secondary", "acc_limit_hit", 1000, 870)}
+        />,
+      );
+
+      expect(
+        screen.getByRole("heading", { name: "Working now" }),
+      ).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(61_000);
+      });
+
+      expect(
+        screen.queryByRole("heading", { name: "Working now" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("limit-hit@example.com")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps depleted 5h accounts out of working-now when no sessions are active", () => {
     const depletedIdle = createAccountSummary({
       accountId: "acc_depleted_idle",
@@ -320,6 +371,61 @@ describe("AccountCards", () => {
       "high-weekly@example.com",
       "high-primary@example.com",
       "medium@example.com",
+    ]);
+  });
+
+  it("keeps stale last-seen accounts after recently seen accounts even when stale usage is higher", () => {
+    const now = Date.now();
+    const recentHighest = createAccountSummary({
+      accountId: "acc_recent_high",
+      email: "recent-high@example.com",
+      displayName: "recent-high@example.com",
+      usage: {
+        primaryRemainingPercent: 78,
+        secondaryRemainingPercent: 42,
+      },
+      lastUsageRecordedAtPrimary: new Date(now - 5 * 60 * 1000).toISOString(),
+      lastUsageRecordedAtSecondary: new Date(now - 8 * 60 * 1000).toISOString(),
+    });
+    const recentLower = createAccountSummary({
+      accountId: "acc_recent_low",
+      email: "recent-low@example.com",
+      displayName: "recent-low@example.com",
+      usage: {
+        primaryRemainingPercent: 26,
+        secondaryRemainingPercent: 90,
+      },
+      lastUsageRecordedAtPrimary: new Date(now - 12 * 60 * 1000).toISOString(),
+      lastUsageRecordedAtSecondary: new Date(now - 18 * 60 * 1000).toISOString(),
+    });
+    const staleHighest = createAccountSummary({
+      accountId: "acc_stale_high",
+      email: "stale-high@example.com",
+      displayName: "stale-high@example.com",
+      usage: {
+        primaryRemainingPercent: 99,
+        secondaryRemainingPercent: 99,
+      },
+      lastUsageRecordedAtPrimary: new Date(now - 45 * 60 * 1000).toISOString(),
+      lastUsageRecordedAtSecondary: new Date(now - 50 * 60 * 1000).toISOString(),
+    });
+
+    const { container } = render(
+      <AccountCards
+        accounts={[staleHighest, recentLower, recentHighest]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const cards = Array.from(container.querySelectorAll(".card-hover"));
+    const titles = cards.map((card) =>
+      card.querySelector("p.truncate.text-sm.font-semibold.leading-tight")?.textContent,
+    );
+    expect(titles).toEqual([
+      "recent-high@example.com",
+      "recent-low@example.com",
+      "stale-high@example.com",
     ]);
   });
 

@@ -108,7 +108,12 @@ def _spawn_detached(argv: list[str]) -> None:
 
 
 def _open_linux_terminal(shell: str, command: str) -> None:
-    if _open_linux_terminal_with_override(shell=shell, command=command):
+    is_containerized = _is_containerized_runtime()
+    if _open_linux_terminal_with_override(
+        shell=shell,
+        command=command,
+        is_containerized=is_containerized,
+    ):
         return
 
     candidates: list[list[str]] = [
@@ -134,7 +139,6 @@ def _open_linux_terminal(shell: str, command: str) -> None:
     ]
 
     errors: list[str] = []
-    is_containerized = _is_containerized_runtime()
     for argv in candidates:
         executable = _resolve_executable(argv[0])
         if executable is None:
@@ -207,7 +211,12 @@ def _is_containerized_runtime() -> bool:
     return bool(container_hint and container_hint != "0")
 
 
-def _open_linux_terminal_with_override(*, shell: str, command: str) -> bool:
+def _open_linux_terminal_with_override(
+    *,
+    shell: str,
+    command: str,
+    is_containerized: bool,
+) -> bool:
     template = os.environ.get("CODEX_LB_LINUX_TERMINAL_LAUNCHER", "").strip()
     if not template:
         return False
@@ -229,17 +238,31 @@ def _open_linux_terminal_with_override(*, shell: str, command: str) -> bool:
     if not argv:
         raise TerminalLaunchError("CODEX_LB_LINUX_TERMINAL_LAUNCHER produced an empty command.")
 
+    errors: list[str] = []
     executable = _resolve_executable(argv[0])
-    if executable is None:
+    if executable is not None:
+        try:
+            _spawn_detached([executable, *argv[1:]])
+            return True
+        except Exception as exc:  # pragma: no cover - platform specific
+            errors.append(f"{argv[0]}: {exc}")
+
+    bridge_prefixes = _linux_host_bridge_prefixes()
+    if bridge_prefixes and is_containerized:
+        for prefix in bridge_prefixes:
+            try:
+                _spawn_detached([*prefix, *argv])
+                return True
+            except Exception as exc:  # pragma: no cover - platform specific
+                errors.append(f"{' '.join(prefix)} {' '.join(argv)}: {exc}")
+
+    if executable is None and not errors:
         raise TerminalLaunchError(
             f"CODEX_LB_LINUX_TERMINAL_LAUNCHER executable was not found in PATH: {argv[0]}"
         )
 
-    try:
-        _spawn_detached([executable, *argv[1:]])
-    except Exception as exc:  # pragma: no cover - platform specific
-        raise TerminalLaunchError(f"Failed to launch terminal via override: {exc}") from exc
-    return True
+    detail = "; ".join(errors) if errors else "No launch attempts were made."
+    raise TerminalLaunchError(f"Failed to launch terminal via override: {detail}")
 
 
 def _linux_host_bridge_prefixes() -> list[list[str]]:

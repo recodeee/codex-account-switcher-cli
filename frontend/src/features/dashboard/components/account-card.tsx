@@ -7,7 +7,7 @@ import {
   RotateCcw,
   SquareTerminal,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CopyButton } from "@/components/copy-button";
 import { usePrivacyStore } from "@/hooks/use-privacy";
@@ -347,7 +347,14 @@ export function AccountCard({
   useLocalBusy = false,
   onAction,
 }: AccountCardProps) {
-  const nowMs = Date.now();
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const [showQuotaDebug, setShowQuotaDebug] = useState(false);
   const liveQuotaDebug = account.liveQuotaDebug ?? null;
   const mergedPrimaryRemainingPercent = getMergedQuotaRemainingPercent(

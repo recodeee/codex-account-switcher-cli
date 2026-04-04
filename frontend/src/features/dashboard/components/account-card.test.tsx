@@ -541,6 +541,36 @@ describe("AccountCard", () => {
     expect(screen.queryByText("Working now")).not.toBeInTheDocument();
   });
 
+  it("shows usage-limit countdown and red card tint while grace window is active", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 66,
+      },
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    const { container } = render(<AccountCard account={account} />);
+
+    expect(screen.getByText(/leaves in/i)).toBeInTheDocument();
+    const card = container.querySelector(".card-hover");
+    expect(card).not.toBeNull();
+    expect(card?.className).toContain("border-red-500/40");
+  });
+
   it("shows live-session fallback label when runtime sessions have no telemetry timestamps yet", () => {
     const account = createAccountSummary({
       usage: {

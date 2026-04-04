@@ -87,6 +87,36 @@ def test_open_linux_terminal_uses_override_launcher(monkeypatch: pytest.MonkeyPa
     ]
 
 
+def test_open_linux_terminal_uses_override_launcher_with_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_argv: list[list[str]] = []
+    monkeypatch.setenv(
+        "CODEX_LB_LINUX_TERMINAL_LAUNCHER",
+        "x-terminal-emulator -e {shell} -lc {command_q}",
+    )
+    monkeypatch.setenv("CODEX_LB_LINUX_TERMINAL_BRIDGE", "flatpak-spawn --host")
+    monkeypatch.setattr(
+        terminal,
+        "_resolve_executable",
+        lambda name: "/usr/bin/flatpak-spawn" if name == "flatpak-spawn" else None,
+    )
+    monkeypatch.setattr(terminal, "_is_containerized_runtime", lambda: True)
+    monkeypatch.setattr(terminal, "_spawn_detached", lambda argv: captured_argv.append(argv))
+
+    terminal._open_linux_terminal("/bin/bash", "echo test")
+
+    assert captured_argv == [
+        [
+            "/usr/bin/flatpak-spawn",
+            "--host",
+            "x-terminal-emulator",
+            "-e",
+            "/bin/bash",
+            "-lc",
+            "echo test",
+        ]
+    ]
+
+
 def test_open_linux_terminal_uses_host_bridge_when_containerized(monkeypatch: pytest.MonkeyPatch) -> None:
     captured_argv: list[list[str]] = []
 

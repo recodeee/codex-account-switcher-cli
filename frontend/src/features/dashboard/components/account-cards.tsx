@@ -1,4 +1,4 @@
-import { type CSSProperties, useMemo } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { Users } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
@@ -20,6 +20,8 @@ import {
 import { resolveEffectiveAccountStatus } from "@/utils/account-status";
 import { formatWindowLabel } from "@/utils/formatters";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
+
+const RECENT_LAST_SEEN_SORT_WINDOW_MS = 30 * 60 * 1000;
 
 function roundAveragePercent(
   values: Array<number | null | undefined>,
@@ -61,6 +63,7 @@ function parseTimestampMs(value: string | null | undefined): number | null {
 function resolveSortableRemainingPercent(
   account: AccountSummary,
   windowKey: "primary" | "secondary",
+  nowMs: number,
 ): number | null {
   const mergedRemainingPercent = getMergedQuotaRemainingPercent(account, windowKey);
   const deferredQuotaFallback = getRawQuotaWindowFallback(account, windowKey);
@@ -74,7 +77,7 @@ function resolveSortableRemainingPercent(
     windowKey === "primary"
       ? account.lastUsageRecordedAtPrimary
       : account.lastUsageRecordedAtSecondary;
-  const hasLiveSession = hasFreshLiveTelemetry(account);
+  const hasLiveSession = hasFreshLiveTelemetry(account, nowMs);
 
   const remainingPercentRaw =
     mergedRemainingPercent ??
@@ -111,14 +114,25 @@ function resolveSortableResetAtMs(
   return parseTimestampMs(effectiveResetAt);
 }
 
-function sortAccountsByAvailableQuota(accounts: AccountSummary[]): AccountSummary[] {
+function sortAccountsByAvailableQuota(
+  accounts: AccountSummary[],
+  nowMs: number,
+): AccountSummary[] {
   const sortMetricsByAccountId = new Map(
     accounts.map((account) => [
       account.accountId,
       {
-        primaryRemaining: resolveSortableRemainingPercent(account, "primary"),
+        primaryRemaining: resolveSortableRemainingPercent(
+          account,
+          "primary",
+          nowMs,
+        ),
         primaryResetAtMs: resolveSortableResetAtMs(account, "primary"),
-        secondaryRemaining: resolveSortableRemainingPercent(account, "secondary"),
+        secondaryRemaining: resolveSortableRemainingPercent(
+          account,
+          "secondary",
+          nowMs,
+        ),
         title: account.displayName || account.email || account.accountId,
       },
     ]),
@@ -157,6 +171,57 @@ function sortAccountsByAvailableQuota(accounts: AccountSummary[]): AccountSummar
 
     return leftMetrics.title.localeCompare(rightMetrics.title);
   });
+}
+
+function resolveMostRecentUsageRecordedAtMs(account: AccountSummary): number | null {
+  const primaryRecordedAt =
+    getRawQuotaWindowFallback(account, "primary")?.recordedAt ??
+    account.lastUsageRecordedAtPrimary ??
+    null;
+  const secondaryRecordedAt =
+    getRawQuotaWindowFallback(account, "secondary")?.recordedAt ??
+    account.lastUsageRecordedAtSecondary ??
+    null;
+  const primaryRecordedAtMs = parseTimestampMs(primaryRecordedAt);
+  const secondaryRecordedAtMs = parseTimestampMs(secondaryRecordedAt);
+
+  if (primaryRecordedAtMs == null && secondaryRecordedAtMs == null) {
+    return null;
+  }
+
+  return Math.max(primaryRecordedAtMs ?? Number.NEGATIVE_INFINITY, secondaryRecordedAtMs ?? Number.NEGATIVE_INFINITY);
+}
+
+function hasRecentLastSeenUsage(
+  account: AccountSummary,
+  nowMs: number = Date.now(),
+): boolean {
+  const mostRecentUsageRecordedAtMs = resolveMostRecentUsageRecordedAtMs(account);
+  if (mostRecentUsageRecordedAtMs == null) {
+    return false;
+  }
+  return nowMs - mostRecentUsageRecordedAtMs <= RECENT_LAST_SEEN_SORT_WINDOW_MS;
+}
+
+function sortAccountsByLastSeenAndAvailableQuota(
+  accounts: AccountSummary[],
+  nowMs: number = Date.now(),
+): AccountSummary[] {
+  const recentAccounts: AccountSummary[] = [];
+  const staleAccounts: AccountSummary[] = [];
+
+  for (const account of accounts) {
+    if (hasRecentLastSeenUsage(account, nowMs)) {
+      recentAccounts.push(account);
+    } else {
+      staleAccounts.push(account);
+    }
+  }
+
+  return [
+    ...sortAccountsByAvailableQuota(recentAccounts, nowMs),
+    ...sortAccountsByAvailableQuota(staleAccounts, nowMs),
+  ];
 }
 
 export type AccountCardsProps = {
@@ -216,6 +281,14 @@ export function AccountCards({
   useLocalBusy = false,
   onAction,
 }: AccountCardsProps) {
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const primaryWindowLabel = formatWindowLabel(
     "primary",
     primaryWindow?.windowMinutes ?? null,
@@ -238,17 +311,18 @@ export function AccountCards({
     const deactivated: AccountSummary[] = [];
 
     for (const account of accounts) {
-      const hasActiveCliSession = hasActiveCliSessionSignal(account);
+      const hasActiveCliSession = hasActiveCliSessionSignal(account, nowMs);
       const effectiveStatus = resolveEffectiveAccountStatus({
         status: account.status,
         hasSnapshot: account.codexAuth?.hasSnapshot,
         isActiveSnapshot: account.codexAuth?.isActiveSnapshot,
         hasLiveSession: hasActiveCliSession,
         hasRecentUsageSignal:
-          (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account),
+          (account.codexAuth?.hasSnapshot ?? false) &&
+          hasRecentUsageSignal(account, nowMs),
       });
 
-      if (isAccountWorkingNow(account)) {
+      if (isAccountWorkingNow(account, nowMs)) {
         working.push(account);
         continue;
       }
@@ -261,16 +335,16 @@ export function AccountCards({
     }
 
     return {
-      working: sortAccountsByAvailableQuota(working),
+      working: sortAccountsByAvailableQuota(working, nowMs),
       remaining: [
-        ...sortAccountsByAvailableQuota(active),
-        ...sortAccountsByAvailableQuota(deactivated),
+        ...sortAccountsByLastSeenAndAvailableQuota(active, nowMs),
+        ...sortAccountsByLastSeenAndAvailableQuota(deactivated, nowMs),
       ],
     };
-  }, [accounts]);
+  }, [accounts, nowMs]);
   const workingSummary = useMemo(() => {
     const liveSessions = groupedAccounts.working.reduce((sum, account) => {
-      if (!hasFreshLiveTelemetry(account)) {
+      if (!hasFreshLiveTelemetry(account, nowMs)) {
         return sum;
       }
       return sum + Math.max(account.codexLiveSessionCount ?? 0, 1);
@@ -285,7 +359,7 @@ export function AccountCards({
             windowKey: "primary",
             remainingPercent: account.usage?.primaryRemainingPercent ?? null,
             resetAt: account.resetAtPrimary ?? null,
-            hasLiveSession: hasFreshLiveTelemetry(account),
+            hasLiveSession: hasFreshLiveTelemetry(account, nowMs),
             lastRecordedAt: account.lastUsageRecordedAtPrimary ?? null,
           }),
         ),
@@ -297,13 +371,13 @@ export function AccountCards({
             windowKey: "secondary",
             remainingPercent: account.usage?.secondaryRemainingPercent ?? null,
             resetAt: account.resetAtSecondary ?? null,
-            hasLiveSession: hasFreshLiveTelemetry(account),
+            hasLiveSession: hasFreshLiveTelemetry(account, nowMs),
             lastRecordedAt: account.lastUsageRecordedAtSecondary ?? null,
           }),
         ),
       ),
     };
-  }, [groupedAccounts.working]);
+  }, [groupedAccounts.working, nowMs]);
 
   if (accounts.length === 0) {
     return (

@@ -80,7 +80,7 @@ describe("isAccountWorkingNow", () => {
       lastUsageRecordedAtSecondary: "2026-04-04T11:59:00.000Z",
     });
 
-    expect(isAccountWorkingNow(account, new Date("2026-04-04T12:00:00.000Z").getTime())).toBe(true);
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:40.000Z").getTime())).toBe(true);
   });
 
   it("returns true when 5h rounds down to 0% and live sessions are still present", () => {
@@ -103,7 +103,7 @@ describe("isAccountWorkingNow", () => {
       lastUsageRecordedAtSecondary: "2026-04-04T11:59:00.000Z",
     });
 
-    expect(isAccountWorkingNow(account, new Date("2026-04-04T12:00:00.000Z").getTime())).toBe(true);
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:40.000Z").getTime())).toBe(true);
   });
 
   it("ages out usage-limit-hit accounts after 60 seconds even with active session signals", () => {
