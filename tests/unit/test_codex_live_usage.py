@@ -11,6 +11,7 @@ import pytest
 import app.modules.accounts.codex_live_usage as codex_live_usage_module
 from app.modules.accounts.codex_live_usage import (
     has_recent_active_snapshot_process_fallback,
+    read_live_codex_process_session_attribution,
     read_live_codex_process_session_counts_by_snapshot,
     read_local_codex_live_usage,
     read_local_codex_live_usage_by_snapshot,
@@ -896,6 +897,66 @@ def test_read_live_codex_process_session_counts_by_snapshot_uses_configured_proc
     assert counts == {"work": 1}
 
 
+def test_read_live_codex_process_session_counts_by_snapshot_deduplicates_node_wrapper_with_native_child(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    default_current = tmp_path / "default" / "current"
+    default_current.parent.mkdir(parents=True, exist_ok=True)
+    default_current.write_text("work", encoding="utf-8")
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(default_current))
+
+    proc_root = tmp_path / "proc"
+
+    wrapper_pid_dir = proc_root / "123"
+    wrapper_pid_dir.mkdir(parents=True, exist_ok=True)
+    (wrapper_pid_dir / "cmdline").write_bytes(
+        b"/usr/bin/node\x00/home/deadpool/.nvm/versions/node/v22/bin/codex\x00"
+        b"--dangerously-bypass-approvals-and-sandbox\x00model_instructions_file=agents\x00"
+    )
+    (wrapper_pid_dir / "environ").write_bytes(b"")
+    (wrapper_pid_dir / "status").write_text("Name:\tnode\nPPid:\t1\n", encoding="utf-8")
+
+    child_pid_dir = proc_root / "124"
+    child_pid_dir.mkdir(parents=True, exist_ok=True)
+    (child_pid_dir / "cmdline").write_bytes(
+        b"/opt/codex/codex\x00--dangerously-bypass-approvals-and-sandbox\x00"
+        b"model_instructions_file=agents\x00"
+    )
+    (child_pid_dir / "environ").write_bytes(b"")
+    (child_pid_dir / "status").write_text("Name:\tcodex\nPPid:\t123\n", encoding="utf-8")
+
+    monkeypatch.setenv("CODEX_LB_PROC_ROOT", str(proc_root))
+
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert counts == {"work": 1}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_keeps_node_wrapper_without_native_child(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    default_current = tmp_path / "default" / "current"
+    default_current.parent.mkdir(parents=True, exist_ok=True)
+    default_current.write_text("work", encoding="utf-8")
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(default_current))
+
+    proc_root = tmp_path / "proc"
+    wrapper_pid_dir = proc_root / "123"
+    wrapper_pid_dir.mkdir(parents=True, exist_ok=True)
+    (wrapper_pid_dir / "cmdline").write_bytes(
+        b"/usr/bin/node\x00/home/deadpool/.nvm/versions/node/v22/bin/codex\x00"
+        b"--dangerously-bypass-approvals-and-sandbox\x00model_instructions_file=agents\x00"
+    )
+    (wrapper_pid_dir / "environ").write_bytes(b"")
+    (wrapper_pid_dir / "status").write_text("Name:\tnode\nPPid:\t1\n", encoding="utf-8")
+
+    monkeypatch.setenv("CODEX_LB_PROC_ROOT", str(proc_root))
+
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert counts == {"work": 1}
+
+
 def test_read_live_codex_process_session_counts_by_snapshot_maps_unlabeled_default_scope_processes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1111,7 +1172,10 @@ def test_read_live_codex_process_session_counts_by_snapshot_skips_uncached_unlab
         lambda _pid: 1_000.0,
     )
 
+    attribution = read_live_codex_process_session_attribution()
     counts = read_live_codex_process_session_counts_by_snapshot()
+    assert attribution.counts_by_snapshot == {}
+    assert attribution.unattributed_session_pids == [801]
     assert counts == {}
 
 
@@ -1248,6 +1312,75 @@ def test_read_local_codex_task_previews_by_snapshot_reads_default_and_runtime_pr
     previews = read_local_codex_task_previews_by_snapshot(now=now)
     assert previews["alpha"].text == "Investigate alpha session drift"
     assert previews["beta"].text == "Fix beta websocket retry task"
+
+
+def test_read_local_codex_task_previews_by_snapshot_keeps_latest_task_when_session_is_live_but_file_is_stale(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+    monkeypatch.setenv("CODEX_LB_LOCAL_SESSION_ACTIVE_SECONDS", "300")
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage.build_snapshot_index",
+        lambda: SimpleNamespace(active_snapshot_name="alpha"),
+    )
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    rollout_path = day_dir / "rollout-2026-04-04T21-33-27-019d5a6a-4665-7873-9714-9efb95b24268.jsonl"
+    _write_rollout_with_user_task(
+        rollout_path,
+        timestamp=now - timedelta(minutes=20),
+        task="Keep showing this task while terminal session stays live",
+    )
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(901, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {"CODEX_AUTH_ACTIVE_SNAPSHOT": "alpha"},
+    )
+
+    previews = read_local_codex_task_previews_by_snapshot(now=now)
+    assert (
+        previews["alpha"].text
+        == "Keep showing this task while terminal session stays live"
+    )
+
+
+def test_read_local_codex_task_previews_by_snapshot_ignores_stale_task_without_live_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+    monkeypatch.setenv("CODEX_LB_LOCAL_SESSION_ACTIVE_SECONDS", "300")
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage.build_snapshot_index",
+        lambda: SimpleNamespace(active_snapshot_name="alpha"),
+    )
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    rollout_path = day_dir / "rollout-2026-04-04T21-33-27-019d5a6a-4665-7873-9714-9efb95b24268.jsonl"
+    _write_rollout_with_user_task(
+        rollout_path,
+        timestamp=now - timedelta(minutes=20),
+        task="Do not surface this task when there is no live session",
+    )
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [],
+    )
+
+    previews = read_local_codex_task_previews_by_snapshot(now=now)
+    assert previews == {}
 
 
 def test_read_local_codex_task_previews_by_session_id_ignores_bootstrap_and_sanitizes(

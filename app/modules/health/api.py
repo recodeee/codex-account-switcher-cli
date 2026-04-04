@@ -20,7 +20,9 @@ from app.modules.accounts.codex_auth_switcher import (
     select_snapshot_name,
 )
 from app.modules.accounts.codex_live_usage import (
+    read_live_codex_process_session_attribution,
     read_live_codex_process_session_counts_by_snapshot,
+    read_local_codex_task_previews_by_snapshot,
     read_runtime_live_session_counts_by_snapshot,
 )
 from app.modules.accounts.repository import AccountsRepository
@@ -44,10 +46,15 @@ async def health_live() -> HealthCheckResponse:
 
 @router.get("/live_usage")
 async def live_usage() -> Response:
-    counts_by_snapshot = read_live_codex_process_session_counts_by_snapshot()
+    attribution = read_live_codex_process_session_attribution()
+    counts_by_snapshot = attribution.counts_by_snapshot
+    unattributed_session_pids = attribution.unattributed_session_pids
     task_previews_by_snapshot = await _read_live_usage_task_previews_by_snapshot()
+    account_emails_by_snapshot = await _read_live_usage_account_emails_by_snapshot()
     generated_at = utcnow().isoformat() + "Z"
-    total_sessions = sum(max(0, count) for count in counts_by_snapshot.values())
+    total_mapped_sessions = sum(max(0, count) for count in counts_by_snapshot.values())
+    total_unattributed_sessions = len(unattributed_session_pids)
+    total_sessions = total_mapped_sessions + total_unattributed_sessions
     total_task_previews = sum(
         len(task_previews) for task_previews in task_previews_by_snapshot.values()
     )
@@ -57,24 +64,34 @@ async def live_usage() -> Response:
         "<live_usage"
         f' generated_at="{escape(generated_at, quote=True)}"'
         f' total_sessions="{total_sessions}"'
+        f' mapped_sessions="{total_mapped_sessions}"'
+        f' unattributed_sessions="{total_unattributed_sessions}"'
         f' total_task_previews="{total_task_previews}"'
         ">",
     ]
     snapshot_names = sorted(
-        set(counts_by_snapshot.keys()) | set(task_previews_by_snapshot.keys())
+        set(counts_by_snapshot.keys())
+        | set(task_previews_by_snapshot.keys())
+        | set(account_emails_by_snapshot.keys())
     )
     for snapshot_name in snapshot_names:
         session_count = max(0, counts_by_snapshot.get(snapshot_name, 0))
         task_previews = task_previews_by_snapshot.get(snapshot_name, [])
+        account_emails = account_emails_by_snapshot.get(snapshot_name, [])
         sanitized_snapshot_name = escape(snapshot_name, quote=True)
+        account_emails_attribute = (
+            f' account_emails="{escape(",".join(account_emails), quote=True)}"'
+            if account_emails
+            else ""
+        )
         if not task_previews:
             lines.append(
-                f'  <snapshot name="{sanitized_snapshot_name}" session_count="{session_count}" />'
+                f'  <snapshot name="{sanitized_snapshot_name}" session_count="{session_count}"{account_emails_attribute} />'
             )
             continue
 
         lines.append(
-            f'  <snapshot name="{sanitized_snapshot_name}" session_count="{session_count}" task_preview_count="{len(task_previews)}">'
+            f'  <snapshot name="{sanitized_snapshot_name}" session_count="{session_count}" task_preview_count="{len(task_previews)}"{account_emails_attribute}>'
         )
         for task_preview in task_previews:
             lines.append(
@@ -84,6 +101,11 @@ async def live_usage() -> Response:
                 " />"
             )
         lines.append("  </snapshot>")
+    if unattributed_session_pids:
+        lines.append(f'  <unattributed_sessions count="{len(unattributed_session_pids)}">')
+        for pid in unattributed_session_pids:
+            lines.append(f'    <session pid="{pid}" />')
+        lines.append("  </unattributed_sessions>")
     lines.append("</live_usage>")
 
     return Response(
@@ -269,19 +291,85 @@ async def _read_live_usage_task_previews_by_snapshot() -> dict[str, list[_LiveUs
         async for session in get_session():
             repository = AccountsRepository(session)
             accounts = await repository.list_accounts()
+            account_ids = [account.id for account in accounts]
+            task_previews: dict[str, str] = {}
+            if account_ids:
+                task_previews = await repository.list_codex_current_task_preview_by_account(
+                    account_ids=account_ids,
+                    active_since=utcnow() - _ACTIVE_CLI_SIGNAL_WINDOW,
+                )
+
+            previews_by_snapshot: dict[str, list[_LiveUsageTaskPreview]] = {}
+            account_ids_by_snapshot: dict[str, list[str]] = {}
+            for account in accounts:
+                normalized_preview = _normalize_task_preview(task_previews.get(account.id))
+                snapshot_candidates = resolve_snapshot_names_for_account(
+                    snapshot_index=snapshot_index,
+                    account_id=account.id,
+                    chatgpt_account_id=account.chatgpt_account_id,
+                    email=account.email,
+                )
+                selected_snapshot_name = select_snapshot_name(
+                    snapshot_candidates,
+                    snapshot_index.active_snapshot_name,
+                    email=account.email,
+                )
+                if not selected_snapshot_name:
+                    continue
+                account_ids_by_snapshot.setdefault(selected_snapshot_name, []).append(account.id)
+
+                if not normalized_preview:
+                    continue
+
+                previews_by_snapshot.setdefault(selected_snapshot_name, []).append(
+                    _LiveUsageTaskPreview(
+                        account_id=account.id,
+                        preview=normalized_preview,
+                    )
+                )
+
+            local_task_previews = read_local_codex_task_previews_by_snapshot(now=utcnow())
+            for snapshot_name, local_preview in local_task_previews.items():
+                normalized_local_preview = _normalize_task_preview(local_preview.text)
+                if not normalized_local_preview:
+                    continue
+
+                existing = previews_by_snapshot.setdefault(snapshot_name, [])
+                if any(preview.preview == normalized_local_preview for preview in existing):
+                    continue
+
+                snapshot_account_ids = account_ids_by_snapshot.get(snapshot_name, [])
+                local_account_id = snapshot_account_ids[0] if snapshot_account_ids else "local"
+                existing.append(
+                    _LiveUsageTaskPreview(
+                        account_id=local_account_id,
+                        preview=normalized_local_preview,
+                    )
+                )
+
+            for task_previews in previews_by_snapshot.values():
+                task_previews.sort(key=lambda preview: preview.account_id)
+
+            return previews_by_snapshot
+    except Exception:
+        return {}
+
+    return {}
+
+
+async def _read_live_usage_account_emails_by_snapshot() -> dict[str, list[str]]:
+    try:
+        snapshot_index = build_snapshot_index()
+        async for session in get_session():
+            repository = AccountsRepository(session)
+            accounts = await repository.list_accounts()
             if not accounts:
                 return {}
 
-            account_ids = [account.id for account in accounts]
-            task_previews = await repository.list_codex_current_task_preview_by_account(
-                account_ids=account_ids,
-                active_since=utcnow() - _ACTIVE_CLI_SIGNAL_WINDOW,
-            )
-
-            previews_by_snapshot: dict[str, list[_LiveUsageTaskPreview]] = {}
+            emails_by_snapshot: dict[str, set[str]] = {}
             for account in accounts:
-                normalized_preview = _normalize_task_preview(task_previews.get(account.id))
-                if not normalized_preview:
+                normalized_email = (account.email or "").strip().lower()
+                if not normalized_email:
                     continue
 
                 snapshot_candidates = resolve_snapshot_names_for_account(
@@ -298,17 +386,12 @@ async def _read_live_usage_task_previews_by_snapshot() -> dict[str, list[_LiveUs
                 if not selected_snapshot_name:
                     continue
 
-                previews_by_snapshot.setdefault(selected_snapshot_name, []).append(
-                    _LiveUsageTaskPreview(
-                        account_id=account.id,
-                        preview=normalized_preview,
-                    )
-                )
+                emails_by_snapshot.setdefault(selected_snapshot_name, set()).add(normalized_email)
 
-            for task_previews in previews_by_snapshot.values():
-                task_previews.sort(key=lambda preview: preview.account_id)
-
-            return previews_by_snapshot
+            return {
+                snapshot_name: sorted(snapshot_emails)
+                for snapshot_name, snapshot_emails in emails_by_snapshot.items()
+            }
     except Exception:
         return {}
 

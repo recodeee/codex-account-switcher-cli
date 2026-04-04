@@ -8,6 +8,9 @@ When debugging MCP/runtime attribution, this makes it hard to confirm whether an
 
 - Extend `GET /live_usage` XML output with task-preview observability metadata.
 - Add `total_task_previews` on the root `<live_usage>` node.
+- Add explicit unmapped-process observability:
+  - `mapped_sessions` and `unattributed_sessions` on `<live_usage>`.
+  - `<unattributed_sessions><session pid="..." /></unattributed_sessions>` block.
 - Add per-snapshot task-preview rows:
   - `task_preview_count` attribute on `<snapshot>` when task previews exist.
   - nested `<task_preview account_id="..." preview="..." />` entries.

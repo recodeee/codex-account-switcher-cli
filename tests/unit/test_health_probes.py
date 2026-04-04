@@ -32,12 +32,16 @@ async def test_health_live_always_ok():
 
 @pytest.mark.asyncio
 async def test_live_usage_returns_xml_payload():
+    from app.modules.accounts.codex_live_usage import LocalCodexProcessSessionAttribution
     from app.modules.health.api import live_usage
 
     with (
         patch(
-            "app.modules.health.api.read_live_codex_process_session_counts_by_snapshot",
-            return_value={"viktoredixaicom": 8},
+            "app.modules.health.api.read_live_codex_process_session_attribution",
+            return_value=LocalCodexProcessSessionAttribution(
+                counts_by_snapshot={"viktoredixaicom": 8},
+                unattributed_session_pids=[],
+            ),
         ),
         patch(
             "app.modules.health.api._read_live_usage_task_previews_by_snapshot",
@@ -54,7 +58,7 @@ async def test_live_usage_returns_xml_payload():
     assert response.headers.get("cache-control") == "no-store"
     body = response.body.decode("utf-8")
     assert (
-        '<live_usage generated_at="2026-04-05T00:00:00Z" total_sessions="8" total_task_previews="0">'
+        '<live_usage generated_at="2026-04-05T00:00:00Z" total_sessions="8" mapped_sessions="8" unattributed_sessions="0" total_task_previews="0">'
         in body
     )
     assert '<snapshot name="viktoredixaicom" session_count="8" />' in body
@@ -62,12 +66,16 @@ async def test_live_usage_returns_xml_payload():
 
 @pytest.mark.asyncio
 async def test_live_usage_includes_task_previews_mapped_to_snapshot():
+    from app.modules.accounts.codex_live_usage import LocalCodexProcessSessionAttribution
     from app.modules.health.api import live_usage
 
     with (
         patch(
-            "app.modules.health.api.read_live_codex_process_session_counts_by_snapshot",
-            return_value={"unique": 4},
+            "app.modules.health.api.read_live_codex_process_session_attribution",
+            return_value=LocalCodexProcessSessionAttribution(
+                counts_by_snapshot={"unique": 4},
+                unattributed_session_pids=[],
+            ),
         ),
         patch(
             "app.modules.health.api._read_live_usage_task_previews_by_snapshot",
@@ -91,13 +99,142 @@ async def test_live_usage_includes_task_previews_mapped_to_snapshot():
 
     body = response.body.decode("utf-8")
     assert (
-        '<live_usage generated_at="2026-04-05T00:00:00Z" total_sessions="4" total_task_previews="1">'
+        '<live_usage generated_at="2026-04-05T00:00:00Z" total_sessions="4" mapped_sessions="4" unattributed_sessions="0" total_task_previews="1">'
         in body
     )
     assert '<snapshot name="unique" session_count="4" task_preview_count="1">' in body
     assert (
         '<task_preview account_id="acc-1" preview="Investigate merged telemetry" />'
         in body
+    )
+
+
+@pytest.mark.asyncio
+async def test_live_usage_surfaces_unattributed_cli_sessions():
+    from app.modules.accounts.codex_live_usage import LocalCodexProcessSessionAttribution
+    from app.modules.health.api import live_usage
+
+    with (
+        patch(
+            "app.modules.health.api.read_live_codex_process_session_attribution",
+            return_value=LocalCodexProcessSessionAttribution(
+                counts_by_snapshot={"thedailyscooby": 2},
+                unattributed_session_pids=[701, 702],
+            ),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_task_previews_by_snapshot",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "app.modules.health.api.utcnow",
+            return_value=datetime(2026, 4, 5, 0, 0, 0),
+        ),
+    ):
+        response = await live_usage()
+
+    body = response.body.decode("utf-8")
+    assert (
+        '<live_usage generated_at="2026-04-05T00:00:00Z" total_sessions="4" mapped_sessions="2" unattributed_sessions="2" total_task_previews="0">'
+        in body
+    )
+    assert '<snapshot name="thedailyscooby" session_count="2" />' in body
+    assert '<unattributed_sessions count="2">' in body
+    assert '<session pid="701" />' in body
+    assert '<session pid="702" />' in body
+
+
+@pytest.mark.asyncio
+async def test_read_live_usage_task_previews_by_snapshot_merges_local_preview_when_db_preview_missing():
+    from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
+    from app.modules.accounts.codex_live_usage import LocalCodexTaskPreview
+    from app.modules.health.api import _read_live_usage_task_previews_by_snapshot
+
+    now = datetime(2026, 4, 5, 0, 0, 0)
+    account = SimpleNamespace(
+        id="acc-1",
+        email="owner@example.com",
+        chatgpt_account_id="chatgpt-1",
+    )
+    repo = AsyncMock()
+    repo.list_accounts = AsyncMock(return_value=[account])
+    repo.list_codex_current_task_preview_by_account = AsyncMock(return_value={})
+
+    async def _fake_session():
+        yield AsyncMock()
+
+    with (
+        patch("app.modules.health.api.AccountsRepository", return_value=repo),
+        patch("app.modules.health.api.get_session", return_value=_fake_session()),
+        patch(
+            "app.modules.health.api.build_snapshot_index",
+            return_value=CodexAuthSnapshotIndex(
+                snapshots_by_account_id={"acc-1": ["unique"]},
+                active_snapshot_name="unique",
+            ),
+        ),
+        patch(
+            "app.modules.health.api.resolve_snapshot_names_for_account",
+            return_value=["unique"],
+        ),
+        patch(
+            "app.modules.health.api.select_snapshot_name",
+            return_value="unique",
+        ),
+        patch(
+            "app.modules.health.api.read_local_codex_task_previews_by_snapshot",
+            return_value={
+                "unique": LocalCodexTaskPreview(
+                    text="Show local codex task preview in XML feed",
+                    recorded_at=now,
+                )
+            },
+        ),
+        patch("app.modules.health.api.utcnow", return_value=now),
+    ):
+        previews = await _read_live_usage_task_previews_by_snapshot()
+
+    assert "unique" in previews
+    assert len(previews["unique"]) == 1
+    assert previews["unique"][0].account_id == "acc-1"
+    assert previews["unique"][0].preview == "Show local codex task preview in XML feed"
+
+
+@pytest.mark.asyncio
+async def test_read_live_usage_task_previews_by_snapshot_uses_local_preview_without_accounts():
+    from app.modules.accounts.codex_live_usage import LocalCodexTaskPreview
+    from app.modules.health.api import _read_live_usage_task_previews_by_snapshot
+
+    now = datetime(2026, 4, 5, 0, 0, 0)
+    repo = AsyncMock()
+    repo.list_accounts = AsyncMock(return_value=[])
+    repo.list_codex_current_task_preview_by_account = AsyncMock(return_value={})
+
+    async def _fake_session():
+        yield AsyncMock()
+
+    with (
+        patch("app.modules.health.api.AccountsRepository", return_value=repo),
+        patch("app.modules.health.api.get_session", return_value=_fake_session()),
+        patch(
+            "app.modules.health.api.read_local_codex_task_previews_by_snapshot",
+            return_value={
+                "thedailyscooby": LocalCodexTaskPreview(
+                    text="Show preview even before account import completes",
+                    recorded_at=now,
+                )
+            },
+        ),
+        patch("app.modules.health.api.utcnow", return_value=now),
+    ):
+        previews = await _read_live_usage_task_previews_by_snapshot()
+
+    assert "thedailyscooby" in previews
+    assert len(previews["thedailyscooby"]) == 1
+    assert previews["thedailyscooby"][0].account_id == "local"
+    assert (
+        previews["thedailyscooby"][0].preview
+        == "Show preview even before account import completes"
     )
 
 

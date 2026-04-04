@@ -76,6 +76,14 @@ class _UnlabeledDefaultScopeProcessOwner:
     observed_at: float
 
 
+@dataclass(frozen=True)
+class LocalCodexProcessSessionAttribution:
+    counts_by_snapshot: dict[str, int]
+    unattributed_session_pids: list[int]
+    mapped_session_pids_by_snapshot: dict[str, list[int]]
+    task_preview_by_pid: dict[int, str]
+
+
 _UNLABELED_DEFAULT_SCOPE_PROCESS_OWNER_CACHE_TTL_SECONDS = 6 * 60 * 60
 _UNLABELED_DEFAULT_SCOPE_PROCESS_OWNER_CACHE_MAX_ENTRIES = 2048
 _unlabeled_default_scope_process_owner_cache: dict[int, _UnlabeledDefaultScopeProcessOwner] = {}
@@ -174,9 +182,19 @@ def read_local_codex_live_usage_samples_by_snapshot(
 
 
 def read_live_codex_process_session_counts_by_snapshot() -> dict[str, int]:
+    attribution = read_live_codex_process_session_attribution()
+    return attribution.counts_by_snapshot
+
+
+def read_live_codex_process_session_attribution() -> LocalCodexProcessSessionAttribution:
     proc_root = _resolve_proc_root()
     if not proc_root.exists() or not proc_root.is_dir():
-        return {}
+        return LocalCodexProcessSessionAttribution(
+            counts_by_snapshot={},
+            unattributed_session_pids=[],
+            mapped_session_pids_by_snapshot={},
+            task_preview_by_pid={},
+        )
 
     default_current_path = _resolve_current_path()
     default_auth_path = _resolve_auth_path()
@@ -186,6 +204,9 @@ def read_live_codex_process_session_counts_by_snapshot() -> dict[str, int]:
     _prune_unlabeled_default_scope_process_owner_cache(active_pids={pid for pid, _env in processes})
 
     counts: dict[str, int] = {}
+    unattributed_session_pids: list[int] = []
+    mapped_session_pids_by_snapshot: dict[str, list[int]] = {}
+    task_preview_by_pid: dict[int, str] = {}
     for pid, env in processes:
         snapshot_name = _resolve_process_snapshot_name_for_accounting(
             pid,
@@ -193,11 +214,24 @@ def read_live_codex_process_session_counts_by_snapshot() -> dict[str, int]:
             default_current_path=default_current_path,
             default_auth_path=default_auth_path,
         )
+        task_preview = _resolve_process_task_preview(pid, env=env)
+        if task_preview:
+            task_preview_by_pid[pid] = task_preview
         if not snapshot_name:
+            unattributed_session_pids.append(pid)
             continue
         counts[snapshot_name] = counts.get(snapshot_name, 0) + 1
+        mapped_session_pids_by_snapshot.setdefault(snapshot_name, []).append(pid)
 
-    return counts
+    for session_pids in mapped_session_pids_by_snapshot.values():
+        session_pids.sort()
+
+    return LocalCodexProcessSessionAttribution(
+        counts_by_snapshot=counts,
+        unattributed_session_pids=sorted(unattributed_session_pids),
+        mapped_session_pids_by_snapshot=mapped_session_pids_by_snapshot,
+        task_preview_by_pid=task_preview_by_pid,
+    )
 
 
 def terminate_live_codex_processes_for_snapshot(snapshot_name: str) -> int:
@@ -369,12 +403,21 @@ def read_local_codex_task_previews_by_snapshot(
 ) -> dict[str, LocalCodexTaskPreview]:
     current = now or datetime.now(timezone.utc)
     previews_by_snapshot: dict[str, LocalCodexTaskPreview] = {}
+    live_process_session_counts_by_snapshot = read_live_codex_process_session_counts_by_snapshot()
+    runtime_live_session_counts_by_snapshot = read_runtime_live_session_counts_by_snapshot(now=current)
+
+    def has_live_session_for_snapshot(snapshot_name: str) -> bool:
+        return (
+            max(0, live_process_session_counts_by_snapshot.get(snapshot_name, 0)) > 0
+            or max(0, runtime_live_session_counts_by_snapshot.get(snapshot_name, 0)) > 0
+        )
 
     active_snapshot_name = build_snapshot_index().active_snapshot_name
     if active_snapshot_name:
         default_candidates = _read_local_codex_task_preview_candidates_for_sessions_dir(
             sessions_dir=_resolve_sessions_dir(),
             now=current,
+            allow_inactive_fallback=has_live_session_for_snapshot(active_snapshot_name),
         )
         _merge_task_preview_candidates_for_snapshot(
             previews_by_snapshot=previews_by_snapshot,
@@ -397,6 +440,7 @@ def read_local_codex_task_previews_by_snapshot(
         runtime_candidates = _read_local_codex_task_preview_candidates_for_sessions_dir(
             sessions_dir=runtime_dir / "sessions",
             now=current,
+            allow_inactive_fallback=has_live_session_for_snapshot(snapshot_name),
         )
         _merge_task_preview_candidates_for_snapshot(
             previews_by_snapshot=previews_by_snapshot,
@@ -1283,10 +1327,53 @@ def _read_process_cwd(pid: int) -> Path | None:
         return None
 
 
+def _resolve_process_task_preview(pid: int, *, env: dict[str, str] | None = None) -> str | None:
+    env = env or {}
+    direct_preview = _sanitize_codex_task_preview(env.get("CODEX_CURRENT_TASK_PREVIEW", ""))
+    if direct_preview:
+        return direct_preview
+
+    rollout_path = _resolve_process_rollout_path(pid)
+    if rollout_path is None:
+        return None
+    preview = _extract_latest_task_preview_from_file(rollout_path)
+    return preview.text if preview is not None else None
+
+
+def _resolve_process_rollout_path(pid: int) -> Path | None:
+    fd_root = _resolve_proc_root() / str(pid) / "fd"
+    if not fd_root.exists() or not fd_root.is_dir():
+        return None
+
+    best_match: tuple[float, Path] | None = None
+    try:
+        fd_entries = list(fd_root.iterdir())
+    except OSError:
+        return None
+
+    for fd_entry in fd_entries:
+        try:
+            target_raw = os.readlink(fd_entry)
+        except OSError:
+            continue
+        target = target_raw.replace(" (deleted)", "")
+        target_path = Path(target)
+        if _ROLLOUT_SESSION_FILE_RE.match(target_path.name) is None:
+            continue
+        mtime = _safe_mtime(target_path)
+        if best_match is None or mtime >= best_match[0]:
+            best_match = (mtime, target_path)
+
+    if best_match is None:
+        return None
+    return best_match[1]
+
+
 def _read_local_codex_task_preview_candidates_for_sessions_dir(
     *,
     sessions_dir: Path,
     now: datetime,
+    allow_inactive_fallback: bool = False,
 ) -> list[tuple[str, LocalCodexTaskPreview]]:
     if not sessions_dir.exists() or not sessions_dir.is_dir():
         return []
@@ -1297,11 +1384,17 @@ def _read_local_codex_task_preview_candidates_for_sessions_dir(
 
     cutoff_ts = (now - timedelta(seconds=_active_window_seconds())).timestamp()
     active_files = [path for path in candidates if _safe_mtime(path) >= cutoff_ts]
-    if not active_files:
+    if active_files:
+        source_files = _prefer_newest_sessions(active_files)
+    elif allow_inactive_fallback:
+        # Keep current task visible while a CLI session is still live even if
+        # no new user message landed inside the active file-mtime window.
+        source_files = _prefer_newest_sessions(candidates[:5])
+    else:
         return []
 
     collected: list[tuple[str, LocalCodexTaskPreview]] = []
-    for path in _prefer_newest_sessions(active_files):
+    for path in source_files:
         session_id = _rollout_session_id_from_path(path)
         if session_id is None:
             continue
