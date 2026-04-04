@@ -1418,7 +1418,7 @@ def test_apply_local_live_usage_overrides_does_not_fallback_to_alias_snapshots_w
     assert account.id not in secondary_usage
 
 
-def test_apply_local_live_usage_overrides_maps_new_default_scope_sample_to_active_account_alias_immediately(
+def test_apply_local_live_usage_overrides_keeps_baseline_for_new_default_scope_sample_without_confident_ownership(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     active_account = _make_account("acc-z", "active@example.com")
@@ -1523,16 +1523,13 @@ def test_apply_local_live_usage_overrides_maps_new_default_scope_sample_to_activ
         live_quota_debug_by_account=debug_by_account,
     )
 
-    assert primary_usage[active_account.id].used_percent == pytest.approx(1.0)
-    assert secondary_usage[active_account.id].used_percent == pytest.approx(25.0)
+    assert primary_usage[active_account.id].used_percent == pytest.approx(64.0)
+    assert secondary_usage[active_account.id].used_percent == pytest.approx(42.0)
     assert primary_usage[other_account.id].used_percent == pytest.approx(62.0)
     assert secondary_usage[other_account.id].used_percent == pytest.approx(44.0)
     assert active_account.id in debug_by_account
     assert debug_by_account[active_account.id].raw_samples
-    assert debug_by_account[active_account.id].override_reason in {
-        "deferred_active_snapshot_sample_floor_override",
-        "no_live_telemetry_sample_floor_override",
-    }
+    assert debug_by_account[active_account.id].override_reason == "no_live_telemetry"
 
 
 def test_apply_local_live_usage_overrides_applies_conservative_floor_for_deactivated_accounts(
@@ -2410,7 +2407,7 @@ def test_apply_local_live_usage_overrides_keeps_baseline_for_ambiguous_deferred_
     assert debug.override_reason == "deferred_active_snapshot_mixed_default_sessions"
 
 
-def test_apply_local_live_usage_overrides_scopes_deferred_sample_floor_to_account_debug_samples(
+def test_apply_local_live_usage_overrides_keeps_baseline_for_scoped_deferred_debug_samples_without_confident_ownership(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     account = _make_account("acc-bia", "bia@example.com")
@@ -2537,18 +2534,18 @@ def test_apply_local_live_usage_overrides_scopes_deferred_sample_floor_to_accoun
         live_quota_debug_by_account=debug_by_account,
     )
 
-    assert primary_usage[account.id].used_percent == pytest.approx(84.0)
-    assert secondary_usage[account.id].used_percent == pytest.approx(60.0)
+    assert primary_usage[account.id].used_percent == pytest.approx(50.0)
+    assert secondary_usage[account.id].used_percent == pytest.approx(44.0)
     debug = debug_by_account[account.id]
-    assert debug.override_reason == "deferred_active_snapshot_sample_floor_override"
+    assert debug.override_reason == "deferred_active_snapshot_mixed_default_sessions"
     assert debug.merged is not None
     assert debug.merged.primary is not None
     assert debug.merged.secondary is not None
-    assert debug.merged.primary.remaining_percent == pytest.approx(16.0)
-    assert debug.merged.secondary.remaining_percent == pytest.approx(40.0)
+    assert debug.merged.primary.remaining_percent == pytest.approx(50.0)
+    assert debug.merged.secondary.remaining_percent == pytest.approx(56.0)
 
 
-def test_apply_local_live_usage_overrides_keeps_deferred_floor_merged_windows_aligned_with_freshest_debug_sample(
+def test_apply_local_live_usage_overrides_keeps_baseline_for_multiple_scoped_deferred_debug_samples_without_confident_ownership(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     account = _make_account("acc-bia", "bia@example.com")
@@ -2693,15 +2690,15 @@ def test_apply_local_live_usage_overrides_keeps_deferred_floor_merged_windows_al
         live_quota_debug_by_account=debug_by_account,
     )
 
-    assert primary_usage[account.id].used_percent == pytest.approx(84.0)
-    assert secondary_usage[account.id].used_percent == pytest.approx(60.0)
+    assert primary_usage[account.id].used_percent == pytest.approx(50.0)
+    assert secondary_usage[account.id].used_percent == pytest.approx(44.0)
     debug = debug_by_account[account.id]
-    assert debug.override_reason == "deferred_active_snapshot_sample_floor_override"
+    assert debug.override_reason == "deferred_active_snapshot_mixed_default_sessions"
     assert debug.merged is not None
     assert debug.merged.primary is not None
     assert debug.merged.secondary is not None
-    assert debug.merged.primary.remaining_percent == pytest.approx(16.0)
-    assert debug.merged.secondary.remaining_percent == pytest.approx(40.0)
+    assert debug.merged.primary.remaining_percent == pytest.approx(50.0)
+    assert debug.merged.secondary.remaining_percent == pytest.approx(56.0)
 
 
 def test_apply_local_live_usage_overrides_hides_presence_only_debug_samples(

@@ -185,3 +185,131 @@ test("inferAccountNameFromCurrentAuth returns unique suffix for same-email diffe
     assert.equal(inferred, "codexina-edixai-com");
   });
 });
+
+test("resolveDefaultAccountNameFromCurrentAuth reuses active snapshot name when identity matches", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const activeName = "itrexsale";
+    const activeSnapshotPath = path.join(accountsDir, `${activeName}.json`);
+    const currentPath = path.join(codexDir, "current");
+
+    await fsp.writeFile(
+      activeSnapshotPath,
+      buildAuthPayload("codexina@edixai.com", {
+        accountId: "acct-a",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload("codexina@edixai.com", {
+        accountId: "acct-a",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, `${activeName}\n`, "utf8");
+
+    const resolved = await service.resolveDefaultAccountNameFromCurrentAuth();
+    assert.deepEqual(resolved, {
+      name: activeName,
+      source: "active",
+    });
+  });
+});
+
+test("resolveDefaultAccountNameFromCurrentAuth falls back to inferred name when active snapshot mismatches identity", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const activeName = "itrexsale";
+    const activeSnapshotPath = path.join(accountsDir, `${activeName}.json`);
+    const currentPath = path.join(codexDir, "current");
+
+    await fsp.writeFile(
+      activeSnapshotPath,
+      buildAuthPayload("other@edixai.com", {
+        accountId: "acct-other",
+        userId: "user-other",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload("codexina@edixai.com", {
+        accountId: "acct-a",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, `${activeName}\n`, "utf8");
+
+    const resolved = await service.resolveDefaultAccountNameFromCurrentAuth();
+    assert.deepEqual(resolved, {
+      name: "codexina",
+      source: "inferred",
+    });
+  });
+});
+
+test("listAccountMappings returns active flag and identity metadata for each snapshot", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const currentPath = path.join(codexDir, "current");
+
+    await fsp.writeFile(
+      path.join(accountsDir, "itrexsale.json"),
+      buildAuthPayload("itrex@edixai.com", {
+        accountId: "acct-itrex",
+        userId: "user-itrex",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(
+      path.join(accountsDir, "deadpool.json"),
+      buildAuthPayload("deadpool@edixai.com", {
+        accountId: "acct-deadpool",
+        userId: "user-deadpool",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, "itrexsale\n", "utf8");
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload("itrex@edixai.com", {
+        accountId: "acct-itrex",
+        userId: "user-itrex",
+      }),
+      "utf8",
+    );
+
+    await service.saveAccount("itrexsale");
+    const mappings = await service.listAccountMappings();
+
+    assert.deepEqual(
+      mappings.map((item) => ({
+        name: item.name,
+        active: item.active,
+        email: item.email,
+        accountId: item.accountId,
+        userId: item.userId,
+      })),
+      [
+        {
+          name: "deadpool",
+          active: false,
+          email: "deadpool@edixai.com",
+          accountId: "acct-deadpool",
+          userId: "user-deadpool",
+        },
+        {
+          name: "itrexsale",
+          active: true,
+          email: "itrex@edixai.com",
+          accountId: "acct-itrex",
+          userId: "user-itrex",
+        },
+      ],
+    );
+  });
+});

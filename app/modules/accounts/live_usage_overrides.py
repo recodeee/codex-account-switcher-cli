@@ -216,29 +216,37 @@ def apply_local_live_usage_overrides(
                     if confident_sample_live_usage is not None:
                         debug_live_usage = confident_sample_live_usage
                 else:
-                    (
-                        applied_sample_floor_override,
-                        sample_floor_live_usage,
-                    ) = _apply_deferred_sample_floor_override(
-                        account_id=account_id,
-                        snapshots_considered=snapshots_considered,
-                        live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
-                        raw_samples_override=(
-                            raw_samples_override
-                            if raw_samples_override is not None
-                            else ([] if should_defer_active_snapshot_usage else None)
-                        ),
-                        primary_usage=primary_usage,
-                        secondary_usage=secondary_usage,
-                        persist_candidates=persist_candidates,
-                    )
-                    if applied_sample_floor_override:
-                        override_applied = True
-                        override_reason = "no_live_telemetry_sample_floor_override"
-                        if sample_floor_live_usage is not None:
-                            debug_live_usage = sample_floor_live_usage
-                    else:
+                    # Strict attribution mode for deferred active snapshots:
+                    # keep quota windows on baseline values unless ownership is
+                    # confidently attributable (process/runtime or confident
+                    # sample override above). Avoid sample-floor merges from
+                    # ambiguous default-scope sessions.
+                    if should_defer_active_snapshot_usage:
                         override_reason = "no_live_telemetry"
+                    else:
+                        (
+                            applied_sample_floor_override,
+                            sample_floor_live_usage,
+                        ) = _apply_deferred_sample_floor_override(
+                            account_id=account_id,
+                            snapshots_considered=snapshots_considered,
+                            live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
+                            raw_samples_override=(
+                                raw_samples_override
+                                if raw_samples_override is not None
+                                else None
+                            ),
+                            primary_usage=primary_usage,
+                            secondary_usage=secondary_usage,
+                            persist_candidates=persist_candidates,
+                        )
+                        if applied_sample_floor_override:
+                            override_applied = True
+                            override_reason = "no_live_telemetry_sample_floor_override"
+                            if sample_floor_live_usage is not None:
+                                debug_live_usage = sample_floor_live_usage
+                        else:
+                            override_reason = "no_live_telemetry"
             else:
                 override_reason = "no_live_telemetry"
 
@@ -330,26 +338,8 @@ def apply_local_live_usage_overrides(
                     if confident_sample_live_usage is not None:
                         debug_live_usage = confident_sample_live_usage
                 else:
-                    (
-                        applied_sample_floor_override,
-                        sample_floor_live_usage,
-                    ) = _apply_deferred_sample_floor_override(
-                        account_id=account_id,
-                        snapshots_considered=snapshots_considered,
-                        live_usage_samples_by_snapshot=live_usage_samples_by_snapshot,
-                        raw_samples_override=raw_samples_override if raw_samples_override is not None else [],
-                        primary_usage=primary_usage,
-                        secondary_usage=secondary_usage,
-                        persist_candidates=persist_candidates,
-                    )
-                    if applied_sample_floor_override:
-                        override_applied = True
-                        override_reason = "deferred_active_snapshot_sample_floor_override"
-                        if sample_floor_live_usage is not None:
-                            debug_live_usage = sample_floor_live_usage
-                    else:
-                        override_applied = False
-                        override_reason = "deferred_active_snapshot_mixed_default_sessions"
+                    override_applied = False
+                    override_reason = "deferred_active_snapshot_mixed_default_sessions"
             _set_live_quota_debug(
                 account_id=account_id,
                 snapshots_considered=snapshots_considered,

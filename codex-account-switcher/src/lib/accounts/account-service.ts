@@ -24,6 +24,7 @@ import {
   saveRegistry,
 } from "./registry";
 import {
+  AccountMapping,
   AutoSwitchRunResult,
   ParsedAuthSnapshot,
   RegistryData,
@@ -59,6 +60,11 @@ export interface SaveAccountOptions {
   force?: boolean;
 }
 
+export interface ResolvedDefaultAccountName {
+  name: string;
+  source: "active" | "inferred";
+}
+
 export class AccountService {
   public async listAccountNames(): Promise<string[]> {
     const accountsDir = resolveAccountsDir();
@@ -85,6 +91,36 @@ export class AccountService {
       email: registry.accounts[name]?.email,
       active: current === name,
     }));
+  }
+
+  public async listAccountMappings(): Promise<AccountMapping[]> {
+    const [accounts, current, registry] = await Promise.all([
+      this.listAccountNames(),
+      this.getCurrentAccountName(),
+      this.loadReconciledRegistry(),
+    ]);
+
+    return Promise.all(
+      accounts.map(async (name) => {
+        const entry = registry.accounts[name];
+        let fallbackSnapshot: ParsedAuthSnapshot | undefined;
+
+        if (!entry?.email || !entry?.accountId || !entry?.userId || !entry?.planType) {
+          fallbackSnapshot = await parseAuthSnapshotFile(this.accountFilePath(name));
+        }
+
+        return {
+          name,
+          active: current === name,
+          email: entry?.email ?? fallbackSnapshot?.email,
+          accountId: entry?.accountId ?? fallbackSnapshot?.accountId,
+          userId: entry?.userId ?? fallbackSnapshot?.userId,
+          planType: entry?.planType ?? fallbackSnapshot?.planType,
+          lastUsageAt: entry?.lastUsageAt,
+          usageSource: entry?.lastUsage?.source,
+        };
+      }),
+    );
   }
 
   public async findMatchingAccounts(query: string): Promise<AccountChoice[]> {
@@ -171,6 +207,34 @@ export class AccountService {
     const baseCandidate = this.normalizeAccountName(baseName);
     const uniqueName = await this.resolveUniqueInferredName(baseCandidate, domainName, parsed);
     return uniqueName;
+  }
+
+  public async resolveDefaultAccountNameFromCurrentAuth(): Promise<ResolvedDefaultAccountName> {
+    const authPath = resolveAuthPath();
+    await this.ensureAuthFileExists(authPath);
+
+    const activeName = await this.getCurrentAccountName();
+    if (activeName) {
+      const activeSnapshotPath = this.accountFilePath(activeName);
+      if (await this.pathExists(activeSnapshotPath)) {
+        const [activeSnapshot, incomingSnapshot] = await Promise.all([
+          parseAuthSnapshotFile(activeSnapshotPath),
+          parseAuthSnapshotFile(authPath),
+        ]);
+
+        if (this.snapshotsShareIdentity(activeSnapshot, incomingSnapshot)) {
+          return {
+            name: activeName,
+            source: "active",
+          };
+        }
+      }
+    }
+
+    return {
+      name: await this.inferAccountNameFromCurrentAuth(),
+      source: "inferred",
+    };
   }
 
   public async useAccount(rawName: string): Promise<string> {

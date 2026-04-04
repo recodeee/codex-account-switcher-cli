@@ -26,11 +26,18 @@ export default class SaveCommand extends BaseCommand {
     await this.runSafe(async () => {
       const { args, flags } = await this.parse(SaveCommand);
       const providedName = args.name as string | undefined;
-      const accountName = providedName ?? (await this.accounts.inferAccountNameFromCurrentAuth());
-      const savedName = await this.accounts.saveAccount(accountName, {
+      const resolvedName = providedName
+        ? { name: providedName, source: "explicit" as const }
+        : await this.accounts.resolveDefaultAccountNameFromCurrentAuth();
+      const savedName = await this.accounts.saveAccount(resolvedName.name, {
         force: Boolean(flags.force),
       });
-      const suffix = providedName ? "" : " (inferred from auth email)";
+      const suffix =
+        resolvedName.source === "explicit"
+          ? ""
+          : resolvedName.source === "active"
+            ? " (reused active account name)"
+            : " (inferred from auth email)";
       this.log(`Saved current Codex auth tokens as "${savedName}"${suffix}.`);
     });
   }

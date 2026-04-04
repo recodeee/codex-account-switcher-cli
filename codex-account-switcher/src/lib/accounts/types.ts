@@ -69,3 +69,14 @@ export interface AutoSwitchRunResult {
   toAccount?: string;
   reason: string;
 }
+
+export interface AccountMapping {
+  name: string;
+  active: boolean;
+  email?: string;
+  accountId?: string;
+  userId?: string;
+  planType?: string;
+  lastUsageAt?: string;
+  usageSource?: UsageSource;
+}

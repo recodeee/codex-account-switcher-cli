@@ -46,6 +46,9 @@ codex-auth use
 # list accounts
 codex-auth list
 
+# list accounts with mapping metadata (email/account/user/usage)
+codex-auth list --details
+
 # show current account name
 codex-auth current
 
@@ -75,10 +78,10 @@ codex-auth daemon --watch
 
 ### Command reference
 
-- `codex-auth save <name> [--force]` – Validates `<name>`, ensures `auth.json` exists, then snapshots it to `~/.codex/accounts/<name>.json`. By default, it blocks overwriting a name when the existing snapshot email differs from current auth.
-- `codex-auth login [name] [--device-auth] [--force]` – Runs `codex login` (optionally with device auth), waits for refreshed auth snapshot detection, then saves it. If `name` is omitted, an account name is inferred from auth email with unique-suffix handling for multi-workspace identities.
+- `codex-auth save <name> [--force]` – Validates `<name>`, ensures `auth.json` exists, then snapshots it to `~/.codex/accounts/<name>.json`. By default, it blocks overwriting a name when the existing snapshot email differs from current auth. If `name` is omitted, it first tries reusing the active snapshot name when identity matches; otherwise it infers one from auth email.
+- `codex-auth login [name] [--device-auth] [--force]` – Runs `codex login` (optionally with device auth), waits for refreshed auth snapshot detection, then saves it. If `name` is omitted, it first tries reusing the active snapshot name when identity matches; otherwise it infers one from auth email with unique-suffix handling for multi-workspace identities.
 - `codex-auth use [name]` – Accepts a name or launches an interactive selector with the current account pre-selected. Copies on Windows, creates a symlink elsewhere, and records the active name.
-- `codex-auth list` – Lists all saved snapshots alphabetically and marks the active one with `*`.
+- `codex-auth list [--details]` – Lists all saved snapshots alphabetically and marks the active one with `*`. `--details` adds per-snapshot mapping metadata (email, account id, user id, and usage metadata) for easier session/account troubleshooting.
 - `codex-auth current` – Prints the active account name, or a friendly message if none is active.
 - `codex-auth remove [query|--all]` – Removes snapshots interactively or by selector. If the active account is removed, the best remaining account is activated automatically.
 - `codex-auth status` – Prints auto-switch state, managed service status, active thresholds, and usage mode.
