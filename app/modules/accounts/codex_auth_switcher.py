@@ -162,6 +162,11 @@ def resolve_snapshot_names_for_account(
 
         _add(filtered_email_named_matches)
 
+    resolved = _filter_snapshot_names_by_email_identity(
+        snapshot_names=resolved,
+        email=email,
+    )
+
     selected_snapshot_name = select_snapshot_name(
         resolved,
         snapshot_index.active_snapshot_name,
@@ -187,6 +192,64 @@ def _expected_account_ids_for_account(
             if lowered_email != normalized_email:
                 expected_account_ids.add(generate_unique_account_id(chatgpt_account_id, lowered_email))
     return expected_account_ids
+
+
+def _filter_snapshot_names_by_email_identity(
+    *,
+    snapshot_names: list[str],
+    email: str | None,
+) -> list[str]:
+    """Keep snapshot resolution email-safe when persisted ids drift.
+
+    Snapshot ownership is keyed by auth claims (account_id + email). In legacy
+    rows where only a stale `account.id` is available, fallback-by-id can point
+    to another person's snapshot. When we can verify snapshot emails on disk,
+    drop candidates that do not match the account email.
+    """
+
+    if not snapshot_names:
+        return []
+
+    normalized_email = (email or "").strip().lower()
+    if not normalized_email:
+        return snapshot_names
+
+    accounts_dir = _resolve_accounts_dir()
+    if not accounts_dir.exists() or not accounts_dir.is_dir():
+        return snapshot_names
+
+    matched: list[str] = []
+    unknown: list[str] = []
+    for snapshot_name in snapshot_names:
+        snapshot_email = _read_snapshot_email(snapshot_name, accounts_dir=accounts_dir)
+        if snapshot_email is None:
+            unknown.append(snapshot_name)
+            continue
+        if snapshot_email == normalized_email:
+            matched.append(snapshot_name)
+
+    if matched:
+        return matched
+    if unknown:
+        return unknown
+    return []
+
+
+def _read_snapshot_email(snapshot_name: str, *, accounts_dir: Path) -> str | None:
+    snapshot_path = accounts_dir / f"{snapshot_name}.json"
+    if not snapshot_path.exists() or not snapshot_path.is_file():
+        return None
+
+    try:
+        auth = parse_auth_json(snapshot_path.read_bytes())
+    except Exception:
+        return None
+
+    claims = claims_from_auth(auth)
+    email = (claims.email or "").strip().lower()
+    if not email or email == DEFAULT_EMAIL.lower():
+        return None
+    return email
 
 
 def _resolve_accounts_dir() -> Path:

@@ -2,6 +2,7 @@ import {
   Activity,
   ChevronDown,
   Clock,
+  Download,
   ExternalLink,
   Play,
   RotateCcw,
@@ -284,15 +285,20 @@ function scopeQuotaDebugSamplesToAccount(
 function buildQuotaDebugLogLines(
   liveQuotaDebug: NonNullable<AccountSummary["liveQuotaDebug"]>,
   accountSnapshotName: string | null | undefined,
+  accountId: string,
 ): string[] {
   const merged = liveQuotaDebug.merged;
   const scopedSamples = scopeQuotaDebugSamplesToAccount(
     liveQuotaDebug,
     accountSnapshotName,
   );
+  const normalizedSnapshotName = accountSnapshotName?.trim() || "none";
+  const diagnosticOnly = liveQuotaDebug.overrideApplied !== true;
   const lines: string[] = [
+    `$ account=${accountId} snapshot=${normalizedSnapshotName}`,
     `$ merged 5h=${formatDebugPercent(merged?.primary?.remainingPercent)} weekly=${formatDebugPercent(merged?.secondary?.remainingPercent)}`,
     `$ override=${liveQuotaDebug.overrideReason ?? (liveQuotaDebug.overrideApplied ? "applied" : "none")}`,
+    `$ attribution=${diagnosticOnly ? "diagnostic sample only (not attributed)" : "account-attributed override applied"}`,
     `$ flow=collect_cli_sessions -> merge -> ${liveQuotaDebug.overrideApplied ? "apply_override" : "no_override"}`,
   ];
 
@@ -310,11 +316,35 @@ function buildQuotaDebugLogLines(
     const snapshotSuffix = sample.snapshotName
       ? ` snapshot=${sample.snapshotName}`
       : "";
+    const mappingSuffix = diagnosticOnly
+      ? " mapping=diagnostic-only"
+      : ` mapping=account:${accountId}`;
     lines.push(
-      `$ cli-session#${index + 1} src=${formatDebugSource(sample.source)} 5h=${formatDebugPercent(sample.primary?.remainingPercent)} weekly=${formatDebugPercent(sample.secondary?.remainingPercent)}${snapshotSuffix}${staleSuffix}`,
+      `$ cli-session#${index + 1} src=${formatDebugSource(sample.source)} 5h=${formatDebugPercent(sample.primary?.remainingPercent)} weekly=${formatDebugPercent(sample.secondary?.remainingPercent)}${snapshotSuffix}${mappingSuffix}${staleSuffix}`,
     );
   });
   return lines;
+}
+
+function buildDebugLogFileName(accountId: string): string {
+  const safeAccountId = accountId.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `cli-session-mapping-${safeAccountId}-${timestamp}.log`;
+}
+
+function saveQuotaDebugLogToFile(accountId: string, logs: string): void {
+  if (!logs.trim()) {
+    return;
+  }
+  const blob = new Blob([logs], { type: "text/plain;charset=utf-8" });
+  const objectUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = buildDebugLogFileName(accountId);
+  anchor.click();
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(objectUrl);
+  }, 0);
 }
 
 function isLiveUsageLimitHit(input: {
@@ -551,9 +581,10 @@ export function AccountCard({
         ? buildQuotaDebugLogLines(
             liveQuotaDebug,
             account.codexAuth?.snapshotName ?? null,
+            account.accountId,
           ).join("\n")
         : "",
-    [account.codexAuth?.snapshotName, liveQuotaDebug],
+    [account.accountId, account.codexAuth?.snapshotName, liveQuotaDebug],
   );
   const emailSubtitle =
     account.displayName && account.displayName !== account.email
@@ -736,7 +767,19 @@ export function AccountCard({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
                   CLI session logs
                 </p>
-                <div className="origin-right scale-90">
+                <div className="flex items-center gap-1.5 origin-right scale-90">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/10 hover:text-cyan-100"
+                    onClick={() =>
+                      saveQuotaDebugLogToFile(account.accountId, quotaDebugLogText)
+                    }
+                  >
+                    <Download className="h-3 w-3" />
+                    Save log file
+                  </Button>
                   <CopyButton value={quotaDebugLogText} label="Copy logs" />
                 </div>
               </div>

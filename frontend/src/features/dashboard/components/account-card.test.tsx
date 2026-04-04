@@ -872,7 +872,7 @@ describe("AccountCard", () => {
     expect(screen.getByText("Working now")).toBeInTheDocument();
   });
 
-  it("shows working indicator when only fresh debug raw samples exist", () => {
+  it("does not show working indicator when only diagnostic debug raw samples exist", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
       codexTrackedSessionCount: 0,
@@ -906,7 +906,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Working now")).toBeInTheDocument();
+    expect(screen.queryByText("Working now")).not.toBeInTheDocument();
   });
 
   it("does not infer codex session count from debug raw samples when counters are zero", () => {
@@ -1378,6 +1378,10 @@ describe("AccountCard", () => {
     expect(screen.getByText(/cli session logs/i)).toBeInTheDocument();
     expect(screen.getByText(/\$ merged 5h=17% weekly=77%/)).toBeInTheDocument();
     expect(screen.getByText(/\$ override=applied_live_usage_windows/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/\$ attribution=account-attributed override applied/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save log file/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /copy logs/i })).toBeInTheDocument();
     expect(screen.queryByText(/\$ no cli sessions sampled/i)).not.toBeInTheDocument();
   });
@@ -1440,6 +1444,9 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
     await user.click(screen.getByRole("button", { name: /debug/i }));
 
+    expect(
+      screen.getByText(/\$ attribution=diagnostic sample only \(not attributed\)/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/rollout-csoves\.jsonl/i)).toBeInTheDocument();
     expect(screen.queryByText(/rollout-viktor\.jsonl/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/snapshot=viktor/i)).not.toBeInTheDocument();

@@ -565,7 +565,7 @@ def test_apply_local_live_usage_overrides_uses_mixed_default_session_fallback_wi
     assert codex_session_counts_by_account[account_a.id] == 0
     assert codex_session_counts_by_account[account_b.id] == 0
     assert codex_auth_by_account[account_a.id].has_live_session is True
-    assert codex_auth_by_account[account_b.id].has_live_session is True
+    assert codex_auth_by_account[account_b.id].has_live_session is False
 
 
 def test_apply_local_live_usage_overrides_uses_mixed_default_session_fallback_with_process_visibility(
@@ -674,7 +674,7 @@ def test_apply_local_live_usage_overrides_uses_mixed_default_session_fallback_wi
     assert codex_session_counts_by_account[account_a.id] == 2
     assert codex_session_counts_by_account[account_b.id] == 0
     assert codex_auth_by_account[account_a.id].has_live_session is True
-    assert codex_auth_by_account[account_b.id].has_live_session is True
+    assert codex_auth_by_account[account_b.id].has_live_session is False
 
 
 def test_match_sample_prefers_unique_reset_fingerprint_over_percent_similarity() -> None:
@@ -1953,6 +1953,8 @@ def test_apply_local_live_usage_overrides_keeps_cached_source_ownership_across_s
 
     cica_debug = debug_by_account[cica.id]
     amodeus_debug = debug_by_account[amodeus.id]
+    assert switched_auth_by_account[cica.id].has_live_session is False
+    assert switched_auth_by_account[amodeus.id].has_live_session is True
     assert cica_debug.raw_samples == []
     assert amodeus_debug.raw_samples == []
 

@@ -1303,6 +1303,19 @@ def _apply_local_default_session_fingerprint_overrides(
         # active in the default sessions directory.
         allow_ambiguous_fallback_assignments=False,
     )
+    if not allow_quota_override and active_account_id is not None:
+        # Deferred mixed-default mode prioritizes avoiding false positives on
+        # non-active accounts over recovering every concurrent fallback match.
+        # Keep live-session hints scoped to the account that currently owns
+        # the active snapshot until process-level attribution is available.
+        sample_matches_by_index = {
+            sample_index: _SampleMatchResult(
+                account_id=active_account_id,
+                confidence=match.confidence,
+                allows_quota_override=False,
+            )
+            for sample_index, match in sample_matches_by_index.items()
+        }
     if not sample_matches_by_index:
         return
 

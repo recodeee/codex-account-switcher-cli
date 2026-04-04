@@ -382,6 +382,35 @@ def test_resolve_snapshot_names_for_account_does_not_steal_email_prefix_snapshot
     assert resolved == ["viktoredix"]
 
 
+def test_resolve_snapshot_names_for_account_ignores_fallback_id_snapshot_with_mismatched_email(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    (tmp_path / "current").write_text("korona")
+    _write_auth_snapshot(
+        accounts_dir / "korona.json",
+        email="korona@nagyviktor.com",
+        account_id="acc-korona",
+    )
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    index = build_snapshot_index()
+    collided_account_id = generate_unique_account_id("acc-korona", "korona@nagyviktor.com")
+
+    resolved = resolve_snapshot_names_for_account(
+        snapshot_index=index,
+        account_id=collided_account_id,
+        chatgpt_account_id=None,
+        email="admin@edixai.com",
+    )
+
+    assert resolved == []
+
+
 def test_switch_snapshot_falls_back_without_codex_auth(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
