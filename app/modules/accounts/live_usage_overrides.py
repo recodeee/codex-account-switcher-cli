@@ -561,6 +561,11 @@ def _apply_deferred_sample_floor_override(
     if not primary_samples and not secondary_samples:
         return False, None
 
+    # When deferred matching cannot safely map reset fingerprints to a
+    # single account, prefer the least-consumed sample instead of a
+    # conservative max-used floor. Mixed default-session samples can include
+    # telemetry from another snapshot/account, and picking max-used causes
+    # false depletion on the active account immediately after switching.
     primary_sample = min(
         primary_samples,
         key=lambda sample: (
@@ -644,8 +649,24 @@ def _apply_deferred_sample_floor_override(
     sample_floor_live_usage = LocalCodexLiveUsage(
         recorded_at=debug_recorded_at,
         active_session_count=1,
-        primary=primary_sample.primary if primary_sample is not None else None,
-        secondary=secondary_sample.secondary if secondary_sample is not None else None,
+        primary=(
+            LocalUsageWindow(
+                used_percent=float(primary_sample.primary.used_percent),
+                reset_at=primary_sample.primary.reset_at,
+                window_minutes=primary_sample.primary.window_minutes,
+            )
+            if primary_sample is not None and primary_sample.primary is not None
+            else None
+        ),
+        secondary=(
+            LocalUsageWindow(
+                used_percent=float(secondary_sample.secondary.used_percent),
+                reset_at=secondary_sample.secondary.reset_at,
+                window_minutes=secondary_sample.secondary.window_minutes,
+            )
+            if secondary_sample is not None and secondary_sample.secondary is not None
+            else None
+        ),
     )
     return True, sample_floor_live_usage
 
@@ -803,7 +824,10 @@ def _build_default_sample_debug_overrides(
     debug_samples_by_account: dict[str, list[AccountLiveQuotaDebugSample]] = {}
     confident_samples_by_account: dict[str, list[AccountLiveQuotaDebugSample]] = {}
     for sample_index, match in assignments.items():
-        if match.confidence != "high":
+        include_for_debug = match.confidence == "high" or (
+            active_account_id is not None and match.account_id == active_account_id
+        )
+        if not include_for_debug:
             continue
         if sample_index < 0 or sample_index >= len(default_scope_samples):
             continue
@@ -823,11 +847,12 @@ def _build_default_sample_debug_overrides(
         debug_samples_by_account.setdefault(match.account_id, []).append(debug_sample)
         if match.allows_quota_override:
             confident_samples_by_account.setdefault(match.account_id, []).append(debug_sample)
-        _remember_sample_source_owner(
-            source=sample.source,
-            account_id=match.account_id,
-            observed_at=sample.recorded_at,
-        )
+        if match.confidence == "high":
+            _remember_sample_source_owner(
+                source=sample.source,
+                account_id=match.account_id,
+                observed_at=sample.recorded_at,
+            )
 
     for samples in debug_samples_by_account.values():
         samples.sort(key=lambda sample: sample.recorded_at, reverse=True)
@@ -1261,14 +1286,14 @@ def _resolve_active_snapshot_account_id(
         status = codex_auth_by_account.get(account.id)
         if status is None:
             continue
-        if status.is_active_snapshot:
+        if status.snapshot_name == active_snapshot_name:
             return account.id
 
     for account in accounts:
         status = codex_auth_by_account.get(account.id)
         if status is None:
             continue
-        if status.snapshot_name == active_snapshot_name:
+        if status.is_active_snapshot:
             return account.id
     return None
 
@@ -1381,6 +1406,11 @@ def _resolve_sample_account_assignments(
         unresolved_sample_indexes.remove(sample_index)
 
     # Pass 3: deterministic cost-based assignment for remaining fingerprint samples.
+    #
+    # Only keep high-confidence matches here. Low-confidence matches are left
+    # unresolved so Pass 4 can conservatively pin them to the preferred
+    # account (typically the active snapshot) instead of spreading ambiguous
+    # samples across unrelated accounts.
     for sample_index in _sorted_sample_indexes(samples, unresolved_sample_indexes):
         sample = samples[sample_index]
         if not _sample_has_fingerprint(sample):
@@ -1415,6 +1445,8 @@ def _resolve_sample_account_assignments(
             continue
 
         _, _, account_id, match = best_match
+        if match.confidence != "high":
+            continue
         assignments[sample_index] = match
         assigned_counts[account_id] += 1
         unresolved_sample_indexes.remove(sample_index)

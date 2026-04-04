@@ -550,6 +550,91 @@ def test_fallback_mapping_updates_live_session_counts_but_keeps_quota_baseline_f
     assert secondary_usage[account_b.id].used_percent == baseline_secondary[account_b.id].used_percent
 
 
+def test_fallback_mapping_keeps_low_confidence_fingerprint_samples_on_active_snapshot() -> None:
+    account_a = _make_account("acc-a", "a@example.com")
+    account_b = _make_account("acc-b", "b@example.com")
+    accounts = [account_a, account_b]
+    snapshot_index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={account_a.id: ["snap-a"], account_b.id: ["snap-b"]},
+        active_snapshot_name="snap-b",
+    )
+    codex_auth_by_account = {
+        account_a.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="snap-a",
+            active_snapshot_name="snap-b",
+            is_active_snapshot=False,
+            has_live_session=False,
+        ),
+        account_b.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="snap-b",
+            active_snapshot_name="snap-b",
+            is_active_snapshot=True,
+            has_live_session=False,
+        ),
+    }
+
+    shared_primary_reset = 1_210_100
+    shared_secondary_reset = 1_213_700
+    baseline_primary = {
+        account_a.id: _usage_entry(account_id=account_a.id, window="primary", used_percent=40.0, reset_at=shared_primary_reset, window_minutes=300),
+        account_b.id: _usage_entry(account_id=account_b.id, window="primary", used_percent=42.0, reset_at=shared_primary_reset, window_minutes=300),
+    }
+    baseline_secondary = {
+        account_a.id: _usage_entry(account_id=account_a.id, window="secondary", used_percent=40.0, reset_at=shared_secondary_reset, window_minutes=10_080),
+        account_b.id: _usage_entry(account_id=account_b.id, window="secondary", used_percent=42.0, reset_at=shared_secondary_reset, window_minutes=10_080),
+    }
+    primary_usage = dict(baseline_primary)
+    secondary_usage = dict(baseline_secondary)
+    codex_session_counts_by_account = {account_a.id: 0, account_b.id: 0}
+
+    _apply_local_default_session_fingerprint_overrides(
+        accounts=accounts,
+        snapshot_index=snapshot_index,
+        live_usage_by_snapshot={
+            "snap-b": LocalCodexLiveUsage(
+                recorded_at=datetime(2026, 4, 3, tzinfo=timezone.utc),
+                active_session_count=2,
+                primary=LocalUsageWindow(used_percent=50.0, reset_at=1_210_500, window_minutes=300),
+                secondary=LocalUsageWindow(used_percent=50.0, reset_at=1_214_100, window_minutes=10_080),
+            )
+        },
+        live_usage_samples_by_snapshot={
+            "snap-b": [
+                LocalCodexLiveUsageSample(
+                    source="rollout-low-confidence-active-a.jsonl",
+                    recorded_at=datetime(2026, 4, 3, 12, 0, tzinfo=timezone.utc),
+                    primary=LocalUsageWindow(used_percent=41.0, reset_at=shared_primary_reset, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=41.0, reset_at=shared_secondary_reset, window_minutes=10_080),
+                    stale=False,
+                ),
+                LocalCodexLiveUsageSample(
+                    source="rollout-low-confidence-active-b.jsonl",
+                    recorded_at=datetime(2026, 4, 3, 12, 1, tzinfo=timezone.utc),
+                    primary=LocalUsageWindow(used_percent=41.0, reset_at=shared_primary_reset, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=41.0, reset_at=shared_secondary_reset, window_minutes=10_080),
+                    stale=False,
+                ),
+            ]
+        },
+        codex_auth_by_account=codex_auth_by_account,
+        baseline_primary_usage=baseline_primary,
+        baseline_secondary_usage=baseline_secondary,
+        primary_usage=primary_usage,
+        secondary_usage=secondary_usage,
+        codex_session_counts_by_account=codex_session_counts_by_account,
+    )
+
+    assert codex_session_counts_by_account == {account_a.id: 0, account_b.id: 2}
+    assert codex_auth_by_account[account_a.id].has_live_session is False
+    assert codex_auth_by_account[account_b.id].has_live_session is True
+    assert primary_usage[account_a.id].used_percent == baseline_primary[account_a.id].used_percent
+    assert secondary_usage[account_a.id].used_percent == baseline_secondary[account_a.id].used_percent
+    assert primary_usage[account_b.id].used_percent == baseline_primary[account_b.id].used_percent
+    assert secondary_usage[account_b.id].used_percent == baseline_secondary[account_b.id].used_percent
+
+
 def test_fallback_mapping_applies_quota_overrides_when_reset_matches_are_unique() -> None:
     account_a = _make_account("acc-a", "a@example.com")
     account_b = _make_account("acc-b", "b@example.com")
@@ -1413,7 +1498,7 @@ def test_apply_local_live_usage_overrides_keeps_cached_source_ownership_across_s
     assert [sample.source for sample in amodeus_debug.raw_samples] == ["rollout-amodeus.jsonl"]
 
 
-def test_apply_local_live_usage_overrides_keeps_baseline_for_active_snapshot_when_deferred_samples_exist(
+def test_apply_local_live_usage_overrides_clears_active_baseline_when_deferred_samples_exist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     amodeus = _make_account("acc-amodeus", "amodeus@example.com")
@@ -1613,15 +1698,15 @@ def test_apply_local_live_usage_overrides_applies_sample_floor_for_deferred_acti
                 LocalCodexLiveUsageSample(
                     source="rollout-a.jsonl",
                     recorded_at=now,
-                    primary=LocalUsageWindow(used_percent=99.0, reset_at=None, window_minutes=300),
-                    secondary=LocalUsageWindow(used_percent=100.0, reset_at=None, window_minutes=10_080),
+                    primary=LocalUsageWindow(used_percent=1.0, reset_at=None, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=0.0, reset_at=None, window_minutes=10_080),
                     stale=False,
                 ),
                 LocalCodexLiveUsageSample(
                     source="rollout-b.jsonl",
                     recorded_at=now,
-                    primary=LocalUsageWindow(used_percent=90.0, reset_at=None, window_minutes=300),
-                    secondary=LocalUsageWindow(used_percent=99.0, reset_at=None, window_minutes=10_080),
+                    primary=LocalUsageWindow(used_percent=10.0, reset_at=None, window_minutes=300),
+                    secondary=LocalUsageWindow(used_percent=1.0, reset_at=None, window_minutes=10_080),
                     stale=False,
                 ),
             ]
@@ -1646,13 +1731,13 @@ def test_apply_local_live_usage_overrides_applies_sample_floor_for_deferred_acti
         live_quota_debug_by_account=debug_by_account,
     )
 
-    assert primary_usage[korona.id].used_percent == pytest.approx(90.0)
-    assert secondary_usage[korona.id].used_percent == pytest.approx(99.0)
+    assert primary_usage[korona.id].used_percent == pytest.approx(1.0)
+    assert secondary_usage[korona.id].used_percent == pytest.approx(0.0)
     assert len(candidates) == 2
     debug = debug_by_account[korona.id]
     assert debug.override_applied is True
     assert debug.override_reason == "deferred_active_snapshot_sample_floor_override"
     assert debug.merged.primary is not None
     assert debug.merged.secondary is not None
-    assert debug.merged.primary.used_percent == pytest.approx(90.0)
-    assert debug.merged.secondary.used_percent == pytest.approx(99.0)
+    assert debug.merged.primary.remaining_percent == pytest.approx(99.0)
+    assert debug.merged.secondary.remaining_percent == pytest.approx(100.0)
