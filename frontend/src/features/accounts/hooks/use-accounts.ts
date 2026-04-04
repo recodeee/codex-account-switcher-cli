@@ -135,6 +135,9 @@ export function useAccountMutations() {
       toast.success(`Opened terminal for ${response.snapshotName}`);
       void invalidateAccountRelatedQueries(queryClient);
     },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to open host terminal");
+    },
   });
 
   const repairSnapshotMutation = useMutation({

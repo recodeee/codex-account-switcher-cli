@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import App from "@/App";
 import {
@@ -14,12 +14,6 @@ import {
 } from "@/test/mocks/factories";
 import { server } from "@/test/mocks/server";
 import { renderWithProviders } from "@/test/utils";
-
-vi.mock("@/features/dashboard/components/account-terminal-surface", () => ({
-  AccountTerminalSurface: ({ account }: { account: { accountId: string } }) => (
-    <div data-testid={`account-terminal-host-${account.accountId}`} />
-  ),
-}));
 
 describe("dashboard flow integration", () => {
   it("loads dashboard, refetches request logs on filter/pagination, and avoids overview refetch", async () => {

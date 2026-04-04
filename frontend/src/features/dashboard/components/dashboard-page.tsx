@@ -12,7 +12,6 @@ import { DashboardSkeleton } from "@/features/dashboard/components/dashboard-ske
 import { RequestFilters } from "@/features/dashboard/components/filters/request-filters";
 import { RequestLogUsageDonuts } from "@/features/dashboard/components/request-log-usage-donuts";
 import { RecentRequestsTable } from "@/features/dashboard/components/recent-requests-table";
-import { useTerminalWorkspace } from "@/features/dashboard/components/terminal-workspace-context";
 import { mergeRequestLogUsageSummaryWithLiveFallback } from "@/features/dashboard/request-log-usage-fallback";
 import { UsageDonuts } from "@/features/dashboard/components/usage-donuts";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
@@ -31,11 +30,11 @@ export function DashboardPage() {
   const queryClient = useQueryClient();
   const isDark = useThemeStore((s) => s.theme === "dark");
   const dashboardQuery = useDashboard();
-  const { openTerminal } = useTerminalWorkspace();
   const { filters, logsQuery, optionsQuery, usageSummaryQuery, updateFilters } = useRequestLogs();
   const {
     resumeMutation,
     useLocalMutation,
+    openTerminalMutation,
     repairSnapshotMutation,
   } = useAccountMutations();
 
@@ -67,10 +66,7 @@ export function DashboardPage() {
           });
           break;
         case "terminal":
-          openTerminal({
-            accountId: account.accountId,
-            email: account.email,
-          });
+          openTerminalMutation.mutate(account.accountId);
           break;
         case "sessions":
           navigate(`/sessions?accountId=${encodeURIComponent(account.accountId)}`);
@@ -91,7 +87,7 @@ export function DashboardPage() {
     },
     [
       navigate,
-      openTerminal,
+      openTerminalMutation,
       repairSnapshotMutation,
       resumeMutation,
       useLocalMutation,

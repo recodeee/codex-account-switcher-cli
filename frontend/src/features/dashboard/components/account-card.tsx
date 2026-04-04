@@ -37,6 +37,7 @@ import {
   hasActiveCliSessionSignal,
   hasRecentUsageSignal,
   hasFreshLiveTelemetry,
+  getWorkingNowUsageLimitHitCountdownMs,
   isAccountWorkingNow,
   isFreshQuotaTelemetryTimestamp,
   selectStableRemainingPercent,
@@ -330,6 +331,13 @@ function isLiveUsageLimitHit(input: {
   return Math.round(Math.max(0, input.primaryRemainingPercent)) <= 0;
 }
 
+function formatLimitHitCountdown(remainingMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 export function AccountCard({
   account,
   tokensUsed = null,
@@ -339,6 +347,7 @@ export function AccountCard({
   useLocalBusy = false,
   onAction,
 }: AccountCardProps) {
+  const nowMs = Date.now();
   const [showQuotaDebug, setShowQuotaDebug] = useState(false);
   const liveQuotaDebug = account.liveQuotaDebug ?? null;
   const mergedPrimaryRemainingPercent = getMergedQuotaRemainingPercent(
@@ -357,14 +366,19 @@ export function AccountCard({
     account,
     "secondary",
   );
-  const freshDebugRawSampleCount = getFreshDebugRawSampleCount(account);
+  const freshDebugRawSampleCount = getFreshDebugRawSampleCount(account, nowMs);
   const blurred = usePrivacyStore((s) => s.blurred);
   const isActiveSnapshot = account.codexAuth?.isActiveSnapshot ?? false;
-  const hasLiveSession = hasFreshLiveTelemetry(account);
-  const hasActiveCliSession = hasActiveCliSessionSignal(account);
+  const hasLiveSession = hasFreshLiveTelemetry(account, nowMs);
+  const hasActiveCliSession = hasActiveCliSessionSignal(account, nowMs);
   const recentUsageSignal =
-    (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account);
-  const isWorkingNow = isAccountWorkingNow(account);
+    (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account, nowMs);
+  const isWorkingNow = isAccountWorkingNow(account, nowMs);
+  const usageLimitHitCountdownMs = getWorkingNowUsageLimitHitCountdownMs(account, nowMs);
+  const usageLimitHitCountdownLabel =
+    usageLimitHitCountdownMs != null && usageLimitHitCountdownMs > 0
+      ? formatLimitHitCountdown(usageLimitHitCountdownMs)
+      : null;
   const effectiveStatus = resolveEffectiveAccountStatus({
     status: account.status,
     hasSnapshot: account.codexAuth?.hasSnapshot,
@@ -541,7 +555,13 @@ export function AccountCard({
   const idSuffix = showAccountId ? ` | ID ${compactId}` : "";
 
   return (
-    <div className="card-hover rounded-xl border border-border/70 bg-gradient-to-b from-card to-card/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div
+      className={cn(
+        "card-hover rounded-xl border border-border/70 bg-gradient-to-b from-card to-card/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+        usageLimitHit &&
+          "border-red-500/40 bg-gradient-to-b from-red-500/12 via-card to-card/85",
+      )}
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -593,6 +613,11 @@ export function AccountCard({
                 aria-hidden
               />
               Usage limit hit
+              {usageLimitHitCountdownLabel ? (
+                <span className="font-medium text-red-700 dark:text-red-300">
+                  · leaves in {usageLimitHitCountdownLabel}
+                </span>
+              ) : null}
             </Badge>
           ) : isWorkingNow ? (
             <Badge

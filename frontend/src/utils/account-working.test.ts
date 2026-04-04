@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createAccountSummary } from "@/test/mocks/factories";
 import {
+  getWorkingNowUsageLimitHitCountdownMs,
   getMergedQuotaRemainingPercent,
   getRawQuotaWindowFallback,
   isAccountWorkingNow,
@@ -103,6 +104,56 @@ describe("isAccountWorkingNow", () => {
     });
 
     expect(isAccountWorkingNow(account, new Date("2026-04-04T12:00:00.000Z").getTime())).toBe(true);
+  });
+
+  it("ages out usage-limit-hit accounts after 60 seconds even with active session signals", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: "2026-04-04T11:58:30.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-04T11:58:30.000Z",
+    });
+
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:00.000Z").getTime())).toBe(true);
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:31.000Z").getTime())).toBe(false);
+  });
+
+  it("returns a 60-second usage-limit countdown while account is still eligible for working-now", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: "2026-04-04T11:58:30.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-04T11:58:30.000Z",
+    });
+
+    const nowMs = new Date("2026-04-04T11:59:00.000Z").getTime();
+    const countdownMs = getWorkingNowUsageLimitHitCountdownMs(account, nowMs);
+    expect(countdownMs).toBeGreaterThanOrEqual(29_000);
+    expect(countdownMs).toBeLessThanOrEqual(30_000);
   });
 
   it("returns false when no-live-telemetry fallback reports 0% even if baseline usage is higher", () => {

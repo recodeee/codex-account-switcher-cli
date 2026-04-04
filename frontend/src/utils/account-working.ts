@@ -2,6 +2,7 @@ import type { AccountSummary } from "@/features/accounts/schemas";
 
 const LIVE_TELEMETRY_STALE_AFTER_MS = 5 * 60 * 1000;
 const LIVE_TELEMETRY_WORKING_GRACE_AFTER_MS = 20 * 60 * 1000;
+const WORKING_NOW_LIMIT_HIT_GRACE_MS = 60 * 1000;
 const RECENT_USAGE_SIGNAL_STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 const RESET_ALIGNMENT_TOLERANCE_MS = 30 * 1000;
 
@@ -366,6 +367,115 @@ export function hasRecentUsageSignal(
   );
 }
 
+type WorkingNowAccount = Pick<
+  AccountSummary,
+  | "codexAuth"
+  | "codexLiveSessionCount"
+  | "codexSessionCount"
+  | "codexTrackedSessionCount"
+  | "liveQuotaDebug"
+  | "usage"
+  | "lastUsageRecordedAtPrimary"
+  | "lastUsageRecordedAtSecondary"
+>;
+
+function isDepletedPrimaryQuota(value: number | null | undefined): boolean {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return false;
+  }
+  return Math.round(Math.max(0, value)) <= 0;
+}
+
+function resolveWorkingNowPrimaryQuota(
+  account: WorkingNowAccount,
+  nowMs: number,
+): {
+  mergedPrimaryRemaining: number | null;
+  deferredPrimaryQuotaFallback: RawQuotaWindowFallback | null;
+  primaryRemaining: number | null;
+} {
+  const mergedPrimaryRemaining = getMergedQuotaRemainingPercent(account, "primary");
+  const deferredPrimaryQuotaFallback = getRawQuotaWindowFallback(account, "primary");
+  const freshDeferredPrimaryRemaining = (() => {
+    if (!deferredPrimaryQuotaFallback) return null;
+    if (!isFreshTimestamp(deferredPrimaryQuotaFallback.recordedAt, nowMs)) return null;
+    return deferredPrimaryQuotaFallback.remainingPercent;
+  })();
+  const primaryRemaining =
+    mergedPrimaryRemaining ??
+    freshDeferredPrimaryRemaining ??
+    account.usage?.primaryRemainingPercent ??
+    null;
+
+  return {
+    mergedPrimaryRemaining,
+    deferredPrimaryQuotaFallback,
+    primaryRemaining,
+  };
+}
+
+function resolveUsageLimitHitRecordedAtMs(
+  account: WorkingNowAccount,
+  input: {
+    mergedPrimaryRemaining: number | null;
+    deferredPrimaryQuotaFallback: RawQuotaWindowFallback | null;
+  },
+): number | null {
+  if (isDepletedPrimaryQuota(input.mergedPrimaryRemaining)) {
+    const mergedRecordedAtMs = parseRecordedAtMs(account.liveQuotaDebug?.merged?.recordedAt);
+    if (mergedRecordedAtMs != null) {
+      return mergedRecordedAtMs;
+    }
+  }
+
+  const deferredPrimary = input.deferredPrimaryQuotaFallback;
+  if (deferredPrimary && isDepletedPrimaryQuota(deferredPrimary.remainingPercent)) {
+    const deferredRecordedAtMs = parseRecordedAtMs(deferredPrimary.recordedAt);
+    if (deferredRecordedAtMs != null) {
+      return deferredRecordedAtMs;
+    }
+  }
+
+  return (
+    parseRecordedAtMs(account.lastUsageRecordedAtPrimary) ??
+    parseRecordedAtMs(account.lastUsageRecordedAtSecondary)
+  );
+}
+
+export function getWorkingNowUsageLimitHitCountdownMs(
+  account: WorkingNowAccount,
+  nowMs: number = Date.now(),
+): number | null {
+  const hasActiveSessionCounterSignal =
+    Math.max(
+      account.codexLiveSessionCount ?? 0,
+      account.codexTrackedSessionCount ?? 0,
+      account.codexSessionCount ?? 0,
+      0,
+    ) > 0;
+  const hasActiveCliSessionSignal =
+    hasActiveSessionCounterSignal || (account.codexAuth?.hasLiveSession ?? false);
+  if (!hasActiveCliSessionSignal) {
+    return null;
+  }
+
+  const quotaState = resolveWorkingNowPrimaryQuota(account, nowMs);
+  const hasDepletedPrimaryQuota =
+    isDepletedPrimaryQuota(quotaState.mergedPrimaryRemaining) ||
+    isDepletedPrimaryQuota(quotaState.primaryRemaining);
+  if (!hasDepletedPrimaryQuota) {
+    return null;
+  }
+
+  const hitRecordedAtMs = resolveUsageLimitHitRecordedAtMs(account, quotaState);
+  if (hitRecordedAtMs == null) {
+    return WORKING_NOW_LIMIT_HIT_GRACE_MS;
+  }
+
+  const elapsedMs = Math.max(0, nowMs - hitRecordedAtMs);
+  return Math.max(0, WORKING_NOW_LIMIT_HIT_GRACE_MS - elapsedMs);
+}
+
 export function isAccountWorkingNow(
   account: Pick<
     AccountSummary,
@@ -413,37 +523,24 @@ export function isAccountWorkingNow(
     return false;
   }
 
-  const mergedPrimaryRemaining = getMergedQuotaRemainingPercent(account, "primary");
-  const deferredPrimaryQuotaFallback = getRawQuotaWindowFallback(account, "primary");
-  const freshDeferredPrimaryRemaining = (() => {
-    if (!deferredPrimaryQuotaFallback) return null;
-    if (!isFreshTimestamp(deferredPrimaryQuotaFallback.recordedAt, nowMs)) return null;
-    return deferredPrimaryQuotaFallback.remainingPercent;
-  })();
-  const primaryRemaining =
-    mergedPrimaryRemaining ??
-    freshDeferredPrimaryRemaining ??
-    account.usage?.primaryRemainingPercent ??
-    null;
-
-  // Explicit merged live usage is authoritative: when it reports depleted 5h
-  // quota, the account should leave "Working now" immediately.
-  if (
-    typeof mergedPrimaryRemaining === "number" &&
-    Math.round(Math.max(0, mergedPrimaryRemaining)) <= 0
-  ) {
-    return false;
-  }
+  const quotaState = resolveWorkingNowPrimaryQuota(account, nowMs);
+  const hasDepletedPrimaryQuota =
+    isDepletedPrimaryQuota(quotaState.mergedPrimaryRemaining) ||
+    isDepletedPrimaryQuota(quotaState.primaryRemaining);
+  const usageLimitHitCountdownMs = getWorkingNowUsageLimitHitCountdownMs(account, nowMs);
 
   // Keep the grouping logic aligned with the UI percent label (rounded).
   // When the 5h budget renders as 0%, the account should not stay in
-  // "Working now" unless it still has an active CLI session signal.
-  if (
-    typeof primaryRemaining === "number" &&
-    Math.round(Math.max(0, primaryRemaining)) <= 0 &&
-    !hasActiveCliSessionSignal
-  ) {
-    return false;
+  // "Working now" unless it still has an active CLI session signal. Even with
+  // active session signals, keep exhausted accounts in "Working now" only for
+  // a short grace period, then age them out automatically.
+  if (hasDepletedPrimaryQuota) {
+    if (!hasActiveCliSessionSignal) {
+      return false;
+    }
+    if (usageLimitHitCountdownMs != null && usageLimitHitCountdownMs <= 0) {
+      return false;
+    }
   }
 
   if (hasFreshLiveSession) {
