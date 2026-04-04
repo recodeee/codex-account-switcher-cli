@@ -307,10 +307,36 @@ def build_snapshot_index() -> CodexAuthSnapshotIndex:
         snapshot_names.sort()
 
     active_snapshot_name = _resolve_active_snapshot_name(accounts_dir)
+    if active_snapshot_name is None:
+        active_snapshot_name = _resolve_active_snapshot_name_from_active_auth_payload(
+            snapshots_by_account_id=snapshots_by_account_id
+        )
     return CodexAuthSnapshotIndex(
         snapshots_by_account_id=snapshots_by_account_id,
         active_snapshot_name=active_snapshot_name,
     )
+
+
+def _resolve_active_snapshot_name_from_active_auth_payload(
+    *,
+    snapshots_by_account_id: dict[str, list[str]],
+) -> str | None:
+    active_auth_path = _resolve_active_auth_path()
+    if not active_auth_path.exists() or not active_auth_path.is_file():
+        return None
+
+    try:
+        auth = parse_auth_json(active_auth_path.read_bytes())
+    except Exception:
+        return None
+
+    claims = claims_from_auth(auth)
+    email = claims.email or DEFAULT_EMAIL
+    account_id = generate_unique_account_id(claims.account_id, email)
+    snapshot_names = snapshots_by_account_id.get(account_id, [])
+    if not snapshot_names:
+        return None
+    return select_snapshot_name(snapshot_names, None, email=email)
 
 
 def select_snapshot_name(

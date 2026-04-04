@@ -10,7 +10,7 @@ function item(overrides: { accountId: string; label: string; value: number; rema
 }
 
 describe("UsageDonuts", () => {
-  it("renders primary and secondary donut panels with collapsed account legends", () => {
+  it("renders primary and secondary donut panels with collapsed legends showing account previews", () => {
     render(
       <UsageDonuts
         primaryItems={[item({ accountId: "acc-1", label: "primary@example.com", value: 120, remainingPercent: 60, color: "#7bb661" })]}
@@ -22,10 +22,10 @@ describe("UsageDonuts", () => {
 
     expect(screen.getByText("5h Remaining")).toBeInTheDocument();
     expect(screen.getByText("Weekly Remaining")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "5h Remaining accounts" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByRole("button", { name: "Weekly Remaining accounts" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("primary@example.com")).not.toBeInTheDocument();
-    expect(screen.queryByText("secondary@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "5h Remaining accounts" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Weekly Remaining accounts" })).not.toBeInTheDocument();
+    expect(screen.getByText("primary@example.com")).toBeInTheDocument();
+    expect(screen.getByText("secondary@example.com")).toBeInTheDocument();
   });
 
   it("expands account legends when accounts toggle is clicked", async () => {
@@ -33,8 +33,20 @@ describe("UsageDonuts", () => {
 
     render(
       <UsageDonuts
-        primaryItems={[item({ accountId: "acc-1", label: "primary@example.com", value: 120, remainingPercent: 60, color: "#7bb661" })]}
-        secondaryItems={[item({ accountId: "acc-2", label: "secondary@example.com", value: 80, remainingPercent: 40, color: "#d9a441" })]}
+        primaryItems={[
+          item({ accountId: "acc-1", label: "p1@example.com", value: 120, remainingPercent: 60, color: "#7bb661" }),
+          item({ accountId: "acc-2", label: "p2@example.com", value: 110, remainingPercent: 55, color: "#d9a441" }),
+          item({ accountId: "acc-3", label: "p3@example.com", value: 100, remainingPercent: 50, color: "#4c8df5" }),
+          item({ accountId: "acc-4", label: "p4@example.com", value: 90, remainingPercent: 45, color: "#9b5de5" }),
+          item({ accountId: "acc-5", label: "p5@example.com", value: 80, remainingPercent: 40, color: "#00a896" }),
+        ]}
+        secondaryItems={[
+          item({ accountId: "acc-6", label: "s1@example.com", value: 120, remainingPercent: 60, color: "#7bb661" }),
+          item({ accountId: "acc-7", label: "s2@example.com", value: 110, remainingPercent: 55, color: "#d9a441" }),
+          item({ accountId: "acc-8", label: "s3@example.com", value: 100, remainingPercent: 50, color: "#4c8df5" }),
+          item({ accountId: "acc-9", label: "s4@example.com", value: 90, remainingPercent: 45, color: "#9b5de5" }),
+          item({ accountId: "acc-10", label: "s5@example.com", value: 80, remainingPercent: 40, color: "#00a896" }),
+        ]}
         primaryTotal={200}
         secondaryTotal={200}
       />,
@@ -43,13 +55,41 @@ describe("UsageDonuts", () => {
     await user.click(screen.getByRole("button", { name: "5h Remaining accounts" }));
     await user.click(screen.getByRole("button", { name: "Weekly Remaining accounts" }));
 
-    expect(screen.getByText("primary@example.com")).toBeInTheDocument();
-    expect(screen.getByText("secondary@example.com")).toBeInTheDocument();
+    expect(screen.getByText("p5@example.com")).toBeInTheDocument();
+    expect(screen.getByText("s5@example.com")).toBeInTheDocument();
+  });
+
+  it("shows 4 account previews when collapsed and reveals all on expand", async () => {
+    const user = userEvent.setup({ delay: null });
+    render(
+      <UsageDonuts
+        primaryItems={[
+          item({ accountId: "acc-1", label: "a1@example.com", value: 120, remainingPercent: 60, color: "#7bb661" }),
+          item({ accountId: "acc-2", label: "a2@example.com", value: 90, remainingPercent: 45, color: "#d9a441" }),
+          item({ accountId: "acc-3", label: "a3@example.com", value: 80, remainingPercent: 40, color: "#4c8df5" }),
+          item({ accountId: "acc-4", label: "a4@example.com", value: 70, remainingPercent: 35, color: "#9b5de5" }),
+          item({ accountId: "acc-5", label: "a5@example.com", value: 60, remainingPercent: 30, color: "#00a896" }),
+        ]}
+        secondaryItems={[]}
+        primaryTotal={500}
+        secondaryTotal={0}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "5h Remaining accounts" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("a1@example.com")).toBeInTheDocument();
+    expect(screen.getByText("a2@example.com")).toBeInTheDocument();
+    expect(screen.getByText("a3@example.com")).toBeInTheDocument();
+    expect(screen.getByText("a4@example.com")).toBeInTheDocument();
+    expect(screen.queryByText("a5@example.com")).not.toBeInTheDocument();
+    expect(screen.getByText("+1 more")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "5h Remaining accounts" }));
+    expect(screen.getByRole("button", { name: "5h Remaining accounts" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("a5@example.com")).toBeInTheDocument();
   });
 
   it("shows donut center values as remaining credits, not total capacity", async () => {
-    const user = userEvent.setup({ delay: null });
-
     render(
       <UsageDonuts
         primaryItems={[]}
@@ -59,10 +99,8 @@ describe("UsageDonuts", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Weekly Remaining accounts" }));
-
-    expect(screen.queryByText("14.36M")).not.toBeInTheDocument();
-    expect(screen.getAllByText("189K").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("143.64M")).not.toBeInTheDocument();
+    expect(screen.getAllByText("1.89M").length).toBeGreaterThanOrEqual(1);
   });
 
   it("handles empty data gracefully", () => {

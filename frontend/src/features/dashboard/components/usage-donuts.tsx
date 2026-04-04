@@ -18,7 +18,7 @@ function formatTokensFromCredits(value: number): string {
 	if (!Number.isFinite(value)) {
 		return "--";
 	}
-	return formatCompactNumber(Math.max(0, value) * 100);
+	return formatCompactNumber(Math.max(0, value) * 1000);
 }
 
 export function UsageDonuts({

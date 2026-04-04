@@ -60,14 +60,22 @@ export function AccountDetail({
     : null;
   const idSuffix = showAccountId ? ` (${compactId})` : "";
   const hasResolvedSnapshot = Boolean(account.codexAuth?.snapshotName?.trim());
+  const snapshotName = account.codexAuth?.snapshotName?.trim() || null;
 
   return (
     <div key={account.accountId} className="animate-fade-in-up space-y-4 rounded-xl border bg-card p-5">
       {/* Account header */}
       <div>
-        <h2 className="text-base font-semibold">
-          {titleIsEmail ? <><span className={blurred ? "privacy-blur" : ""}>{title}</span>{idSuffix}</> : <>{title}{!emailSubtitle ? idSuffix : ""}</>}
-        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold">
+            {titleIsEmail ? <><span className={blurred ? "privacy-blur" : ""}>{title}</span>{idSuffix}</> : <>{title}{!emailSubtitle ? idSuffix : ""}</>}
+          </h2>
+          {snapshotName ? (
+            <span className="inline-flex items-center rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-cyan-700 dark:text-cyan-300">
+              SNAPSHOT:{snapshotName}
+            </span>
+          ) : null}
+        </div>
         {emailSubtitle ? (
           <p className="mt-0.5 text-xs text-muted-foreground" title={showAccountId ? `Account ID ${account.accountId}` : undefined}>
             <span className={blurred ? "privacy-blur" : ""}>{emailSubtitle}</span>{showAccountId ? ` | ID ${compactId}` : ""}

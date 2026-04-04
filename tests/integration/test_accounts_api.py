@@ -16,6 +16,7 @@ from app.core.crypto import TokenEncryptor
 from app.core.auth.refresh import RefreshError, TokenRefreshResult
 from app.db.models import Account
 from app.db.session import SessionLocal
+from app.modules.accounts.codex_auth_switcher import build_email_snapshot_name
 from app.modules.usage.repository import UsageRepository
 
 pytestmark = pytest.mark.integration
@@ -424,6 +425,57 @@ async def test_accounts_list_reactivates_deactivated_account_from_active_auth_js
     accounts = {item["accountId"]: item for item in listed.json()["accounts"]}
     assert accounts[expected_account_id]["status"] == "active"
     assert accounts[expected_account_id]["deactivationReason"] is None
+    expected_snapshot_name = build_email_snapshot_name(email)
+    assert accounts[expected_account_id]["codexAuth"]["hasSnapshot"] is True
+    assert accounts[expected_account_id]["codexAuth"]["snapshotName"] == expected_snapshot_name
+    assert accounts[expected_account_id]["codexAuth"]["activeSnapshotName"] == expected_snapshot_name
+    assert accounts[expected_account_id]["codexAuth"]["isActiveSnapshot"] is True
+    assert (accounts_dir / f"{expected_snapshot_name}.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_active_auth_session_updates_existing_snapshot_file(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    existing_snapshot_path = accounts_dir / "tokio.json"
+    _write_auth_snapshot(
+        existing_snapshot_path,
+        email="tokio@example.com",
+        account_id="acc_tokio",
+        access_token="stale_access",
+        refresh_token="stale_refresh",
+    )
+    auth_json_path = tmp_path / "auth.json"
+    _write_auth_snapshot(
+        auth_json_path,
+        email="tokio@example.com",
+        account_id="acc_tokio",
+        access_token="fresh_access",
+        refresh_token="fresh_refresh",
+    )
+
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "missing-current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(auth_json_path))
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    listed = await async_client.get("/api/accounts")
+    assert listed.status_code == 200
+    expected_account_id = generate_unique_account_id("acc_tokio", "tokio@example.com")
+    account = next(item for item in listed.json()["accounts"] if item["accountId"] == expected_account_id)
+    assert account["codexAuth"]["hasSnapshot"] is True
+    assert account["codexAuth"]["snapshotName"] == "tokio"
+    assert account["codexAuth"]["activeSnapshotName"] == "tokio"
+    assert account["codexAuth"]["isActiveSnapshot"] is True
+
+    persisted_snapshot = json.loads(existing_snapshot_path.read_text(encoding="utf-8"))
+    assert persisted_snapshot["tokens"]["accessToken"] == "fresh_access"
+    assert persisted_snapshot["tokens"]["refreshToken"] == "fresh_refresh"
 
 
 @pytest.mark.asyncio

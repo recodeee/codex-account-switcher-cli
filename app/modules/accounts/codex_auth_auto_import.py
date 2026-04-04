@@ -20,6 +20,7 @@ from app.core.plan_types import coerce_account_plan_type
 from app.core.utils.time import to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus
 from app.modules.accounts.codex_auth_auto_import_ignore import list_auto_import_ignored_account_ids
+from app.modules.accounts.codex_auth_switcher import build_email_snapshot_name, select_snapshot_name
 from app.modules.accounts.repository import AccountIdentityConflictError, AccountsRepository
 from app.modules.proxy.account_cache import get_account_selection_cache
 
@@ -34,6 +35,14 @@ class ParsedSnapshotAuth(NamedTuple):
 async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor: TokenEncryptor) -> None:
     if not get_settings().codex_auth_auto_import_on_accounts_list:
         return
+
+    accounts_dir = _resolve_codex_auth_accounts_dir()
+    active_auth_path = _resolve_codex_auth_path()
+    _materialize_active_auth_snapshot(
+        accounts_dir=accounts_dir,
+        active_auth_path=active_auth_path,
+        encryptor=encryptor,
+    )
 
     ignored_account_ids = list_auto_import_ignored_account_ids()
     changed_any = False
@@ -139,12 +148,7 @@ def _existing_tokens_match(
 
 def _collect_codex_auth_snapshot_paths() -> list[Path]:
     accounts_dir = _resolve_codex_auth_accounts_dir()
-    snapshots: list[Path] = []
-    if accounts_dir.exists() and accounts_dir.is_dir():
-        snapshots = sorted(
-            (path for path in accounts_dir.iterdir() if path.is_file() and path.suffix == ".json"),
-            key=lambda path: path.name,
-        )
+    snapshots = _collect_snapshot_files(accounts_dir)
 
     sources = list(snapshots)
     active_auth_path = _resolve_codex_auth_path()
@@ -157,6 +161,15 @@ def _collect_codex_auth_snapshot_paths() -> list[Path]:
         if active_target not in snapshot_targets:
             sources.append(active_auth_path)
     return sources
+
+
+def _collect_snapshot_files(accounts_dir: Path) -> list[Path]:
+    if not accounts_dir.exists() or not accounts_dir.is_dir():
+        return []
+    return sorted(
+        (path for path in accounts_dir.iterdir() if path.is_file() and path.suffix == ".json"),
+        key=lambda path: path.name,
+    )
 
 
 def _resolve_codex_auth_accounts_dir() -> Path:
@@ -172,6 +185,91 @@ def _resolve_codex_auth_path() -> Path:
         path = Path(raw).expanduser()
         return path if path.is_absolute() else Path.cwd() / path
     return Path.home() / ".codex" / "auth.json"
+
+
+def _materialize_active_auth_snapshot(
+    *,
+    accounts_dir: Path,
+    active_auth_path: Path,
+    encryptor: TokenEncryptor,
+) -> None:
+    if not active_auth_path.exists() or not active_auth_path.is_file():
+        return
+
+    snapshots = _collect_snapshot_files(accounts_dir)
+    try:
+        active_target = active_auth_path.resolve()
+    except OSError:
+        active_target = active_auth_path
+
+    snapshot_targets = {snapshot.resolve() for snapshot in snapshots}
+    if active_target in snapshot_targets:
+        return
+
+    try:
+        raw = active_auth_path.read_bytes()
+    except OSError:
+        return
+
+    parsed = _parse_account_from_auth_bytes(raw=raw, encryptor=encryptor)
+    if parsed is None:
+        return
+
+    snapshot_name = _select_snapshot_name_for_account(
+        account_id=parsed.account.id,
+        email=parsed.account.email,
+        accounts_dir=accounts_dir,
+    )
+    if not snapshot_name:
+        return
+
+    snapshot_path = accounts_dir / f"{snapshot_name}.json"
+    try:
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        if snapshot_path.exists() and snapshot_path.read_bytes() == raw:
+            return
+        snapshot_path.write_bytes(raw)
+    except OSError:
+        return
+
+
+def _select_snapshot_name_for_account(
+    *,
+    account_id: str,
+    email: str,
+    accounts_dir: Path,
+) -> str | None:
+    snapshot_names_by_account_id = _snapshot_names_by_account_id(accounts_dir)
+    existing_names = snapshot_names_by_account_id.get(account_id, [])
+    if existing_names:
+        selected = select_snapshot_name(existing_names, None, email=email)
+        return selected or existing_names[0]
+
+    base_name = build_email_snapshot_name(email)
+    candidate = base_name
+    suffix = 2
+    while (accounts_dir / f"{candidate}.json").exists():
+        candidate = f"{base_name}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def _snapshot_names_by_account_id(accounts_dir: Path) -> dict[str, list[str]]:
+    names_by_account_id: dict[str, list[str]] = {}
+    for snapshot_path in _collect_snapshot_files(accounts_dir):
+        try:
+            auth = parse_auth_json(snapshot_path.read_bytes())
+        except (json.JSONDecodeError, ValidationError, UnicodeDecodeError, TypeError, OSError):
+            continue
+
+        claims = claims_from_auth(auth)
+        email = claims.email or DEFAULT_EMAIL
+        account_id = generate_unique_account_id(claims.account_id, email)
+        names_by_account_id.setdefault(account_id, []).append(snapshot_path.stem)
+
+    for snapshot_names in names_by_account_id.values():
+        snapshot_names.sort()
+    return names_by_account_id
 
 
 def _should_reactivate_deactivated_account(account: Account) -> bool:

@@ -58,6 +58,52 @@ export type DashboardView = {
   safeLineSecondary: SafeLineView | null;
 };
 
+function compareNullableNumberDesc(
+  left: number | null | undefined,
+  right: number | null | undefined,
+): number {
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
+  return right - left;
+}
+
+function sortRemainingItemsByQuotaPriority(
+  primaryItems: RemainingItem[],
+  secondaryItems: RemainingItem[],
+): { primary: RemainingItem[]; secondary: RemainingItem[] } {
+  const primaryByAccountId = new Map(
+    primaryItems.map((item) => [item.accountId, item.value]),
+  );
+  const secondaryByAccountId = new Map(
+    secondaryItems.map((item) => [item.accountId, item.value]),
+  );
+
+  const compareItems = (left: RemainingItem, right: RemainingItem): number => {
+    const primaryDiff = compareNullableNumberDesc(
+      primaryByAccountId.get(left.accountId),
+      primaryByAccountId.get(right.accountId),
+    );
+    if (primaryDiff !== 0) return primaryDiff;
+
+    const secondaryDiff = compareNullableNumberDesc(
+      secondaryByAccountId.get(left.accountId),
+      secondaryByAccountId.get(right.accountId),
+    );
+    if (secondaryDiff !== 0) return secondaryDiff;
+
+    const labelDiff = left.label.localeCompare(right.label);
+    if (labelDiff !== 0) return labelDiff;
+
+    return left.accountId.localeCompare(right.accountId);
+  };
+
+  return {
+    primary: [...primaryItems].sort(compareItems),
+    secondary: [...secondaryItems].sort(compareItems),
+  };
+}
+
 export function buildDepletionView(depletion: Depletion | null | undefined): SafeLineView | null {
   if (!depletion || depletion.riskLevel === "safe") return null;
   return { safePercent: depletion.safeUsagePercent, riskLevel: depletion.riskLevel };
@@ -319,15 +365,20 @@ export function buildDashboardView(
 
   const rawPrimaryItems = buildRemainingItems(donutAccounts, primaryWindow, "primary", isDark);
   const secondaryUsageItems = buildRemainingItems(donutAccounts, secondaryWindow, "secondary", isDark);
+  const constrainedPrimaryUsageItems = secondaryWindow
+    ? applySecondaryConstraint(rawPrimaryItems, secondaryUsageItems)
+    : rawPrimaryItems;
+  const sortedUsageItems = sortRemainingItemsByQuotaPriority(
+    constrainedPrimaryUsageItems,
+    secondaryUsageItems,
+  );
   const primaryTotal = buildGroupedWindowTotalCapacity(donutAccounts, primaryWindow, "primary");
   const secondaryTotal = buildGroupedWindowTotalCapacity(donutAccounts, secondaryWindow, "secondary");
 
   return {
     stats,
-    primaryUsageItems: secondaryWindow
-      ? applySecondaryConstraint(rawPrimaryItems, secondaryUsageItems)
-      : rawPrimaryItems,
-    secondaryUsageItems,
+    primaryUsageItems: sortedUsageItems.primary,
+    secondaryUsageItems: sortedUsageItems.secondary,
     primaryTotal,
     secondaryTotal,
     requestLogs,

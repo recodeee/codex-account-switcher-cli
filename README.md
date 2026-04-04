@@ -456,6 +456,9 @@ For external database, production config, ingress, observability, and more see t
 docker compose watch
 
 # Local
+./scripts/dev-auto.sh                           # backend + HMR + static build watch
+
+# Local (manual, separate terminals)
 uv sync && cd frontend && bun install && cd ..
 uv run fastapi run app/main.py --reload        # backend :2455
 cd frontend && bun run dev                     # frontend :5173

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applySecondaryConstraint,
+  buildDashboardView,
   buildDepletionView,
   buildRemainingItems,
 } from "@/features/dashboard/utils";
@@ -329,5 +330,121 @@ describe("buildRemainingItems", () => {
     expect(items[0].accountId).toBe("acc-2");
     expect(items[0].value).toBe(20);
     expect(items[0].remainingPercent).toBe(20);
+  });
+});
+
+describe("buildDashboardView", () => {
+  it("orders donut accounts by 5h remaining, then weekly remaining", () => {
+    const overview = {
+      lastSyncAt: null,
+      accounts: [
+        account({
+          accountId: "acc-medium",
+          email: "medium@example.com",
+          usage: { primaryRemainingPercent: 65, secondaryRemainingPercent: 95 },
+        }),
+        account({
+          accountId: "acc-high-weekly",
+          email: "high-weekly@example.com",
+          usage: { primaryRemainingPercent: 80, secondaryRemainingPercent: 70 },
+        }),
+        account({
+          accountId: "acc-high-primary",
+          email: "high-primary@example.com",
+          usage: { primaryRemainingPercent: 80, secondaryRemainingPercent: 55 },
+        }),
+      ],
+      summary: {
+        primaryWindow: {
+          remainingPercent: 70,
+          capacityCredits: 300,
+          remainingCredits: 225,
+          resetAt: null,
+          windowMinutes: 300,
+        },
+        secondaryWindow: {
+          remainingPercent: 70,
+          capacityCredits: 3000,
+          remainingCredits: 2100,
+          resetAt: null,
+          windowMinutes: 10080,
+        },
+        cost: { currency: "USD", totalUsd7d: 0 },
+        metrics: {
+          requests7d: 0,
+          tokensSecondaryWindow: 0,
+          cachedTokensSecondaryWindow: 0,
+          errorRate7d: 0,
+          topError: null,
+        },
+      },
+      windows: {
+        primary: {
+          windowKey: "primary",
+          windowMinutes: 300,
+          accounts: [
+            {
+              accountId: "acc-medium",
+              remainingPercentAvg: 65,
+              capacityCredits: 100,
+              remainingCredits: 65,
+            },
+            {
+              accountId: "acc-high-weekly",
+              remainingPercentAvg: 80,
+              capacityCredits: 100,
+              remainingCredits: 80,
+            },
+            {
+              accountId: "acc-high-primary",
+              remainingPercentAvg: 80,
+              capacityCredits: 100,
+              remainingCredits: 80,
+            },
+          ],
+        },
+        secondary: {
+          windowKey: "secondary",
+          windowMinutes: 10080,
+          accounts: [
+            {
+              accountId: "acc-medium",
+              remainingPercentAvg: 95,
+              capacityCredits: 1000,
+              remainingCredits: 950,
+            },
+            {
+              accountId: "acc-high-weekly",
+              remainingPercentAvg: 70,
+              capacityCredits: 1000,
+              remainingCredits: 700,
+            },
+            {
+              accountId: "acc-high-primary",
+              remainingPercentAvg: 55,
+              capacityCredits: 1000,
+              remainingCredits: 550,
+            },
+          ],
+        },
+      },
+      trends: { requests: [], tokens: [], cost: [], errorRate: [] },
+      additionalQuotas: [],
+      depletionPrimary: null,
+      depletionSecondary: null,
+    };
+
+    const view = buildDashboardView(overview, [], false);
+
+    expect(view.primaryUsageItems.map((item) => item.accountId)).toEqual([
+      "acc-high-weekly",
+      "acc-high-primary",
+      "acc-medium",
+    ]);
+    expect(view.secondaryUsageItems.map((item) => item.accountId)).toEqual([
+      "acc-high-weekly",
+      "acc-high-primary",
+      "acc-medium",
+    ]);
   });
 });

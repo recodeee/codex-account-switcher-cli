@@ -82,6 +82,25 @@ def test_build_snapshot_index_resolves_active_from_auth_symlink(
     assert index.active_snapshot_name == "secondary"
 
 
+def test_build_snapshot_index_resolves_active_from_auth_payload_when_pointer_is_plain_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    codex_dir = tmp_path / ".codex"
+    accounts_dir = codex_dir / "accounts"
+    accounts_dir.mkdir(parents=True)
+    _write_auth_snapshot(accounts_dir / "tokio.json", email="tokio@example.com", account_id="acc-tokio")
+    auth_path = codex_dir / "auth.json"
+    _write_auth_snapshot(auth_path, email="tokio@example.com", account_id="acc-tokio")
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(codex_dir / "missing-current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(auth_path))
+
+    index = build_snapshot_index()
+
+    assert index.active_snapshot_name == "tokio"
+
+
 def test_build_snapshot_index_prefers_auth_pointer_over_registry_active_account_name(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

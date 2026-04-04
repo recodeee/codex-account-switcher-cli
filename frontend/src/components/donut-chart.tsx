@@ -195,7 +195,7 @@ export function DonutChart({
         </div>
 
         <div className="flex-1 overflow-hidden">
-          {legendCollapsible ? (
+          {hasCollapsedLegendOverflow ? (
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-md border border-border/60 bg-background/30 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:bg-background/50"
