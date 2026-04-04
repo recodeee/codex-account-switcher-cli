@@ -30,7 +30,7 @@ export class InvalidAccountNameError extends CodexAuthError {
   constructor() {
     super(
       "Account names must include at least one non-space character and " +
-        "may contain letters, numbers, dashes, underscores, and dots.",
+        "may contain letters, numbers, dashes, underscores, dots, and @.",
     );
   }
 }

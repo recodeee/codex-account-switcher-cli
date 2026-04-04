@@ -126,6 +126,20 @@ test("saveAccount still overwrites when existing snapshot belongs to same email"
   });
 });
 
+test("saveAccount accepts an email-shaped snapshot name", async (t) => {
+  await withIsolatedCodexDir(t, async ({ accountsDir, authPath }) => {
+    const service = new AccountService();
+    const accountName = "viktor@edia.com";
+    const destinationPath = path.join(accountsDir, `${accountName}.json`);
+
+    await fsp.writeFile(authPath, buildAuthPayload("viktor@edia.com"), "utf8");
+
+    await assert.doesNotReject(() => service.saveAccount(accountName));
+    const parsed = await parseAuthSnapshotFile(destinationPath);
+    assert.equal(parsed.email, "viktor@edia.com");
+  });
+});
+
 test("saveAccount blocks overwrite when emails match but account identity differs", async (t) => {
   await withIsolatedCodexDir(t, async ({ accountsDir, authPath }) => {
     const service = new AccountService();
