@@ -6,7 +6,7 @@
   "packageManager": "bun@1.3.7",
   "scripts": {
     "sync-version": "bun ./scripts/write-version-json.mjs",
-    "dev": "bun run sync-version && next dev --turbopack --port 5173",
+    "dev": "bun run sync-version && next dev --port 5173",
     "build": "bun run sync-version && next build && bun run sync-static",
     "sync-static": "rm -rf ../app/static && mkdir -p ../app/static && cp -R out/. ../app/static/",
     "test": "vitest run",
