@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "@/lib/router-compat";
 
 import { EmptyState } from "@/components/empty-state";
 import { SpinnerBlock } from "@/components/ui/spinner";

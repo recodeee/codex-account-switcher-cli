@@ -5,19 +5,20 @@
   "type": "module",
   "packageManager": "bun@1.3.7",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "sync-version": "bun ./scripts/write-version-json.mjs",
+    "dev": "bun run sync-version && next dev --port 5173",
+    "build": "bun run sync-version && next build && bun run sync-static",
+    "sync-static": "rm -rf ../app/static && mkdir -p ../app/static && cp -R out/. ../app/static/",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
-    "typecheck": "tsc -b",
-    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "preview": "python3 -m http.server 4173 --directory out",
     "screenshots": "npx playwright test --config screenshots/playwright.config.ts",
     "redeploy": "bash ../redeploy.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
-    "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-query": "^5.90.21",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
@@ -27,6 +28,7 @@
     "geist": "^1.7.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.563.0",
+    "next": "^15.3.3",
     "radix-ui": "^1.4.3",
     "react": "^19.2.4",
     "react-day-picker": "^9.13.2",
@@ -42,13 +44,14 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.52.0",
+    "@tailwindcss/postcss": "^4.1.18",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.2.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react-swc": "^4.2.3",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.0",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -60,8 +63,6 @@
     "tw-animate-css": "^1.4.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.55.0",
-    "@playwright/test": "^1.52.0",
-    "vite": "^7.3.1",
     "vitest": "^4.0.18"
   }
 }

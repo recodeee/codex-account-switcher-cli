@@ -1,3 +1,5 @@
-/// <reference types="vite/client" />
-
-declare const __APP_VERSION__: string;
+declare namespace NodeJS {
+  interface ProcessEnv {
+    NEXT_PUBLIC_APP_VERSION?: string;
+  }
+}

@@ -30,6 +30,14 @@ class AccountRequestUsageSummary:
     total_cost_usd: float
 
 
+@dataclass(frozen=True, slots=True)
+class AccountSessionTaskPreview:
+    account_id: str
+    session_key: str
+    task_preview: str | None
+    task_updated_at: datetime | None
+
+
 class AccountIdentityConflictError(Exception):
     def __init__(self, email: str) -> None:
         self.email = email
@@ -158,6 +166,65 @@ class AccountsRepository:
             for account_id, task_preview in result.all()
             if account_id and task_preview
         }
+
+    async def list_codex_session_task_previews_by_account(
+        self,
+        account_ids: list[str] | None = None,
+        *,
+        active_since: datetime | None = None,
+        limit_per_account: int = 4,
+    ) -> dict[str, list[AccountSessionTaskPreview]]:
+        limit_per_account = max(1, int(limit_per_account))
+        task_timestamp = func.coalesce(StickySession.task_updated_at, StickySession.updated_at).label("task_timestamp")
+        ranked_sessions = (
+            select(
+                StickySession.account_id.label("account_id"),
+                StickySession.key.label("session_key"),
+                StickySession.task_preview.label("task_preview"),
+                task_timestamp,
+                func.row_number()
+                .over(
+                    partition_by=StickySession.account_id,
+                    order_by=(
+                        task_timestamp.desc(),
+                        StickySession.updated_at.desc(),
+                        StickySession.key.asc(),
+                    ),
+                )
+                .label("row_number"),
+            )
+            .where(StickySession.kind == StickySessionKind.CODEX_SESSION)
+        )
+        if account_ids:
+            ranked_sessions = ranked_sessions.where(StickySession.account_id.in_(account_ids))
+        if active_since is not None:
+            ranked_sessions = ranked_sessions.where(StickySession.updated_at >= active_since)
+
+        ranked_subquery = ranked_sessions.subquery()
+        result = await self._session.execute(
+            select(
+                ranked_subquery.c.account_id,
+                ranked_subquery.c.session_key,
+                ranked_subquery.c.task_preview,
+                ranked_subquery.c.task_timestamp,
+            ).where(ranked_subquery.c.row_number <= limit_per_account)
+        )
+
+        previews_by_account: dict[str, list[AccountSessionTaskPreview]] = {}
+        for account_id, session_key, task_preview, task_timestamp in result.all():
+            if not account_id or not session_key:
+                continue
+            normalized_task_preview = str(task_preview).strip() if isinstance(task_preview, str) else None
+            previews_by_account.setdefault(str(account_id), []).append(
+                AccountSessionTaskPreview(
+                    account_id=str(account_id),
+                    session_key=str(session_key),
+                    task_preview=normalized_task_preview or None,
+                    task_updated_at=task_timestamp,
+                )
+            )
+
+        return previews_by_account
 
     async def exists_active_chatgpt_account_id(self, chatgpt_account_id: str) -> bool:
         result = await self._session.execute(

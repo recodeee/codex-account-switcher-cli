@@ -595,6 +595,99 @@ async def test_live_usage_extracts_task_after_live_usage_xml_prefix():
 
 
 @pytest.mark.asyncio
+async def test_live_usage_strips_trailing_live_usage_xml_from_session_task_preview():
+    from app.modules.accounts.codex_live_usage import LocalCodexProcessSessionAttribution
+    from app.modules.health.api import live_usage
+
+    with (
+        patch(
+            "app.modules.health.api.read_live_codex_process_session_attribution",
+            return_value=LocalCodexProcessSessionAttribution(
+                counts_by_snapshot={"viktor@edixai.com": 1},
+                unattributed_session_pids=[],
+                mapped_session_pids_by_snapshot={"viktor@edixai.com": [408006]},
+                task_preview_by_pid={
+                    408006: (
+                        "task should map per session in dashboard card "
+                        '<live_usage generated_at="2026-04-05T09:51:36.510585Z" total_sessions="3"></live_usage>'
+                    )
+                },
+            ),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_task_previews_by_snapshot",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_account_emails_by_snapshot",
+            new=AsyncMock(return_value={"viktor@edixai.com": ["viktor@edixai.com"]}),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_snapshot_alias_map",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "app.modules.health.api.utcnow",
+            return_value=datetime(2026, 4, 5, 0, 0, 0),
+        ),
+    ):
+        response = await live_usage()
+
+    body = response.body.decode("utf-8")
+    assert 'task_preview="task should map per session in dashboard card"' in body
+    assert "&lt;live_usage generated_at=" not in body
+
+
+@pytest.mark.asyncio
+async def test_live_usage_extracts_user_request_from_omx_explore_task_preview():
+    from app.modules.accounts.codex_live_usage import LocalCodexProcessSessionAttribution
+    from app.modules.health.api import live_usage
+
+    with (
+        patch(
+            "app.modules.health.api.read_live_codex_process_session_attribution",
+            return_value=LocalCodexProcessSessionAttribution(
+                counts_by_snapshot={"viktor@edixai.com": 1},
+                unattributed_session_pids=[],
+                mapped_session_pids_by_snapshot={"viktor@edixai.com": [408006]},
+                task_preview_by_pid={
+                    408006: (
+                        "You are OMX Explore, a low-cost read-only repository exploration harness.\n"
+                        "Operate strictly in read-only mode.\n"
+                        "User request:\n"
+                        "hide the snapshot name too because that is email"
+                    )
+                },
+            ),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_task_previews_by_snapshot",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_account_emails_by_snapshot",
+            new=AsyncMock(return_value={"viktor@edixai.com": ["viktor@edixai.com"]}),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_snapshot_alias_map",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "app.modules.health.api.utcnow",
+            return_value=datetime(2026, 4, 5, 0, 0, 0),
+        ),
+    ):
+        response = await live_usage()
+
+    body = response.body.decode("utf-8")
+    assert (
+        '<session pid="408006" task_preview="hide the snapshot name too because that is email" />'
+        in body
+    )
+    assert "You are OMX Explore" not in body
+
+
+@pytest.mark.asyncio
 async def test_live_usage_includes_account_emails_mapped_to_snapshot():
     from app.modules.accounts.codex_live_usage import LocalCodexProcessSessionAttribution
     from app.modules.health.api import live_usage

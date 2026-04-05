@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "@/lib/router-compat";
 
 import {
   getRequestLogOptions,

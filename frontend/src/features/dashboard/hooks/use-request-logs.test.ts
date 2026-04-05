@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { createElement, type PropsWithChildren } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import { useRequestLogs } from "@/features/dashboard/hooks/use-request-logs";
@@ -21,11 +20,11 @@ function createTestQueryClient(): QueryClient {
 
 function createWrapper(queryClient: QueryClient, initialEntry = "/dashboard") {
   return function Wrapper({ children }: PropsWithChildren) {
-    return createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(MemoryRouter, { initialEntries: [initialEntry] }, children),
-    );
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, "", initialEntry);
+    }
+
+    return createElement(QueryClientProvider, { client: queryClient }, children);
   };
 }
 

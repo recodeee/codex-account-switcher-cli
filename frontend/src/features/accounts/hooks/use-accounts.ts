@@ -16,7 +16,7 @@ import {
 } from "@/features/accounts/api";
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { resetQuotaDisplayFloorCacheForAccount } from "@/utils/quota-display";
-import { isAccountWorkingNow } from "@/utils/account-working";
+import { hasActiveCliSessionSignal } from "@/utils/account-working";
 
 const DEFAULT_ACCOUNTS_POLL_MS = 30_000;
 const ACTIVE_ACCOUNTS_POLL_MS = 1_000;
@@ -41,7 +41,7 @@ export function hasWorkingAccounts(data: unknown): boolean {
   if (!accounts || accounts.length === 0) {
     return false;
   }
-  return accounts.some((account) => isAccountWorkingNow(account));
+  return accounts.some((account) => hasActiveCliSessionSignal(account));
 }
 
 export function resolveAccountsPollInterval(data: unknown): number {

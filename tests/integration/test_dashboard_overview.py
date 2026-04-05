@@ -237,6 +237,7 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
     assert payload["accounts"][0]["codexTrackedSessionCount"] == 1
     assert payload["accounts"][0]["codexSessionCount"] == 0
     assert payload["accounts"][0]["codexCurrentTaskPreview"] == "Investigate dashboard quota drift"
+    assert isinstance(payload["accounts"][0]["codexSessionTaskPreviews"], list)
     assert payload["accounts"][0]["codexAuth"]["hasLiveSession"] is False
     assert payload["accounts"][0]["usage"]["primaryRemainingPercent"] == pytest.approx(80.0)
     assert payload["accounts"][0]["usage"]["secondaryRemainingPercent"] == pytest.approx(60.0)

@@ -83,6 +83,12 @@ export const AccountLiveQuotaDebugSchema = z.object({
   overrideReason: z.string().nullable().optional(),
 });
 
+export const AccountSessionTaskPreviewSchema = z.object({
+  sessionKey: z.string(),
+  taskPreview: z.string().nullable().optional().default(null),
+  taskUpdatedAt: z.string().datetime({ offset: true }).nullable().optional().default(null),
+});
+
 export const AccountSummarySchema = z.object({
   accountId: z.string(),
   email: z.string(),
@@ -103,6 +109,7 @@ export const AccountSummarySchema = z.object({
   codexSessionCount: z.number().int().nonnegative().optional(),
   codexCurrentTaskPreview: z.string().nullable().optional(),
   codexLastTaskPreview: z.string().nullable().optional(),
+  codexSessionTaskPreviews: z.array(AccountSessionTaskPreviewSchema).optional(),
   liveQuotaDebug: AccountLiveQuotaDebugSchema.nullable().optional(),
   auth: AccountAuthSchema.nullable().optional(),
   codexAuth: AccountCodexAuthSchema.nullable().optional(),

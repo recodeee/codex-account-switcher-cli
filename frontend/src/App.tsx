@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import { AppHeader } from "@/components/layout/app-header";
+import { AppSidebar } from "@/components/layout/app-sidebar";
 import { StatusBar } from "@/components/layout/status-bar";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,17 +20,21 @@ function AppLayout() {
   const passwordRequired = useAuthStore((state) => state.passwordRequired);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background pb-10">
-      <AppHeader
-        onLogout={() => {
-          void logout();
-        }}
-        showLogout={passwordRequired}
-      />
-      <main className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-8 sm:px-6">
-        <Outlet />
-      </main>
-      <StatusBar />
+    <div className="flex min-h-screen bg-background pb-10">
+      <AppSidebar />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <AppHeader
+          onLogout={() => {
+            void logout();
+          }}
+          showLogout={passwordRequired}
+          sidebarAware
+        />
+        <main className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-8 sm:px-6 lg:px-8">
+          <Outlet />
+        </main>
+        <StatusBar />
+      </div>
     </div>
   );
 }

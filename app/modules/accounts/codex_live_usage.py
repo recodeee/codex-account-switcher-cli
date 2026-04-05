@@ -486,6 +486,7 @@ def read_live_codex_process_session_attribution() -> LocalCodexProcessSessionAtt
     mapped_session_pids_by_snapshot: dict[str, list[int]] = {}
     task_preview_by_pid: dict[int, str] = {}
     task_previews_by_pid: dict[int, list[str]] = {}
+    missing_task_preview_pids: list[int] = []
     for pid, env in processes:
         snapshot_name = _resolve_process_snapshot_name_for_accounting(
             pid,
@@ -500,11 +501,22 @@ def read_live_codex_process_session_attribution() -> LocalCodexProcessSessionAtt
         if task_previews:
             task_previews_by_pid[pid] = task_previews
             task_preview_by_pid[pid] = task_previews[0]
+        else:
+            missing_task_preview_pids.append(pid)
         if not snapshot_name:
             unattributed_session_pids.append(pid)
             continue
         counts[snapshot_name] = counts.get(snapshot_name, 0) + 1
         mapped_session_pids_by_snapshot.setdefault(snapshot_name, []).append(pid)
+
+    fallback_task_previews_by_pid = _resolve_fallback_process_task_previews(
+        missing_task_preview_pids
+    )
+    for pid, previews in fallback_task_previews_by_pid.items():
+        if not previews:
+            continue
+        task_previews_by_pid[pid] = previews
+        task_preview_by_pid[pid] = previews[0]
 
     for session_pids in mapped_session_pids_by_snapshot.values():
         session_pids.sort()
@@ -516,6 +528,128 @@ def read_live_codex_process_session_attribution() -> LocalCodexProcessSessionAtt
         task_preview_by_pid=task_preview_by_pid,
         task_previews_by_pid=task_previews_by_pid,
     )
+
+
+def _resolve_fallback_process_task_previews(pids: list[int]) -> dict[int, list[str]]:
+    if not pids:
+        return {}
+
+    previews_by_session_id = read_local_codex_task_previews_by_session_id()
+    if not previews_by_session_id:
+        return {}
+
+    available_previews: list[tuple[LocalCodexTaskPreview, float | None]] = []
+    for session_id, preview in previews_by_session_id.items():
+        if not isinstance(preview.text, str) or not preview.text.strip():
+            continue
+        available_previews.append(
+            (
+                preview,
+                _resolve_session_rollout_started_at(session_id),
+            )
+        )
+    if not available_previews:
+        return {}
+
+    available_previews.sort(
+        key=lambda item: (
+            item[1] if item[1] is not None else item[0].recorded_at.timestamp()
+        ),
+        reverse=True,
+    )
+    candidates_by_pid = sorted(
+        ((pid, _read_process_started_at(pid)) for pid in pids),
+        key=lambda item: item[1] if item[1] is not None else float("-inf"),
+        reverse=True,
+    )
+    unassigned_pids = list(candidates_by_pid)
+
+    assigned: dict[int, list[str]] = {}
+    for preview, preview_started_at in available_previews:
+        if not unassigned_pids:
+            break
+
+        reference_ts = (
+            preview_started_at
+            if preview_started_at is not None
+            else preview.recorded_at.timestamp()
+        )
+        best_pid_index = 0
+        best_distance: float | None = None
+        for index, (_pid, started_at) in enumerate(unassigned_pids):
+            distance = (
+                abs(reference_ts - started_at)
+                if started_at is not None
+                else float("inf")
+            )
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
+                best_pid_index = index
+
+        pid, _started_at = unassigned_pids.pop(best_pid_index)
+        assigned[pid] = [preview.text]
+
+    return assigned
+
+
+def _resolve_session_rollout_started_at(session_id: str) -> float | None:
+    normalized_session_id = session_id.strip()
+    if not normalized_session_id:
+        return None
+
+    roots: list[Path] = [_resolve_sessions_dir()]
+    runtime_root = _resolve_runtime_root()
+    if runtime_root.exists() and runtime_root.is_dir():
+        for runtime_dir in runtime_root.iterdir():
+            if not runtime_dir.is_dir():
+                continue
+            roots.append(runtime_dir / "sessions")
+
+    candidates: list[Path] = []
+    pattern = f"rollout-*-{normalized_session_id}.jsonl"
+    for root in roots:
+        if not root.exists() or not root.is_dir():
+            continue
+        try:
+            matches = list(root.rglob(pattern))
+        except OSError:
+            continue
+        for match in matches:
+            if match.is_file():
+                candidates.append(match)
+
+    if not candidates:
+        return None
+
+    path = max(candidates, key=_safe_mtime)
+    match = _ROLLOUT_SESSION_FILE_RE.match(path.name)
+    if match is None:
+        return None
+
+    start_value = match.group("start")
+    try:
+        parsed = datetime.strptime(start_value, "%Y-%m-%dT%H-%M-%S")
+    except ValueError:
+        return None
+
+    parsed_ts = parsed.replace(tzinfo=timezone.utc).timestamp()
+    file_mtime = _safe_mtime(path)
+    if file_mtime <= 0:
+        return parsed_ts
+
+    # rollout filename start timestamps are local-time strings; align to file
+    # mtime by searching whole-hour offsets so mapping works across host/container
+    # timezone differences.
+    best_ts = parsed_ts
+    best_distance = abs(parsed_ts - file_mtime)
+    for offset_hours in range(-14, 15):
+        candidate_ts = parsed_ts + (offset_hours * 3600)
+        distance = abs(candidate_ts - file_mtime)
+        if distance < best_distance:
+            best_distance = distance
+            best_ts = candidate_ts
+
+    return best_ts
 
 
 def terminate_live_codex_processes_for_snapshot(snapshot_name: str) -> int:
@@ -1979,7 +2113,10 @@ def _resolve_process_task_previews(
         if len(previews) >= limit:
             return previews
 
-    rollout_path = _resolve_process_rollout_path(pid)
+    rollout_path = _resolve_sessions_scoped_rollout_path(
+        rollout_path=_resolve_process_rollout_path(pid),
+        sessions_dir=_resolve_sessions_dir(),
+    )
     if rollout_path is None:
         return previews
 
@@ -2293,6 +2430,7 @@ def _sanitize_codex_task_preview(text: str) -> str | None:
     redacted = _TASK_PREVIEW_BEARER_RE.sub("bearer [redacted]", redacted)
     redacted = _TASK_PREVIEW_SECRET_ASSIGNMENT_RE.sub(r"\1=[redacted]", redacted)
     trimmed = _strip_leading_live_usage_payload(redacted).strip()
+    trimmed = _strip_trailing_live_usage_payload(trimmed).strip()
     if not trimmed:
         return None
     if _TASK_PREVIEW_WARNING_PREFIX_RE.match(trimmed):
@@ -2324,6 +2462,21 @@ def _strip_leading_live_usage_payload(text: str) -> str:
             count=1,
         ).strip()
     return normalized
+
+
+def _strip_trailing_live_usage_payload(text: str) -> str:
+    lowered = text.lower()
+    marker_indexes = [
+        index
+        for index in (
+            lowered.find("<live_usage"),
+            lowered.find("<live_usage_mapping"),
+        )
+        if index >= 0
+    ]
+    if not marker_indexes:
+        return text
+    return text[: min(marker_indexes)].strip()
 
 
 def _candidate_rollout_files(sessions_dir: Path, now: datetime) -> list[Path]:

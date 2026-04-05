@@ -29,9 +29,8 @@ async function fetchVersionFromUrl(
 export async function fetchRuntimeAppVersion(
   fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
-  const candidates = import.meta.env.DEV
-    ? ["/package.json", "/version.json"]
-    : ["/version.json"];
+  const isDev = process.env.NODE_ENV !== "production";
+  const candidates = isDev ? ["/package.json", "/version.json"] : ["/version.json"];
 
   for (const candidate of candidates) {
     try {

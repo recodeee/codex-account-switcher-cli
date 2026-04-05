@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@/lib/router-compat";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
@@ -55,7 +55,7 @@ export function DashboardPage() {
           resumeMutation.mutate(account.accountId);
           break;
         case "reauth":
-          navigate(`/accounts?selected=${account.accountId}&oauth=device`);
+          navigate(`/accounts?selected=${account.accountId}&oauth=prompt`);
           break;
         case "useLocal":
           useLocalMutation.mutate(account.accountId, {

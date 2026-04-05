@@ -91,6 +91,12 @@ class AccountLiveQuotaDebug(DashboardModel):
     override_reason: str | None = None
 
 
+class AccountSessionTaskPreview(DashboardModel):
+    session_key: str
+    task_preview: str | None = None
+    task_updated_at: datetime | None = None
+
+
 class AccountSummary(DashboardModel):
     account_id: str
     email: str
@@ -115,6 +121,7 @@ class AccountSummary(DashboardModel):
     codex_session_count: int = 0
     codex_current_task_preview: str | None = None
     codex_last_task_preview: str | None = None
+    codex_session_task_previews: list[AccountSessionTaskPreview] = Field(default_factory=list)
     live_quota_debug: AccountLiveQuotaDebug | None = None
     additional_quotas: list[AccountAdditionalQuota] = Field(default_factory=list)
     deactivation_reason: str | None = None

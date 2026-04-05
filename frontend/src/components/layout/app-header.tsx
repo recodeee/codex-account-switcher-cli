@@ -1,8 +1,9 @@
 import { Eye, EyeOff, LogOut, Menu } from "lucide-react";
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink } from "@/lib/router-compat";
 
 import { CodexLogo } from "@/components/brand/codex-logo";
+import { NAV_ITEMS } from "@/components/layout/nav-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,31 +16,17 @@ import {
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { cn } from "@/lib/utils";
 
-type NavItem = {
-  to: string;
-  label: string;
-  isComingSoon?: boolean;
-};
-
-const NAV_ITEMS: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/accounts", label: "Accounts" },
-  { to: "/apis", label: "APIs" },
-  { to: "/devices", label: "Devices" },
-  { to: "/storage", label: "Storage", isComingSoon: true },
-  { to: "/sessions", label: "Sessions" },
-  { to: "/settings", label: "Settings" },
-];
-
 export type AppHeaderProps = {
   onLogout: () => void;
   showLogout?: boolean;
+  sidebarAware?: boolean;
   className?: string;
 };
 
 export function AppHeader({
   onLogout,
   showLogout = true,
+  sidebarAware = false,
   className,
 }: AppHeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -71,32 +58,34 @@ export function AppHeader({
         </div>
 
         {/* Desktop nav pills */}
-        <nav className="hidden items-center rounded-lg border border-border/50 bg-muted/40 p-0.5 sm:flex">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                cn(
-                  "relative inline-flex h-7 items-center rounded-md px-3.5 text-xs leading-none font-medium transition-colors duration-200",
-                  isActive
-                    ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
-                    : "text-muted-foreground hover:text-foreground",
-                )
-              }
-            >
-              <span>{item.label}</span>
-              {item.isComingSoon ? (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 border border-border/60 bg-muted px-1.5 py-0 text-[10px] text-muted-foreground"
-                >
-                  Coming soon
-                </Badge>
-              ) : null}
-            </NavLink>
-          ))}
-        </nav>
+        {!sidebarAware ? (
+          <nav className="hidden items-center rounded-lg border border-border/50 bg-muted/40 p-0.5 sm:flex">
+            {NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  cn(
+                    "relative inline-flex h-7 items-center rounded-md px-3.5 text-xs leading-none font-medium transition-colors duration-200",
+                    isActive
+                      ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )
+                }
+              >
+                <span>{item.label}</span>
+                {item.isComingSoon ? (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 border border-border/60 bg-muted px-1.5 py-0 text-[10px] text-muted-foreground"
+                  >
+                    Coming soon
+                  </Badge>
+                ) : null}
+              </NavLink>
+            ))}
+          </nav>
+        ) : null}
 
         {/* Actions */}
         <div className="flex flex-1 items-center justify-end gap-1.5">
@@ -133,7 +122,7 @@ export function AppHeader({
                 size="icon"
                 variant="ghost"
                 aria-label="Open menu"
-                className="h-8 w-8 rounded-lg sm:hidden"
+                className={cn("h-8 w-8 rounded-lg", sidebarAware ? "lg:hidden" : "sm:hidden")}
               >
                 <Menu className="h-4 w-4" />
               </Button>

@@ -4,6 +4,7 @@ import {
   Clock,
   Download,
   ExternalLink,
+  Lock,
   Play,
   RotateCcw,
   SquareTerminal,
@@ -108,6 +109,22 @@ function getPlanSnapshotDetails(
 
 const NEAR_ZERO_QUOTA_PERCENT = 5;
 const WAITING_FOR_NEW_TASK_LABEL = "Waiting for new task";
+const SESSION_TASK_PREVIEW_MAX_ROWS = 4;
+
+function formatSessionKeyLabel(sessionKey: string): string {
+  const normalized = sessionKey.trim();
+  if (normalized.length <= 18) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 6)}…${normalized.slice(-4)}`;
+}
+
+function resolveSessionTaskPreview(taskPreview: string | null | undefined): string {
+  const normalized = taskPreview?.trim();
+  return normalized && normalized.length > 0
+    ? normalized
+    : WAITING_FOR_NEW_TASK_LABEL;
+}
 
 function normalizeNearZeroQuotaPercent(value: number): number {
   const clamped = Math.max(0, Math.min(100, value));
@@ -726,6 +743,8 @@ export function AccountCard(props: AccountCardProps) {
     account.codexAuth?.snapshotName,
   );
   const snapshotName = account.codexAuth?.snapshotName?.trim() ?? null;
+  const hasResolvedSnapshot = Boolean(snapshotName);
+  const showMissingSnapshotLockOverlay = !hasResolvedSnapshot;
   const expectedSnapshotName =
     account.codexAuth?.expectedSnapshotName?.trim() ?? null;
   const hasSnapshotMismatch = Boolean(
@@ -774,6 +793,25 @@ export function AccountCard(props: AccountCardProps) {
     effectiveCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL &&
     codexLastTaskPreview != null &&
     codexLastTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
+  const sessionTaskPreviews = useMemo(() => {
+    const seenSessionKeys = new Set<string>();
+    const normalized = (account.codexSessionTaskPreviews ?? [])
+      .filter((preview) => {
+        const sessionKey = preview.sessionKey?.trim();
+        if (!sessionKey || seenSessionKeys.has(sessionKey)) {
+          return false;
+        }
+        seenSessionKeys.add(sessionKey);
+        return true;
+      })
+      .slice(0, SESSION_TASK_PREVIEW_MAX_ROWS)
+      .map((preview) => ({
+        sessionKey: preview.sessionKey.trim(),
+        taskPreview: resolveSessionTaskPreview(preview.taskPreview),
+      }));
+    return normalized;
+  }, [account.codexSessionTaskPreviews]);
+  const hasSessionTaskPreviews = sessionTaskPreviews.length > 0;
   const quotaDebugLogText = useMemo(
     () =>
       liveQuotaDebug
@@ -805,6 +843,19 @@ export function AccountCard(props: AccountCardProps) {
     account.displayName && account.displayName !== account.email
       ? account.email
       : null;
+  const cardholderName = account.email?.trim() || title;
+  const cardholderLine = `Gmail · ${cardholderName}`;
+  const cardholderBlurred = blurred && isLikelyEmailValue(cardholderName);
+  const tokenCardPrimaryLine = tokenMetricValue;
+  const tokenCardSecondaryLine = String(codexLiveSessionCount);
+  const accessibleTokenMetricValue =
+    tokenMetricValue === "0"
+      ? tokenMetricValue
+      : `${tokenMetricValue} tokens`;
+  const accessibleCodexSessionValue =
+    codexLiveSessionCount <= 1
+      ? String(codexLiveSessionCount)
+      : `${codexLiveSessionCount} sessions`;
   const idSuffix = showAccountId ? ` | ID ${compactId}` : "";
 
   return (
@@ -817,7 +868,8 @@ export function AccountCard(props: AccountCardProps) {
     >
       <div
         className={cn(
-          showUsageLimitGraceOverlay && "blur-[1.5px] saturate-[0.82]",
+          (showUsageLimitGraceOverlay || showMissingSnapshotLockOverlay) &&
+            "blur-[1.5px] saturate-[0.82]",
         )}
       >
       {/* Header */}
@@ -927,14 +979,52 @@ export function AccountCard(props: AccountCardProps) {
         </div>
       </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(10.75rem,0.85fr)_minmax(0,1.7fr)]">
+      <div className="relative mt-3 overflow-hidden rounded-[18px] border border-white/10 bg-[radial-gradient(120%_180%_at_0%_0%,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0)_42%),linear-gradient(118deg,#17191f_0%,#101217_52%,#07080b_100%)] px-3.5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_16px_34px_rgba(0,0,0,0.55)]">
+        <div
+          className="pointer-events-none absolute -left-6 top-0 h-full w-28 rotate-[18deg] bg-white/[0.04]"
+          aria-hidden
+        />
+        <div className="relative">
+          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-200/90">
+            <span>OpenAI</span>
+            <span>{hasLiveSession ? "Live token card" : "Token card"}</span>
+          </div>
+          <div className="mt-3 flex items-center gap-2 text-zinc-200/85">
+            <div className="h-5 w-7 rounded-[4px] border border-amber-200/35 bg-[linear-gradient(145deg,#f2ca7d_0%,#d79a24_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]" />
+            <span className="text-xs tracking-[0.18em]">)))</span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2.5 font-mono text-sm font-medium tracking-[0.22em] text-zinc-100 sm:text-base">
+            <p className="truncate rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5">
+              {tokenCardPrimaryLine}
+            </p>
+            <p className="truncate rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5">
+              {tokenCardSecondaryLine}
+            </p>
+          </div>
+          <div className="mt-3 border-t border-white/10 pt-2">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">
+              Cardholder name
+            </p>
+            <p
+              className={cn(
+                "mt-1 truncate font-mono text-sm uppercase tracking-[0.15em] text-zinc-100",
+                cardholderBlurred && "privacy-blur",
+              )}
+            >
+              {cardholderLine}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="sr-only">
         <div className="min-w-0 space-y-2">
           <div className="min-w-0">
             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               {tokenMetricLabel}
             </p>
             <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold tabular-nums">
-              <span>{tokenMetricValue}</span>
+              <span>{accessibleTokenMetricValue}</span>
               {isWorkingNow ? (
                 <span className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
                   live
@@ -947,14 +1037,16 @@ export function AccountCard(props: AccountCardProps) {
               Codex CLI sessions
             </p>
             <p className="mt-0.5 text-xs font-semibold tabular-nums">
-              {codexLiveSessionCount}
+              {accessibleCodexSessionValue}
             </p>
             <p className="mt-0.5 text-[10px] text-muted-foreground">
               Tracked: {codexTrackedSessionCount}
             </p>
           </div>
         </div>
-        <div className="min-w-0">
+      </div>
+
+      <div className="mt-3 min-w-0">
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Current task
           </p>
@@ -974,8 +1066,32 @@ export function AccountCard(props: AccountCardProps) {
                 {codexLastTaskPreview}
               </p>
             ) : null}
+            {hasSessionTaskPreviews ? (
+              <div className="mt-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.06] px-2.5 py-2">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">
+                  CLI session tasks
+                </p>
+                <ul className="space-y-1.5">
+                  {sessionTaskPreviews.map((preview) => (
+                    <li
+                      key={preview.sessionKey}
+                      className="grid grid-cols-[auto,1fr] items-start gap-2 text-xs"
+                    >
+                      <span className="inline-flex items-center rounded border border-cyan-500/25 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                        {formatSessionKeyLabel(preview.sessionKey)}
+                      </span>
+                      <span
+                        className="break-words whitespace-pre-wrap leading-relaxed text-muted-foreground"
+                        title={preview.taskPreview}
+                      >
+                        {preview.taskPreview}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
-        </div>
       </div>
 
       {/* Quota bars */}
@@ -1177,6 +1293,28 @@ export function AccountCard(props: AccountCardProps) {
             <p className="mt-1 text-sm font-semibold tabular-nums text-red-800 dark:text-red-200">
               Leaving working now in {usageLimitHitCountdownLabel}
             </p>
+          </div>
+        </div>
+      ) : null}
+      {showMissingSnapshotLockOverlay ? (
+        <div className="absolute inset-0 z-30 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/45 backdrop-blur-[1.5px]" aria-hidden />
+          <div className="relative flex w-full max-w-[13rem] flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/75 px-4 py-3.5 text-center shadow-[0_20px_55px_rgba(0,0,0,0.55)] backdrop-blur-md">
+            <div className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/25 bg-cyan-400/10">
+              <Lock className="h-4 w-4 text-cyan-200" aria-hidden />
+            </div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
+              Locked account
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 rounded-lg border-white/15 bg-white/[0.04] px-3 text-xs font-semibold text-zinc-100 hover:border-cyan-400/35 hover:bg-cyan-400/12 hover:text-cyan-100"
+              onClick={() => onAction?.(account, "reauth")}
+            >
+              Unlock
+            </Button>
           </div>
         </div>
       ) : null}

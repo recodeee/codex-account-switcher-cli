@@ -60,7 +60,7 @@ export function StatusBar() {
   const displayVersion =
     typeof runtimeVersion === "string" && runtimeVersion.trim().length > 0
       ? runtimeVersion
-      : __APP_VERSION__;
+      : process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.08] bg-background/50 px-4 py-2 shadow-[0_-1px_12px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-[1.8] supports-[backdrop-filter]:bg-background/40 dark:shadow-[0_-1px_12px_rgba(0,0,0,0.25)]">

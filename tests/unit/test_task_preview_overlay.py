@@ -9,7 +9,11 @@ from app.modules.accounts.codex_live_usage import (
     LocalCodexTaskPreview,
 )
 from app.modules.accounts.live_usage_overrides import remember_terminated_cli_session_snapshots
-from app.modules.accounts.schemas import AccountCodexAuthStatus
+from app.modules.accounts.schemas import (
+    AccountCodexAuthStatus,
+    AccountLiveQuotaDebug,
+    AccountLiveQuotaDebugSample,
+)
 from app.modules.accounts.task_preview_overlay import overlay_live_codex_task_previews
 
 
@@ -177,6 +181,145 @@ def test_overlay_keeps_waiting_state_and_adds_last_task_preview(monkeypatch) -> 
     assert (
         codex_last_task_preview_by_account[account.id]
         == "Investigate Zeus quota overlay mapping"
+    )
+
+
+def test_overlay_waiting_multi_session_does_not_copy_last_task_from_debug_sample(
+    monkeypatch,
+) -> None:
+    now = datetime(2026, 4, 5, tzinfo=timezone.utc)
+    account = _make_account("acc-tokio", "tokio@edixai.com")
+    codex_auth_by_account = {
+        account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="tokio@edixai.com",
+            active_snapshot_name="tokio@edixai.com",
+            is_active_snapshot=True,
+            has_live_session=True,
+        )
+    }
+    codex_current_task_preview_by_account: dict[str, str] = {}
+    codex_last_task_preview_by_account: dict[str, str] = {}
+
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_snapshot",
+        lambda *, now: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_session_id",
+        lambda *, now: {
+            "019d5a6a-4665-7873-9714-9efb95b24272": LocalCodexTaskPreview(
+                text="hide the snapshot name too because that is email",
+                recorded_at=now,
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_live_codex_process_session_attribution",
+        lambda: LocalCodexProcessSessionAttribution(
+            counts_by_snapshot={"tokio@edixai.com": 2},
+            unattributed_session_pids=[],
+            mapped_session_pids_by_snapshot={"tokio@edixai.com": [393741, 393963]},
+            task_preview_by_pid={},
+            task_previews_by_pid={},
+        ),
+    )
+
+    overlay_live_codex_task_previews(
+        accounts=[account],
+        codex_auth_by_account=codex_auth_by_account,
+        codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+        codex_last_task_preview_by_account=codex_last_task_preview_by_account,
+        live_quota_debug_by_account={
+            account.id: AccountLiveQuotaDebug(
+                snapshots_considered=["tokio@edixai.com"],
+                raw_samples=[
+                    AccountLiveQuotaDebugSample(
+                        source="/tmp/rollout-2026-04-04T21-33-33-019d5a6a-4665-7873-9714-9efb95b24272.jsonl",
+                        snapshot_name="tokio@edixai.com",
+                        recorded_at=now,
+                        stale=False,
+                    )
+                ],
+            )
+        },
+        now=now,
+    )
+
+    assert codex_current_task_preview_by_account[account.id] == "Waiting for new task"
+    assert account.id not in codex_last_task_preview_by_account
+
+
+def test_overlay_waiting_last_task_uses_matching_snapshot_debug_sample_only(monkeypatch) -> None:
+    now = datetime(2026, 4, 5, tzinfo=timezone.utc)
+    account = _make_account("acc-viktor", "viktor@edixai.com")
+    codex_auth_by_account = {
+        account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="viktor@edixai.com",
+            active_snapshot_name="viktor@edixai.com",
+            is_active_snapshot=True,
+            has_live_session=True,
+        )
+    }
+    codex_current_task_preview_by_account: dict[str, str] = {}
+    codex_last_task_preview_by_account: dict[str, str] = {}
+
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_snapshot",
+        lambda *, now: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_session_id",
+        lambda *, now: {
+            "019d5a6a-4665-7873-9714-9efb95b24272": LocalCodexTaskPreview(
+                text="hide the snapshot name too because that is email",
+                recorded_at=now,
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_live_codex_process_session_attribution",
+        lambda: LocalCodexProcessSessionAttribution(
+            counts_by_snapshot={"viktor@edixai.com": 1},
+            unattributed_session_pids=[],
+            mapped_session_pids_by_snapshot={"viktor@edixai.com": [408006]},
+            task_preview_by_pid={},
+            task_previews_by_pid={},
+        ),
+    )
+
+    overlay_live_codex_task_previews(
+        accounts=[account],
+        codex_auth_by_account=codex_auth_by_account,
+        codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+        codex_last_task_preview_by_account=codex_last_task_preview_by_account,
+        live_quota_debug_by_account={
+            account.id: AccountLiveQuotaDebug(
+                snapshots_considered=["tokio@edixai.com", "viktor@edixai.com"],
+                raw_samples=[
+                    AccountLiveQuotaDebugSample(
+                        source="/tmp/rollout-2026-04-04T21-33-33-019d5a6a-4665-7873-9714-9efb95b24272.jsonl",
+                        snapshot_name="tokio@edixai.com",
+                        recorded_at=now,
+                        stale=False,
+                    ),
+                    AccountLiveQuotaDebugSample(
+                        source="/tmp/rollout-2026-04-04T21-33-33-019d5a6a-4665-7873-9714-9efb95b24272.jsonl",
+                        snapshot_name="viktor@edixai.com",
+                        recorded_at=now,
+                        stale=False,
+                    ),
+                ],
+            )
+        },
+        now=now,
+    )
+
+    assert codex_current_task_preview_by_account[account.id] == "Waiting for new task"
+    assert (
+        codex_last_task_preview_by_account[account.id]
+        == "hide the snapshot name too because that is email"
     )
 
 

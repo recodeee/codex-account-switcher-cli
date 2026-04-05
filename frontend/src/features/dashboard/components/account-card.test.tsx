@@ -216,6 +216,27 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.getByText("Team · No snapshot")).toBeInTheDocument();
+    expect(screen.getByText("Locked account")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unlock" })).toBeInTheDocument();
+  });
+
+  it("calls reauth action when unlock is clicked for a missing snapshot", async () => {
+    const user = userEvent.setup({ delay: null });
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: false,
+        snapshotName: null,
+        activeSnapshotName: null,
+        isActiveSnapshot: false,
+      },
+    });
+    const onAction = vi.fn();
+
+    render(<AccountCard account={account} onAction={onAction} />);
+
+    await user.click(screen.getByRole("button", { name: "Unlock" }));
+
+    expect(onAction).toHaveBeenCalledWith(account, "reauth");
   });
 
   it("enables use this account button when snapshot exists and 5h quota is available", () => {
@@ -1281,6 +1302,41 @@ describe("AccountCard", () => {
 
     expect(screen.getByText("Current task")).toBeInTheDocument();
     expect(screen.getByText("Waiting for new task")).toBeInTheDocument();
+  });
+
+  it("renders per-session task previews with waiting fallback", () => {
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Investigate websocket sticky routing",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-alpha-123456",
+          taskPreview: "Investigate websocket sticky routing",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+        {
+          sessionKey: "sess-beta-abcdef",
+          taskPreview: null,
+          taskUpdatedAt: "2026-04-05T10:01:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 2,
+      codexSessionCount: 2,
+      codexTrackedSessionCount: 2,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("CLI session tasks")).toBeInTheDocument();
+    expect(screen.getByText("sess-alpha-123456")).toBeInTheDocument();
+    expect(screen.getByText("sess-beta-abcdef")).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows last task context when a waiting live session exposes a fallback preview", () => {

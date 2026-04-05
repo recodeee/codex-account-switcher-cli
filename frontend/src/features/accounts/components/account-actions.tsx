@@ -3,7 +3,6 @@ import { Pause, Play, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { canUseLocalAccount, getUseLocalAccountDisabledReason } from "@/utils/use-local-account";
-import { resolveEffectiveAccountStatus } from "@/utils/account-status";
 import { hasActiveCliSessionSignal, hasRecentUsageSignal } from "@/utils/account-working";
 
 export type AccountActionsProps = {
@@ -35,13 +34,6 @@ export function AccountActions({
   const hasActiveCliSession = hasActiveCliSessionSignal(account);
   const recentUsageSignal =
     (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account);
-  const effectiveStatus = resolveEffectiveAccountStatus({
-    status: account.status,
-    hasSnapshot: account.codexAuth?.hasSnapshot,
-    isActiveSnapshot,
-    hasLiveSession: hasActiveCliSession,
-    hasRecentUsageSignal: recentUsageSignal,
-  });
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: account.usage?.primaryRemainingPercent,
@@ -67,6 +59,15 @@ export function AccountActions({
   const hasSnapshotMismatch = Boolean(
     snapshotName && expectedSnapshotName && snapshotName !== expectedSnapshotName,
   );
+  const hasLocalSnapshot =
+    (account.codexAuth?.hasSnapshot ?? false) &&
+    !account.codexAuth?.activeSnapshotName?.trim();
+  const shouldShowReauth =
+    account.status === "deactivated" &&
+    !hasActiveCliSession &&
+    !recentUsageSignal &&
+    !(account.codexAuth?.isActiveSnapshot ?? false) &&
+    !hasLocalSnapshot;
 
   return (
     <div className="flex flex-wrap gap-2 border-t pt-4">
@@ -135,7 +136,7 @@ export function AccountActions({
         </Button>
       )}
 
-      {effectiveStatus === "deactivated" ? (
+      {shouldShowReauth ? (
         <Button
           type="button"
           size="sm"

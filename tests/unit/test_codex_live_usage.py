@@ -1048,6 +1048,139 @@ def test_read_live_codex_process_session_counts_by_snapshot_uses_explicit_snapsh
     assert counts == {"work": 1}
 
 
+def test_read_live_codex_process_session_attribution_maps_host_rollout_path_for_task_preview(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    session_id = "019d5caf-03d1-7791-abd3-0694d6bb1357"
+    rollout_name = f"rollout-2026-04-05T10-07-46-{session_id}.jsonl"
+    mounted_rollout = day_dir / rollout_name
+    _write_rollout_with_user_task(
+        mounted_rollout,
+        timestamp=now - timedelta(seconds=5),
+        task="Map this task from mounted sessions path",
+    )
+
+    host_rollout = Path("/home/deadpool/.codex/sessions/2026/04/05") / rollout_name
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(901, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {"CODEX_AUTH_ACTIVE_SNAPSHOT": "viktor@edixai.com"},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._resolve_process_rollout_path",
+        lambda _pid: host_rollout,
+    )
+
+    attribution = read_live_codex_process_session_attribution()
+
+    assert attribution.counts_by_snapshot == {"viktor@edixai.com": 1}
+    assert attribution.task_preview_by_pid[901] == "Map this task from mounted sessions path"
+    assert attribution.task_previews_by_pid[901] == [
+        "Map this task from mounted sessions path"
+    ]
+
+
+def test_resolve_session_rollout_started_at_reads_start_from_rollout_filename(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+
+    day_dir = sessions_root / "2026" / "04" / "05"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    session_id = "019d5caf-03d1-7791-abd3-0694d6bb1357"
+    rollout_path = day_dir / f"rollout-2026-04-05T10-07-46-{session_id}.jsonl"
+    rollout_path.write_text("", encoding="utf-8")
+
+    started_at = codex_live_usage_module._resolve_session_rollout_started_at(session_id)
+
+    assert started_at is not None
+    assert datetime.fromtimestamp(started_at, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H-%M-%S"
+    ) == "2026-04-05T10-07-46"
+
+
+def test_read_live_codex_process_session_attribution_falls_back_to_recent_session_previews_when_proc_fd_rollout_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base_time = datetime(2026, 4, 5, 9, 50, tzinfo=timezone.utc)
+    started_at_by_pid = {
+        393963: (base_time - timedelta(minutes=14)).timestamp(),
+        408006: (base_time - timedelta(minutes=10)).timestamp(),
+        450971: base_time.timestamp(),
+    }
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [
+            (393963, ["/usr/bin/codex"]),
+            (408006, ["/usr/bin/codex"]),
+            (450971, ["/usr/bin/codex"]),
+        ],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda pid: (
+            {"CODEX_AUTH_ACTIVE_SNAPSHOT": "odin@edixai.com"}
+            if pid == 393963
+            else {"CODEX_AUTH_ACTIVE_SNAPSHOT": "viktor@edixai.com"}
+        ),
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._resolve_process_task_previews",
+        lambda _pid, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda pid: started_at_by_pid.get(pid),
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage.read_local_codex_task_previews_by_session_id",
+        lambda **_kwargs: {
+            "019d5d03-6ce7-7632-8fae-cba240fc8774": codex_live_usage_module.LocalCodexTaskPreview(
+                text="Task from Viktor session #1",
+                recorded_at=base_time + timedelta(minutes=1),
+            ),
+            "019d5d0c-c00f-7b91-802e-ccce1b6074bd": codex_live_usage_module.LocalCodexTaskPreview(
+                text="Task from Viktor session #2",
+                recorded_at=base_time + timedelta(minutes=3),
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._resolve_session_rollout_started_at",
+        lambda session_id: {
+            "019d5d03-6ce7-7632-8fae-cba240fc8774": started_at_by_pid[408006],
+            "019d5d0c-c00f-7b91-802e-ccce1b6074bd": started_at_by_pid[450971],
+        }.get(session_id),
+    )
+
+    attribution = read_live_codex_process_session_attribution()
+
+    assert attribution.counts_by_snapshot == {
+        "odin@edixai.com": 1,
+        "viktor@edixai.com": 2,
+    }
+    assert attribution.task_preview_by_pid[450971] == "Task from Viktor session #2"
+    assert attribution.task_preview_by_pid[408006] == "Task from Viktor session #1"
+    assert 393963 not in attribution.task_preview_by_pid
+
+
 def test_terminate_live_codex_processes_for_snapshot_only_targets_matching_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2282,6 +2415,48 @@ def test_read_local_codex_task_previews_by_session_id_extracts_task_from_bootstr
     assert previews[session_id].text == "Fix task mapping for [redacted-email] token=[redacted]"
 
 
+def test_read_local_codex_task_previews_by_session_id_extracts_user_request_from_omx_explore_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    session_id = "019d5a6a-4665-7873-9714-9efb95b24272"
+    rollout_path = day_dir / f"rollout-2026-04-04T21-33-33-{session_id}.jsonl"
+
+    wrapped_task_payload = {
+        "timestamp": (now - timedelta(seconds=2)).isoformat().replace("+00:00", "Z"),
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "You are OMX Explore, a low-cost read-only repository exploration harness.\n"
+                        "Operate strictly in read-only mode.\n"
+                        "User request:\n"
+                        "hide the snapshot name too because that is email"
+                    ),
+                }
+            ],
+        },
+    }
+
+    rollout_path.write_text(json.dumps(wrapped_task_payload) + "\n", encoding="utf-8")
+    ts = now.timestamp()
+    os.utime(rollout_path, (ts, ts))
+
+    previews = read_local_codex_task_previews_by_session_id(now=now)
+    assert session_id in previews
+    assert previews[session_id].text == "hide the snapshot name too because that is email"
+
+
 def test_read_local_codex_task_previews_by_session_id_ignores_warning_and_status_only_done(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -2417,6 +2592,46 @@ def test_read_local_codex_task_previews_by_session_id_extracts_task_from_live_us
         previews[session_id].text
         == "both are waiting for tasks when we set tasks for the session so improve this"
     )
+
+
+def test_read_local_codex_task_previews_by_session_id_strips_trailing_live_usage_xml_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    session_id = "019d5a6a-4665-7873-9714-9efb95b24282"
+    rollout_path = day_dir / f"rollout-2026-04-04T21-33-34-{session_id}.jsonl"
+
+    mixed_payload = {
+        "timestamp": (now - timedelta(seconds=2)).isoformat().replace("+00:00", "Z"),
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "task should map per session in dashboard card "
+                        '<live_usage generated_at="2026-04-05T09:51:36.510585Z" total_sessions="3"></live_usage>'
+                    ),
+                }
+            ],
+        },
+    }
+
+    rollout_path.write_text(json.dumps(mixed_payload) + "\n", encoding="utf-8")
+    ts = now.timestamp()
+    os.utime(rollout_path, (ts, ts))
+
+    previews = read_local_codex_task_previews_by_session_id(now=now)
+    assert session_id in previews
+    assert previews[session_id].text == "task should map per session in dashboard card"
 
 
 def test_read_local_codex_task_previews_by_session_id_keeps_latest_task_when_warning_follows(

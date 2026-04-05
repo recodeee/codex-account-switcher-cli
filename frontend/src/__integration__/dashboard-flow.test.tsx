@@ -293,9 +293,8 @@ describe("dashboard flow integration", () => {
     expect(window.location.search).toContain("selected=acc_no_snapshot");
   });
 
-  it("routes to accounts and starts device OAuth when re-auth is clicked", async () => {
+  it("routes to accounts and opens OAuth method chooser when unlock is clicked", async () => {
     const user = userEvent.setup({ delay: null });
-    let refreshCalls = 0;
 
     server.use(
       http.get("/api/dashboard/overview", () =>
@@ -304,48 +303,38 @@ describe("dashboard flow integration", () => {
             accounts: [
               createAccountSummary({
                 accountId: "acc_reauth_success",
-                status: "deactivated",
+                status: "active",
                 usage: {
                   primaryRemainingPercent: 44,
                   secondaryRemainingPercent: 73,
                 },
                 codexAuth: {
-                  hasSnapshot: true,
-                  snapshotName: "reauth-snapshot",
-                  activeSnapshotName: "different-snapshot",
+                  hasSnapshot: false,
+                  snapshotName: null,
+                  activeSnapshotName: null,
                   isActiveSnapshot: false,
                   hasLiveSession: false,
-                  expectedSnapshotName: "reauth-snapshot",
-                  snapshotNameMatchesEmail: true,
                 },
               }),
             ],
           }),
         ),
       ),
-      http.post("/api/accounts/:accountId/refresh-auth", ({ params }) => {
-        refreshCalls += 1;
-        return HttpResponse.json({
-          status: "refreshed",
-          accountId: String(params.accountId),
-          email: "reauth-success@example.com",
-          planType: "plus",
-        });
-      }),
     );
 
     window.history.pushState({}, "", "/dashboard");
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Re-auth" }));
+    await user.click(await screen.findByRole("button", { name: "Unlock" }));
 
-    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Add account with OAuth" })).toBeInTheDocument();
-    expect(await screen.findByText("User code")).toBeInTheDocument();
+    expect(await screen.findByText("Browser (PKCE)")).toBeInTheDocument();
+    expect(await screen.findByText("Device code")).toBeInTheDocument();
+    expect(screen.queryByText("User code")).not.toBeInTheDocument();
     expect(window.location.pathname).toBe("/accounts");
     expect(window.location.search).toContain("selected=acc_reauth_success");
-    expect(refreshCalls).toBe(0);
+    expect(window.location.search).not.toContain("oauth=");
   });
 
   it("opens sessions page from account card when codex sessions are present", async () => {

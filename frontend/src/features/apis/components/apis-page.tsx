@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "@/lib/router-compat";
 import { AlertMessage } from "@/components/alert-message";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingOverlay } from "@/components/layout/loading-overlay";

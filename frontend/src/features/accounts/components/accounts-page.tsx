@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "@/lib/router-compat";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AlertMessage } from "@/components/alert-message";
@@ -69,6 +69,14 @@ export function AccountsPage() {
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
+    if (oauthIntent === "prompt") {
+      oauthDialog.show();
+      const nextSearchParams = new URLSearchParams(searchParams);
+      nextSearchParams.delete("oauth");
+      setSearchParams(nextSearchParams, { replace: true });
+      return;
+    }
+
     if (oauthIntent !== "device" || oauthIntentInFlightRef.current) {
       return;
     }

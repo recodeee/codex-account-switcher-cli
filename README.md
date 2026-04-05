@@ -458,7 +458,7 @@ For external database, production config, ingress, observability, and more see t
 docker compose watch
 
 # Local
-./scripts/dev-auto.sh                           # backend + HMR + static build watch
+./scripts/dev-auto.sh                           # backend + Next.js HMR
 
 # Local (manual, separate terminals)
 uv sync && cd frontend && bun install && cd ..

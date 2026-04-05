@@ -350,6 +350,11 @@ def create_app() -> FastAPI:
             candidate = (static_dir / normalized).resolve()
             if candidate.is_relative_to(static_root) and candidate.is_file():
                 return FileResponse(candidate)
+
+            nested_index = (static_dir / normalized / "index.html").resolve()
+            if nested_index.is_relative_to(static_root) and nested_index.is_file():
+                return FileResponse(nested_index, media_type="text/html")
+
             if _is_static_asset_path(normalized):
                 raise HTTPException(status_code=404, detail="Not Found")
 

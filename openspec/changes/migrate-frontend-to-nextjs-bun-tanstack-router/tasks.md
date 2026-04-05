@@ -7,15 +7,15 @@ Owner handoff document for parallel Codex execution.
 - Replace current Vite frontend with a Next.js frontend (Bun runtime/tooling).
 - Keep FastAPI backend as source of truth on `:2455`.
 - Preserve all existing product behavior (Dashboard, Accounts, APIs, Devices, Sessions, Settings, auth).
-- Keep TanStack Router as the app-level route/state system for main UI flows.
+- Use Next.js App Router as the primary routing system (user-selected migration path).
 - Maintain local-dev hot reload without requiring `redeploy.sh`.
 
 ---
 
 ## 1) Foundation & architecture decisions
 
-- [ ] 1.1 Create OpenSpec change artifacts (`proposal.md`, `specs/*/spec.md`) for the migration scope.
-- [ ] 1.2 Decide target structure:
+- [x] 1.1 Create OpenSpec change artifacts (`proposal.md`, `specs/*/spec.md`) for the migration scope.
+- [x] 1.2 Decide target structure:
   - Option A: Replace `frontend/` with Next app.
   - Option B: Create `web/` Next app, keep old `frontend/` temporarily for phased cutover.
 - [ ] 1.3 Define routing model:
@@ -27,13 +27,13 @@ Owner handoff document for parallel Codex execution.
 
 ## 2) Next.js app bootstrap (Bun)
 
-- [ ] 2.1 Scaffold Next.js app with Bun lockfile and scripts.
-- [ ] 2.2 Configure TypeScript path aliases (`@/*`) and strict settings.
+- [x] 2.1 Scaffold Next.js app with Bun lockfile and scripts.
+- [x] 2.2 Configure TypeScript path aliases (`@/*`) and strict settings.
 - [ ] 2.3 Install and wire required dependencies:
   - `@tanstack/react-router`
   - `@tanstack/react-query`
   - existing UI stack (radix-ui, zod, sonner, recharts, etc.)
-- [ ] 2.4 Port theme/bootstrap providers currently used by `App` root.
+- [x] 2.4 Port theme/bootstrap providers currently used by `App` root.
 
 ---
 
@@ -50,7 +50,7 @@ Owner handoff document for parallel Codex execution.
 ## 4) API client + transport compatibility
 
 - [ ] 4.1 Port `api-client` utilities and shared schemas.
-- [ ] 4.2 Add Next rewrite/proxy config to FastAPI target (`http://server:2455` in Docker, localhost in local dev).
+- [x] 4.2 Add Next rewrite/proxy config to FastAPI target (`http://server:2455` in Docker, localhost in local dev).
 - [ ] 4.3 Validate websocket compatibility for terminal/session features.
 - [ ] 4.4 Preserve unauthorized/session-expired behavior and global error UX.
 
@@ -70,21 +70,21 @@ Owner handoff document for parallel Codex execution.
 
 ## 6) Styling/assets build pipeline
 
-- [ ] 6.1 Port Tailwind setup to Next (`postcss/tailwind` as needed).
-- [ ] 6.2 Port global styles, fonts, tokens, and animation classes.
+- [x] 6.1 Port Tailwind setup to Next (`postcss/tailwind` as needed).
+- [x] 6.2 Port global styles, fonts, tokens, and animation classes.
 - [ ] 6.3 Ensure static assets resolve correctly (icons, version asset, chart colors, etc.).
 
 ---
 
 ## 7) Docker/dev workflow (no redeploy loop)
 
-- [ ] 7.1 Update `docker-compose.yml`:
+- [x] 7.1 Update `docker-compose.yml`:
   - Next dev service with bind mount + Bun install cache volume.
   - FastAPI service unchanged except required env/proxy tweaks.
 - [ ] 7.2 Ensure live edits are visible immediately:
   - Next HMR on frontend edits.
   - FastAPI auto-reload on backend edits.
-- [ ] 7.3 Remove obsolete Vite-specific watch/build steps once cutover is complete.
+- [x] 7.3 Remove obsolete Vite-specific watch/build steps once cutover is complete.
 
 ---
 
@@ -96,12 +96,12 @@ Owner handoff document for parallel Codex execution.
   - dashboard loading/error states
   - re-auth routing flow
   - account switch/use-local flow
-- [ ] 8.3 Run frontend checks:
+- [x] 8.3 Run frontend checks:
   - lint
   - typecheck
   - tests
 - [ ] 8.4 Run backend unit tests impacted by frontend contract assumptions.
-- [ ] 8.5 Run `openspec validate --specs`.
+- [x] 8.5 Run `openspec validate --specs`.
 
 ---
 
@@ -109,7 +109,7 @@ Owner handoff document for parallel Codex execution.
 
 - [ ] 9.1 Switch default served frontend to Next output/dev server path.
 - [ ] 9.2 Remove Vite-only code/config once parity is proven.
-- [ ] 9.3 Update README development commands for Next + Bun.
+- [x] 9.3 Update README development commands for Next + Bun.
 - [ ] 9.4 Add migration notes (what changed, rollback plan, known gaps).
 
 ---

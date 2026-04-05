@@ -46,20 +46,19 @@ services:
         COPY package.json bun.lock ./
         RUN bun install --frozen-lockfile
         COPY . .
-        CMD ["bun", "run", "dev", "--host", "0.0.0.0"]
+        CMD ["bun", "run", "dev", "--hostname", "0.0.0.0"]
     ports:
       - "5173:5173"
     command:
       - sh
       - -c
-      - bun install --frozen-lockfile && (bun run build --watch &) && bun run dev --host 0.0.0.0
+      - bun install --frozen-lockfile && bun run dev --hostname 0.0.0.0
     environment:
       API_PROXY_TARGET: http://server:2455
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "100"
     volumes:
       - ./frontend:/app:rw
-      - ./app/static:/app/static:rw
       - codex-lb-frontend-node-modules:/app/node_modules
 
   postgres:

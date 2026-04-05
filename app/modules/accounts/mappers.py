@@ -15,6 +15,7 @@ from app.modules.accounts.schemas import (
     AccountCodexAuthStatus,
     AccountLiveQuotaDebug,
     AccountRequestUsage,
+    AccountSessionTaskPreview,
     AccountSummary,
     AccountTokenStatus,
     AccountUsage,
@@ -33,6 +34,7 @@ def build_account_summaries(
     codex_tracked_session_counts_by_account: dict[str, int] | None = None,
     codex_current_task_preview_by_account: dict[str, str] | None = None,
     codex_last_task_preview_by_account: dict[str, str] | None = None,
+    codex_session_task_previews_by_account: dict[str, list[AccountSessionTaskPreview]] | None = None,
     live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug] | None = None,
     additional_quotas_by_account: dict[str, list[AccountAdditionalQuota]] | None = None,
     codex_auth_by_account: dict[str, AccountCodexAuthStatus] | None = None,
@@ -57,6 +59,9 @@ def build_account_summaries(
             codex_last_task_preview_by_account.get(account.id)
             if codex_last_task_preview_by_account
             else None,
+            codex_session_task_previews_by_account.get(account.id)
+            if codex_session_task_previews_by_account
+            else None,
             live_quota_debug_by_account.get(account.id) if live_quota_debug_by_account else None,
             additional_quotas_by_account.get(account.id) if additional_quotas_by_account else None,
             codex_auth_by_account.get(account.id) if codex_auth_by_account else None,
@@ -76,6 +81,7 @@ def _account_to_summary(
     codex_tracked_session_count: int,
     codex_current_task_preview: str | None,
     codex_last_task_preview: str | None,
+    codex_session_task_previews: list[AccountSessionTaskPreview] | None,
     live_quota_debug: AccountLiveQuotaDebug | None,
     additional_quotas: list[AccountAdditionalQuota] | None,
     codex_auth: AccountCodexAuthStatus | None,
@@ -147,6 +153,7 @@ def _account_to_summary(
         codex_session_count=max(0, int(codex_live_session_count)),
         codex_current_task_preview=codex_current_task_preview,
         codex_last_task_preview=codex_last_task_preview,
+        codex_session_task_previews=codex_session_task_previews or [],
         live_quota_debug=live_quota_debug,
         additional_quotas=additional_quotas or [],
         deactivation_reason=account.deactivation_reason,

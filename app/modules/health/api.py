@@ -552,6 +552,7 @@ def _normalize_task_preview(value: str | None) -> str:
     normalized = " ".join((value or "").split()).strip()
     normalized = _strip_omx_explore_wrapper(normalized)
     normalized = _strip_leading_live_usage_payload(normalized)
+    normalized = _strip_trailing_live_usage_payload(normalized)
     if not normalized:
         return ""
     if _TASK_PREVIEW_WARNING_PREFIX_RE.match(normalized):
@@ -583,6 +584,21 @@ def _strip_leading_live_usage_payload(value: str) -> str:
             count=1,
         ).strip()
     return normalized
+
+
+def _strip_trailing_live_usage_payload(value: str) -> str:
+    lowered = value.lower()
+    marker_indexes = [
+        index
+        for index in (
+            lowered.find("<live_usage"),
+            lowered.find("<live_usage_mapping"),
+        )
+        if index >= 0
+    ]
+    if not marker_indexes:
+        return value
+    return value[: min(marker_indexes)].strip()
 
 
 def _strip_omx_explore_wrapper(value: str) -> str:

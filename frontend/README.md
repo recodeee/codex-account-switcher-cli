@@ -1,6 +1,6 @@
-# Frontend (Bun + Vite + React + TypeScript + SWC)
+# Frontend (Bun + Next.js App Router + React + TypeScript)
 
-This frontend is built with Bun, Vite, React, TypeScript, and SWC.
+This frontend is built with Bun and Next.js App Router.
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ bun install
 bun run dev
 ```
 
-Vite dev server runs on port `5173` by default and proxies API routes to FastAPI:
+Next dev server runs on port `5173` by default and proxies API routes to FastAPI:
 
 - `/api/*`
 - `/v1/*`
@@ -32,12 +32,13 @@ Vite dev server runs on port `5173` by default and proxies API routes to FastAPI
 bun run build
 ```
 
-Production assets are emitted to `../app/static`.
+Production static export assets are emitted to `../app/static`.
 
 ## Quality
 
 ```bash
 bun run lint
+bun run typecheck
 bun run test
 bun run test:coverage
 ```

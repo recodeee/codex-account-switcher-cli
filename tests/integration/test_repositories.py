@@ -4,7 +4,7 @@ import asyncio
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core.crypto import TokenEncryptor
 from app.core.utils.time import utcnow
@@ -199,3 +199,54 @@ async def test_request_logs_repository_filters(db_setup):
         assert len(results) == 1
         assert results[0].error_code == "rate_limit_exceeded"
         assert total == 1
+
+
+@pytest.mark.asyncio
+async def test_accounts_repository_lists_recent_codex_session_task_previews(db_setup):
+    now = utcnow().replace(microsecond=0)
+    active_timestamp = now - timedelta(minutes=1)
+    stale_timestamp = now - timedelta(hours=1)
+    active_since = now - timedelta(minutes=5)
+
+    async with SessionLocal() as session:
+        repo = AccountsRepository(session)
+        await repo.upsert(_make_account("acc_preview", "preview@example.com"))
+        await session.execute(
+            text(
+                """
+                INSERT INTO sticky_sessions (
+                    key, account_id, kind, created_at, updated_at, task_preview, task_updated_at
+                )
+                VALUES
+                    (
+                        :active_key, :account_id, 'codex_session',
+                        :active_timestamp, :active_timestamp, :active_task_preview, :active_timestamp
+                    ),
+                    (
+                        :stale_key, :account_id, 'codex_session',
+                        :stale_timestamp, :stale_timestamp, :stale_task_preview, :stale_timestamp
+                    )
+                """
+            ),
+            {
+                "active_key": "repo-session-active",
+                "stale_key": "repo-session-stale",
+                "account_id": "acc_preview",
+                "active_timestamp": active_timestamp,
+                "stale_timestamp": stale_timestamp,
+                "active_task_preview": "Investigate active preview row",
+                "stale_task_preview": "This stale preview should be excluded",
+            },
+        )
+        await session.commit()
+
+        previews = await repo.list_codex_session_task_previews_by_account(
+            ["acc_preview"],
+            active_since=active_since,
+            limit_per_account=4,
+        )
+
+        assert list(previews.keys()) == ["acc_preview"]
+        assert len(previews["acc_preview"]) == 1
+        assert previews["acc_preview"][0].session_key == "repo-session-active"
+        assert previews["acc_preview"][0].task_preview == "Investigate active preview row"

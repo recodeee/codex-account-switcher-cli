@@ -51,6 +51,7 @@ from app.modules.accounts.schemas import (
     AccountImportResponse,
     AccountRefreshAuthResponse,
     AccountRequestUsage,
+    AccountSessionTaskPreview,
     AccountTerminateCliSessionsResponse,
     AccountSummary,
     AccountTrendsResponse,
@@ -108,6 +109,22 @@ class AccountsService:
             account_ids,
             active_since=active_codex_window_start,
         )
+        raw_codex_session_task_previews_by_account = await self._repo.list_codex_session_task_previews_by_account(
+            account_ids,
+            active_since=active_codex_window_start,
+            limit_per_account=4,
+        )
+        codex_session_task_previews_by_account: dict[str, list[AccountSessionTaskPreview]] = {
+            account_id: [
+                AccountSessionTaskPreview(
+                    session_key=preview.session_key,
+                    task_preview=preview.task_preview,
+                    task_updated_at=preview.task_updated_at,
+                )
+                for preview in previews
+            ]
+            for account_id, previews in raw_codex_session_task_previews_by_account.items()
+        }
         codex_last_task_preview_by_account: dict[str, str] = {}
         request_usage_rows = await self._repo.list_request_usage_summary_by_account(account_ids)
         request_usage_by_account = {
@@ -199,6 +216,7 @@ class AccountsService:
             codex_tracked_session_counts_by_account=codex_tracked_session_counts_by_account,
             codex_current_task_preview_by_account=codex_current_task_preview_by_account,
             codex_last_task_preview_by_account=codex_last_task_preview_by_account,
+            codex_session_task_previews_by_account=codex_session_task_previews_by_account,
             live_quota_debug_by_account=live_quota_debug_by_account,
             additional_quotas_by_account=additional_quotas_by_account,
             codex_auth_by_account=codex_auth_by_account,
