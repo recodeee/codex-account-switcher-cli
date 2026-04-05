@@ -9,7 +9,11 @@ from pathlib import Path
 from urllib.request import HTTPCookieProcessor, build_opener
 
 from app.core.auth import DEFAULT_EMAIL, claims_from_auth, generate_unique_account_id, parse_auth_json
-from app.modules.accounts.codex_auth_auto_import import _select_snapshot_name_for_account
+from app.modules.accounts.codex_auth_auto_import import (
+    _legacy_snapshot_alias_names_for_account,
+    _refresh_legacy_snapshot_aliases,
+    _select_snapshot_name_for_account,
+)
 from app.tools.codex_auth_switch import (
     DEFAULT_LB_URL,
     SwitchToolError,
@@ -167,6 +171,11 @@ def _materialize_active_auth_snapshot_if_possible(
     if identity is None:
         return active_auth_path
 
+    legacy_alias_names = _legacy_snapshot_alias_names_for_account(
+        account_id=identity.account_id,
+        email=identity.email,
+        accounts_dir=accounts_dir,
+    )
     snapshot_name = _select_snapshot_name_for_account(
         account_id=identity.account_id,
         email=identity.email,
@@ -179,8 +188,20 @@ def _materialize_active_auth_snapshot_if_possible(
     try:
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         if snapshot_path.exists() and snapshot_path.read_bytes() == raw:
+            _refresh_legacy_snapshot_aliases(
+                accounts_dir=accounts_dir,
+                alias_names=legacy_alias_names,
+                canonical_name=snapshot_name,
+                raw=raw,
+            )
             return snapshot_path
         snapshot_path.write_bytes(raw)
+        _refresh_legacy_snapshot_aliases(
+            accounts_dir=accounts_dir,
+            alias_names=legacy_alias_names,
+            canonical_name=snapshot_name,
+            raw=raw,
+        )
     except OSError:
         return active_auth_path
     return snapshot_path

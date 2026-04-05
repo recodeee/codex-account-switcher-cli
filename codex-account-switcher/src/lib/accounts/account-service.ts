@@ -43,7 +43,7 @@ import {
   getManagedServiceState,
 } from "./service-manager";
 
-const ACCOUNT_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._@-]*$/;
+const ACCOUNT_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._@+-]*$/;
 
 export interface AccountChoice {
   name: string;

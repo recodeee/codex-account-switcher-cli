@@ -20,7 +20,7 @@ from app.core.plan_types import coerce_account_plan_type
 from app.core.utils.time import to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus
 from app.modules.accounts.codex_auth_auto_import_ignore import list_auto_import_ignored_account_ids
-from app.modules.accounts.codex_auth_switcher import build_email_snapshot_name, select_snapshot_name
+from app.modules.accounts.codex_auth_switcher import build_email_snapshot_name
 from app.modules.accounts.repository import AccountIdentityConflictError, AccountsRepository
 from app.modules.proxy.account_cache import get_account_selection_cache
 
@@ -210,16 +210,6 @@ def _materialize_active_auth_snapshot(
     if not active_auth_path.exists() or not active_auth_path.is_file():
         return
 
-    snapshots = _collect_snapshot_files(accounts_dir)
-    try:
-        active_target = active_auth_path.resolve()
-    except OSError:
-        active_target = active_auth_path
-
-    snapshot_targets = {snapshot.resolve() for snapshot in snapshots}
-    if active_target in snapshot_targets:
-        return
-
     try:
         raw = active_auth_path.read_bytes()
     except OSError:
@@ -229,6 +219,11 @@ def _materialize_active_auth_snapshot(
     if parsed is None:
         return
 
+    legacy_alias_names = _legacy_snapshot_alias_names_for_account(
+        account_id=parsed.account.id,
+        email=parsed.account.email,
+        accounts_dir=accounts_dir,
+    )
     snapshot_name = _select_snapshot_name_for_account(
         account_id=parsed.account.id,
         email=parsed.account.email,
@@ -241,8 +236,20 @@ def _materialize_active_auth_snapshot(
     try:
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         if snapshot_path.exists() and snapshot_path.read_bytes() == raw:
+            _refresh_legacy_snapshot_aliases(
+                accounts_dir=accounts_dir,
+                alias_names=legacy_alias_names,
+                canonical_name=snapshot_name,
+                raw=raw,
+            )
             return
         snapshot_path.write_bytes(raw)
+        _refresh_legacy_snapshot_aliases(
+            accounts_dir=accounts_dir,
+            alias_names=legacy_alias_names,
+            canonical_name=snapshot_name,
+            raw=raw,
+        )
     except OSError:
         return
 
@@ -266,13 +273,12 @@ def _select_snapshot_name_for_account(
     snapshot_names_by_email = _snapshot_names_by_email(accounts_dir)
     existing_email_names = snapshot_names_by_email.get(normalized_email, [])
     if existing_email_names:
-        # Force converging to canonical email-shaped snapshot names so
-        # codex login auto-import always standardizes legacy aliases.
+        # Converge legacy aliases for the same email identity to canonical
+        # email-shaped naming.
         return canonical_name
 
     if existing_names:
-        # Account-id matched legacy snapshots without email-shaped names.
-        # Materialize to canonical email-shaped name on next sync.
+        # Converge account-id matched aliases to canonical email naming.
         return canonical_name
     if canonical_snapshot_path.exists():
         # Canonical filename exists but belongs to another email identity.
@@ -288,6 +294,41 @@ def _next_available_email_snapshot_name(*, base_name: str, accounts_dir: Path) -
         candidate = f"{base_name}--dup-{suffix}"
         suffix += 1
     return candidate
+
+
+def _legacy_snapshot_alias_names_for_account(
+    *,
+    account_id: str,
+    email: str,
+    accounts_dir: Path,
+) -> list[str]:
+    normalized_email = email.strip().lower()
+    names_by_account_id = _snapshot_names_by_account_id(accounts_dir)
+    names_by_email = _snapshot_names_by_email(accounts_dir)
+    candidate_names = set(names_by_account_id.get(account_id, []))
+    candidate_names.update(names_by_email.get(normalized_email, []))
+    return sorted(candidate_names)
+
+
+def _refresh_legacy_snapshot_aliases(
+    *,
+    accounts_dir: Path,
+    alias_names: list[str],
+    canonical_name: str,
+    raw: bytes,
+) -> None:
+    for alias_name in alias_names:
+        if alias_name == canonical_name:
+            continue
+        alias_path = accounts_dir / f"{alias_name}.json"
+        try:
+            if not alias_path.exists() or not alias_path.is_file():
+                continue
+            if alias_path.read_bytes() == raw:
+                continue
+            alias_path.write_bytes(raw)
+        except OSError:
+            continue
 
 
 def _snapshot_email(snapshot_path: Path) -> str | None:

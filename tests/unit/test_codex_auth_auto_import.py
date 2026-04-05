@@ -134,7 +134,7 @@ def test_select_snapshot_name_for_account_converges_existing_email_matched_snaps
     assert selected == "nagy.viktordp@gmail.com"
 
 
-def test_materialize_active_auth_snapshot_writes_canonical_email_snapshot_on_new_login(
+def test_materialize_active_auth_snapshot_materializes_canonical_email_snapshot_on_new_login(
     tmp_path: Path,
 ) -> None:
     accounts_dir = tmp_path / "accounts"
@@ -169,3 +169,34 @@ def test_materialize_active_auth_snapshot_writes_canonical_email_snapshot_on_new
     assert legacy_snapshot_path.exists()
     assert canonical_snapshot_path.exists()
     assert canonical_snapshot_path.read_bytes() == active_auth_path.read_bytes()
+
+
+def test_materialize_active_auth_snapshot_materializes_canonical_name_even_when_active_auth_targets_existing_alias(
+    tmp_path: Path,
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    active_auth_path = tmp_path / "auth.json"
+    email = "cica@nagyviktor.com"
+    raw_account_id = "acc-main"
+
+    alias_snapshot_path = accounts_dir / "amodeus@nagyviktor.com.json"
+    _write_auth_snapshot(
+        alias_snapshot_path,
+        email=email,
+        account_id=raw_account_id,
+        access_token="current-access",
+        refresh_token="current-refresh",
+    )
+    active_auth_path.symlink_to(alias_snapshot_path)
+
+    _materialize_active_auth_snapshot(
+        accounts_dir=accounts_dir,
+        active_auth_path=active_auth_path,
+        encryptor=TokenEncryptor(),
+    )
+
+    canonical_snapshot_path = accounts_dir / "cica@nagyviktor.com.json"
+    assert alias_snapshot_path.exists()
+    assert canonical_snapshot_path.exists()
+    assert canonical_snapshot_path.read_bytes() == alias_snapshot_path.read_bytes()

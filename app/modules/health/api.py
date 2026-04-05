@@ -491,8 +491,8 @@ async def _read_live_usage_task_previews_by_snapshot() -> dict[str, list[_LiveUs
                     )
                 )
 
-            for task_previews in previews_by_snapshot.values():
-                task_previews.sort(key=lambda preview: preview.account_id)
+            for snapshot_previews in previews_by_snapshot.values():
+                snapshot_previews.sort(key=lambda preview: preview.account_id)
 
             return previews_by_snapshot
     except Exception:

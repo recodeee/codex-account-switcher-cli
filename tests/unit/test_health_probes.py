@@ -483,7 +483,7 @@ async def test_live_usage_mapping_returns_xml_payload():
     assert '<account account_id="acc-1"' in body
     assert 'email="owner@example.com"' in body
     assert 'status="active"' in body
-    assert 'expected_snapshot="owner-example-com"' in body
+    assert 'expected_snapshot="owner@example.com"' in body
     assert 'mapped_snapshot="owner-example-com"' in body
     assert 'snapshot_candidates="owner-example-com"' in body
     assert 'process_session_count="1"' in body

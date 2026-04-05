@@ -12,7 +12,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from app.modules.accounts.codex_auth_switcher import build_snapshot_index
+from app.core.auth import DEFAULT_EMAIL, claims_from_auth, generate_unique_account_id, parse_auth_json
+from app.modules.accounts.codex_auth_switcher import (
+    build_email_snapshot_name,
+    build_snapshot_index,
+    select_snapshot_name,
+)
 
 
 _DEFAULT_ACTIVE_WINDOW_SECONDS = 300
@@ -1225,8 +1230,116 @@ def _infer_snapshot_name_from_auth_path(auth_path: Path | None) -> str | None:
     if candidate.suffix != ".json":
         return None
     if candidate.name == "auth.json":
-        return None
+        return _resolve_or_materialize_snapshot_name_from_auth_json(candidate)
     return candidate.stem or None
+
+
+def _resolve_or_materialize_snapshot_name_from_auth_json(auth_path: Path) -> str | None:
+    if not auth_path.exists() or not auth_path.is_file():
+        return None
+
+    try:
+        raw = auth_path.read_bytes()
+    except OSError:
+        return None
+
+    parsed = _parse_auth_identity_for_snapshot(raw)
+    if parsed is None:
+        return None
+
+    account_id, normalized_email = parsed
+    snapshot_index = build_snapshot_index()
+    existing_snapshot_names = snapshot_index.snapshots_by_account_id.get(account_id, [])
+    selected_existing_snapshot_name = select_snapshot_name(
+        existing_snapshot_names,
+        snapshot_index.active_snapshot_name,
+        email=normalized_email,
+    )
+    if selected_existing_snapshot_name:
+        return selected_existing_snapshot_name
+
+    canonical_snapshot_name = build_email_snapshot_name(normalized_email)
+    materialized_snapshot_name = _materialize_snapshot_from_auth_bytes(
+        snapshot_name=canonical_snapshot_name,
+        email=normalized_email,
+        raw=raw,
+    )
+    return materialized_snapshot_name
+
+
+def _parse_auth_identity_for_snapshot(raw: bytes) -> tuple[str, str] | None:
+    try:
+        auth = parse_auth_json(raw)
+    except Exception:
+        return None
+
+    claims = claims_from_auth(auth)
+    normalized_email = (claims.email or DEFAULT_EMAIL).strip().lower()
+    if not normalized_email or normalized_email == DEFAULT_EMAIL.lower():
+        return None
+    return (
+        generate_unique_account_id(claims.account_id, normalized_email),
+        normalized_email,
+    )
+
+
+def _materialize_snapshot_from_auth_bytes(
+    *,
+    snapshot_name: str,
+    email: str,
+    raw: bytes,
+) -> str | None:
+    accounts_dir = _resolve_accounts_dir()
+    try:
+        accounts_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+
+    candidate_name = snapshot_name
+    candidate_path = accounts_dir / f"{candidate_name}.json"
+    if candidate_path.exists() and candidate_path.is_file():
+        existing_email = _snapshot_email_from_path(candidate_path)
+        if existing_email not in {None, email}:
+            alias_name = _next_available_duplicate_snapshot_name(
+                base_name=snapshot_name,
+                accounts_dir=accounts_dir,
+            )
+            if alias_name is None:
+                return None
+            candidate_name = alias_name
+            candidate_path = accounts_dir / f"{candidate_name}.json"
+
+    try:
+        if candidate_path.exists() and candidate_path.read_bytes() == raw:
+            return candidate_name
+        candidate_path.write_bytes(raw)
+    except OSError:
+        return None
+
+    return candidate_name
+
+
+def _snapshot_email_from_path(snapshot_path: Path) -> str | None:
+    try:
+        raw = snapshot_path.read_bytes()
+    except OSError:
+        return None
+
+    parsed = _parse_auth_identity_for_snapshot(raw)
+    if parsed is None:
+        return None
+    return parsed[1]
+
+
+def _next_available_duplicate_snapshot_name(*, base_name: str, accounts_dir: Path) -> str | None:
+    suffix = 2
+    while suffix < 10_000:
+        candidate_name = f"{base_name}--dup-{suffix}"
+        candidate_path = accounts_dir / f"{candidate_name}.json"
+        if not candidate_path.exists():
+            return candidate_name
+        suffix += 1
+    return None
 
 
 def _iter_running_codex_commands(proc_root: Path) -> list[tuple[int, list[str]]]:

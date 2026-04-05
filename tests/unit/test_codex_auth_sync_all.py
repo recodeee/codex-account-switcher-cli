@@ -116,8 +116,8 @@ def test_collect_import_sources_materializes_active_auth_to_new_email_snapshot(t
 
     sources = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active)
 
-    assert [path.name for path in sources] == ["new.user-example-com.json"]
-    materialized = accounts_dir / "new.user-example-com.json"
+    assert [path.name for path in sources] == ["new.user@example.com.json"]
+    materialized = accounts_dir / "new.user@example.com.json"
     assert materialized.exists()
     assert json.loads(materialized.read_text(encoding="utf-8"))["tokens"]["accessToken"] == "token-new"
 
@@ -132,7 +132,10 @@ def test_collect_import_sources_refreshes_existing_generic_snapshot_for_same_acc
 
     sources = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active)
 
-    assert [path.name for path in sources] == ["work.json"]
+    assert [path.name for path in sources] == ["old.user@example.com.json", "work.json"]
+    canonical = accounts_dir / "old.user@example.com.json"
+    assert canonical.exists()
+    assert json.loads(canonical.read_text(encoding="utf-8"))["tokens"]["accessToken"] == "token-fresh"
     assert json.loads(existing.read_text(encoding="utf-8"))["tokens"]["accessToken"] == "token-fresh"
 
 
@@ -148,5 +151,8 @@ def test_collect_import_sources_refreshes_existing_snapshot_matched_by_email_whe
 
     sources = _collect_import_sources(accounts_dir=accounts_dir, active_auth_path=active)
 
-    assert [path.name for path in sources] == ["work.json"]
+    assert [path.name for path in sources] == ["same.user@example.com.json", "work.json"]
+    canonical = accounts_dir / "same.user@example.com.json"
+    assert canonical.exists()
+    assert json.loads(canonical.read_text(encoding="utf-8"))["tokens"]["accessToken"] == "token-fresh"
     assert json.loads(existing.read_text(encoding="utf-8"))["tokens"]["accessToken"] == "token-fresh"

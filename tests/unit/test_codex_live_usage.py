@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -95,6 +96,25 @@ def _write_rollout_with_user_task(path: Path, *, timestamp: datetime, task: str)
     path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     ts = timestamp.timestamp()
     os.utime(path, (ts, ts))
+
+
+def _encode_jwt(payload: dict[str, object]) -> str:
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    body = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+    return f"header.{body}.sig"
+
+
+def _write_auth_json(path: Path, *, email: str, account_id: str, access_token: str = "access") -> None:
+    payload = {"email": email}
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": access_token,
+            "refreshToken": "refresh",
+            "accountId": account_id,
+        },
+    }
+    path.write_text(json.dumps(auth_json), encoding="utf-8")
 
 
 def test_read_local_codex_live_usage_uses_latest_rate_limit_and_counts_active_sessions(
@@ -1104,6 +1124,46 @@ def test_read_live_codex_process_session_counts_by_snapshot_uses_explicit_defaul
 
     counts = read_live_codex_process_session_counts_by_snapshot()
     assert counts == {"work": 1}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_materializes_email_snapshot_from_auth_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "current"
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+
+    auth_path = tmp_path / "process" / "auth.json"
+    auth_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_auth_json(
+        auth_path,
+        email="new.user@example.com",
+        account_id="acc-new",
+        access_token="token-new",
+    )
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(auth_path))
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(tmp_path / "accounts"))
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(606, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {
+            "CODEX_AUTH_JSON_PATH": str(auth_path),
+        },
+    )
+
+    counts = read_live_codex_process_session_counts_by_snapshot()
+
+    assert counts == {"new.user@example.com": 1}
+    materialized_snapshot_path = tmp_path / "accounts" / "new.user@example.com.json"
+    assert materialized_snapshot_path.exists()
+    assert (
+        json.loads(materialized_snapshot_path.read_text(encoding="utf-8"))["tokens"]["accessToken"]
+        == "token-new"
+    )
 
 
 def test_read_live_codex_process_session_counts_by_snapshot_keeps_cached_unlabeled_mapping_after_switch(
