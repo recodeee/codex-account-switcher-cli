@@ -331,6 +331,7 @@ function buildQuotaDebugLogLines(
   trackedCliSessions: number,
   displayedCliSessions: number,
   hasLiveSessionSignal: boolean,
+  currentTaskPreview: string | null,
 ): string[] {
   const merged = liveQuotaDebug.merged;
   const scopedSamples = scopeQuotaDebugSamplesToAccount(
@@ -339,11 +340,17 @@ function buildQuotaDebugLogLines(
   );
   const normalizedSnapshotName = accountSnapshotName?.trim() || "none";
   const normalizedActiveSnapshotName = activeSnapshotName?.trim() || "none";
+  const normalizedCurrentTaskPreview = currentTaskPreview?.trim() || null;
   const selectedMatchesActive =
     normalizeDebugSnapshotName(normalizedSnapshotName) != null &&
     normalizeDebugSnapshotName(normalizedSnapshotName) ===
       normalizeDebugSnapshotName(normalizedActiveSnapshotName);
   const diagnosticOnly = liveQuotaDebug.overrideApplied !== true;
+  const quotaSampledRows = scopedSamples.length;
+  const liveSessionsWithoutQuotaRows = Math.max(
+    mappedCliSessions - quotaSampledRows,
+    0,
+  );
   const lines: string[] = [
     `$ account=${accountId} snapshot=${normalizedSnapshotName}`,
     `$ cli_mapping selected_snapshot=${normalizedSnapshotName} active_snapshot=${normalizedActiveSnapshotName} match=${selectedMatchesActive ? "yes" : "no"}`,
@@ -352,15 +359,32 @@ function buildQuotaDebugLogLines(
     `$ override=${liveQuotaDebug.overrideReason ?? (liveQuotaDebug.overrideApplied ? "applied" : "none")}`,
     `$ attribution=${diagnosticOnly ? "diagnostic sample only (not attributed)" : "account-attributed override applied"}`,
     `$ flow=collect_cli_samples -> merge -> ${liveQuotaDebug.overrideApplied ? "apply_override" : "no_override"}`,
-    `$ mapped_cli_sessions=${mappedCliSessions} sampled_rows=${scopedSamples.length}`,
+    `$ mapped_cli_sessions=${mappedCliSessions} quota_sampled_rows=${quotaSampledRows}`,
   ];
+
+  if (liveSessionsWithoutQuotaRows > 0) {
+    lines.push(
+      `$ live_sessions_without_quota_rows=${liveSessionsWithoutQuotaRows}`,
+    );
+    if (
+      hasLiveSessionSignal &&
+      (normalizedCurrentTaskPreview == null ||
+        normalizedCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL)
+    ) {
+      lines.push("$ task_preview_state=waiting_for_new_task");
+    }
+  }
 
   if (liveQuotaDebug.snapshotsConsidered.length > 0) {
     lines.push(`$ snapshots=${liveQuotaDebug.snapshotsConsidered.join(", ")}`);
   }
 
-  if (scopedSamples.length === 0) {
-    lines.push("$ no cli sessions sampled");
+  if (quotaSampledRows === 0) {
+    lines.push(
+      mappedCliSessions > 0
+        ? "$ no quota-bearing cli samples"
+        : "$ no cli sessions sampled",
+    );
     return lines;
   }
 
@@ -716,6 +740,7 @@ export function AccountCard({
             codexTrackedSessionCount,
             codexLiveSessionCount,
             Boolean(account.codexAuth?.hasLiveSession),
+            effectiveCurrentTaskPreview,
           ).join("\n")
         : "",
     [
@@ -726,6 +751,7 @@ export function AccountCard({
       codexLiveSessionCount,
       codexLiveSessionCountRaw,
       codexTrackedSessionCount,
+      effectiveCurrentTaskPreview,
       liveQuotaDebug,
     ],
   );

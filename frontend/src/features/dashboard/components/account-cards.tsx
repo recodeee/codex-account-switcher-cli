@@ -223,10 +223,29 @@ function sortAccountsByLastSeenAndAvailableQuota(
   accounts: AccountSummary[],
   nowMs: number = Date.now(),
 ): AccountSummary[] {
+  const weeklyAvailableAccounts: AccountSummary[] = [];
+  const weeklyDepletedAccounts: AccountSummary[] = [];
+
+  for (const account of accounts) {
+    const weeklyRemaining = resolveSortableRemainingPercent(
+      account,
+      "secondary",
+      nowMs,
+    );
+    const isWeeklyDepleted =
+      weeklyRemaining != null && weeklyRemaining <= 0;
+
+    if (isWeeklyDepleted) {
+      weeklyDepletedAccounts.push(account);
+    } else {
+      weeklyAvailableAccounts.push(account);
+    }
+  }
+
   const recentAccounts: AccountSummary[] = [];
   const staleAccounts: AccountSummary[] = [];
 
-  for (const account of accounts) {
+  for (const account of weeklyAvailableAccounts) {
     if (hasRecentLastSeenUsage(account, nowMs)) {
       recentAccounts.push(account);
     } else {
@@ -237,6 +256,7 @@ function sortAccountsByLastSeenAndAvailableQuota(
   return [
     ...sortAccountsByAvailableQuota(recentAccounts, nowMs),
     ...sortAccountsByAvailableQuota(staleAccounts, nowMs),
+    ...sortAccountsByAvailableQuota(weeklyDepletedAccounts, nowMs),
   ];
 }
 

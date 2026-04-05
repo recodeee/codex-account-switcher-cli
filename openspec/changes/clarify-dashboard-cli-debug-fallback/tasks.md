@@ -1,0 +1,3 @@
+- [x] Add frontend regression coverage for account-card debug output when mapped live sessions have no quota-bearing sample rows.
+- [x] Update the account-card CLI session debug log builder to surface mapped-without-quota session state.
+- [x] Run relevant frontend tests and validate specs.

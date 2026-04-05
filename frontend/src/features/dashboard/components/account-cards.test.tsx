@@ -566,6 +566,63 @@ describe("AccountCards", () => {
     ]);
   });
 
+  it("keeps weekly-depleted accounts at the end even when they are more recently seen", () => {
+    const now = Date.now();
+    const weeklyDepletedRecent = createAccountSummary({
+      accountId: "acc_weekly_depleted_recent",
+      email: "weekly-depleted-recent@example.com",
+      displayName: "weekly-depleted-recent@example.com",
+      usage: {
+        primaryRemainingPercent: 100,
+        secondaryRemainingPercent: 0,
+      },
+      resetAtSecondary: new Date(now + 4 * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000).toISOString(),
+      lastUsageRecordedAtPrimary: new Date(now - 3 * 60 * 1000).toISOString(),
+      lastUsageRecordedAtSecondary: new Date(now - 4 * 60 * 1000).toISOString(),
+    });
+    const weeklyAvailableStale = createAccountSummary({
+      accountId: "acc_weekly_available_stale",
+      email: "weekly-available-stale@example.com",
+      displayName: "weekly-available-stale@example.com",
+      usage: {
+        primaryRemainingPercent: 22,
+        secondaryRemainingPercent: 73,
+      },
+      lastUsageRecordedAtPrimary: new Date(now - 45 * 60 * 1000).toISOString(),
+      lastUsageRecordedAtSecondary: new Date(now - 50 * 60 * 1000).toISOString(),
+    });
+    const weeklyDepletedLater = createAccountSummary({
+      accountId: "acc_weekly_depleted_later",
+      email: "weekly-depleted-later@example.com",
+      displayName: "weekly-depleted-later@example.com",
+      usage: {
+        primaryRemainingPercent: 5,
+        secondaryRemainingPercent: 0,
+      },
+      resetAtSecondary: new Date(now + 6 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString(),
+      lastUsageRecordedAtPrimary: new Date(now - 6 * 60 * 1000).toISOString(),
+      lastUsageRecordedAtSecondary: new Date(now - 6 * 60 * 1000).toISOString(),
+    });
+
+    const { container } = render(
+      <AccountCards
+        accounts={[weeklyDepletedRecent, weeklyAvailableStale, weeklyDepletedLater]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const cards = Array.from(container.querySelectorAll(".card-hover"));
+    const titles = cards.map((card) =>
+      card.querySelector("p.truncate.text-sm.font-semibold.leading-tight")?.textContent,
+    );
+    expect(titles).toEqual([
+      "weekly-available-stale@example.com",
+      "weekly-depleted-recent@example.com",
+      "weekly-depleted-later@example.com",
+    ]);
+  });
+
   it("prioritizes non-zero 5h remaining accounts above zero-percent accounts", () => {
     const zeroA = createAccountSummary({
       accountId: "acc_zero_a",

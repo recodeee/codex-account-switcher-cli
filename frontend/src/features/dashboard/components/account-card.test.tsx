@@ -1818,6 +1818,51 @@ describe("AccountCard", () => {
     expect(screen.queryByText(/\$ no cli sessions sampled/i)).not.toBeInTheDocument();
   });
 
+  it("surfaces mapped live sessions without quota rows in CLI session logs", async () => {
+    const user = userEvent.setup();
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 2,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 2,
+      codexCurrentTaskPreview: null,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "snap-a",
+        activeSnapshotName: "snap-a",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["snap-a"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    render(<AccountCard account={account} />);
+    await user.click(screen.getByRole("button", { name: /debug/i }));
+
+    expect(
+      screen.getByText(/\$ cli_session_counts mapped=2 tracked=1 displayed=2 live_signal=yes/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/\$ mapped_cli_sessions=2 quota_sampled_rows=0/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/\$ live_sessions_without_quota_rows=2/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/\$ task_preview_state=waiting_for_new_task/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/\$ no quota-bearing cli samples/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\$ no cli sessions sampled/i)).not.toBeInTheDocument();
+  });
+
   it("scopes CLI session logs to the current account snapshot", async () => {
     const user = userEvent.setup();
     const account = createAccountSummary({

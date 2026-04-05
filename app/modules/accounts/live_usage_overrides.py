@@ -70,6 +70,22 @@ class _SampleSourceOwner:
 _SAMPLE_SOURCE_OWNER_TTL = timedelta(days=7)
 _SAMPLE_SOURCE_OWNER_MAX_ENTRIES = 512
 _sample_source_owner_cache: dict[str, _SampleSourceOwner] = {}
+_TERMINATED_CLI_SESSION_SNAPSHOT_TTL = timedelta(hours=6)
+_terminated_cli_session_snapshot_cache: dict[str, datetime] = {}
+
+
+def remember_terminated_cli_session_snapshots(
+    snapshot_names: list[str],
+    *,
+    observed_at: datetime | None = None,
+) -> None:
+    observed = to_utc_naive(observed_at or datetime.now(timezone.utc))
+    _prune_terminated_cli_session_snapshot_cache(now=observed)
+    for snapshot_name in snapshot_names:
+        normalized_snapshot_name = _normalize_snapshot_name(snapshot_name)
+        if normalized_snapshot_name is None:
+            continue
+        _terminated_cli_session_snapshot_cache[normalized_snapshot_name] = observed
 
 
 def apply_local_live_usage_overrides(
