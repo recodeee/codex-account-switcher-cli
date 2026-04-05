@@ -521,7 +521,18 @@ function buildWorkingNowSessionFingerprint(account: WorkingNowAccount): string {
     Math.max(account.codexTrackedSessionCount ?? 0, 0),
     Math.max(account.codexSessionCount ?? 0, 0),
   ].join("/");
-  const taskFingerprint = account.codexCurrentTaskPreview?.trim() || "task:none";
+  const taskPreview = account.codexCurrentTaskPreview?.trim() || "";
+  const taskFingerprint = (() => {
+    if (!taskPreview) {
+      return "task:none";
+    }
+    // live_usage payloads include volatile timestamps/counters that rotate on
+    // every poll. Keeping them verbatim restarts the usage-limit grace window.
+    if (/^<live_usage\b/i.test(taskPreview)) {
+      return "task:live_usage";
+    }
+    return `task:${taskPreview}`;
+  })();
 
   // Do not include volatile rollout file names / merged source ids here.
   // They can rotate on every telemetry poll and would keep restarting the
@@ -569,34 +580,6 @@ function resolveWorkingNowPrimaryQuota(
   };
 }
 
-function resolveUsageLimitHitRecordedAtMs(
-  account: WorkingNowAccount,
-  input: {
-    mergedPrimaryRemaining: number | null;
-    deferredPrimaryQuotaFallback: RawQuotaWindowFallback | null;
-  },
-): number | null {
-  if (isDepletedPrimaryQuota(input.mergedPrimaryRemaining)) {
-    const mergedRecordedAtMs = parseRecordedAtMs(account.liveQuotaDebug?.merged?.recordedAt);
-    if (mergedRecordedAtMs != null) {
-      return mergedRecordedAtMs;
-    }
-  }
-
-  const deferredPrimary = input.deferredPrimaryQuotaFallback;
-  if (deferredPrimary && isDepletedPrimaryQuota(deferredPrimary.remainingPercent)) {
-    const deferredRecordedAtMs = parseRecordedAtMs(deferredPrimary.recordedAt);
-    if (deferredRecordedAtMs != null) {
-      return deferredRecordedAtMs;
-    }
-  }
-
-  return (
-    parseRecordedAtMs(account.lastUsageRecordedAtPrimary) ??
-    parseRecordedAtMs(account.lastUsageRecordedAtSecondary)
-  );
-}
-
 export function getWorkingNowUsageLimitHitCountdownMs(
   account: WorkingNowAccount,
   nowMs: number = Date.now(),
@@ -631,13 +614,12 @@ export function getWorkingNowUsageLimitHitCountdownMs(
     return null;
   }
 
-  const hitRecordedAtMs = resolveUsageLimitHitRecordedAtMs(account, quotaState) ?? nowMs;
   const sessionFingerprint = buildWorkingNowSessionFingerprint(account);
   const existing = usageLimitHitByAccount.get(account.accountId);
   const startedAtMs =
     existing && existing.fingerprint === sessionFingerprint
       ? existing.startedAtMs
-      : Math.min(nowMs, hitRecordedAtMs);
+      : nowMs;
   if (!existing || existing.fingerprint !== sessionFingerprint) {
     usageLimitHitByAccount.set(account.accountId, {
       fingerprint: sessionFingerprint,

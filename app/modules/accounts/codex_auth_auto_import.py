@@ -273,13 +273,12 @@ def _select_snapshot_name_for_account(
     snapshot_names_by_email = _snapshot_names_by_email(accounts_dir)
     existing_email_names = snapshot_names_by_email.get(normalized_email, [])
     if existing_email_names:
-        # Converge legacy aliases for the same email identity to canonical
-        # email-shaped naming.
-        return canonical_name
+        # Preserve existing mappings for this email; do not rewrite snapshot names.
+        return existing_email_names[0]
 
     if existing_names:
-        # Converge account-id matched aliases to canonical email naming.
-        return canonical_name
+        # Preserve existing mappings for this account id; do not rewrite names.
+        return existing_names[0]
     if canonical_snapshot_path.exists():
         # Canonical filename exists but belongs to another email identity.
         # Preserve both snapshots by allocating a deterministic duplicate alias.

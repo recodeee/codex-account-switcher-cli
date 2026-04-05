@@ -133,7 +133,7 @@ describe("isAccountWorkingNow", () => {
     });
 
     expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:00.000Z").getTime())).toBe(true);
-    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:31.000Z").getTime())).toBe(false);
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T12:00:01.000Z").getTime())).toBe(false);
   });
 
   it("returns a 60-second usage-limit countdown while account is still eligible for working-now", () => {
@@ -158,8 +158,8 @@ describe("isAccountWorkingNow", () => {
 
     const nowMs = new Date("2026-04-04T11:59:00.000Z").getTime();
     const countdownMs = getWorkingNowUsageLimitHitCountdownMs(account, nowMs);
-    expect(countdownMs).toBeGreaterThanOrEqual(29_000);
-    expect(countdownMs).toBeLessThanOrEqual(30_000);
+    expect(countdownMs).toBeGreaterThanOrEqual(59_000);
+    expect(countdownMs).toBeLessThanOrEqual(60_000);
   });
 
   it("does not restart the usage-limit grace window for the same stuck session", () => {
@@ -262,6 +262,61 @@ describe("isAccountWorkingNow", () => {
     expect(getWorkingNowUsageLimitHitCountdownMs(sameSessionWithRotatedSource, secondNowMs)).toBe(0);
     expect(isAccountWorkingNow(sameSessionWithRotatedSource, secondNowMs)).toBe(false);
     expect(hasActiveCliSessionSignal(sameSessionWithRotatedSource, secondNowMs)).toBe(false);
+  });
+
+  it("does not restart usage-limit grace when live_usage task preview timestamps rotate", () => {
+    const base = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        '<live_usage generated_at="2026-04-04T11:58:30.000Z" total_sessions="5" mapped_sessions="1" unattributed_sessions="4">',
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "cica",
+        activeSnapshotName: "cica",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: "2026-04-04T11:58:30.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-04T11:58:30.000Z",
+    });
+
+    const firstNowMs = new Date("2026-04-04T11:59:00.000Z").getTime();
+    const firstCountdownMs = getWorkingNowUsageLimitHitCountdownMs(base, firstNowMs);
+    expect(firstCountdownMs).toBeGreaterThan(0);
+
+    const sameSessionWithRefreshedLiveUsageTask = {
+      ...base,
+      codexCurrentTaskPreview:
+        '<live_usage generated_at="2026-04-04T12:00:10.000Z" total_sessions="5" mapped_sessions="1" unattributed_sessions="4">',
+      lastUsageRecordedAtPrimary: "2026-04-04T12:00:10.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-04T12:00:10.000Z",
+    };
+    const secondNowMs = new Date("2026-04-04T12:00:10.000Z").getTime();
+
+    expect(
+      getWorkingNowUsageLimitHitCountdownMs(
+        sameSessionWithRefreshedLiveUsageTask,
+        secondNowMs,
+      ),
+    ).toBe(0);
+    expect(
+      isAccountWorkingNow(
+        sameSessionWithRefreshedLiveUsageTask,
+        secondNowMs,
+      ),
+    ).toBe(false);
+    expect(
+      hasActiveCliSessionSignal(
+        sameSessionWithRefreshedLiveUsageTask,
+        secondNowMs,
+      ),
+    ).toBe(false);
   });
 
   it("returns false when no-live-telemetry fallback reports 0% even if baseline usage is higher", () => {
