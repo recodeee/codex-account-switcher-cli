@@ -128,6 +128,7 @@ function sortAccountsByAvailableQuota(
           nowMs,
         ),
         primaryResetAtMs: resolveSortableResetAtMs(account, "primary"),
+        secondaryResetAtMs: resolveSortableResetAtMs(account, "secondary"),
         secondaryRemaining: resolveSortableRemainingPercent(
           account,
           "secondary",
@@ -151,6 +152,13 @@ function sortAccountsByAvailableQuota(
       rightMetrics.secondaryRemaining != null && rightMetrics.secondaryRemaining <= 0;
     if (leftWeeklyDepleted !== rightWeeklyDepleted) {
       return leftWeeklyDepleted ? 1 : -1;
+    }
+    if (leftWeeklyDepleted && rightWeeklyDepleted) {
+      const weeklyResetDiff = compareNullableNumberAsc(
+        leftMetrics.secondaryResetAtMs,
+        rightMetrics.secondaryResetAtMs,
+      );
+      if (weeklyResetDiff !== 0) return weeklyResetDiff;
     }
 
     const primaryDiff = compareNullableNumberDesc(

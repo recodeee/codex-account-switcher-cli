@@ -28,6 +28,7 @@ from app.modules.accounts.codex_auth_switcher import (
     build_email_snapshot_name,
     build_snapshot_index,
     repair_snapshot_for_account,
+    resolve_snapshot_name_candidates_for_account,
     resolve_snapshot_names_for_account,
     select_snapshot_name,
     switch_snapshot,
@@ -313,17 +314,37 @@ class AccountsService:
         self,
         account_id: str,
     ) -> AccountTerminateCliSessionsResponse | None:
-        resolved = await self.resolve_account_snapshot(account_id)
-        if resolved is None:
+        account = await self._repo.get_by_id(account_id)
+        if account is None:
             return None
 
-        resolved_account_id, snapshot_name = resolved
-        terminated_session_count = terminate_live_codex_processes_for_snapshot(snapshot_name)
-        await self._repo.delete_codex_sessions_for_account(resolved_account_id)
+        snapshot_index = build_snapshot_index()
+        snapshot_candidates = resolve_snapshot_name_candidates_for_account(
+            snapshot_index=snapshot_index,
+            account_id=account.id,
+            chatgpt_account_id=account.chatgpt_account_id,
+            email=account.email,
+        )
+        selected_snapshot_name = select_snapshot_name(
+            snapshot_candidates,
+            snapshot_index.active_snapshot_name,
+            email=account.email,
+        )
+        if selected_snapshot_name is None:
+            raise CodexAuthSnapshotNotFoundError(
+                f"No codex-auth snapshot found for account {account.email}. Run `codex-auth save <name>` first."
+            )
+
+        snapshot_names_to_terminate = list(dict.fromkeys([selected_snapshot_name, *snapshot_candidates]))
+        terminated_session_count = 0
+        for snapshot_name in snapshot_names_to_terminate:
+            terminated_session_count += terminate_live_codex_processes_for_snapshot(snapshot_name)
+
+        await self._repo.delete_codex_sessions_for_account(account.id)
         return AccountTerminateCliSessionsResponse(
             status="terminated",
-            account_id=resolved_account_id,
-            snapshot_name=snapshot_name,
+            account_id=account.id,
+            snapshot_name=selected_snapshot_name,
             terminated_session_count=terminated_session_count,
         )
 

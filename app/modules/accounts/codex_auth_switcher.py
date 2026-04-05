@@ -68,22 +68,20 @@ def build_email_snapshot_name(email: str) -> str:
     return sanitized
 
 
-def resolve_snapshot_names_for_account(
+def resolve_snapshot_name_candidates_for_account(
     *,
     snapshot_index: CodexAuthSnapshotIndex,
     account_id: str,
     chatgpt_account_id: str | None = None,
     email: str | None = None,
 ) -> list[str]:
-    """Resolve candidate codex-auth snapshots for an account.
+    """Resolve all codex-auth snapshot candidates for an account.
 
     When chatgpt_account_id + email are available, prefer lookup by their
     canonical generated account id to avoid stale persisted account.id values
     leaking snapshots from a different account after merge/overwrite flows.
     Fallback to persisted account.id only when canonical lookup resolves no
     snapshots.
-
-    Policy: one account maps to at most one effective snapshot name.
     """
 
     resolved: list[str] = []
@@ -175,7 +173,24 @@ def resolve_snapshot_names_for_account(
         snapshot_names=resolved,
         email=email,
     )
+    return resolved
 
+
+def resolve_snapshot_names_for_account(
+    *,
+    snapshot_index: CodexAuthSnapshotIndex,
+    account_id: str,
+    chatgpt_account_id: str | None = None,
+    email: str | None = None,
+) -> list[str]:
+    """Resolve one effective codex-auth snapshot for an account."""
+
+    resolved = resolve_snapshot_name_candidates_for_account(
+        snapshot_index=snapshot_index,
+        account_id=account_id,
+        chatgpt_account_id=chatgpt_account_id,
+        email=email,
+    )
     selected_snapshot_name = select_snapshot_name(
         resolved,
         snapshot_index.active_snapshot_name,

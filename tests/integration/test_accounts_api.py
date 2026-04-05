@@ -1845,6 +1845,68 @@ async def test_terminate_account_cli_sessions_terminates_snapshot_scoped_codex_s
 
 
 @pytest.mark.asyncio
+async def test_terminate_account_cli_sessions_terminates_all_account_snapshot_candidates(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    email = "terminate-candidate-snapshots@example.com"
+    raw_account_id = "acc_terminate_candidate_snapshots"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": raw_account_id,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(accounts_dir / "work.json", email=email, account_id=raw_account_id)
+    _write_auth_snapshot(accounts_dir / "work-alias.json", email=email, account_id=raw_account_id)
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    terminated_snapshots: list[str] = []
+    from app.modules.accounts import service as accounts_service
+
+    terminated_counts = {
+        "work": 1,
+        "work-alias": 2,
+    }
+
+    def _terminate_live_codex_processes_for_snapshot(snapshot_name: str) -> int:
+        terminated_snapshots.append(snapshot_name)
+        return terminated_counts.get(snapshot_name, 0)
+
+    monkeypatch.setattr(
+        accounts_service,
+        "terminate_live_codex_processes_for_snapshot",
+        _terminate_live_codex_processes_for_snapshot,
+    )
+
+    terminate_response = await async_client.post(
+        f"/api/accounts/{expected_account_id}/terminate-cli-sessions"
+    )
+    assert terminate_response.status_code == 200
+    payload = terminate_response.json()
+    assert payload["status"] == "terminated"
+    assert payload["accountId"] == expected_account_id
+    assert payload["snapshotName"] == "work"
+    assert payload["terminatedSessionCount"] == 3
+    assert terminated_snapshots == ["work", "work-alias"]
+
+
+@pytest.mark.asyncio
 async def test_terminate_account_cli_sessions_returns_not_found_snapshot_error(
     async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):

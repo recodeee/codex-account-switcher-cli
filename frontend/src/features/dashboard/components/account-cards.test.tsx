@@ -460,6 +460,57 @@ describe("AccountCards", () => {
     ]);
   });
 
+  it("orders weekly-depleted accounts by the nearest weekly reset time", () => {
+    const now = Date.now();
+    const weeklyOk = createAccountSummary({
+      accountId: "acc_weekly_ok_2",
+      email: "weekly-ok-2@example.com",
+      displayName: "weekly-ok-2@example.com",
+      usage: {
+        primaryRemainingPercent: 34,
+        secondaryRemainingPercent: 28,
+      },
+    });
+    const weeklyDepletedSoonerReset = createAccountSummary({
+      accountId: "acc_weekly_zero_soon",
+      email: "weekly-zero-soon@example.com",
+      displayName: "weekly-zero-soon@example.com",
+      usage: {
+        primaryRemainingPercent: 6,
+        secondaryRemainingPercent: 0,
+      },
+      resetAtSecondary: new Date(now + 4 * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000).toISOString(),
+    });
+    const weeklyDepletedLaterReset = createAccountSummary({
+      accountId: "acc_weekly_zero_later",
+      email: "weekly-zero-later@example.com",
+      displayName: "weekly-zero-later@example.com",
+      usage: {
+        primaryRemainingPercent: 97,
+        secondaryRemainingPercent: 0,
+      },
+      resetAtSecondary: new Date(now + 6 * 24 * 60 * 60 * 1000 + 1 * 60 * 60 * 1000).toISOString(),
+    });
+
+    const { container } = render(
+      <AccountCards
+        accounts={[weeklyDepletedLaterReset, weeklyOk, weeklyDepletedSoonerReset]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const cards = Array.from(container.querySelectorAll(".card-hover"));
+    const titles = cards.map((card) =>
+      card.querySelector("p.truncate.text-sm.font-semibold.leading-tight")?.textContent,
+    );
+    expect(titles).toEqual([
+      "weekly-ok-2@example.com",
+      "weekly-zero-soon@example.com",
+      "weekly-zero-later@example.com",
+    ]);
+  });
+
   it("keeps stale last-seen accounts after recently seen accounts even when stale usage is higher", () => {
     const now = Date.now();
     const recentHighest = createAccountSummary({

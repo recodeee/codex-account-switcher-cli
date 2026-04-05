@@ -17,6 +17,7 @@ from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSwitchFailedError,
     build_snapshot_index,
     repair_snapshot_for_account,
+    resolve_snapshot_name_candidates_for_account,
     resolve_snapshot_names_for_account,
     select_snapshot_name,
     switch_snapshot,
@@ -362,6 +363,26 @@ def test_resolve_snapshot_names_for_account_prefers_canonical_id_over_stale_pers
     )
 
     assert resolved == ["main-snapshot"]
+
+
+def test_resolve_snapshot_name_candidates_for_account_returns_all_canonical_snapshots() -> None:
+    canonical_id = generate_unique_account_id("acc-main", "main@example.com")
+    index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={
+            "stale-account-id": ["wrong-snapshot"],
+            canonical_id: ["main-snapshot", "main-snapshot-alt"],
+        },
+        active_snapshot_name=None,
+    )
+
+    resolved = resolve_snapshot_name_candidates_for_account(
+        snapshot_index=index,
+        account_id="stale-account-id",
+        chatgpt_account_id="acc-main",
+        email="main@example.com",
+    )
+
+    assert resolved == ["main-snapshot", "main-snapshot-alt"]
 
 
 def test_resolve_snapshot_names_for_account_does_not_steal_email_named_snapshot_from_other_account() -> None:
