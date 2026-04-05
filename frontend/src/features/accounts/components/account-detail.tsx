@@ -1,6 +1,6 @@
 import { User } from "lucide-react";
 
-import { isEmailLabel } from "@/components/blur-email";
+import { isEmailLabel, isLikelyEmailValue } from "@/components/blur-email";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { AccountActions } from "@/features/accounts/components/account-actions";
 import { AccountSnapshotTutorial } from "@/features/accounts/components/account-snapshot-tutorial";
@@ -61,6 +61,7 @@ export function AccountDetail({
   const idSuffix = showAccountId ? ` (${compactId})` : "";
   const hasResolvedSnapshot = Boolean(account.codexAuth?.snapshotName?.trim());
   const snapshotName = account.codexAuth?.snapshotName?.trim() || null;
+  const snapshotNameIsEmail = isLikelyEmailValue(snapshotName);
 
   return (
     <div key={account.accountId} className="animate-fade-in-up space-y-4 rounded-xl border bg-card p-5">
@@ -72,7 +73,12 @@ export function AccountDetail({
           </h2>
           {snapshotName ? (
             <span className="inline-flex items-center rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-cyan-700 dark:text-cyan-300">
-              SNAPSHOT:{snapshotName}
+              SNAPSHOT:
+              {snapshotNameIsEmail && blurred ? (
+                <span className="privacy-blur">{snapshotName}</span>
+              ) : (
+                snapshotName
+              )}
             </span>
           ) : null}
         </div>

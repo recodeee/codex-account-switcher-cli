@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { isEmailLabel } from "@/components/blur-email";
+import { isEmailLabel, isLikelyEmailValue } from "@/components/blur-email";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { StatusBadge } from "@/components/status-badge";
 import type { AccountSummary } from "@/features/accounts/schemas";
@@ -46,6 +46,30 @@ function formatPlanWithSnapshot(
     return `${planLabel} · No snapshot`;
   }
   return `${planLabel} · ${normalizedSnapshotName}`;
+}
+
+function getPlanSnapshotDetails(
+  planType: string,
+  snapshotName?: string | null,
+): {
+  planLabel: string;
+  snapshotLabel: string;
+  snapshotIsEmail: boolean;
+} {
+  const planLabel = formatSlug(planType);
+  const normalizedSnapshotName = snapshotName?.trim();
+  if (!normalizedSnapshotName) {
+    return {
+      planLabel,
+      snapshotLabel: "No snapshot",
+      snapshotIsEmail: false,
+    };
+  }
+  return {
+    planLabel,
+    snapshotLabel: normalizedSnapshotName,
+    snapshotIsEmail: isLikelyEmailValue(normalizedSnapshotName),
+  };
 }
 
 function MiniQuotaRow({
@@ -126,6 +150,10 @@ export function AccountListItem({
   const baseSubtitle =
     emailSubtitle ??
     formatPlanWithSnapshot(account.planType, account.codexAuth?.snapshotName);
+  const { planLabel, snapshotLabel, snapshotIsEmail } = getPlanSnapshotDetails(
+    account.planType,
+    account.codexAuth?.snapshotName,
+  );
   const idSuffix = showAccountId
     ? ` | ID ${formatCompactAccountId(account.accountId)}`
     : "";
@@ -235,7 +263,13 @@ export function AccountListItem({
                   </>
                 ) : (
                   <>
-                    {baseSubtitle}
+                    {snapshotIsEmail && blurred ? (
+                      <>
+                        {planLabel} · <span className="privacy-blur">{snapshotLabel}</span>
+                      </>
+                    ) : (
+                      baseSubtitle
+                    )}
                     {idSuffix}
                   </>
                 )}

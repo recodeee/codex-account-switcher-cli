@@ -148,6 +148,44 @@ describe("AccountCard", () => {
     expect(container.querySelector(".privacy-blur")).not.toBeNull();
   });
 
+  it("blurs account title when it is an email in privacy mode", () => {
+    act(() => {
+      usePrivacyStore.setState({ blurred: true });
+    });
+    const account = createAccountSummary({
+      displayName: "solo@example.com",
+      email: "solo@example.com",
+    });
+
+    const { container } = render(<AccountCard account={account} />);
+
+    const title = screen.getByText("solo@example.com");
+
+    expect(title.closest(".privacy-blur")).not.toBeNull();
+    expect(container.querySelector(".privacy-blur")).not.toBeNull();
+  });
+
+  it("blurs snapshot name when snapshot name is an email in privacy mode", () => {
+    act(() => {
+      usePrivacyStore.setState({ blurred: true });
+    });
+    const account = createAccountSummary({
+      displayName: "AWS Account MSP",
+      email: "aws-account@example.com",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "snapshot-email@example.com",
+        activeSnapshotName: "snapshot-email@example.com",
+        isActiveSnapshot: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const snapshot = screen.getByText("snapshot-email@example.com");
+    expect(snapshot.closest(".privacy-blur")).not.toBeNull();
+  });
+
   it("shows plan subtitle with mapped snapshot name", () => {
     const account = createAccountSummary({
       planType: "team",

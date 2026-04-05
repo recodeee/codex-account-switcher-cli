@@ -1,9 +1,12 @@
-import { lazy, Suspense, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AlertMessage } from "@/components/alert-message";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingOverlay } from "@/components/layout/loading-overlay";
 import { Button } from "@/components/ui/button";
+import { ApiKeyCreateDialog } from "@/features/api-keys/components/api-key-create-dialog";
+import { ApiKeyCreatedDialog } from "@/features/api-keys/components/api-key-created-dialog";
+import { ApiKeyEditDialog } from "@/features/api-keys/components/api-key-edit-dialog";
 import type {
 	ApiKey,
 	ApiKeyCreateRequest,
@@ -19,22 +22,6 @@ import {
 } from "@/features/apis/hooks/use-apis";
 import { useDialogState } from "@/hooks/use-dialog-state";
 import { getErrorMessageOrNull } from "@/utils/errors";
-
-const ApiKeyCreateDialog = lazy(() =>
-	import("@/features/api-keys/components/api-key-create-dialog").then((m) => ({
-		default: m.ApiKeyCreateDialog,
-	})),
-);
-const ApiKeyEditDialog = lazy(() =>
-	import("@/features/api-keys/components/api-key-edit-dialog").then((m) => ({
-		default: m.ApiKeyEditDialog,
-	})),
-);
-const ApiKeyCreatedDialog = lazy(() =>
-	import("@/features/api-keys/components/api-key-created-dialog").then((m) => ({
-		default: m.ApiKeyCreatedDialog,
-	})),
-);
 
 export function ApisPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -178,28 +165,26 @@ export function ApisPage() {
 				</div>
 			)}
 
-			<Suspense fallback={null}>
-				<ApiKeyCreateDialog
-					open={createDialog.open}
-					busy={createMutation.isPending}
-					onOpenChange={createDialog.onOpenChange}
-					onSubmit={handleCreate}
-				/>
+			<ApiKeyCreateDialog
+				open={createDialog.open}
+				busy={createMutation.isPending}
+				onOpenChange={createDialog.onOpenChange}
+				onSubmit={handleCreate}
+			/>
 
-				<ApiKeyEditDialog
-					open={editDialog.open}
-					busy={updateMutation.isPending}
-					apiKey={editDialog.data}
-					onOpenChange={editDialog.onOpenChange}
-					onSubmit={handleUpdate}
-				/>
+			<ApiKeyEditDialog
+				open={editDialog.open}
+				busy={updateMutation.isPending}
+				apiKey={editDialog.data}
+				onOpenChange={editDialog.onOpenChange}
+				onSubmit={handleUpdate}
+			/>
 
-				<ApiKeyCreatedDialog
-					open={createdDialog.open}
-					apiKey={createdDialog.data}
-					onOpenChange={createdDialog.onOpenChange}
-				/>
-			</Suspense>
+			<ApiKeyCreatedDialog
+				open={createdDialog.open}
+				apiKey={createdDialog.data}
+				onOpenChange={createdDialog.onOpenChange}
+			/>
 
 			<ConfirmDialog
 				open={deleteDialog.open}

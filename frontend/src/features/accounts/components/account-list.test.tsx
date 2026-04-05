@@ -1,8 +1,16 @@
 import { render, screen } from "@testing-library/react";
+import { act } from "react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AccountList } from "@/features/accounts/components/account-list";
+import { usePrivacyStore } from "@/hooks/use-privacy";
+
+afterEach(() => {
+  act(() => {
+    usePrivacyStore.setState({ blurred: false });
+  });
+});
 
 describe("AccountList", () => {
   it("renders items and filters by search", async () => {
@@ -78,6 +86,43 @@ describe("AccountList", () => {
 
     await user.type(screen.getByPlaceholderText("Search accounts..."), "not-found");
     expect(screen.getByText("No matching accounts")).toBeInTheDocument();
+  });
+
+  it("blurs snapshot name in list subtitle when privacy mode is enabled", () => {
+    act(() => {
+      usePrivacyStore.setState({ blurred: true });
+    });
+
+    render(
+      <AccountList
+        accounts={[
+          {
+            accountId: "acc-1",
+            email: "primary@example.com",
+            displayName: "primary@example.com",
+            planType: "plus",
+            status: "active",
+            codexSessionCount: 0,
+            additionalQuotas: [],
+            codexAuth: {
+              hasSnapshot: true,
+              snapshotName: "snapshot-email@example.com",
+              activeSnapshotName: "snapshot-email@example.com",
+              isActiveSnapshot: true,
+            },
+          },
+        ]}
+        selectedAccountId={null}
+        onSelect={() => {}}
+        onUseLocal={() => {}}
+        useLocalBusy={false}
+        onOpenImport={() => {}}
+        onOpenOauth={() => {}}
+      />,
+    );
+
+    const snapshotLabel = screen.getByText("snapshot-email@example.com");
+    expect(snapshotLabel.closest(".privacy-blur")).not.toBeNull();
   });
 
   it("shows account id only for duplicate emails", () => {

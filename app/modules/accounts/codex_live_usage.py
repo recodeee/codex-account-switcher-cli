@@ -65,6 +65,12 @@ _TASK_PREVIEW_BOOTSTRAP_ENVIRONMENT_BLOCK_RE = re.compile(
 _TASK_PREVIEW_BOOTSTRAP_LIVE_USAGE_BLOCK_RE = re.compile(
     r"(?is)^\s*<live_usage\b.*?</live_usage>\s*"
 )
+_TASK_PREVIEW_OMX_EXPLORE_HEADER_RE = re.compile(
+    r"(?is)\byou\s+are\s+omx\s+explore\b"
+)
+_TASK_PREVIEW_OMX_EXPLORE_USER_REQUEST_RE = re.compile(
+    r"(?is)\buser request:\s*(.+)$"
+)
 _DEFAULT_PROC_ROOT = Path("/proc")
 
 
@@ -2200,7 +2206,11 @@ def _extract_task_preview_source_text(raw_text: str) -> str | None:
     if stripped_bootstrap_prefix is None:
         return None
 
-    normalized = " ".join(stripped_bootstrap_prefix.split())
+    stripped_omx_explore_wrapper = _strip_known_omx_explore_wrapper(stripped_bootstrap_prefix)
+    if stripped_omx_explore_wrapper is None:
+        return None
+
+    normalized = " ".join(stripped_omx_explore_wrapper.split())
     if not normalized:
         return None
     if _is_bootstrap_user_message(normalized):
@@ -2239,6 +2249,22 @@ def _strip_known_bootstrap_prefix(text: str) -> str | None:
         ).strip()
 
     return normalized or None
+
+
+def _strip_known_omx_explore_wrapper(text: str) -> str | None:
+    stripped = text.strip()
+    if not stripped:
+        return None
+
+    if _TASK_PREVIEW_OMX_EXPLORE_HEADER_RE.search(stripped) is None:
+        return stripped
+
+    request_match = _TASK_PREVIEW_OMX_EXPLORE_USER_REQUEST_RE.search(stripped)
+    if request_match is None:
+        return None
+
+    extracted = request_match.group(1).strip()
+    return extracted or None
 
 
 def _is_bootstrap_user_message(text: str) -> bool:

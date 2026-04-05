@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AccountDetail } from "@/features/accounts/components/account-detail";
+import { usePrivacyStore } from "@/hooks/use-privacy";
 import { createAccountSummary } from "@/test/mocks/factories";
 
 vi.mock("@/features/accounts/hooks/use-accounts", () => ({
@@ -20,6 +22,12 @@ const baseProps = {
   onRepairSnapshot: vi.fn(),
   onReauth: vi.fn(),
 };
+
+afterEach(() => {
+  act(() => {
+    usePrivacyStore.setState({ blurred: false });
+  });
+});
 
 describe("AccountDetail", () => {
   it("shows snapshot label next to account title when snapshot is available", () => {
@@ -55,5 +63,25 @@ describe("AccountDetail", () => {
 
     expect(screen.queryByText(/^SNAPSHOT:/)).not.toBeInTheDocument();
   });
-});
 
+  it("blurs snapshot label value when snapshot name is an email and privacy mode is enabled", () => {
+    act(() => {
+      usePrivacyStore.setState({ blurred: true });
+    });
+    const account = createAccountSummary({
+      email: "account@example.com",
+      displayName: "account@example.com",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "snapshot@example.com",
+        activeSnapshotName: "snapshot@example.com",
+        isActiveSnapshot: true,
+      },
+    });
+
+    render(<AccountDetail {...baseProps} account={account} />);
+
+    const snapshotValue = screen.getByText("snapshot@example.com");
+    expect(snapshotValue.closest(".privacy-blur")).not.toBeNull();
+  });
+});

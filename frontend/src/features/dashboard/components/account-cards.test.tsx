@@ -460,6 +460,45 @@ describe("AccountCards", () => {
     ]);
   });
 
+  it("treats near-zero weekly quota as depleted when ordering cards", () => {
+    const usageLimitHit = createAccountSummary({
+      accountId: "acc_usage_limit_hit",
+      email: "usage-limit-hit@example.com",
+      displayName: "usage-limit-hit@example.com",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 80,
+      },
+    });
+    const weeklyNearZero = createAccountSummary({
+      accountId: "acc_weekly_near_zero",
+      email: "weekly-near-zero@example.com",
+      displayName: "weekly-near-zero@example.com",
+      usage: {
+        primaryRemainingPercent: 94,
+        secondaryRemainingPercent: 4,
+      },
+      resetAtSecondary: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    const { container } = render(
+      <AccountCards
+        accounts={[weeklyNearZero, usageLimitHit]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const cards = Array.from(container.querySelectorAll(".card-hover"));
+    const titles = cards.map((card) =>
+      card.querySelector("p.truncate.text-sm.font-semibold.leading-tight")?.textContent,
+    );
+    expect(titles).toEqual([
+      "usage-limit-hit@example.com",
+      "weekly-near-zero@example.com",
+    ]);
+  });
+
   it("keeps weekly-depleted accounts at the end even when the weekly reset is sooner than 5h", () => {
     const now = Date.now();
     const healthyWeekly = createAccountSummary({

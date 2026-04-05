@@ -45,6 +45,12 @@ _TASK_PREVIEW_LEADING_LIVE_USAGE_BLOCK_RE = re.compile(
 _TASK_PREVIEW_LEADING_LIVE_USAGE_MAPPING_BLOCK_RE = re.compile(
     r"(?is)^\s*<live_usage_mapping\b[^>]*>.*?</live_usage_mapping>\s*"
 )
+_TASK_PREVIEW_OMX_EXPLORE_HEADER_RE = re.compile(
+    r"(?is)\byou\s+are\s+omx\s+explore\b"
+)
+_TASK_PREVIEW_OMX_EXPLORE_USER_REQUEST_RE = re.compile(
+    r"(?is)\buser request:\s*(.+)$"
+)
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -544,6 +550,7 @@ def _resolve_session_waiting_last_task_preview(
 
 def _normalize_task_preview(value: str | None) -> str:
     normalized = " ".join((value or "").split()).strip()
+    normalized = _strip_omx_explore_wrapper(normalized)
     normalized = _strip_leading_live_usage_payload(normalized)
     if not normalized:
         return ""
@@ -576,6 +583,19 @@ def _strip_leading_live_usage_payload(value: str) -> str:
             count=1,
         ).strip()
     return normalized
+
+
+def _strip_omx_explore_wrapper(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        return ""
+    if _TASK_PREVIEW_OMX_EXPLORE_HEADER_RE.search(stripped) is None:
+        return stripped
+
+    request_match = _TASK_PREVIEW_OMX_EXPLORE_USER_REQUEST_RE.search(stripped)
+    if request_match is None:
+        return ""
+    return request_match.group(1).strip()
 
 
 async def _read_live_usage_task_previews_by_snapshot() -> dict[str, list[_LiveUsageTaskPreview]]:

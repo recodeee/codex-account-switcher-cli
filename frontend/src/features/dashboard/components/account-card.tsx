@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { isEmailLabel, isLikelyEmailValue } from "@/components/blur-email";
 import { CopyButton } from "@/components/copy-button";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +80,30 @@ function formatPlanWithSnapshot(
     return `${planLabel} · No snapshot`;
   }
   return `${planLabel} · ${normalizedSnapshotName}`;
+}
+
+function getPlanSnapshotDetails(
+  planType: string,
+  snapshotName?: string | null,
+): {
+  planLabel: string;
+  snapshotLabel: string;
+  snapshotIsEmail: boolean;
+} {
+  const planLabel = formatSlug(planType);
+  const normalizedSnapshotName = snapshotName?.trim();
+  if (!normalizedSnapshotName) {
+    return {
+      planLabel,
+      snapshotLabel: "No snapshot",
+      snapshotIsEmail: false,
+    };
+  }
+  return {
+    planLabel,
+    snapshotLabel: normalizedSnapshotName,
+    snapshotIsEmail: isLikelyEmailValue(normalizedSnapshotName),
+  };
 }
 
 const NEAR_ZERO_QUOTA_PERCENT = 5;
@@ -690,8 +715,13 @@ export function AccountCard(props: AccountCardProps) {
       : null;
 
   const title = account.displayName || account.email;
+  const titleIsEmail = isEmailLabel(title, account.email);
   const compactId = formatCompactAccountId(account.accountId);
   const planWithSnapshot = formatPlanWithSnapshot(
+    account.planType,
+    account.codexAuth?.snapshotName,
+  );
+  const { planLabel, snapshotLabel, snapshotIsEmail } = getPlanSnapshotDetails(
     account.planType,
     account.codexAuth?.snapshotName,
   );
@@ -794,10 +824,20 @@ export function AccountCard(props: AccountCardProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold leading-tight">
-            {title}
+            {titleIsEmail && blurred ? (
+              <span className="privacy-blur">{title}</span>
+            ) : (
+              title
+            )}
           </p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {planWithSnapshot}
+            {snapshotIsEmail && blurred ? (
+              <>
+                {planLabel} · <span className="privacy-blur">{snapshotLabel}</span>
+              </>
+            ) : (
+              planWithSnapshot
+            )}
             {!emailSubtitle ? idSuffix : ""}
           </p>
           {emailSubtitle ? (

@@ -22,6 +22,7 @@ import { formatWindowLabel } from "@/utils/formatters";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 
 const RECENT_LAST_SEEN_SORT_WINDOW_MS = 30 * 60 * 1000;
+const WEEKLY_DEPLETED_SORT_THRESHOLD_PERCENT = 5;
 
 function roundAveragePercent(
   values: Array<number | null | undefined>,
@@ -58,6 +59,17 @@ function parseTimestampMs(value: string | null | undefined): number | null {
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) return null;
   return parsed;
+}
+
+function normalizeNearZeroQuotaPercent(value: number): number {
+  const clamped = Math.max(0, Math.min(100, value));
+  if (
+    clamped > 0 &&
+    clamped < WEEKLY_DEPLETED_SORT_THRESHOLD_PERCENT
+  ) {
+    return 0;
+  }
+  return clamped;
 }
 
 function resolveSortableRemainingPercent(
@@ -119,7 +131,10 @@ function shouldPinWeeklyDepletedAccountToEnd(metrics: {
   secondaryResetAtMs: number | null;
   secondaryRemaining: number | null;
 }): boolean {
-  return metrics.secondaryRemaining != null && metrics.secondaryRemaining <= 0;
+  if (metrics.secondaryRemaining == null) {
+    return false;
+  }
+  return normalizeNearZeroQuotaPercent(metrics.secondaryRemaining) <= 0;
 }
 
 function sortAccountsByAvailableQuota(
