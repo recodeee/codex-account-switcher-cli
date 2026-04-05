@@ -226,6 +226,8 @@ export function NavLink({ to, className, children, onClick }: NavLinkProps) {
         }
 
         if (isNextRuntimeEnvironment()) {
+          event.preventDefault();
+          window.location.assign(new URL(to, window.location.href).toString());
           return;
         }
 

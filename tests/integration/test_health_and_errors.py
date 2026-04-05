@@ -51,6 +51,44 @@ async def test_spa_route_path_returns_index_html(async_client, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_spa_route_path_serves_flat_route_html(async_client):
+    route_html = _STATIC_DIR / "accounts.html"
+    created = not route_html.exists()
+    marker = "accounts-static-route-test-marker"
+    if created:
+        route_html.parent.mkdir(parents=True, exist_ok=True)
+        route_html.write_text(f"<!doctype html><html><body>{marker}</body></html>")
+    try:
+        response = await async_client.get("/accounts")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        if created:
+            assert marker in response.text
+    finally:
+        if created:
+            route_html.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_spa_route_path_with_trailing_slash_serves_flat_route_html(async_client):
+    route_html = _STATIC_DIR / "accounts.html"
+    created = not route_html.exists()
+    marker = "accounts-static-route-trailing-slash-test-marker"
+    if created:
+        route_html.parent.mkdir(parents=True, exist_ok=True)
+        route_html.write_text(f"<!doctype html><html><body>{marker}</body></html>")
+    try:
+        response = await async_client.get("/accounts/")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        if created:
+            assert marker in response.text
+    finally:
+        if created:
+            route_html.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
 async def test_missing_static_asset_returns_not_found(async_client):
     response = await async_client.get("/assets/missing.js")
     assert response.status_code == 404

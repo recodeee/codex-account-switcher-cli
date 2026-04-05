@@ -341,19 +341,24 @@ def create_app() -> FastAPI:
     @app.get("/{path:path}", include_in_schema=False)
     async def spa_fallback(path: str = ""):
         normalized = path.lstrip("/")
+        route_path = normalized.rstrip("/")
         if normalized and any(
             normalized == prefix.rstrip("/") or normalized.startswith(prefix) for prefix in excluded_prefixes
         ):
             raise HTTPException(status_code=404, detail="Not Found")
 
-        if normalized:
-            candidate = (static_dir / normalized).resolve()
+        if route_path:
+            candidate = (static_dir / route_path).resolve()
             if candidate.is_relative_to(static_root) and candidate.is_file():
                 return FileResponse(candidate)
 
-            nested_index = (static_dir / normalized / "index.html").resolve()
+            nested_index = (static_dir / route_path / "index.html").resolve()
             if nested_index.is_relative_to(static_root) and nested_index.is_file():
                 return FileResponse(nested_index, media_type="text/html")
+
+            flat_route_html = (static_dir / f"{route_path}.html").resolve()
+            if flat_route_html.is_relative_to(static_root) and flat_route_html.is_file():
+                return FileResponse(flat_route_html, media_type="text/html")
 
             if _is_static_asset_path(normalized):
                 raise HTTPException(status_code=404, detail="Not Found")
