@@ -45,6 +45,7 @@ def test_overlay_replaces_stale_preview_with_waiting_for_new_task(
     codex_current_task_preview_by_account = {
         account.id: "the 2% is basically zero so anything under 5%",
     }
+    codex_last_task_preview_by_account: dict[str, str] = {}
 
     monkeypatch.setattr(
         "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_snapshot",
@@ -69,11 +70,13 @@ def test_overlay_replaces_stale_preview_with_waiting_for_new_task(
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+        codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         live_quota_debug_by_account={},
         now=datetime(2026, 4, 5, tzinfo=timezone.utc),
     )
 
     assert codex_current_task_preview_by_account[account.id] == "Waiting for new task"
+    assert account.id not in codex_last_task_preview_by_account
 
 
 def test_overlay_prefers_live_process_preview_for_snapshot(monkeypatch) -> None:
@@ -88,6 +91,7 @@ def test_overlay_prefers_live_process_preview_for_snapshot(monkeypatch) -> None:
         )
     }
     codex_current_task_preview_by_account: dict[str, str] = {}
+    codex_last_task_preview_by_account: dict[str, str] = {}
 
     monkeypatch.setattr(
         "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_snapshot",
@@ -112,11 +116,68 @@ def test_overlay_prefers_live_process_preview_for_snapshot(monkeypatch) -> None:
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+        codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         live_quota_debug_by_account={},
         now=datetime(2026, 4, 5, tzinfo=timezone.utc),
     )
 
     assert codex_current_task_preview_by_account[account.id] == "Investigate snapshot mapping"
+    assert account.id not in codex_last_task_preview_by_account
+
+
+def test_overlay_keeps_waiting_state_and_adds_last_task_preview(monkeypatch) -> None:
+    now = datetime(2026, 4, 5, tzinfo=timezone.utc)
+    account = _make_account("acc-zeus", "zeus@example.com")
+    codex_auth_by_account = {
+        account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="zeus",
+            active_snapshot_name="zeus",
+            is_active_snapshot=True,
+            has_live_session=True,
+        )
+    }
+    codex_current_task_preview_by_account: dict[str, str] = {}
+    codex_last_task_preview_by_account: dict[str, str] = {}
+
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_snapshot",
+        lambda *, now: {
+            "zeus": LocalCodexTaskPreview(
+                text="Investigate Zeus quota overlay mapping",
+                recorded_at=now,
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_session_id",
+        lambda *, now: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_live_codex_process_session_attribution",
+        lambda: LocalCodexProcessSessionAttribution(
+            counts_by_snapshot={"zeus": 1},
+            unattributed_session_pids=[],
+            mapped_session_pids_by_snapshot={"zeus": [31001]},
+            task_preview_by_pid={},
+            task_previews_by_pid={},
+        ),
+    )
+
+    overlay_live_codex_task_previews(
+        accounts=[account],
+        codex_auth_by_account=codex_auth_by_account,
+        codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+        codex_last_task_preview_by_account=codex_last_task_preview_by_account,
+        live_quota_debug_by_account={},
+        now=now,
+    )
+
+    assert codex_current_task_preview_by_account[account.id] == "Waiting for new task"
+    assert (
+        codex_last_task_preview_by_account[account.id]
+        == "Investigate Zeus quota overlay mapping"
+    )
 
 
 def test_overlay_suppresses_stale_snapshot_preview_after_recent_termination(monkeypatch) -> None:
@@ -134,6 +195,9 @@ def test_overlay_suppresses_stale_snapshot_preview_after_recent_termination(monk
     }
     codex_current_task_preview_by_account = {
         account.id: "Waiting for new task",
+    }
+    codex_last_task_preview_by_account = {
+        account.id: "Investigate old sticky session task",
     }
 
     remember_terminated_cli_session_snapshots([snapshot_name], observed_at=now)
@@ -161,8 +225,10 @@ def test_overlay_suppresses_stale_snapshot_preview_after_recent_termination(monk
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+        codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         live_quota_debug_by_account={},
         now=now,
     )
 
     assert account.id not in codex_current_task_preview_by_account
+    assert account.id not in codex_last_task_preview_by_account

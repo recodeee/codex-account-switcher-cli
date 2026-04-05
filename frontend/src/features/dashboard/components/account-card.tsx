@@ -734,11 +734,16 @@ export function AccountCard(props: AccountCardProps) {
   const codexCurrentTaskPreview = usageLimitHitGraceExpired
     ? null
     : account.codexCurrentTaskPreview?.trim() || null;
+  const codexLastTaskPreview = account.codexLastTaskPreview?.trim() || null;
   const effectiveCurrentTaskPreview =
     codexCurrentTaskPreview ??
     (hasActiveCliSession && codexLiveSessionCount > 0
       ? WAITING_FOR_NEW_TASK_LABEL
       : null);
+  const showLastTaskPreview =
+    effectiveCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL &&
+    codexLastTaskPreview != null &&
+    codexLastTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
   const quotaDebugLogText = useMemo(
     () =>
       liveQuotaDebug
@@ -913,12 +918,23 @@ export function AccountCard(props: AccountCardProps) {
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Current task
           </p>
-          <p
-            className="mt-0.5 break-words whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground"
-            title={effectiveCurrentTaskPreview ?? undefined}
-          >
-            {effectiveCurrentTaskPreview ?? "No active task reported"}
-          </p>
+          <div className="mt-0.5 space-y-1">
+            <p
+              className="break-words whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground"
+              title={effectiveCurrentTaskPreview ?? undefined}
+            >
+              {effectiveCurrentTaskPreview ?? "No active task reported"}
+            </p>
+            {showLastTaskPreview ? (
+              <p
+                className="break-words whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground/80"
+                title={codexLastTaskPreview ?? undefined}
+              >
+                <span className="font-medium text-muted-foreground">Last task:</span>{" "}
+                {codexLastTaskPreview}
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
 

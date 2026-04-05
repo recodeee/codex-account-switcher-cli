@@ -1,6 +1,6 @@
-- [ ] Add OpenSpec coverage for waiting-session last-task fallback in dashboard/sessions/XML surfaces.
-- [ ] Extend backend account summary/task overlay flow with `codex_last_task_preview`.
-- [ ] Extend `/live_usage` XML waiting rows with optional `last_task_preview` fallback.
-- [ ] Update dashboard and sessions fallback UI to render waiting state plus secondary last-task context.
-- [ ] Add/update backend and frontend tests for waiting-session fallback behavior.
-- [ ] Run targeted tests and `openspec validate --specs`.
+- [x] Add OpenSpec coverage for waiting-session last-task fallback in dashboard/sessions/XML surfaces.
+- [x] Extend backend account summary/task overlay flow with `codex_last_task_preview`.
+- [x] Extend `/live_usage` XML waiting rows with optional `last_task_preview` fallback.
+- [x] Update dashboard and sessions fallback UI to render waiting state plus secondary last-task context.
+- [x] Add/update backend and frontend tests for waiting-session fallback behavior.
+- [x] Run targeted tests and `openspec validate --specs`.

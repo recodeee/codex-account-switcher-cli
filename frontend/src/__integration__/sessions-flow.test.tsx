@@ -177,6 +177,56 @@ describe("sessions flow integration", () => {
     expect(screen.getAllByText("6").length).toBeGreaterThan(0);
   });
 
+  it("fallback mode keeps waiting label and shows last task context from overview telemetry", async () => {
+    server.use(
+      http.get("/api/sticky-sessions", () =>
+        HttpResponse.json({
+          entries: [],
+          stalePromptCacheCount: 0,
+          total: 0,
+          hasMore: false,
+        }),
+      ),
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_waiting",
+                email: "waiting@example.com",
+                displayName: "waiting@example.com",
+                codexLiveSessionCount: 1,
+                codexTrackedSessionCount: 1,
+                codexSessionCount: 0,
+                codexCurrentTaskPreview: "Waiting for new task",
+                codexLastTaskPreview: "Capture the waiting session last task preview",
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "waiting",
+                  activeSnapshotName: "waiting",
+                  isActiveSnapshot: true,
+                  hasLiveSession: true,
+                },
+                lastUsageRecordedAtPrimary: new Date().toISOString(),
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/sessions?accountId=acc_waiting");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(await screen.findByText("waiting@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for new task")).toBeInTheDocument();
+    expect(screen.getByText("Last task:")).toBeInTheDocument();
+    expect(
+      screen.getByText("Capture the waiting session last task preview"),
+    ).toBeInTheDocument();
+  });
+
   it("fallback counters use tracked inventory while live badge follows live status", async () => {
     server.use(
       http.get("/api/sticky-sessions", () =>

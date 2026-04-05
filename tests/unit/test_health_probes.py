@@ -362,6 +362,57 @@ async def test_live_usage_lists_multiple_tasks_per_session_and_waiting_state():
 
 
 @pytest.mark.asyncio
+async def test_live_usage_waiting_session_can_include_last_task_preview():
+    from app.modules.accounts.codex_live_usage import LocalCodexProcessSessionAttribution
+    from app.modules.health.api import _LiveUsageTaskPreview, live_usage
+
+    with (
+        patch(
+            "app.modules.health.api.read_live_codex_process_session_attribution",
+            return_value=LocalCodexProcessSessionAttribution(
+                counts_by_snapshot={"zeus": 1},
+                unattributed_session_pids=[],
+                mapped_session_pids_by_snapshot={"zeus": [41001]},
+                task_preview_by_pid={},
+                task_previews_by_pid={},
+            ),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_task_previews_by_snapshot",
+            new=AsyncMock(
+                return_value={
+                    "zeus": [
+                        _LiveUsageTaskPreview(
+                            account_id="acc-zeus",
+                            preview="Investigate Zeus quota overlay mapping",
+                        )
+                    ]
+                }
+            ),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_account_emails_by_snapshot",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "app.modules.health.api._read_live_usage_snapshot_alias_map",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "app.modules.health.api.utcnow",
+            return_value=datetime(2026, 4, 5, 0, 0, 0),
+        ),
+    ):
+        response = await live_usage()
+
+    body = response.body.decode("utf-8")
+    assert (
+        '<session pid="41001" state="waiting_for_new_task"'
+        ' last_task_preview="Investigate Zeus quota overlay mapping" />'
+    ) in body
+
+
+@pytest.mark.asyncio
 async def test_live_usage_remaps_alias_snapshot_counts_to_selected_snapshot():
     from app.modules.accounts.codex_live_usage import LocalCodexProcessSessionAttribution
     from app.modules.health.api import live_usage

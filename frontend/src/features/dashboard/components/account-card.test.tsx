@@ -1245,6 +1245,34 @@ describe("AccountCard", () => {
     expect(screen.getByText("Waiting for new task")).toBeInTheDocument();
   });
 
+  it("shows last task context when a waiting live session exposes a fallback preview", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Waiting for new task",
+      codexLastTaskPreview: "Investigate Zeus quota overlay mapping",
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Waiting for new task")).toBeInTheDocument();
+    expect(screen.getByText("Last task:")).toBeInTheDocument();
+    expect(
+      screen.getByText("Investigate Zeus quota overlay mapping"),
+    ).toBeInTheDocument();
+  });
+
   it("hides stale current task preview after usage-limit grace expires", () => {
     vi.useFakeTimers();
     try {

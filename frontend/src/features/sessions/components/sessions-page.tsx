@@ -23,6 +23,7 @@ import { getFreshDebugRawSampleCount } from "@/utils/account-working";
 import { formatLastUsageLabel } from "@/utils/formatters";
 
 const DEFAULT_LIMIT = 25;
+const WAITING_FOR_NEW_TASK_LABEL = "Waiting for new task";
 
 type ProgressTone = "upToDate" | "muted" | "pending";
 
@@ -34,6 +35,7 @@ type ActivityRow = {
   sourceLabel: string;
   status: "live" | "idle";
   currentTask: string | null;
+  lastTask: string | null;
   progressLabel: string;
   progressTone: ProgressTone;
   codexSessionCount: number;
@@ -201,6 +203,7 @@ export function SessionsPage() {
         sourceLabel: "Sticky mapping",
         status: entry.isActive ? ("live" as const) : ("idle" as const),
         currentTask: entry.taskPreview?.trim() || null,
+        lastTask: null,
         progressLabel: progress.label,
         progressTone: progress.tone,
         codexSessionCount: 1,
@@ -253,6 +256,7 @@ export function SessionsPage() {
           }),
           status: hasLiveSession ? ("live" as const) : ("idle" as const),
           currentTask: account.codexCurrentTaskPreview?.trim() || null,
+          lastTask: account.codexLastTaskPreview?.trim() || null,
           progressLabel: progress.label,
           progressTone: progress.tone,
           codexSessionCount: detectedSessionCount,
@@ -379,8 +383,22 @@ export function SessionsPage() {
                               {row.status === "live" ? "Live" : "Idle"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="max-w-[28rem] text-xs text-muted-foreground" title={row.currentTask ?? undefined}>
-                            {row.currentTask ?? "—"}
+                          <TableCell
+                            className="max-w-[28rem] text-xs text-muted-foreground"
+                            title={row.currentTask ?? row.lastTask ?? undefined}
+                          >
+                            <div className="space-y-1">
+                              <p>{row.currentTask ?? "—"}</p>
+                              {row.currentTask === WAITING_FOR_NEW_TASK_LABEL && row.lastTask ? (
+                                <p
+                                  className="break-words whitespace-pre-wrap text-[11px] text-muted-foreground/80"
+                                  title={row.lastTask}
+                                >
+                                  <span className="font-medium text-muted-foreground">Last task:</span>{" "}
+                                  {row.lastTask}
+                                </p>
+                              ) : null}
+                            </div>
                           </TableCell>
                           <TableCell
                             className={cn(
