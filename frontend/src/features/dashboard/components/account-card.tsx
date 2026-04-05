@@ -325,8 +325,12 @@ function scopeQuotaDebugSamplesToAccount(
 function buildQuotaDebugLogLines(
   liveQuotaDebug: NonNullable<AccountSummary["liveQuotaDebug"]>,
   accountSnapshotName: string | null | undefined,
+  activeSnapshotName: string | null | undefined,
   accountId: string,
   mappedCliSessions: number,
+  trackedCliSessions: number,
+  displayedCliSessions: number,
+  hasLiveSessionSignal: boolean,
 ): string[] {
   const merged = liveQuotaDebug.merged;
   const scopedSamples = scopeQuotaDebugSamplesToAccount(
@@ -334,9 +338,16 @@ function buildQuotaDebugLogLines(
     accountSnapshotName,
   );
   const normalizedSnapshotName = accountSnapshotName?.trim() || "none";
+  const normalizedActiveSnapshotName = activeSnapshotName?.trim() || "none";
+  const selectedMatchesActive =
+    normalizeDebugSnapshotName(normalizedSnapshotName) != null &&
+    normalizeDebugSnapshotName(normalizedSnapshotName) ===
+      normalizeDebugSnapshotName(normalizedActiveSnapshotName);
   const diagnosticOnly = liveQuotaDebug.overrideApplied !== true;
   const lines: string[] = [
     `$ account=${accountId} snapshot=${normalizedSnapshotName}`,
+    `$ cli_mapping selected_snapshot=${normalizedSnapshotName} active_snapshot=${normalizedActiveSnapshotName} match=${selectedMatchesActive ? "yes" : "no"}`,
+    `$ cli_session_counts mapped=${mappedCliSessions} tracked=${trackedCliSessions} displayed=${displayedCliSessions} live_signal=${hasLiveSessionSignal ? "yes" : "no"}`,
     `$ merged 5h=${formatDebugPercent(merged?.primary?.remainingPercent)} weekly=${formatDebugPercent(merged?.secondary?.remainingPercent)}`,
     `$ override=${liveQuotaDebug.overrideReason ?? (liveQuotaDebug.overrideApplied ? "applied" : "none")}`,
     `$ attribution=${diagnosticOnly ? "diagnostic sample only (not attributed)" : "account-attributed override applied"}`,
@@ -589,12 +600,7 @@ export function AccountCard({
     account.accountId,
     account.codexAuth?.snapshotName ?? "",
     account.status,
-    String(account.codexLiveSessionCount ?? 0),
-    String(account.codexTrackedSessionCount ?? 0),
-    String(account.codexSessionCount ?? 0),
     String(primaryRemaining ?? ""),
-    primaryLastRecordedAt ?? "",
-    secondaryLastRecordedAt ?? "",
   ].join("|");
   const lastAutoTerminateSignatureRef = useRef<string | null>(null);
   useEffect(() => {
@@ -670,10 +676,11 @@ export function AccountCard({
     hasLiveSession ||
     (account.codexAuth?.hasLiveSession ?? false) ||
     Math.max(account.codexLiveSessionCount ?? 0, 0) > 0;
+  const codexLiveSessionCountRaw = Math.max(account.codexLiveSessionCount ?? 0, 0);
   const codexLiveSessionCount = hasActiveCliSession
     ? hasRuntimeLiveSessionSignal
-      ? Math.max(account.codexLiveSessionCount ?? 0, 1)
-      : Math.max(account.codexLiveSessionCount ?? 0, 0)
+      ? Math.max(codexLiveSessionCountRaw, 1)
+      : codexLiveSessionCountRaw
     : 0;
   const codexTrackedSessionCount = Math.max(
     account.codexTrackedSessionCount ?? 0,
@@ -698,14 +705,22 @@ export function AccountCard({
         ? buildQuotaDebugLogLines(
             liveQuotaDebug,
             account.codexAuth?.snapshotName ?? null,
+            account.codexAuth?.activeSnapshotName ?? null,
             account.accountId,
+            codexLiveSessionCountRaw,
+            codexTrackedSessionCount,
             codexLiveSessionCount,
+            Boolean(account.codexAuth?.hasLiveSession),
           ).join("\n")
         : "",
     [
       account.accountId,
+      account.codexAuth?.activeSnapshotName,
+      account.codexAuth?.hasLiveSession,
       account.codexAuth?.snapshotName,
       codexLiveSessionCount,
+      codexLiveSessionCountRaw,
+      codexTrackedSessionCount,
       liveQuotaDebug,
     ],
   );

@@ -583,6 +583,28 @@ function resolveWorkingNowPrimaryQuota(
   };
 }
 
+function hasStrongWorkingNowSessionEvidence(
+  account: WorkingNowAccount,
+  nowMs: number,
+): boolean {
+  const hasActiveSessionCounterSignal =
+    Math.max(
+      account.codexLiveSessionCount ?? 0,
+      account.codexTrackedSessionCount ?? 0,
+      account.codexSessionCount ?? 0,
+      0,
+    ) > 0;
+  if (hasActiveSessionCounterSignal) {
+    return true;
+  }
+
+  if (hasFreshTaskPreviewSignal(account)) {
+    return true;
+  }
+
+  return hasFreshLiveTelemetry(account, nowMs);
+}
+
 export function getWorkingNowUsageLimitHitCountdownMs(
   account: WorkingNowAccount,
   nowMs: number = Date.now(),
@@ -617,8 +639,15 @@ export function getWorkingNowUsageLimitHitCountdownMs(
     return null;
   }
 
-  const sessionFingerprint = buildWorkingNowSessionFingerprint(account);
   const existing = usageLimitHitByAccount.get(account.accountId);
+  if (existing) {
+    const existingElapsedMs = Math.max(0, nowMs - existing.startedAtMs);
+    if (existingElapsedMs >= WORKING_NOW_LIMIT_HIT_GRACE_MS) {
+      return 0;
+    }
+  }
+
+  const sessionFingerprint = buildWorkingNowSessionFingerprint(account);
   const startedAtMs =
     existing && existing.fingerprint === sessionFingerprint
       ? existing.startedAtMs
@@ -699,6 +728,18 @@ export function isAccountWorkingNow(
   // "Working now" unless it still has an active CLI session signal.
   if (hasDepletedPrimaryQuota) {
     if (!hasActiveCliSessionSignal) {
+      return false;
+    }
+
+    const usageLimitHitCountdownMs = getWorkingNowUsageLimitHitCountdownMs(
+      account,
+      nowMs,
+    );
+    if (
+      usageLimitHitCountdownMs != null &&
+      usageLimitHitCountdownMs <= 0 &&
+      !hasStrongWorkingNowSessionEvidence(account, nowMs)
+    ) {
       return false;
     }
   }

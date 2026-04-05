@@ -343,6 +343,82 @@ describe("isAccountWorkingNow", () => {
     ).toBe(true);
   });
 
+  it("keeps usage-limit countdown at 0 after expiry even if session fingerprint changes", () => {
+    const base = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Investigate quota termination behavior",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: "2026-04-04T11:58:30.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-04T11:58:30.000Z",
+    });
+
+    const firstNowMs = new Date("2026-04-04T11:59:00.000Z").getTime();
+    const firstCountdownMs = getWorkingNowUsageLimitHitCountdownMs(base, firstNowMs);
+    expect(firstCountdownMs).toBeGreaterThan(0);
+
+    const changedFingerprintAfterExpiry = {
+      ...base,
+      codexCurrentTaskPreview: "Different task preview after session recycle",
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      lastUsageRecordedAtPrimary: "2026-04-04T12:00:10.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-04T12:00:10.000Z",
+    };
+    const secondNowMs = new Date("2026-04-04T12:00:10.000Z").getTime();
+
+    expect(
+      getWorkingNowUsageLimitHitCountdownMs(
+        changedFingerprintAfterExpiry,
+        secondNowMs,
+      ),
+    ).toBe(0);
+  });
+
+  it("drops working-now after grace expiry when only stale hasLiveSession remains", () => {
+    const base = createAccountSummary({
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
+    const firstNowMs = new Date("2026-04-04T11:59:00.000Z").getTime();
+    expect(getWorkingNowUsageLimitHitCountdownMs(base, firstNowMs)).toBeGreaterThan(0);
+    expect(isAccountWorkingNow(base, firstNowMs)).toBe(true);
+
+    const afterGraceMs = new Date("2026-04-04T12:00:10.000Z").getTime();
+    expect(getWorkingNowUsageLimitHitCountdownMs(base, afterGraceMs)).toBe(0);
+    expect(hasActiveCliSessionSignal(base, afterGraceMs)).toBe(true);
+    expect(isAccountWorkingNow(base, afterGraceMs)).toBe(false);
+  });
+
   it("returns false when no-live-telemetry fallback reports 0% even if baseline usage is higher", () => {
     const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
     const account = createAccountSummary({

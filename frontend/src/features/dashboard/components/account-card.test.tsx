@@ -819,6 +819,57 @@ describe("AccountCard", () => {
     }
   });
 
+  it("does not repeatedly auto-terminate when telemetry timestamps keep rotating", () => {
+    vi.useFakeTimers();
+    try {
+      const now = new Date("2026-04-05T00:00:00.000Z");
+      vi.setSystemTime(now);
+      const nowIso = now.toISOString();
+      const account = createAccountSummary({
+        status: "active",
+        usage: {
+          primaryRemainingPercent: 0,
+          secondaryRemainingPercent: 66,
+        },
+        codexLiveSessionCount: 1,
+        codexTrackedSessionCount: 1,
+        codexSessionCount: 1,
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "main",
+          activeSnapshotName: "main",
+          isActiveSnapshot: true,
+          hasLiveSession: true,
+        },
+        lastUsageRecordedAtPrimary: nowIso,
+        lastUsageRecordedAtSecondary: nowIso,
+      });
+      const onAction = vi.fn();
+
+      const { rerender } = render(<AccountCard account={account} onAction={onAction} />);
+
+      act(() => {
+        vi.advanceTimersByTime(61_000);
+      });
+      expect(onAction).toHaveBeenCalledWith(account, "terminateCliSessions");
+
+      const refreshedAccount = {
+        ...account,
+        lastUsageRecordedAtPrimary: new Date("2026-04-05T00:01:10.000Z").toISOString(),
+        lastUsageRecordedAtSecondary: new Date("2026-04-05T00:01:10.000Z").toISOString(),
+      };
+      rerender(<AccountCard account={refreshedAccount} onAction={onAction} />);
+
+      const terminateCalls = onAction.mock.calls.filter(
+        ([, action]) => action === "terminateCliSessions",
+      );
+      expect(terminateCalls).toHaveLength(1);
+      expect(screen.queryByText(/Leaving working now in/i)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows live-session fallback label when runtime sessions have no telemetry timestamps yet", () => {
     const account = createAccountSummary({
       usage: {
@@ -1665,11 +1716,14 @@ describe("AccountCard", () => {
   it("keeps live quota debug collapsed by default and expands on demand", async () => {
     const user = userEvent.setup();
     const account = createAccountSummary({
+      codexLiveSessionCount: 2,
+      codexTrackedSessionCount: 1,
       codexAuth: {
         hasSnapshot: true,
         snapshotName: "snap-a",
         activeSnapshotName: "snap-a",
         isActiveSnapshot: true,
+        hasLiveSession: true,
       },
       liveQuotaDebug: {
         snapshotsConsidered: ["snap-a"],
@@ -1726,6 +1780,12 @@ describe("AccountCard", () => {
     expect(screen.getByText(/cli session logs/i)).toBeInTheDocument();
     expect(screen.getByText(/\$ merged 5h=17% weekly=77%/)).toBeInTheDocument();
     expect(screen.getByText(/\$ override=applied_live_usage_windows/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/\$ cli_mapping selected_snapshot=snap-a active_snapshot=snap-a match=yes/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/\$ cli_session_counts mapped=2 tracked=1 displayed=2 live_signal=yes/),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/\$ attribution=account-attributed override applied/),
     ).toBeInTheDocument();
@@ -1792,6 +1852,12 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
     await user.click(screen.getByRole("button", { name: /debug/i }));
 
+    expect(
+      screen.getByText(/\$ cli_mapping selected_snapshot=csoves\.com active_snapshot=csoves\.com match=yes/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/\$ cli_session_counts mapped=0 tracked=0 displayed=0 live_signal=no/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/\$ attribution=diagnostic sample only \(not attributed\)/i),
     ).toBeInTheDocument();
