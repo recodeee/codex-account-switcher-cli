@@ -53,7 +53,7 @@ describe("NavLink", () => {
     expect(window.location.pathname).toBe("/apis");
   });
 
-  it("keeps query-only navigation client-side in Next runtime", async () => {
+  it("prefers full navigation for query links in Next runtime", async () => {
     const user = userEvent.setup();
     window.history.pushState({}, "", "/apis");
     setNextRuntimeFlag();
@@ -63,8 +63,8 @@ describe("NavLink", () => {
     render(<NavLink to="/apis?selected=key_1">Key 1</NavLink>);
     await user.click(screen.getByRole("link", { name: "Key 1" }));
 
-    expect(pushStateSpy).toHaveBeenCalled();
+    expect(pushStateSpy).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe("/apis");
-    expect(window.location.search).toBe("?selected=key_1");
+    expect(window.location.search).toBe("");
   });
 });

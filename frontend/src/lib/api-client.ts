@@ -12,6 +12,7 @@ type RequestOptions = {
 
 const JSON_CONTENT_TYPE = "application/json";
 const EMPTY_RESPONSE_STATUS = new Set([204, 205]);
+const REQUEST_TIMEOUT_MS = 15_000;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -140,22 +141,53 @@ async function request<T>(
     headers.set("Accept", JSON_CONTENT_TYPE);
   }
 
+  const abortController = new AbortController();
+  const { signal: upstreamSignal } = options ?? {};
+  let didTimeout = false;
+  const timeoutId = setTimeout(() => {
+    didTimeout = true;
+    abortController.abort();
+  }, REQUEST_TIMEOUT_MS);
+  const handleUpstreamAbort = () => {
+    abortController.abort();
+  };
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      abortController.abort();
+    } else {
+      upstreamSignal.addEventListener("abort", handleUpstreamAbort, { once: true });
+    }
+  }
+
   let response: Response;
   try {
     response = await fetch(url, {
       method,
       body: requestBody.body,
       headers,
-      signal: options?.signal,
+      signal: abortController.signal,
       credentials: options?.credentials ?? "same-origin",
     });
   } catch (error) {
+    if (didTimeout) {
+      throw new ApiError({
+        status: 0,
+        code: "request_timeout",
+        message: `Request timed out after ${REQUEST_TIMEOUT_MS}ms`,
+        details: error,
+      });
+    }
     throw new ApiError({
       status: 0,
       code: "network_error",
       message: error instanceof Error ? error.message : "Network request failed",
       details: error,
     });
+  } finally {
+    clearTimeout(timeoutId);
+    if (upstreamSignal) {
+      upstreamSignal.removeEventListener("abort", handleUpstreamAbort);
+    }
   }
 
   if (response.status === 401) {

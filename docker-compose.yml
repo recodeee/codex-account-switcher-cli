@@ -46,13 +46,13 @@ services:
         COPY package.json bun.lock ./
         RUN bun install --frozen-lockfile
         COPY . .
-        CMD ["bun", "run", "dev", "--hostname", "0.0.0.0"]
+        CMD ["sh", "-c", "bun run sync-version && ./node_modules/.bin/next dev --port 5173 --hostname 0.0.0.0"]
     ports:
       - "5173:5173"
     command:
       - sh
       - -c
-      - bun install --frozen-lockfile && bun run dev --hostname 0.0.0.0
+      - bun install --frozen-lockfile && bun run sync-version && ./node_modules/.bin/next dev --port 5173 --hostname 0.0.0.0
     environment:
       API_PROXY_TARGET: http://server:2455
       CHOKIDAR_USEPOLLING: "true"
