@@ -308,6 +308,16 @@ class AccountsRepository:
         await self._session.commit()
         return result.scalar_one_or_none() is not None
 
+    async def delete_codex_sessions_for_account(self, account_id: str) -> int:
+        result = await self._session.execute(
+            delete(StickySession)
+            .where(StickySession.account_id == account_id)
+            .where(StickySession.kind == StickySessionKind.CODEX_SESSION)
+            .returning(StickySession.key)
+        )
+        await self._session.commit()
+        return len(list(result.scalars().all()))
+
     async def update_tokens(
         self,
         account_id: str,

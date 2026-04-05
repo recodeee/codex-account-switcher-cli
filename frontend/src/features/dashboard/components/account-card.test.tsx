@@ -655,6 +655,55 @@ describe("AccountCard", () => {
     expect(screen.queryByText("Working now")).not.toBeInTheDocument();
   });
 
+  it("shows usage-limit badge when remaining tokens are depleted", () => {
+    const account = createAccountSummary({
+      status: "active",
+      codexLiveSessionCount: 0,
+      codexSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+    });
+
+    const { container } = render(
+      <AccountCard account={account} showTokensRemaining tokensRemaining={0} />,
+    );
+
+    expect(screen.getAllByText("Usage limit hit").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/leaves in/i)).not.toBeInTheDocument();
+    const card = container.querySelector(".card-hover");
+    expect(card).not.toBeNull();
+    expect(card?.className).toContain("border-red-500/40");
+  });
+
+  it("shows usage-limit badge when remaining tokens fallback to zero", () => {
+    const account = createAccountSummary({
+      status: "active",
+      codexLiveSessionCount: 0,
+      codexSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+    });
+
+    render(<AccountCard account={account} showTokensRemaining />);
+
+    expect(screen.getAllByText("Usage limit hit").length).toBeGreaterThanOrEqual(1);
+    const tokensSection = screen.getByText("Tokens remaining").parentElement;
+    expect(tokensSection).not.toBeNull();
+    expect(within(tokensSection as HTMLElement).getByText("0")).toBeInTheDocument();
+  });
+
   it("treats sub-5% 5h quota as depleted for live usage-limit state", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({

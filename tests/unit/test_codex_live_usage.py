@@ -408,6 +408,10 @@ def test_read_local_codex_live_usage_by_snapshot_default_scope_prefers_newest_sa
         "app.modules.accounts.codex_live_usage.build_snapshot_index",
         lambda: SimpleNamespace(active_snapshot_name="viktor"),
     )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [],
+    )
 
     day_dir = _sessions_day_dir(sessions_root, now)
     _write_rollout(
@@ -652,6 +656,10 @@ def test_read_local_codex_live_usage_samples_by_snapshot_returns_runtime_and_def
         "app.modules.accounts.codex_live_usage.build_snapshot_index",
         lambda: SimpleNamespace(active_snapshot_name="work"),
     )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [],
+    )
 
     default_day_dir = _sessions_day_dir(sessions_root, now)
     _write_rollout(
@@ -679,6 +687,88 @@ def test_read_local_codex_live_usage_samples_by_snapshot_returns_runtime_and_def
     assert len(samples) == 2
     used_primary = sorted(sample.primary.used_percent for sample in samples if sample.primary is not None)
     assert used_primary == [12.0, 91.0]
+
+
+def test_read_local_codex_live_usage_by_snapshot_skips_active_fallback_when_processes_are_mapped_without_rollouts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage.build_snapshot_index",
+        lambda: SimpleNamespace(active_snapshot_name="amodeus@nagyviktor.com"),
+    )
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    _write_rollout(
+        day_dir / "rollout-2026-04-05T10-07-46-019d5caf-03d1-7791-abd3-0694d6bb1357.jsonl",
+        timestamp=now - timedelta(seconds=10),
+        primary_used=25.0,
+        secondary_used=78.0,
+    )
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(901, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {"CODEX_AUTH_ACTIVE_SNAPSHOT": "perzeus@nagyviktor.com"},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._resolve_process_rollout_path",
+        lambda _pid: None,
+    )
+
+    usage_by_snapshot = read_local_codex_live_usage_by_snapshot(now=now)
+
+    assert usage_by_snapshot == {}
+
+
+def test_read_local_codex_live_usage_samples_by_snapshot_skips_active_fallback_when_processes_are_mapped_without_rollouts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage.build_snapshot_index",
+        lambda: SimpleNamespace(active_snapshot_name="amodeus@nagyviktor.com"),
+    )
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    _write_rollout(
+        day_dir / "rollout-2026-04-05T10-07-46-019d5caf-03d1-7791-abd3-0694d6bb1357.jsonl",
+        timestamp=now - timedelta(seconds=10),
+        primary_used=25.0,
+        secondary_used=78.0,
+    )
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(902, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {"CODEX_AUTH_ACTIVE_SNAPSHOT": "perzeus@nagyviktor.com"},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._resolve_process_rollout_path",
+        lambda _pid: None,
+    )
+
+    samples_by_snapshot = read_local_codex_live_usage_samples_by_snapshot(now=now)
+
+    assert samples_by_snapshot == {}
 
 
 def test_read_local_codex_live_usage_by_snapshot_splits_default_scope_samples_by_live_process_snapshot(
@@ -1294,7 +1384,7 @@ def test_read_live_codex_process_session_counts_by_snapshot_maps_multiple_pre_sw
     )
     monkeypatch.setattr(
         "app.modules.accounts.codex_live_usage._read_process_started_at",
-        lambda _pid: 1_000.0,
+        lambda _pid: 1_491.0,
     )
 
     attribution = read_live_codex_process_session_attribution()
@@ -1355,7 +1445,7 @@ def test_read_live_codex_process_session_counts_by_snapshot_infers_recent_previo
     )
     monkeypatch.setattr(
         "app.modules.accounts.codex_live_usage._read_process_started_at",
-        lambda _pid: 1_000.0,
+        lambda _pid: 1_491.0,
     )
 
     attribution = read_live_codex_process_session_attribution()
@@ -1363,6 +1453,63 @@ def test_read_live_codex_process_session_counts_by_snapshot_infers_recent_previo
     assert attribution.counts_by_snapshot == {"itrexsale@gmail.com": 1}
     assert attribution.unattributed_session_pids == []
     assert counts == {"itrexsale@gmail.com": 1}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_prefers_registry_usage_closest_to_process_start(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "default" / "current"
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text("thedailyscooby@gmail.com", encoding="utf-8")
+    os.utime(current_path, (2_000.0, 2_000.0))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_LB_UNLABELED_PROCESS_START_TOLERANCE_SECONDS", "0")
+
+    registry_path = tmp_path / "accounts" / "registry.json"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "activeAccountName": "thedailyscooby@gmail.com",
+                "accounts": {
+                    "thedailyscooby@gmail.com": {
+                        "name": "thedailyscooby@gmail.com",
+                        "lastUsageAt": "1970-01-01T00:33:15Z",
+                    },
+                    "perzeus@nagyviktor.com": {
+                        "name": "perzeus@nagyviktor.com",
+                        "lastUsageAt": "1970-01-01T00:16:50Z",
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_AUTH_REGISTRY_PATH", str(registry_path))
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(903, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._process_belongs_to_current_user",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda _pid: 1_010.0,
+    )
+
+    attribution = read_live_codex_process_session_attribution()
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert attribution.counts_by_snapshot == {"perzeus@nagyviktor.com": 1}
+    assert attribution.unattributed_session_pids == []
+    assert counts == {"perzeus@nagyviktor.com": 1}
 
 
 def test_read_live_codex_process_session_counts_by_snapshot_leaves_unattributed_when_registry_usage_is_ambiguous(

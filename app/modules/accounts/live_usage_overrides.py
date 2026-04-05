@@ -173,7 +173,10 @@ def apply_local_live_usage_overrides(
             )
         live_process_session_counts_by_account[account.id] = max(0, live_process_session_count)
         has_live_process_session = live_process_session_count > 0
-        has_live_runtime_session = live_runtime_session_count > 0
+        effective_live_runtime_session_count = (
+            live_runtime_session_count if not has_process_session_visibility else 0
+        )
+        has_live_runtime_session = effective_live_runtime_session_count > 0
         deferred_default_scope_session_hint_count = (
             deferred_default_scope_session_hints_by_account.get(account.id, 0)
             if should_defer_active_snapshot_usage
@@ -209,7 +212,7 @@ def apply_local_live_usage_overrides(
         if has_live_process_session or has_live_runtime_session:
             codex_live_session_counts_by_account[account_id] = max(
                 live_process_session_count,
-                live_runtime_session_count,
+                effective_live_runtime_session_count,
                 codex_live_session_counts_by_account.get(account_id, 0),
             )
         elif not has_live_telemetry:
@@ -476,6 +479,7 @@ def apply_local_live_usage_overrides(
         codex_live_session_counts_by_account=codex_live_session_counts_by_account,
         live_process_session_counts_by_account=live_process_session_counts_by_account,
         codex_auth_by_account=codex_auth_by_account,
+        has_process_session_visibility=has_process_session_visibility,
     )
     return _coalesce_persist_candidates(persist_candidates)
 
@@ -486,13 +490,14 @@ def _normalize_live_session_counts_to_process_presence(
     codex_live_session_counts_by_account: dict[str, int],
     live_process_session_counts_by_account: dict[str, int],
     codex_auth_by_account: dict[str, AccountCodexAuthStatus],
+    has_process_session_visibility: bool,
 ) -> None:
     """Keep API live-session counters grounded in observable attribution.
 
     Prefer process-scoped counts when available. If process visibility is
-    missing but attribution already established a live-session hint, preserve
-    inferred counts from runtime/session fallback instead of forcing counters to
-    zero.
+    globally available, force per-account counts to process-ground truth. Only
+    preserve inferred runtime/session fallback counts when process visibility is
+    missing entirely.
     """
 
     for account in accounts:
@@ -503,6 +508,10 @@ def _normalize_live_session_counts_to_process_presence(
         )
         if process_count > 0:
             codex_live_session_counts_by_account[account_id] = process_count
+            continue
+
+        if has_process_session_visibility:
+            codex_live_session_counts_by_account[account_id] = 0
             continue
 
         inferred_count = max(

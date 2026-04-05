@@ -114,6 +114,12 @@ class LocalCodexProcessSessionAttribution:
     task_previews_by_pid: dict[int, list[str]] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class _DefaultScopeLiveProcessRolloutState:
+    rollout_paths_by_snapshot: dict[str, list[Path]]
+    has_mapped_processes: bool
+
+
 _UNLABELED_DEFAULT_SCOPE_PROCESS_OWNER_CACHE_TTL_SECONDS = 6 * 60 * 60
 _UNLABELED_DEFAULT_SCOPE_PROCESS_OWNER_CACHE_MAX_ENTRIES = 2048
 _unlabeled_default_scope_process_owner_cache: dict[int, _UnlabeledDefaultScopeProcessOwner] = {}
@@ -135,12 +141,14 @@ def read_local_codex_live_usage_by_snapshot(*, now: datetime | None = None) -> d
     current = now or datetime.now(timezone.utc)
     usage_by_snapshot: dict[str, LocalCodexLiveUsage] = {}
 
-    default_usage_by_snapshot = _read_default_scope_live_usage_by_snapshot_from_live_processes(
-        now=current
+    default_usage_by_snapshot, has_mapped_default_scope_processes = (
+        _read_default_scope_live_usage_by_snapshot_from_live_processes(
+            now=current
+        )
     )
     if default_usage_by_snapshot:
         usage_by_snapshot.update(default_usage_by_snapshot)
-    else:
+    elif not has_mapped_default_scope_processes:
         active_snapshot_name = build_snapshot_index().active_snapshot_name
         if active_snapshot_name:
             default_usage = _read_local_codex_live_usage_for_sessions_dir(
@@ -184,13 +192,15 @@ def read_local_codex_live_usage_samples_by_snapshot(
     current = now or datetime.now(timezone.utc)
     samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]] = {}
 
-    default_samples_by_snapshot = _read_default_scope_live_usage_samples_by_snapshot_from_live_processes(
-        now=current
+    default_samples_by_snapshot, has_mapped_default_scope_processes = (
+        _read_default_scope_live_usage_samples_by_snapshot_from_live_processes(
+            now=current
+        )
     )
     if default_samples_by_snapshot:
         for snapshot_name, snapshot_samples in default_samples_by_snapshot.items():
             samples_by_snapshot[snapshot_name] = list(snapshot_samples)
-    else:
+    elif not has_mapped_default_scope_processes:
         active_snapshot_name = build_snapshot_index().active_snapshot_name
         if active_snapshot_name:
             default_samples = _read_local_codex_live_usage_sample_entries_for_sessions_dir(
@@ -227,13 +237,13 @@ def read_local_codex_live_usage_samples_by_snapshot(
 def _read_default_scope_live_usage_by_snapshot_from_live_processes(
     *,
     now: datetime,
-) -> dict[str, LocalCodexLiveUsage]:
-    rollout_paths_by_snapshot = _read_default_scope_rollout_paths_by_snapshot_from_live_processes()
-    if not rollout_paths_by_snapshot:
-        return {}
+) -> tuple[dict[str, LocalCodexLiveUsage], bool]:
+    rollout_state = _read_default_scope_rollout_paths_by_snapshot_from_live_processes()
+    if not rollout_state.rollout_paths_by_snapshot:
+        return {}, rollout_state.has_mapped_processes
 
     usage_by_snapshot: dict[str, LocalCodexLiveUsage] = {}
-    for snapshot_name, rollout_paths in rollout_paths_by_snapshot.items():
+    for snapshot_name, rollout_paths in rollout_state.rollout_paths_by_snapshot.items():
         live_usage = _read_local_codex_live_usage_for_rollout_paths(
             rollout_paths=rollout_paths,
             now=now,
@@ -242,19 +252,19 @@ def _read_default_scope_live_usage_by_snapshot_from_live_processes(
         if live_usage is None:
             continue
         usage_by_snapshot[snapshot_name] = live_usage
-    return usage_by_snapshot
+    return usage_by_snapshot, rollout_state.has_mapped_processes
 
 
 def _read_default_scope_live_usage_samples_by_snapshot_from_live_processes(
     *,
     now: datetime,
-) -> dict[str, list[LocalCodexLiveUsageSample]]:
-    rollout_paths_by_snapshot = _read_default_scope_rollout_paths_by_snapshot_from_live_processes()
-    if not rollout_paths_by_snapshot:
-        return {}
+) -> tuple[dict[str, list[LocalCodexLiveUsageSample]], bool]:
+    rollout_state = _read_default_scope_rollout_paths_by_snapshot_from_live_processes()
+    if not rollout_state.rollout_paths_by_snapshot:
+        return {}, rollout_state.has_mapped_processes
 
     samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]] = {}
-    for snapshot_name, rollout_paths in rollout_paths_by_snapshot.items():
+    for snapshot_name, rollout_paths in rollout_state.rollout_paths_by_snapshot.items():
         samples = _read_local_codex_live_usage_sample_entries_for_rollout_paths(
             rollout_paths=rollout_paths,
             now=now,
@@ -262,17 +272,23 @@ def _read_default_scope_live_usage_samples_by_snapshot_from_live_processes(
         if not samples:
             continue
         samples_by_snapshot[snapshot_name] = samples
-    return samples_by_snapshot
+    return samples_by_snapshot, rollout_state.has_mapped_processes
 
 
-def _read_default_scope_rollout_paths_by_snapshot_from_live_processes() -> dict[str, list[Path]]:
+def _read_default_scope_rollout_paths_by_snapshot_from_live_processes() -> _DefaultScopeLiveProcessRolloutState:
     sessions_dir = _resolve_sessions_dir()
     if not sessions_dir.exists() or not sessions_dir.is_dir():
-        return {}
+        return _DefaultScopeLiveProcessRolloutState(
+            rollout_paths_by_snapshot={},
+            has_mapped_processes=False,
+        )
 
     proc_root = _resolve_proc_root()
     if not proc_root.exists() or not proc_root.is_dir():
-        return {}
+        return _DefaultScopeLiveProcessRolloutState(
+            rollout_paths_by_snapshot={},
+            has_mapped_processes=False,
+        )
 
     default_current_path = _resolve_current_path()
     default_auth_path = _resolve_auth_path()
@@ -289,6 +305,7 @@ def _read_default_scope_rollout_paths_by_snapshot_from_live_processes() -> dict[
     )
 
     rollout_paths_by_snapshot: dict[str, set[Path]] = {}
+    has_mapped_processes = False
     for pid, env in processes:
         snapshot_name = _resolve_process_snapshot_name_for_accounting(
             pid,
@@ -301,6 +318,7 @@ def _read_default_scope_rollout_paths_by_snapshot_from_live_processes() -> dict[
         )
         if not snapshot_name:
             continue
+        has_mapped_processes = True
 
         # In containerized deployments the process-side /proc symlink can
         # expose host paths (for example /home/user/.codex/sessions/...)
@@ -316,11 +334,14 @@ def _read_default_scope_rollout_paths_by_snapshot_from_live_processes() -> dict[
 
         rollout_paths_by_snapshot.setdefault(snapshot_name, set()).add(rollout_path)
 
-    return {
-        snapshot_name: _prefer_newest_sessions(list(paths))
-        for snapshot_name, paths in rollout_paths_by_snapshot.items()
-        if paths
-    }
+    return _DefaultScopeLiveProcessRolloutState(
+        rollout_paths_by_snapshot={
+            snapshot_name: _prefer_newest_sessions(list(paths))
+            for snapshot_name, paths in rollout_paths_by_snapshot.items()
+            if paths
+        },
+        has_mapped_processes=has_mapped_processes,
+    )
 
 
 def _path_within_directory(path: Path, directory: Path) -> bool:
@@ -1334,6 +1355,7 @@ def _resolve_unlabeled_default_scope_snapshot_name(
                 inferred_previous_snapshot_name = _infer_recent_previous_snapshot_name_from_registry(
                     current_snapshot_name=snapshot_name,
                     selection_changed_at=selection_changed_at,
+                    process_started_at=started_at,
                 )
                 if inferred_previous_snapshot_name:
                     return inferred_previous_snapshot_name
@@ -1373,6 +1395,7 @@ def _infer_recent_previous_snapshot_name_from_registry(
     *,
     current_snapshot_name: str,
     selection_changed_at: float,
+    process_started_at: float,
 ) -> str | None:
     payload = _read_registry_payload()
     if payload is None:
@@ -1383,9 +1406,11 @@ def _infer_recent_previous_snapshot_name_from_registry(
         return None
 
     candidate_snapshot_name: str | None = None
-    candidate_last_usage_ts: float | None = None
-    fallback_window_seconds = float(
-        max(_active_window_seconds(), _switch_process_fallback_seconds())
+    candidate_distance_seconds: float | None = None
+    # Keep this fallback conservative: infer only when registry usage activity
+    # occurred close to the process start time.
+    max_process_distance_seconds = float(
+        max(_active_window_seconds(), _switch_process_fallback_seconds() * 2)
     )
     timestamp_tie_tolerance_seconds = 1.0
 
@@ -1407,20 +1432,21 @@ def _infer_recent_previous_snapshot_name_from_registry(
         last_usage_ts = parsed_last_usage.timestamp()
         if last_usage_ts > (selection_changed_at + timestamp_tie_tolerance_seconds):
             continue
-        if (selection_changed_at - last_usage_ts) > fallback_window_seconds:
+        distance_seconds = abs(last_usage_ts - process_started_at)
+        if distance_seconds > max_process_distance_seconds:
             continue
 
-        if candidate_last_usage_ts is None:
+        if candidate_distance_seconds is None:
             candidate_snapshot_name = snapshot_name
-            candidate_last_usage_ts = last_usage_ts
+            candidate_distance_seconds = distance_seconds
             continue
 
-        if last_usage_ts > (candidate_last_usage_ts + timestamp_tie_tolerance_seconds):
+        if distance_seconds < (candidate_distance_seconds - timestamp_tie_tolerance_seconds):
             candidate_snapshot_name = snapshot_name
-            candidate_last_usage_ts = last_usage_ts
+            candidate_distance_seconds = distance_seconds
             continue
 
-        if abs(last_usage_ts - candidate_last_usage_ts) <= timestamp_tie_tolerance_seconds:
+        if abs(distance_seconds - candidate_distance_seconds) <= timestamp_tie_tolerance_seconds:
             if snapshot_name != candidate_snapshot_name:
                 return None
 

@@ -319,6 +319,7 @@ class AccountsService:
 
         resolved_account_id, snapshot_name = resolved
         terminated_session_count = terminate_live_codex_processes_for_snapshot(snapshot_name)
+        await self._repo.delete_codex_sessions_for_account(resolved_account_id)
         return AccountTerminateCliSessionsResponse(
             status="terminated",
             account_id=resolved_account_id,

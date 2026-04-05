@@ -221,6 +221,56 @@ def test_apply_local_live_usage_overrides_preserves_runtime_session_count_withou
     assert codex_session_counts_by_account[account.id] == 2
 
 
+def test_apply_local_live_usage_overrides_ignores_runtime_session_count_with_process_visibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    account = _make_account("acc-a", "a@example.com")
+    snapshot_index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={account.id: ["snap-a"]},
+        active_snapshot_name="snap-a",
+    )
+    codex_auth_by_account = {
+        account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="snap-a",
+            active_snapshot_name="snap-a",
+            is_active_snapshot=True,
+            has_live_session=False,
+        )
+    }
+    codex_session_counts_by_account = {account.id: 0}
+
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_by_snapshot",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_samples_by_snapshot",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_live_codex_process_session_counts_by_snapshot",
+        lambda: {"other-snapshot": 1},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_runtime_live_session_counts_by_snapshot",
+        lambda: {"snap-a": 2},
+    )
+
+    candidates = apply_local_live_usage_overrides(
+        accounts=[account],
+        snapshot_index=snapshot_index,
+        codex_auth_by_account=codex_auth_by_account,
+        primary_usage={},
+        secondary_usage={},
+        codex_live_session_counts_by_account=codex_session_counts_by_account,
+    )
+
+    assert candidates == []
+    assert codex_auth_by_account[account.id].has_live_session is False
+    assert codex_session_counts_by_account[account.id] == 0
+
+
 def test_apply_local_live_usage_overrides_skips_mixed_default_session_fallback_when_process_counts_exist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

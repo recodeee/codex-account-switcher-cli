@@ -55,6 +55,58 @@ function invalidateAccountRelatedQueries(queryClient: ReturnType<typeof useQuery
   ]);
 }
 
+function clearAccountLiveSignals(account: AccountSummary): AccountSummary {
+  return {
+    ...account,
+    codexLiveSessionCount: 0,
+    codexTrackedSessionCount: 0,
+    codexSessionCount: 0,
+    codexCurrentTaskPreview: null,
+    codexAuth: account.codexAuth
+      ? {
+          ...account.codexAuth,
+          hasLiveSession: false,
+        }
+      : account.codexAuth,
+    liveQuotaDebug: account.liveQuotaDebug
+      ? {
+          ...account.liveQuotaDebug,
+          merged: null,
+          rawSamples: [],
+          overrideApplied: false,
+          overrideReason: "terminated_cli_sessions",
+        }
+      : account.liveQuotaDebug,
+  };
+}
+
+function applyOptimisticTerminationToQueryData(data: unknown, accountId: string): unknown {
+  const patchEntry = (entry: unknown): unknown => {
+    if (!entry || typeof entry !== "object") {
+      return entry;
+    }
+    const maybeAccount = entry as Partial<AccountSummary>;
+    if (maybeAccount.accountId !== accountId) {
+      return entry;
+    }
+    return clearAccountLiveSignals(entry as AccountSummary);
+  };
+
+  if (Array.isArray(data)) {
+    return data.map((entry) => patchEntry(entry));
+  }
+
+  if (data && typeof data === "object" && "accounts" in data && Array.isArray((data as { accounts?: unknown }).accounts)) {
+    const payload = data as { accounts: unknown[] };
+    return {
+      ...data,
+      accounts: payload.accounts.map((entry) => patchEntry(entry)),
+    };
+  }
+
+  return data;
+}
+
 /**
  * Account mutation actions without the polling query.
  * Use this when you need account actions but already have account data
@@ -143,6 +195,27 @@ export function useAccountMutations() {
 
   const terminateCliSessionsMutation = useMutation({
     mutationFn: terminateAccountCliSessions,
+    onMutate: async (accountId) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["accounts", "list"] }),
+        queryClient.cancelQueries({ queryKey: ["dashboard", "overview"] }),
+      ]);
+
+      const previousAccountsList = queryClient.getQueryData(["accounts", "list"]);
+      const previousDashboardOverview = queryClient.getQueryData(["dashboard", "overview"]);
+
+      queryClient.setQueryData(["accounts", "list"], (current) =>
+        applyOptimisticTerminationToQueryData(current, accountId),
+      );
+      queryClient.setQueryData(["dashboard", "overview"], (current) =>
+        applyOptimisticTerminationToQueryData(current, accountId),
+      );
+
+      return {
+        previousAccountsList,
+        previousDashboardOverview,
+      };
+    },
     onSuccess: (response) => {
       const noun = response.terminatedSessionCount === 1 ? "session" : "sessions";
       toast.success(
@@ -150,7 +223,11 @@ export function useAccountMutations() {
       );
       void invalidateAccountRelatedQueries(queryClient);
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _accountId, context) => {
+      if (context) {
+        queryClient.setQueryData(["accounts", "list"], context.previousAccountsList);
+        queryClient.setQueryData(["dashboard", "overview"], context.previousDashboardOverview);
+      }
       toast.error(error.message || "Failed to terminate CLI sessions");
     },
   });

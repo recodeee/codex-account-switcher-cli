@@ -545,10 +545,10 @@ export function AccountCard({
     hasLiveSession,
     primaryRemainingPercent: primaryRemaining,
   });
+  const remainingTokensValue = tokensRemaining ?? 0;
   const hasRemainingTokensExhausted =
     showTokensRemaining &&
-    typeof tokensRemaining === "number" &&
-    tokensRemaining <= 0;
+    remainingTokensValue <= 0;
   const showUsageLimitHitBadge = usageLimitHit || hasRemainingTokensExhausted;
   const showUsageLimitGraceOverlay = Boolean(
     usageLimitHit && usageLimitHitCountdownMs != null && usageLimitHitCountdownMs > 0,
@@ -661,7 +661,7 @@ export function AccountCard({
   );
   const tokenMetricLabel = showTokensRemaining ? "Tokens remaining" : "Tokens used";
   const tokenMetricValueRaw = showTokensRemaining
-    ? tokensRemaining
+    ? remainingTokensValue
     : (tokensUsed ?? account.requestUsage?.totalTokens ?? 0);
   const tokenMetricValue = isWorkingNow
     ? formatTokenUsagePrecise(tokenMetricValueRaw)
