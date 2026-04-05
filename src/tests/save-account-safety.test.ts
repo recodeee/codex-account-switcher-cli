@@ -140,6 +140,20 @@ test("saveAccount accepts an email-shaped snapshot name", async (t) => {
   });
 });
 
+test("saveAccount accepts an email-shaped snapshot name containing plus aliases", async (t) => {
+  await withIsolatedCodexDir(t, async ({ accountsDir, authPath }) => {
+    const service = new AccountService();
+    const accountName = "viktor+biz@edia.com";
+    const destinationPath = path.join(accountsDir, `${accountName}.json`);
+
+    await fsp.writeFile(authPath, buildAuthPayload("viktor+biz@edia.com"), "utf8");
+
+    await assert.doesNotReject(() => service.saveAccount(accountName));
+    const parsed = await parseAuthSnapshotFile(destinationPath);
+    assert.equal(parsed.email, "viktor+biz@edia.com");
+  });
+});
+
 test("saveAccount blocks overwrite when emails match but account identity differs", async (t) => {
   await withIsolatedCodexDir(t, async ({ accountsDir, authPath }) => {
     const service = new AccountService();
