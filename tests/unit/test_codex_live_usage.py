@@ -689,7 +689,7 @@ def test_read_local_codex_live_usage_samples_by_snapshot_returns_runtime_and_def
     assert used_primary == [12.0, 91.0]
 
 
-def test_read_local_codex_live_usage_by_snapshot_skips_active_fallback_when_processes_are_mapped_without_rollouts(
+def test_read_local_codex_live_usage_by_snapshot_assigns_default_fallback_to_dominant_mapped_snapshot_when_rollouts_are_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -727,10 +727,15 @@ def test_read_local_codex_live_usage_by_snapshot_skips_active_fallback_when_proc
 
     usage_by_snapshot = read_local_codex_live_usage_by_snapshot(now=now)
 
-    assert usage_by_snapshot == {}
+    assert set(usage_by_snapshot.keys()) == {"perzeus@nagyviktor.com"}
+    usage = usage_by_snapshot["perzeus@nagyviktor.com"]
+    assert usage.primary is not None
+    assert usage.secondary is not None
+    assert usage.primary.used_percent == 25.0
+    assert usage.secondary.used_percent == 78.0
 
 
-def test_read_local_codex_live_usage_samples_by_snapshot_skips_active_fallback_when_processes_are_mapped_without_rollouts(
+def test_read_local_codex_live_usage_samples_by_snapshot_assigns_default_fallback_to_dominant_mapped_snapshot_when_rollouts_are_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -768,7 +773,61 @@ def test_read_local_codex_live_usage_samples_by_snapshot_skips_active_fallback_w
 
     samples_by_snapshot = read_local_codex_live_usage_samples_by_snapshot(now=now)
 
-    assert samples_by_snapshot == {}
+    assert set(samples_by_snapshot.keys()) == {"perzeus@nagyviktor.com"}
+    samples = samples_by_snapshot["perzeus@nagyviktor.com"]
+    assert len(samples) == 1
+    assert samples[0].primary is not None
+    assert samples[0].secondary is not None
+    assert samples[0].primary.used_percent == 25.0
+    assert samples[0].secondary.used_percent == 78.0
+
+
+def test_read_local_codex_live_usage_by_snapshot_keeps_default_fallback_unattributed_when_mapped_snapshot_counts_tie(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage.build_snapshot_index",
+        lambda: SimpleNamespace(active_snapshot_name="amodeus@nagyviktor.com"),
+    )
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    _write_rollout(
+        day_dir / "rollout-2026-04-05T10-07-46-019d5caf-03d1-7791-abd3-0694d6bb1357.jsonl",
+        timestamp=now - timedelta(seconds=10),
+        primary_used=25.0,
+        secondary_used=78.0,
+    )
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [
+            (903, ["/usr/bin/codex", "model_instructions_file=agents"]),
+            (904, ["/usr/bin/codex", "model_instructions_file=agents"]),
+        ],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda pid: (
+            {"CODEX_AUTH_ACTIVE_SNAPSHOT": "perzeus@nagyviktor.com"}
+            if pid == 903
+            else {"CODEX_AUTH_ACTIVE_SNAPSHOT": "itrexsale@gmail.com"}
+        ),
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._resolve_process_rollout_path",
+        lambda _pid: None,
+    )
+
+    usage_by_snapshot = read_local_codex_live_usage_by_snapshot(now=now)
+
+    assert usage_by_snapshot == {}
 
 
 def test_read_local_codex_live_usage_by_snapshot_splits_default_scope_samples_by_live_process_snapshot(

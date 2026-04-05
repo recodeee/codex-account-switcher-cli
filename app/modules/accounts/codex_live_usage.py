@@ -118,6 +118,7 @@ class LocalCodexProcessSessionAttribution:
 class _DefaultScopeLiveProcessRolloutState:
     rollout_paths_by_snapshot: dict[str, list[Path]]
     has_mapped_processes: bool
+    mapped_process_counts_by_snapshot: dict[str, int] = field(default_factory=dict)
 
 
 _UNLABELED_DEFAULT_SCOPE_PROCESS_OWNER_CACHE_TTL_SECONDS = 6 * 60 * 60
@@ -240,6 +241,17 @@ def _read_default_scope_live_usage_by_snapshot_from_live_processes(
 ) -> tuple[dict[str, LocalCodexLiveUsage], bool]:
     rollout_state = _read_default_scope_rollout_paths_by_snapshot_from_live_processes()
     if not rollout_state.rollout_paths_by_snapshot:
+        fallback_snapshot_name = _select_unique_dominant_snapshot_name(
+            rollout_state.mapped_process_counts_by_snapshot
+        )
+        if fallback_snapshot_name is not None:
+            fallback_usage = _read_local_codex_live_usage_for_sessions_dir(
+                sessions_dir=_resolve_sessions_dir(),
+                now=now,
+                aggregation_mode="latest",
+            )
+            if fallback_usage is not None:
+                return {fallback_snapshot_name: fallback_usage}, rollout_state.has_mapped_processes
         return {}, rollout_state.has_mapped_processes
 
     usage_by_snapshot: dict[str, LocalCodexLiveUsage] = {}
@@ -261,6 +273,16 @@ def _read_default_scope_live_usage_samples_by_snapshot_from_live_processes(
 ) -> tuple[dict[str, list[LocalCodexLiveUsageSample]], bool]:
     rollout_state = _read_default_scope_rollout_paths_by_snapshot_from_live_processes()
     if not rollout_state.rollout_paths_by_snapshot:
+        fallback_snapshot_name = _select_unique_dominant_snapshot_name(
+            rollout_state.mapped_process_counts_by_snapshot
+        )
+        if fallback_snapshot_name is not None:
+            fallback_samples = _read_local_codex_live_usage_sample_entries_for_sessions_dir(
+                sessions_dir=_resolve_sessions_dir(),
+                now=now,
+            )
+            if fallback_samples:
+                return {fallback_snapshot_name: fallback_samples}, rollout_state.has_mapped_processes
         return {}, rollout_state.has_mapped_processes
 
     samples_by_snapshot: dict[str, list[LocalCodexLiveUsageSample]] = {}
@@ -306,6 +328,7 @@ def _read_default_scope_rollout_paths_by_snapshot_from_live_processes() -> _Defa
 
     rollout_paths_by_snapshot: dict[str, set[Path]] = {}
     has_mapped_processes = False
+    mapped_process_counts_by_snapshot: dict[str, int] = {}
     for pid, env in processes:
         snapshot_name = _resolve_process_snapshot_name_for_accounting(
             pid,
@@ -319,6 +342,9 @@ def _read_default_scope_rollout_paths_by_snapshot_from_live_processes() -> _Defa
         if not snapshot_name:
             continue
         has_mapped_processes = True
+        mapped_process_counts_by_snapshot[snapshot_name] = (
+            mapped_process_counts_by_snapshot.get(snapshot_name, 0) + 1
+        )
 
         # In containerized deployments the process-side /proc symlink can
         # expose host paths (for example /home/user/.codex/sessions/...)
@@ -341,6 +367,7 @@ def _read_default_scope_rollout_paths_by_snapshot_from_live_processes() -> _Defa
             if paths
         },
         has_mapped_processes=has_mapped_processes,
+        mapped_process_counts_by_snapshot=mapped_process_counts_by_snapshot,
     )
 
 
@@ -399,6 +426,23 @@ def _resolve_rollout_path_in_sessions_dir_by_filename(*, filename: str, sessions
             except OSError:
                 return candidate
     return None
+
+
+def _select_unique_dominant_snapshot_name(mapped_counts_by_snapshot: dict[str, int]) -> str | None:
+    if not mapped_counts_by_snapshot:
+        return None
+
+    max_count = max(mapped_counts_by_snapshot.values())
+    if max_count <= 0:
+        return None
+    candidates = sorted(
+        snapshot_name
+        for snapshot_name, count in mapped_counts_by_snapshot.items()
+        if count == max_count
+    )
+    if len(candidates) != 1:
+        return None
+    return candidates[0]
 
 
 def read_live_codex_process_session_counts_by_snapshot() -> dict[str, int]:

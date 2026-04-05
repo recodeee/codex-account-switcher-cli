@@ -1779,6 +1779,24 @@ async def test_terminate_account_cli_sessions_terminates_snapshot_scoped_codex_s
     response = await async_client.post("/api/accounts/import", files=files)
     assert response.status_code == 200
 
+    now = datetime.now(timezone.utc)
+    async with SessionLocal() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO sticky_sessions (key, account_id, kind, created_at, updated_at)
+                VALUES (:key, :account_id, :kind, :timestamp, :timestamp)
+                """
+            ),
+            {
+                "key": "terminate-session-1",
+                "account_id": expected_account_id,
+                "kind": "codex_session",
+                "timestamp": now - timedelta(minutes=1),
+            },
+        )
+        await session.commit()
+
     accounts_dir = tmp_path / "accounts"
     accounts_dir.mkdir()
     _write_auth_snapshot(accounts_dir / "work.json", email=email, account_id=raw_account_id)
@@ -1809,6 +1827,21 @@ async def test_terminate_account_cli_sessions_terminates_snapshot_scoped_codex_s
     assert payload["snapshotName"] == "work"
     assert payload["terminatedSessionCount"] == 2
     assert terminated_snapshots == ["work"]
+
+    async with SessionLocal() as session:
+        sticky_count = (
+            await session.execute(
+                text(
+                    """
+                    SELECT COUNT(*) FROM sticky_sessions
+                    WHERE account_id = :account_id AND kind = 'codex_session'
+                    """
+                ),
+                {"account_id": expected_account_id},
+            )
+        ).scalar_one()
+
+    assert int(sticky_count) == 0
 
 
 @pytest.mark.asyncio
