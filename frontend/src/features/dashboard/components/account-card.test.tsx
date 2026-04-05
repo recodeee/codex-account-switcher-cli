@@ -704,6 +704,33 @@ describe("AccountCard", () => {
     expect(within(tokensSection as HTMLElement).getByText("0")).toBeInTheDocument();
   });
 
+  it("shows usage-limit badge when 5h is depleted even without a live session", () => {
+    const account = createAccountSummary({
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 50,
+      },
+      codexLiveSessionCount: 0,
+      codexSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+    });
+
+    const { container } = render(<AccountCard account={account} />);
+
+    expect(screen.getAllByText("Usage limit hit").length).toBeGreaterThanOrEqual(1);
+    const card = container.querySelector(".card-hover");
+    expect(card).not.toBeNull();
+    expect(card?.className).toContain("border-red-500/40");
+  });
+
   it("shows weekly usage-limit badge when 5h is available but weekly is 0%", () => {
     const account = createAccountSummary({
       status: "active",
@@ -725,7 +752,9 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Weekly usage limit hit")).toBeInTheDocument();
+    expect(
+      screen.getByText("Usage limit hit · Weekly usage limit hit"),
+    ).toBeInTheDocument();
   });
 
   it("treats sub-5% 5h quota as depleted for live usage-limit state", () => {

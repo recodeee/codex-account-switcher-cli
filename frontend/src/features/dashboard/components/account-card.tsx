@@ -587,12 +587,17 @@ export function AccountCard({
   const useLocalBlockedByWeeklyQuota =
     typeof secondaryRemaining === "number" &&
     normalizeNearZeroQuotaPercent(secondaryRemaining) < 1;
+  const useLocalBlockedByPrimaryQuota =
+    !weeklyOnly &&
+    typeof primaryRemaining === "number" &&
+    normalizeNearZeroQuotaPercent(primaryRemaining) < 1;
   const showUsageLimitHitBadge =
-    usageLimitHit || hasRemainingTokensExhausted || useLocalBlockedByWeeklyQuota;
-  const usageLimitHitBadgeLabel =
-    useLocalBlockedByWeeklyQuota && !usageLimitHit && !hasRemainingTokensExhausted
-      ? "Weekly usage limit hit"
-      : "Usage limit hit";
+    usageLimitHit ||
+    hasRemainingTokensExhausted ||
+    useLocalBlockedByWeeklyQuota ||
+    useLocalBlockedByPrimaryQuota;
+  const showWeeklyUsageLimitDetailBadge =
+    useLocalBlockedByWeeklyQuota && !usageLimitHit && !hasRemainingTokensExhausted;
   const showUsageLimitGraceOverlay = Boolean(
     usageLimitHit && usageLimitHitCountdownMs != null && usageLimitHitCountdownMs > 0,
   );
@@ -824,7 +829,9 @@ export function AccountCard({
                 className="h-1.5 w-1.5 rounded-full bg-current"
                 aria-hidden
               />
-              {usageLimitHitBadgeLabel}
+              {showWeeklyUsageLimitDetailBadge
+                ? "Usage limit hit · Weekly usage limit hit"
+                : "Usage limit hit"}
               {usageLimitHit && usageLimitHitCountdownLabel ? (
                 <span className="font-medium text-red-700 dark:text-red-300">
                   · leaves in {usageLimitHitCountdownLabel}
