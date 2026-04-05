@@ -531,7 +531,14 @@ function buildWorkingNowSessionFingerprint(account: WorkingNowAccount): string {
     if (/^<live_usage\b/i.test(taskPreview)) {
       return "task:live_usage";
     }
-    return `task:${taskPreview}`;
+    const normalizedTaskPreview = taskPreview
+      .replace(
+        /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})/g,
+        "<ts>",
+      )
+      .replace(/\s+/g, " ")
+      .trim();
+    return `task:${normalizedTaskPreview}`;
   })();
 
   // Do not include volatile rollout file names / merged source ids here.

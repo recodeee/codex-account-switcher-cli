@@ -996,7 +996,8 @@ describe("isAccountWorkingNow", () => {
     expect(getRawQuotaWindowFallback(account, "secondary")).toBeNull();
   });
 
-  it("returns false when merged 5h is depleted", () => {
+  it("ages out when merged 5h is depleted and live sessions stay present", () => {
+    const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
     const account = createAccountSummary({
       usage: {
         primaryRemainingPercent: 44,
@@ -1028,7 +1029,8 @@ describe("isAccountWorkingNow", () => {
       },
     });
 
-    expect(isAccountWorkingNow(account)).toBe(false);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs + 61_000)).toBe(false);
   });
 
   it("keeps the lower remaining value when fallback and baseline share reset cycle", () => {

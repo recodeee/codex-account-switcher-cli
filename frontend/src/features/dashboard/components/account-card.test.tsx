@@ -587,34 +587,42 @@ describe("AccountCard", () => {
   });
 
   it("shows usage-limit countdown and red card tint while grace window is active", () => {
-    const nowIso = new Date().toISOString();
-    const account = createAccountSummary({
-      status: "active",
-      usage: {
-        primaryRemainingPercent: 0,
-        secondaryRemainingPercent: 66,
-      },
-      codexLiveSessionCount: 1,
-      codexSessionCount: 1,
-      codexTrackedSessionCount: 1,
-      codexAuth: {
-        hasSnapshot: true,
-        snapshotName: "main",
-        activeSnapshotName: "main",
-        isActiveSnapshot: true,
-        hasLiveSession: true,
-      },
-      lastUsageRecordedAtPrimary: nowIso,
-      lastUsageRecordedAtSecondary: nowIso,
-    });
+    vi.useFakeTimers();
+    try {
+      const now = new Date("2026-04-05T00:00:00.000Z");
+      vi.setSystemTime(now);
+      const nowIso = now.toISOString();
+      const account = createAccountSummary({
+        status: "active",
+        usage: {
+          primaryRemainingPercent: 0,
+          secondaryRemainingPercent: 66,
+        },
+        codexLiveSessionCount: 1,
+        codexSessionCount: 1,
+        codexTrackedSessionCount: 1,
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "main",
+          activeSnapshotName: "main",
+          isActiveSnapshot: true,
+          hasLiveSession: true,
+        },
+        lastUsageRecordedAtPrimary: nowIso,
+        lastUsageRecordedAtSecondary: nowIso,
+      });
 
-    const { container } = render(<AccountCard account={account} />);
+      const { container } = render(<AccountCard account={account} />);
 
-    expect(screen.getByText(/leaves in/i)).toBeInTheDocument();
-    expect(screen.getByText(/Leaving working now in/i)).toBeInTheDocument();
-    const card = container.querySelector(".card-hover");
-    expect(card).not.toBeNull();
-    expect(card?.className).toContain("border-red-500/40");
+      expect(screen.getByText(/leaves in/i)).toBeInTheDocument();
+      expect(screen.getByText(/Leaving working now in/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/1:00/).length).toBeGreaterThanOrEqual(1);
+      const card = container.querySelector(".card-hover");
+      expect(card).not.toBeNull();
+      expect(card?.className).toContain("border-red-500/40");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("auto-terminates CLI sessions once the usage-limit grace window expires", () => {
@@ -965,34 +973,47 @@ describe("AccountCard", () => {
   });
 
   it("hides stale current task preview after usage-limit grace expires", () => {
-    const staleRecordedAt = new Date(Date.now() - 90_000).toISOString();
-    const account = createAccountSummary({
-      status: "active",
-      codexCurrentTaskPreview: "Investigate codexina rollout session mapping",
-      usage: {
-        primaryRemainingPercent: 0,
-        secondaryRemainingPercent: 66,
-      },
-      codexLiveSessionCount: 1,
-      codexSessionCount: 1,
-      codexTrackedSessionCount: 1,
-      codexAuth: {
-        hasSnapshot: true,
-        snapshotName: "codexina",
-        activeSnapshotName: "codexina",
-        isActiveSnapshot: true,
-        hasLiveSession: true,
-      },
-      lastUsageRecordedAtPrimary: staleRecordedAt,
-      lastUsageRecordedAtSecondary: staleRecordedAt,
-    });
+    vi.useFakeTimers();
+    try {
+      const now = new Date("2026-04-05T00:00:00.000Z");
+      vi.setSystemTime(now);
+      const nowIso = now.toISOString();
+      const account = createAccountSummary({
+        status: "active",
+        codexCurrentTaskPreview: "Investigate codexina rollout session mapping",
+        usage: {
+          primaryRemainingPercent: 0,
+          secondaryRemainingPercent: 66,
+        },
+        codexLiveSessionCount: 1,
+        codexSessionCount: 1,
+        codexTrackedSessionCount: 1,
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "codexina",
+          activeSnapshotName: "codexina",
+          isActiveSnapshot: true,
+          hasLiveSession: true,
+        },
+        lastUsageRecordedAtPrimary: nowIso,
+        lastUsageRecordedAtSecondary: nowIso,
+      });
 
-    render(<AccountCard account={account} />);
+      render(<AccountCard account={account} />);
+      expect(screen.getByText("Investigate codexina rollout session mapping")).toBeInTheDocument();
+      expect(screen.getByText(/leaves in/i)).toBeInTheDocument();
 
-    expect(screen.getByText("Current task")).toBeInTheDocument();
-    expect(screen.queryByText("Investigate codexina rollout session mapping")).not.toBeInTheDocument();
-    expect(screen.getByText("No active task reported")).toBeInTheDocument();
-    expect(screen.queryByText(/leaves in/i)).not.toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(61_000);
+      });
+
+      expect(screen.getByText("Current task")).toBeInTheDocument();
+      expect(screen.queryByText("Investigate codexina rollout session mapping")).not.toBeInTheDocument();
+      expect(screen.getByText("No active task reported")).toBeInTheDocument();
+      expect(screen.queryByText(/leaves in/i)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("hides working indicator when account snapshot is not active", () => {
