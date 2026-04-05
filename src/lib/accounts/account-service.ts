@@ -197,15 +197,8 @@ export class AccountService {
       throw new AccountNameInferenceError();
     }
 
-    const [localPartRaw, domainRaw] = email.split("@", 2);
-    const baseName = this.sanitizeInferredSegment(localPartRaw);
-    const domainName = this.sanitizeInferredSegment(domainRaw.replace(/\./g, "-"));
-    if (!baseName || !domainName) {
-      throw new AccountNameInferenceError();
-    }
-
-    const baseCandidate = this.normalizeAccountName(baseName);
-    const uniqueName = await this.resolveUniqueInferredName(baseCandidate, domainName, parsed);
+    const baseCandidate = this.normalizeAccountName(email);
+    const uniqueName = await this.resolveUniqueInferredName(baseCandidate, parsed);
     return uniqueName;
   }
 
@@ -647,16 +640,8 @@ export class AccountService {
     registry.accounts[accountName] = entry;
   }
 
-  private sanitizeInferredSegment(value: string): string {
-    const lowered = value.toLowerCase().trim();
-    const replaced = lowered.replace(/[^a-z0-9._-]+/g, "-");
-    const noEdgePunctuation = replaced.replace(/^[._-]+|[._-]+$/g, "");
-    return noEdgePunctuation;
-  }
-
   private async resolveUniqueInferredName(
     baseName: string,
-    domainName: string,
     incomingSnapshot: ParsedAuthSnapshot,
   ): Promise<string> {
     const accountPathFor = (name: string): string => this.accountFilePath(name);
@@ -673,17 +658,8 @@ export class AccountService {
       return baseName;
     }
 
-    const domainCandidate = this.normalizeAccountName(`${baseName}-${domainName}`);
-    const domainPath = accountPathFor(domainCandidate);
-    if (!(await this.pathExists(domainPath))) {
-      return domainCandidate;
-    }
-    if (await hasMatchingIdentity(domainCandidate)) {
-      return domainCandidate;
-    }
-
     for (let i = 2; i <= 99; i += 1) {
-      const candidate = this.normalizeAccountName(`${domainCandidate}-${i}`);
+      const candidate = this.normalizeAccountName(`${baseName}--dup-${i}`);
       const candidatePath = accountPathFor(candidate);
       if (!(await this.pathExists(candidatePath))) {
         return candidate;
