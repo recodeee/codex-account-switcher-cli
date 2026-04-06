@@ -7,6 +7,10 @@ export const LOGIN_HOOK_MARK_END = "# <<< codex-auth-login-auto-snapshot <<<";
 
 export type HookInstallStatus = "installed" | "already-installed";
 export type HookRemoveStatus = "removed" | "not-installed";
+export interface LoginHookStatus {
+  installed: boolean;
+  rcPath: string;
+}
 
 function escapeRegex(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -96,4 +100,26 @@ export async function removeLoginHook(rcPath = resolveDefaultShellRcPath()): Pro
 
   await fsp.writeFile(rcPath, stripped.replace(/\n{3,}/g, "\n\n"), "utf8");
   return "removed";
+}
+
+export async function getLoginHookStatus(rcPath = resolveDefaultShellRcPath()): Promise<LoginHookStatus> {
+  let existing = "";
+  try {
+    existing = await fsp.readFile(rcPath, "utf8");
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === "ENOENT") {
+      return {
+        installed: false,
+        rcPath,
+      };
+    }
+    throw error;
+  }
+
+  const installed = existing.includes(LOGIN_HOOK_MARK_START) && existing.includes(LOGIN_HOOK_MARK_END);
+  return {
+    installed,
+    rcPath,
+  };
 }
