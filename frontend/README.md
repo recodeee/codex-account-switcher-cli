@@ -19,7 +19,11 @@ bun install
 bun run dev
 ```
 
-Next dev server runs on port `5173` by default and proxies API routes to FastAPI:
+Next dev server runs on port `5173` by default (`NEXT_DEV_PORT` overrides it) and proxies API routes to FastAPI:
+
+```bash
+NEXT_DEV_PORT=5174 bun run dev
+```
 
 - `/api/*`
 - `/v1/*`
@@ -33,6 +37,12 @@ bun run build
 ```
 
 Production static export assets are emitted to `../app/static`.
+
+To auto-refresh `:2455` static output while editing frontend code:
+
+```bash
+bun run build:watch
+```
 
 ## Quality
 

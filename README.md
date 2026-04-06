@@ -462,8 +462,9 @@ docker compose watch
 
 # Local (manual, separate terminals)
 uv sync && cd frontend && bun install && cd ..
-uv run fastapi run app/main.py --reload        # backend :2455
+uv run python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2455  # backend :2455
 cd frontend && bun run dev                     # frontend :5173
+cd frontend && bun run build:watch             # optional: auto-rebuild app/static for :2455 on file changes
 ```
 
 ## Contributors ✨
