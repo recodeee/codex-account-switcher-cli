@@ -12,6 +12,7 @@ describe("ComingSoonPage", () => {
     expect(screen.getByRole("heading", { name: "Coming Soon" })).toBeInTheDocument();
     expect(screen.getByLabelText("Email address")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Submit" })).toBeInTheDocument();
+    expect(screen.getByAltText("Dashboard preview")).toBeInTheDocument();
   });
 
   it("shows a confirmation message after submitting an email", async () => {

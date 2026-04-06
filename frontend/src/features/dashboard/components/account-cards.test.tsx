@@ -1177,12 +1177,15 @@ describe("AccountCards", () => {
   });
 
   it("shows syncing token state when live-session token remaining is unknown", () => {
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       accountId: "acc_live_unknown",
       email: "live-unknown@example.com",
       displayName: "live-unknown@example.com",
       codexLiveSessionCount: 4,
       codexSessionCount: 4,
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
       codexAuth: {
         hasSnapshot: true,
         snapshotName: "live-unknown",
@@ -1212,6 +1215,51 @@ describe("AccountCards", () => {
     expect(syncingValues.length).toBeGreaterThanOrEqual(1);
     expect(
       syncingValues.some(
+        (node) => node.tagName.toLowerCase() === "p",
+      ),
+    ).toBe(true);
+  });
+
+  it("shows unknown token state when live-session token remaining has no fresh telemetry hint", () => {
+    const account = createAccountSummary({
+      accountId: "acc_live_unknown_stale",
+      email: "live-unknown-stale@example.com",
+      displayName: "live-unknown-stale@example.com",
+      codexLiveSessionCount: 3,
+      codexSessionCount: 3,
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "live-unknown-stale",
+        activeSnapshotName: "live-unknown-stale",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      requestUsage: {
+        requestCount: 0,
+        totalTokens: 555,
+        cachedInputTokens: 0,
+        totalCostUsd: 0,
+      },
+      windowMinutesPrimary: 300,
+      windowMinutesSecondary: 10080,
+    });
+
+    render(
+      <AccountCards
+        accounts={[account]}
+        primaryWindow={buildWindow("primary", "acc_live_unknown_stale", 1000, 0, null)}
+        secondaryWindow={null}
+      />,
+    );
+
+    const card = screen.getByText("Plus · live-unknown-stale").closest(".card-hover");
+    expect(card).not.toBeNull();
+    const unknownValues = within(card as HTMLElement).getAllByText("--");
+    expect(unknownValues.length).toBeGreaterThanOrEqual(1);
+    expect(
+      unknownValues.some(
         (node) => node.tagName.toLowerCase() === "p",
       ),
     ).toBe(true);

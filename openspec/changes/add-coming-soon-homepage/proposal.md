@@ -7,6 +7,7 @@ The dashboard currently takes over `/`, but we need a simple branded public entr
 - Replace the `/` redirect with a public `Coming Soon` landing page.
 - Add a dedicated `/coming-soon` route that renders the same landing page content.
 - Add recodee.com branding (logo + label) and a basic email input + submit flow.
+- Show a dashboard teaser image (`/commingsoon.jpg`) on the landing page.
 
 ## Impact
 

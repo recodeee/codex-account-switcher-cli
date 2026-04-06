@@ -35,7 +35,7 @@ export function ComingSoonPage() {
             </p>
           </div>
 
-          <h1 className="text-3xl font-semibold tracking-tight">Coming Soon</h1>
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Coming Soon</h1>
         </div>
 
         <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">
@@ -57,6 +57,15 @@ export function ComingSoonPage() {
             Submit
           </Button>
         </form>
+
+        <div className="mt-6 overflow-hidden rounded-xl border border-border/60 bg-muted/20">
+          <img
+            src="/commingsoon.jpg"
+            alt="Dashboard preview"
+            className="h-auto w-full object-cover"
+            loading="lazy"
+          />
+        </div>
 
         {submittedEmail ? (
           <p className="mt-4 text-sm text-emerald-600 dark:text-emerald-400">

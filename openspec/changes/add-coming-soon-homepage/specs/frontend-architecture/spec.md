@@ -17,3 +17,10 @@ The public landing page SHALL include an email input and submit button so visito
 #### Scenario: Visitor submits an email on the landing page
 - **WHEN** a visitor enters a valid email address and clicks `Submit`
 - **THEN** the page accepts the submission interaction and shows an on-page confirmation message
+
+### Requirement: Public coming-soon dashboard teaser
+The public landing page SHALL display a dashboard teaser image sourced from `/commingsoon.jpg`.
+
+#### Scenario: Landing page shows dashboard preview image
+- **WHEN** a visitor opens `/` or `/coming-soon`
+- **THEN** the page shows a visible dashboard preview image sourced from `/commingsoon.jpg`
