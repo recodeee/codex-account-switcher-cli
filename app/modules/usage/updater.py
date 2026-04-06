@@ -125,6 +125,8 @@ _last_successful_refresh: dict[str, datetime] = {}
 _last_failed_refresh: dict[str, datetime] = {}
 _FAILED_REFRESH_BACKOFF_SECONDS = 15
 _DEACTIVATING_REFRESH_ERROR_CODES = {"http_401", "invalid_grant", "invalid_token", "token_inactive"}
+_DEACTIVATION_FAILURE_THRESHOLD = 3
+_deactivation_failure_streak: dict[str, int] = {}
 
 
 class _UsageRefreshSingleflight:
@@ -238,6 +240,7 @@ class UsageUpdater:
                 if result.fetch_succeeded:
                     _last_successful_refresh[account.id] = now
                     _last_failed_refresh.pop(account.id, None)
+                    _deactivation_failure_streak.pop(account.id, None)
                 else:
                     _last_failed_refresh[account.id] = now
             except Exception as exc:
@@ -283,7 +286,7 @@ class UsageUpdater:
             )
         except UsageFetchError as exc:
             if _should_deactivate_for_usage_error(exc.status_code):
-                await self._deactivate_for_client_error(account, exc)
+                await self._maybe_deactivate_for_client_error(account, exc)
                 return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
             if exc.status_code != 401 or not self._auth_manager:
                 return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
@@ -291,7 +294,7 @@ class UsageUpdater:
                 account = await self._auth_manager.ensure_fresh(account, force=True)
             except RefreshError as refresh_exc:
                 if _should_deactivate_for_refresh_error(refresh_exc):
-                    await self._deactivate_for_client_error(
+                    await self._maybe_deactivate_for_client_error(
                         account,
                         UsageFetchError(401, refresh_exc.message or "Token refresh failed"),
                     )
@@ -304,9 +307,9 @@ class UsageUpdater:
                 )
             except UsageFetchError as retry_exc:
                 if retry_exc.status_code == 401:
-                    await self._deactivate_for_client_error(account, retry_exc)
+                    await self._maybe_deactivate_for_client_error(account, retry_exc)
                 elif _should_deactivate_for_usage_error(retry_exc.status_code):
-                    await self._deactivate_for_client_error(account, retry_exc)
+                    await self._maybe_deactivate_for_client_error(account, retry_exc)
                 return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
 
         if payload is None:
@@ -425,6 +428,27 @@ class UsageUpdater:
         account.status = AccountStatus.DEACTIVATED
         account.deactivation_reason = reason
 
+    async def _maybe_deactivate_for_client_error(self, account: Account, exc: UsageFetchError) -> None:
+        if not self._auth_manager:
+            return
+
+        attempts = _deactivation_failure_streak.get(account.id, 0) + 1
+        if attempts < _DEACTIVATION_FAILURE_THRESHOLD:
+            _deactivation_failure_streak[account.id] = attempts
+            logger.warning(
+                "Deferring account deactivation until repeated client errors account_id=%s status=%s attempt=%s/%s message=%s request_id=%s",
+                account.id,
+                exc.status_code,
+                attempts,
+                _DEACTIVATION_FAILURE_THRESHOLD,
+                exc.message,
+                get_request_id(),
+            )
+            return
+
+        _deactivation_failure_streak.pop(account.id, None)
+        await self._deactivate_for_client_error(account, exc)
+
     async def _sync_plan_type(self, account: Account, payload: UsagePayload) -> None:
         next_plan_type = coerce_account_plan_type(payload.plan_type, account.plan_type or "free")
         if next_plan_type == account.plan_type:
@@ -500,6 +524,7 @@ class UsageUpdater:
         await self._accounts_repo.update_status(account.id, AccountStatus.ACTIVE, None)
         account.status = AccountStatus.ACTIVE
         account.deactivation_reason = None
+        _deactivation_failure_streak.pop(account.id, None)
         account.access_token_encrypted = donor.access_token_encrypted
         account.refresh_token_encrypted = donor.refresh_token_encrypted
         account.id_token_encrypted = donor.id_token_encrypted

@@ -112,12 +112,13 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:40.000Z").getTime())).toBe(true);
   });
 
-  it("keeps sub-5% 5h accounts in working-now while active sessions still exist", () => {
+  it("drops sub-5% 5h accounts from working-now after grace until reset", () => {
     const account = createAccountSummary({
       usage: {
         primaryRemainingPercent: 4,
         secondaryRemainingPercent: 88,
       },
+      resetAtPrimary: "2026-04-04T14:30:00.000Z",
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
       codexSessionCount: 1,
@@ -133,15 +134,41 @@ describe("isAccountWorkingNow", () => {
     });
 
     expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:00.000Z").getTime())).toBe(true);
-    expect(isAccountWorkingNow(account, new Date("2026-04-04T12:00:01.000Z").getTime())).toBe(true);
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T12:00:01.000Z").getTime())).toBe(false);
   });
 
-  it("keeps usage-limit-hit accounts in working-now after 60 seconds when sessions stay active", () => {
+  it("keeps usage-limit-hit accounts out of working-now after 60 seconds until reset", () => {
     const account = createAccountSummary({
       usage: {
         primaryRemainingPercent: 0,
         secondaryRemainingPercent: 88,
       },
+      resetAtPrimary: "2026-04-04T14:30:00.000Z",
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: "2026-04-04T11:58:30.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-04T11:58:30.000Z",
+    });
+
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:00.000Z").getTime())).toBe(true);
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T12:00:01.000Z").getTime())).toBe(false);
+  });
+
+  it("allows usage-limit-hit accounts back into working-now after the 5h reset timestamp", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      resetAtPrimary: "2026-04-04T12:00:00.000Z",
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
       codexSessionCount: 1,
@@ -192,6 +219,7 @@ describe("isAccountWorkingNow", () => {
         primaryRemainingPercent: 0,
         secondaryRemainingPercent: 88,
       },
+      resetAtPrimary: "2026-04-04T14:30:00.000Z",
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
       codexSessionCount: 1,
@@ -218,7 +246,7 @@ describe("isAccountWorkingNow", () => {
     const secondNowMs = new Date("2026-04-04T12:00:10.000Z").getTime();
 
     expect(getWorkingNowUsageLimitHitCountdownMs(refreshedButSameSession, secondNowMs)).toBe(0);
-    expect(isAccountWorkingNow(refreshedButSameSession, secondNowMs)).toBe(true);
+    expect(isAccountWorkingNow(refreshedButSameSession, secondNowMs)).toBe(false);
     expect(hasActiveCliSessionSignal(refreshedButSameSession, secondNowMs)).toBe(true);
   });
 
@@ -228,6 +256,7 @@ describe("isAccountWorkingNow", () => {
         primaryRemainingPercent: 0,
         secondaryRemainingPercent: 88,
       },
+      resetAtPrimary: "2026-04-04T14:30:00.000Z",
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
       codexSessionCount: 1,
@@ -284,7 +313,7 @@ describe("isAccountWorkingNow", () => {
     const secondNowMs = new Date("2026-04-04T12:00:10.000Z").getTime();
 
     expect(getWorkingNowUsageLimitHitCountdownMs(sameSessionWithRotatedSource, secondNowMs)).toBe(0);
-    expect(isAccountWorkingNow(sameSessionWithRotatedSource, secondNowMs)).toBe(true);
+    expect(isAccountWorkingNow(sameSessionWithRotatedSource, secondNowMs)).toBe(false);
     expect(hasActiveCliSessionSignal(sameSessionWithRotatedSource, secondNowMs)).toBe(true);
   });
 
@@ -294,6 +323,7 @@ describe("isAccountWorkingNow", () => {
         primaryRemainingPercent: 0,
         secondaryRemainingPercent: 88,
       },
+      resetAtPrimary: "2026-04-04T14:30:00.000Z",
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
       codexSessionCount: 1,
@@ -334,7 +364,7 @@ describe("isAccountWorkingNow", () => {
         sameSessionWithRefreshedLiveUsageTask,
         secondNowMs,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       hasActiveCliSessionSignal(
         sameSessionWithRefreshedLiveUsageTask,
@@ -1096,13 +1126,14 @@ describe("isAccountWorkingNow", () => {
     expect(getRawQuotaWindowFallback(account, "secondary")).toBeNull();
   });
 
-  it("keeps merged-depleted 5h accounts in working-now while live sessions stay present", () => {
+  it("keeps merged-depleted 5h accounts out of working-now after grace until reset", () => {
     const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
     const account = createAccountSummary({
       usage: {
         primaryRemainingPercent: 44,
         secondaryRemainingPercent: 90,
       },
+      resetAtPrimary: "2026-04-04T14:30:00.000Z",
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 2,
       codexSessionCount: 2,
@@ -1130,7 +1161,7 @@ describe("isAccountWorkingNow", () => {
     });
 
     expect(isAccountWorkingNow(account, nowMs)).toBe(true);
-    expect(isAccountWorkingNow(account, nowMs + 61_000)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs + 61_000)).toBe(false);
   });
 
   it("keeps the lower remaining value when fallback and baseline share reset cycle", () => {

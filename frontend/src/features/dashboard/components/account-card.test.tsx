@@ -73,7 +73,7 @@ describe("AccountCard", () => {
     expect(within(tokenCardBody as HTMLElement).getByText("Weekly")).toBeInTheDocument();
   });
 
-  it("shows only the account name in cardholder row without provider prefix", () => {
+  it("does not render the cardholder row", () => {
     const account = createAccountSummary({
       displayName: "admin@recodee.com",
       email: "admin@recodee.com",
@@ -81,9 +81,8 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Cardholder name")).toBeInTheDocument();
-    expect(screen.getByText(/^admin$/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Gmail\s*·/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Cardholder name")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^admin$/i)).not.toBeInTheDocument();
   });
 
   it("hides 5h quota bar for weekly-only accounts", () => {
@@ -164,38 +163,6 @@ describe("AccountCard", () => {
     expect(screen.queryByText("5h")).not.toBeInTheDocument();
   });
 
-  it("keeps cardholder name visible in privacy mode", () => {
-    act(() => {
-      usePrivacyStore.setState({ blurred: true });
-    });
-    const account = createAccountSummary({
-      displayName: "AWS Account MSP",
-      email: "aws-account@example.com",
-    });
-
-    render(<AccountCard account={account} />);
-
-    const cardholder = screen.getByText("AWS Account MSP");
-    expect(cardholder.closest(".privacy-blur")).toBeNull();
-    expect(screen.queryByText("aws-account@example.com")).not.toBeInTheDocument();
-  });
-
-  it("derives cardholder name from email local part when display name is an email", () => {
-    act(() => {
-      usePrivacyStore.setState({ blurred: true });
-    });
-    const account = createAccountSummary({
-      displayName: "solo@example.com",
-      email: "solo@example.com",
-    });
-
-    render(<AccountCard account={account} />);
-
-    const cardholder = screen.getByText(/^solo$/i);
-    expect(cardholder.closest(".privacy-blur")).toBeNull();
-    expect(screen.queryByText("solo@example.com")).not.toBeInTheDocument();
-  });
-
   it("blurs snapshot name when snapshot name is an email in privacy mode", () => {
     act(() => {
       usePrivacyStore.setState({ blurred: true });
@@ -247,7 +214,13 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.getByText("Team · No snapshot")).toBeInTheDocument();
-    expect(screen.getByText("Locked account")).toBeInTheDocument();
+    const lockedAccountHeading = screen.getByText("Locked account");
+    const lockedAccountOverlay = lockedAccountHeading.closest("div.relative");
+
+    expect(lockedAccountOverlay).not.toBeNull();
+    expect(
+      within(lockedAccountOverlay as HTMLElement).getByText("primary@example.com"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Unlock" })).toBeInTheDocument();
   });
 
@@ -1353,7 +1326,7 @@ describe("AccountCard", () => {
     expect(screen.getByText("No active task reported")).toBeInTheDocument();
   });
 
-  it("shows waiting for new task when a live session has no task preview", () => {
+  it("shows waiting for new task without the thinking indicator when a live session has no task preview", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexCurrentTaskPreview: null,
@@ -1375,7 +1348,7 @@ describe("AccountCard", () => {
 
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
     expect(screen.getByText("Waiting for new task")).toBeInTheDocument();
-    expect(screen.getByText("Codex thinking")).toBeInTheDocument();
+    expect(screen.queryByText("Codex thinking")).not.toBeInTheDocument();
   });
 
   it("renders per-session task previews with waiting fallback", () => {

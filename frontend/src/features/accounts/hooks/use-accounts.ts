@@ -19,7 +19,7 @@ import { resetQuotaDisplayFloorCacheForAccount } from "@/utils/quota-display";
 import { hasActiveCliSessionSignal } from "@/utils/account-working";
 
 const DEFAULT_ACCOUNTS_POLL_MS = 30_000;
-const ACTIVE_ACCOUNTS_POLL_MS = 1_000;
+const ACTIVE_ACCOUNTS_POLL_MS = 5_000;
 
 function extractAccounts(data: unknown): AccountSummary[] | undefined {
   if (Array.isArray(data)) {

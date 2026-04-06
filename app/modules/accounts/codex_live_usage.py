@@ -33,7 +33,7 @@ _ROLLOUT_SESSION_FILE_RE = re.compile(
     r"^rollout-(?P<start>\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-(?P<session>[0-9a-fA-F-]{36})\.jsonl$"
 )
 _RESET_AT_MATCH_TOLERANCE_SECONDS = 30
-_TASK_PREVIEW_MAX_LENGTH = 120
+_TASK_PREVIEW_SOFT_MAX_LENGTH = 2000
 _TASK_PREVIEW_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _TASK_PREVIEW_BEARER_RE = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._-]+")
 _TASK_PREVIEW_SECRET_ASSIGNMENT_RE = re.compile(
@@ -2441,9 +2441,9 @@ def _sanitize_codex_task_preview(text: str) -> str | None:
         return None
     if _TASK_PREVIEW_LIVE_USAGE_MAPPING_XML_RE.match(trimmed):
         return None
-    if len(trimmed) <= _TASK_PREVIEW_MAX_LENGTH:
+    if len(trimmed) <= _TASK_PREVIEW_SOFT_MAX_LENGTH:
         return trimmed
-    return trimmed[: _TASK_PREVIEW_MAX_LENGTH - 1].rstrip() + "…"
+    return trimmed[: _TASK_PREVIEW_SOFT_MAX_LENGTH - 1].rstrip() + "…"
 
 
 def _strip_leading_live_usage_payload(text: str) -> str:

@@ -5,7 +5,7 @@ import type { DashboardOverview } from "@/features/dashboard/schemas";
 import { hasActiveCliSessionSignal } from "@/utils/account-working";
 
 const DEFAULT_DASHBOARD_POLL_MS = 30_000;
-const ACTIVE_DASHBOARD_POLL_MS = 1_000;
+const ACTIVE_DASHBOARD_POLL_MS = 5_000;
 
 function hasWorkingAccounts(data: DashboardOverview | undefined): boolean {
   if (!data) {

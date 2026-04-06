@@ -23,6 +23,7 @@ import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 
 const RECENT_LAST_SEEN_SORT_WINDOW_MS = 30 * 60 * 1000;
 const WEEKLY_DEPLETED_SORT_THRESHOLD_PERCENT = 5;
+const ACCOUNT_CARDS_CLOCK_TICK_MS = 5_000;
 
 function roundAveragePercent(
   values: Array<number | null | undefined>,
@@ -344,10 +345,11 @@ export function AccountCards({
   onAction,
 }: AccountCardsProps) {
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       setNowMs(Date.now());
-    }, 1000);
+    }, ACCOUNT_CARDS_CLOCK_TICK_MS);
     return () => window.clearInterval(timer);
   }, []);
 

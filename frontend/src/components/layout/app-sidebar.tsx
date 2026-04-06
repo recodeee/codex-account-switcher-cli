@@ -21,7 +21,6 @@ import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import { NAV_ITEMS } from "@/components/layout/nav-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCompactNumber, formatWindowLabel } from "@/utils/formatters";
 import { cn } from "@/lib/utils";
 
 const NAV_ICONS: Record<string, LucideIcon> = {
@@ -52,31 +51,16 @@ function writeSidebarCollapsedPreference(collapsed: boolean): void {
   window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? "1" : "0");
 }
 
-function formatTokensFromCredits(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "--";
-  }
-
-  return formatCompactNumber(Math.max(0, value) * 1000);
-}
-
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState<boolean>(() => readSidebarCollapsedPreference());
   const dashboardQuery = useDashboard();
 
-  const primaryRemainingLabel = useMemo(() => {
-    const overview = dashboardQuery.data;
-    return formatWindowLabel("primary", overview?.summary.primaryWindow.windowMinutes ?? null);
-  }, [dashboardQuery.data]);
-
-  const primaryRemainingTokens = useMemo(() => {
-    const overview = dashboardQuery.data;
-    return formatTokensFromCredits(overview?.summary.primaryWindow.remainingCredits ?? null);
-  }, [dashboardQuery.data]);
-
-  const secondaryRemainingTokens = useMemo(() => {
-    const overview = dashboardQuery.data;
-    return formatTokensFromCredits(overview?.summary.secondaryWindow?.remainingCredits ?? null);
+  const accountCountLabel = useMemo(() => {
+    const count =
+      dashboardQuery.data?.windows.primary.accounts.length ??
+      dashboardQuery.data?.accounts.length ??
+      0;
+    return String(count);
   }, [dashboardQuery.data]);
 
   const toggleCollapsed = () => {
@@ -131,15 +115,14 @@ export function AppSidebar() {
         ) : (
           <div className="space-y-2.5">
             <div className="flex items-center justify-end gap-3">
-              <p className="text-right text-[11px] leading-tight">
-                <span className="block font-medium tracking-wide text-slate-200">
+              <div className="w-full text-right">
+                <p className="text-xl font-semibold tracking-tight text-white">
                   recodee.com
-                </span>
-                <span className="block text-slate-400">
-                  {primaryRemainingLabel}: {primaryRemainingTokens}
-                </span>
-                <span className="block text-slate-500">Weekly: {secondaryRemainingTokens}</span>
-              </p>
+                </p>
+                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                  Accounts ({accountCountLabel})
+                </p>
+              </div>
               <Button
                 type="button"
                 variant="ghost"

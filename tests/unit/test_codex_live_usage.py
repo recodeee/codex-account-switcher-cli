@@ -2457,6 +2457,45 @@ def test_read_local_codex_task_previews_by_session_id_extracts_user_request_from
     assert previews[session_id].text == "hide the snapshot name too because that is email"
 
 
+def test_read_local_codex_task_previews_by_session_id_keeps_full_task_text_without_short_truncation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    session_id = "019d5a6a-4665-7873-9714-9efb95b24273"
+    rollout_path = day_dir / f"rollout-2026-04-04T21-33-35-{session_id}.jsonl"
+
+    long_task_preview = (
+        "can we regroup this account card task preview and keep the full user message visible "
+        "without cutting it early because the current sentence is still meaningful and should "
+        "be readable end to end on the dashboard"
+    )
+
+    payload = {
+        "timestamp": (now - timedelta(seconds=3)).isoformat().replace("+00:00", "Z"),
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": long_task_preview}],
+        },
+    }
+
+    rollout_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ts = now.timestamp()
+    os.utime(rollout_path, (ts, ts))
+
+    previews = read_local_codex_task_previews_by_session_id(now=now)
+    assert session_id in previews
+    assert previews[session_id].text == long_task_preview
+    assert not previews[session_id].text.endswith("…")
+
+
 def test_read_local_codex_task_previews_by_session_id_ignores_warning_and_status_only_done(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

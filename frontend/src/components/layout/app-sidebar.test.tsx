@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -40,5 +40,15 @@ describe("AppSidebar", () => {
     const sidebar = screen.getByLabelText("Primary sidebar");
     expect(sidebar).toHaveClass("w-20");
     expect(screen.getByRole("button", { name: "Expand navigation menu" })).toBeInTheDocument();
+  });
+
+  it("shows only account count summary in the sidebar header", async () => {
+    renderWithProviders(<AppSidebar />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Accounts \(2\)/i)).toBeInTheDocument();
+      expect(screen.queryByText(/5h Remaining/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Weekly Remaining/i)).not.toBeInTheDocument();
+    });
   });
 });

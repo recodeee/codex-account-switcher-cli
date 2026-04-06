@@ -74,46 +74,11 @@ export type AccountCardProps = {
   onAction?: (account: AccountSummary, action: AccountAction) => void;
 };
 
-function formatPlanWithSnapshot(
-  planType: string,
-  snapshotName?: string | null,
-): string {
-  const planLabel = formatSlug(planType);
-  const normalizedSnapshotName = snapshotName?.trim();
-  if (!normalizedSnapshotName) {
-    return `${planLabel} · No snapshot`;
-  }
-  return `${planLabel} · ${normalizedSnapshotName}`;
-}
-
-function getPlanSnapshotDetails(
-  planType: string,
-  snapshotName?: string | null,
-): {
-  planLabel: string;
-  snapshotLabel: string;
-  snapshotIsEmail: boolean;
-} {
-  const planLabel = formatSlug(planType);
-  const normalizedSnapshotName = snapshotName?.trim();
-  if (!normalizedSnapshotName) {
-    return {
-      planLabel,
-      snapshotLabel: "No snapshot",
-      snapshotIsEmail: false,
-    };
-  }
-  return {
-    planLabel,
-    snapshotLabel: normalizedSnapshotName,
-    snapshotIsEmail: isLikelyEmailValue(normalizedSnapshotName),
-  };
-}
-
 const NEAR_ZERO_QUOTA_PERCENT = 5;
 const WAITING_FOR_NEW_TASK_LABEL = "Waiting for new task";
 const SESSION_TASK_PREVIEW_MAX_ROWS = 4;
 const NEXT_TASK_PREVIEW_PATTERN = /\bnext(?:\.?js)?\b|\bturbopack\b/i;
+const ACCOUNT_SUBTITLE_LABEL = "CODEX ONLY ACCOUNT";
 
 function hasNextTaskHint(taskPreview: string | null | undefined): boolean {
   const normalized = taskPreview?.trim();
@@ -135,6 +100,27 @@ function NextTaskBadge() {
   );
 }
 
+function OpenAILogoMark({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={cn("h-3.5 w-3.5", className)}
+      aria-hidden
+    >
+      <path
+        d="M12 4.25a3.75 3.75 0 0 1 3.63 2.82l2.4.87a3.75 3.75 0 0 1 1.22 6.26l.42 2.52a3.75 3.75 0 0 1-5.02 3.95L12.5 22a3.75 3.75 0 0 1-5-1.7l-2.54-.38a3.75 3.75 0 0 1-2.45-5.89l-.74-2.45a3.75 3.75 0 0 1 3.82-4.82l1.83-1.8A3.75 3.75 0 0 1 12 4.25Z"
+        stroke="currentColor"
+        strokeWidth={1.25}
+        strokeLinejoin="round"
+        opacity={0.7}
+      />
+      <circle cx="12" cy="12" r="2.2" fill="currentColor" />
+      <circle cx="12" cy="12" r="4.8" stroke="currentColor" strokeOpacity={0.55} />
+    </svg>
+  );
+}
+
 function formatSessionKeyLabel(sessionKey: string): string {
   const normalized = sessionKey.trim();
   if (normalized.length <= 18) {
@@ -143,42 +129,13 @@ function formatSessionKeyLabel(sessionKey: string): string {
   return `${normalized.slice(0, 6)}…${normalized.slice(-4)}`;
 }
 
-function resolveSessionTaskPreview(taskPreview: string | null | undefined): string {
+function resolveSessionTaskPreview(
+  taskPreview: string | null | undefined,
+): string {
   const normalized = taskPreview?.trim();
   return normalized && normalized.length > 0
     ? normalized
     : WAITING_FOR_NEW_TASK_LABEL;
-}
-
-function resolveCardholderName(account: AccountSummary, fallbackTitle: string): string {
-  const normalizeLabel = (value: string) =>
-    value
-      .trim()
-      .replace(/\s+/g, " ")
-      .split(" ")
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
-
-  const displayName = account.displayName?.trim();
-  if (displayName && !isLikelyEmailValue(displayName)) {
-    return normalizeLabel(displayName);
-  }
-
-  const email = account.email?.trim();
-  if (email) {
-    const [localPart] = email.split("@");
-    const normalizedLocalPart = localPart?.replace(/[._-]+/g, " ").trim();
-    if (normalizedLocalPart) {
-      return normalizeLabel(normalizedLocalPart);
-    }
-  }
-
-  if (displayName) {
-    return normalizeLabel(displayName);
-  }
-
-  return normalizeLabel(fallbackTitle);
 }
 
 function normalizeNearZeroQuotaPercent(value: number): number {
@@ -212,8 +169,7 @@ function QuotaBar({
   usageLimitHit?: boolean;
   inTokenCard?: boolean;
 }) {
-  const clamped =
-    percent === null ? 0 : normalizeNearZeroQuotaPercent(percent);
+  const clamped = percent === null ? 0 : normalizeNearZeroQuotaPercent(percent);
   const hasPercent = percent !== null;
   const liveTelemetryUnavailable = isLive && !deactivated && percent === null;
   const tone = deactivated
@@ -301,10 +257,10 @@ function QuotaBar({
               {usageLimitHit
                 ? "Usage limit hit"
                 : telemetryPending
-                ? "Telemetry pending"
-                : liveTelemetryUnavailable
-                  ? "Live session detected"
-                  : "Live token status"}
+                  ? "Telemetry pending"
+                  : liveTelemetryUnavailable
+                    ? "Live session detected"
+                    : "Live token status"}
             </span>
           </div>
         ) : lastSeenLabel ? (
@@ -353,7 +309,9 @@ function resolveLastSeenDisplay(label: string | null | undefined): {
   return { label, upToDate: false };
 }
 
-function hasExpiredRefreshTokenReason(reason: string | null | undefined): boolean {
+function hasExpiredRefreshTokenReason(
+  reason: string | null | undefined,
+): boolean {
   const normalized = reason?.trim().toLowerCase();
   if (!normalized || !normalized.includes("refresh token")) {
     return false;
@@ -384,7 +342,9 @@ function formatDebugSource(source: string): string {
   return parts[parts.length - 1] || normalized;
 }
 
-function normalizeDebugSnapshotName(value: string | null | undefined): string | null {
+function normalizeDebugSnapshotName(
+  value: string | null | undefined,
+): string | null {
   const normalized = value?.trim().toLowerCase();
   return normalized ? normalized : null;
 }
@@ -400,7 +360,8 @@ function scopeQuotaDebugSamplesToAccount(
   }
 
   const exactSnapshotMatch = rawSamples.filter(
-    (sample) => normalizeDebugSnapshotName(sample.snapshotName) === targetSnapshot,
+    (sample) =>
+      normalizeDebugSnapshotName(sample.snapshotName) === targetSnapshot,
   );
   if (exactSnapshotMatch.length > 0) {
     return exactSnapshotMatch;
@@ -535,9 +496,7 @@ function isLiveUsageLimitHit(input: {
   if (!input.hasLiveSession || input.primaryRemainingPercent == null) {
     return false;
   }
-  return (
-    normalizeNearZeroQuotaPercent(input.primaryRemainingPercent) <= 0
-  );
+  return normalizeNearZeroQuotaPercent(input.primaryRemainingPercent) <= 0;
 }
 
 function formatLimitHitCountdown(remainingMs: number): string {
@@ -594,9 +553,13 @@ export function AccountCard(props: AccountCardProps) {
   const hasLiveSession = hasFreshLiveTelemetry(account, nowMs);
   const hasActiveCliSession = hasActiveCliSessionSignal(account, nowMs);
   const recentUsageSignal =
-    (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account, nowMs);
+    (account.codexAuth?.hasSnapshot ?? false) &&
+    hasRecentUsageSignal(account, nowMs);
   const isWorkingNow = isAccountWorkingNow(account, nowMs);
-  const usageLimitHitCountdownMs = getWorkingNowUsageLimitHitCountdownMs(account, nowMs);
+  const usageLimitHitCountdownMs = getWorkingNowUsageLimitHitCountdownMs(
+    account,
+    nowMs,
+  );
   const usageLimitHitCountdownLabel =
     usageLimitHitCountdownMs != null && usageLimitHitCountdownMs > 0
       ? formatLimitHitCountdown(usageLimitHitCountdownMs)
@@ -620,7 +583,8 @@ export function AccountCard(props: AccountCardProps) {
   const secondaryRemainingRaw =
     mergedSecondaryRemainingPercent ??
     selectStableRemainingPercent({
-      fallbackRemainingPercent: deferredSecondaryQuotaFallback?.remainingPercent,
+      fallbackRemainingPercent:
+        deferredSecondaryQuotaFallback?.remainingPercent,
       fallbackResetAt: deferredSecondaryQuotaFallback?.resetAt,
       baselineRemainingPercent: account.usage?.secondaryRemainingPercent,
       baselineResetAt: account.resetAtSecondary,
@@ -700,17 +664,22 @@ export function AccountCard(props: AccountCardProps) {
     typeof primaryRemaining === "number" &&
     normalizeNearZeroQuotaPercent(primaryRemaining) < 1;
   const showUsageLimitHitBadge =
-    usageLimitHit || hasRemainingTokensExhausted || useLocalBlockedByPrimaryQuota;
+    usageLimitHit ||
+    hasRemainingTokensExhausted ||
+    useLocalBlockedByPrimaryQuota;
   const showWeeklyUsageLimitDetailBadge = useLocalBlockedByWeeklyQuota;
   const showLimitTint =
     showUsageLimitHitBadge || showWeeklyUsageLimitDetailBadge;
   const showUsageLimitGraceOverlay = Boolean(
-    usageLimitHit && usageLimitHitCountdownMs != null && usageLimitHitCountdownMs > 0,
+    usageLimitHit &&
+    usageLimitHitCountdownMs != null &&
+    usageLimitHitCountdownMs > 0,
   );
   const hasExpiredRefreshToken =
     account.auth?.refresh?.state === "expired" ||
     hasExpiredRefreshTokenReason(account.deactivationReason);
-  const status = usageLimitHit && effectiveStatus === "active" ? "limited" : effectiveStatus;
+  const status =
+    usageLimitHit && effectiveStatus === "active" ? "limited" : effectiveStatus;
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
@@ -793,14 +762,6 @@ export function AccountCard(props: AccountCardProps) {
 
   const title = account.displayName || account.email;
   const compactId = formatCompactAccountId(account.accountId);
-  const planWithSnapshot = formatPlanWithSnapshot(
-    account.planType,
-    account.codexAuth?.snapshotName,
-  );
-  const { planLabel, snapshotLabel, snapshotIsEmail } = getPlanSnapshotDetails(
-    account.planType,
-    account.codexAuth?.snapshotName,
-  );
   const snapshotName = account.codexAuth?.snapshotName?.trim() ?? null;
   const hasResolvedSnapshot = Boolean(snapshotName);
   const showMissingSnapshotLockOverlay = !hasResolvedSnapshot;
@@ -811,7 +772,9 @@ export function AccountCard(props: AccountCardProps) {
     expectedSnapshotName &&
     snapshotName !== expectedSnapshotName,
   );
-  const tokenMetricLabel = showTokensRemaining ? "Tokens remaining" : "Tokens used";
+  const tokenMetricLabel = showTokensRemaining
+    ? "Tokens remaining"
+    : "Tokens used";
   const tokenMetricValueRaw = showTokensRemaining
     ? remainingTokensValue
     : (tokensUsed ?? account.requestUsage?.totalTokens ?? 0);
@@ -824,7 +787,10 @@ export function AccountCard(props: AccountCardProps) {
     hasLiveSession ||
     (account.codexAuth?.hasLiveSession ?? false) ||
     Math.max(account.codexLiveSessionCount ?? 0, 0) > 0;
-  const codexLiveSessionCountRaw = Math.max(account.codexLiveSessionCount ?? 0, 0);
+  const codexLiveSessionCountRaw = Math.max(
+    account.codexLiveSessionCount ?? 0,
+    0,
+  );
   const codexLiveSessionCount = hasActiveCliSession
     ? hasRuntimeLiveSessionSignal
       ? Math.max(codexLiveSessionCountRaw, 1)
@@ -837,7 +803,9 @@ export function AccountCard(props: AccountCardProps) {
   const hasSessionInventory =
     codexLiveSessionCount > 0 || codexTrackedSessionCount > 0;
   const usageLimitHitGraceExpired = Boolean(
-    usageLimitHit && usageLimitHitCountdownMs != null && usageLimitHitCountdownMs <= 0,
+    usageLimitHit &&
+    usageLimitHitCountdownMs != null &&
+    usageLimitHitCountdownMs <= 0,
   );
   const codexCurrentTaskPreview = usageLimitHitGraceExpired
     ? null
@@ -852,6 +820,8 @@ export function AccountCard(props: AccountCardProps) {
     effectiveCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL &&
     codexLastTaskPreview != null &&
     codexLastTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
+  const showThinkingIndicator =
+    isWorkingNow && effectiveCurrentTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
   const sessionTaskPreviews = useMemo(() => {
     const seenSessionKeys = new Set<string>();
     const normalized = (account.codexSessionTaskPreviews ?? [])
@@ -898,14 +868,14 @@ export function AccountCard(props: AccountCardProps) {
       liveQuotaDebug,
     ],
   );
-  const cardholderName = resolveCardholderName(account, title);
-  const cardholderBlurred = blurred && isLikelyEmailValue(cardholderName);
+  const lockedAccountIdentity =
+    account.email?.trim() || account.displayName?.trim() || title.trim();
+  const lockedAccountIdentityBlurred =
+    blurred && isLikelyEmailValue(lockedAccountIdentity);
   const tokenCardPrimaryLine = tokenMetricValue;
   const tokenCardSecondaryLine = String(codexLiveSessionCount);
   const accessibleTokenMetricValue =
-    tokenMetricValue === "0"
-      ? tokenMetricValue
-      : `${tokenMetricValue} tokens`;
+    tokenMetricValue === "0" ? tokenMetricValue : `${tokenMetricValue} tokens`;
   const accessibleCodexSessionValue =
     codexLiveSessionCount <= 1
       ? String(codexLiveSessionCount)
@@ -915,12 +885,10 @@ export function AccountCard(props: AccountCardProps) {
     "h-7 gap-1.5 rounded-full border px-3 text-[11px] font-semibold tracking-[0.02em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
     status === "active" &&
       "border-emerald-500/35 bg-emerald-500/14 text-emerald-300",
-    status === "paused" &&
-      "border-amber-500/35 bg-amber-500/14 text-amber-200",
+    status === "paused" && "border-amber-500/35 bg-amber-500/14 text-amber-200",
     status === "limited" &&
       "border-orange-500/35 bg-orange-500/14 text-orange-200",
-    status === "exceeded" &&
-      "border-red-500/35 bg-red-500/14 text-red-200",
+    status === "exceeded" && "border-red-500/35 bg-red-500/14 text-red-200",
     status === "deactivated" &&
       "border-zinc-500/35 bg-zinc-500/14 text-zinc-300",
   );
@@ -928,31 +896,21 @@ export function AccountCard(props: AccountCardProps) {
     "h-7 gap-1.5 rounded-full border border-cyan-500/35 bg-cyan-500/14 px-3 text-[11px] font-semibold tracking-[0.02em] text-cyan-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
 
   return (
-    <div
-      className={cn(
-        "card-hover relative overflow-hidden rounded-xl border border-border/70 bg-gradient-to-b from-card to-card/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
-        showLimitTint &&
-          "border-red-500/40 bg-gradient-to-b from-red-500/12 via-card to-card/85",
-      )}
-    >
+    <div className="relative">
       <div
         className={cn(
           (showUsageLimitGraceOverlay || showMissingSnapshotLockOverlay) &&
             "blur-[1.5px] saturate-[0.82]",
         )}
       >
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-[18px] border border-white/10 bg-[radial-gradient(120%_180%_at_0%_0%,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0)_42%),linear-gradient(118deg,#17191f_0%,#101217_52%,#07080b_100%)] px-3.5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_16px_34px_rgba(0,0,0,0.55)]",
-          showLimitTint && "border-red-500/45",
-        )}
-      >
         <div
-          className="pointer-events-none absolute -left-6 top-0 h-full w-28 rotate-[18deg] bg-white/[0.04]"
-          aria-hidden
-        />
-        <div className="relative">
-          <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5">
+          className={cn(
+            "card-hover relative overflow-hidden rounded-[18px] border border-white/10 bg-[#101826] px-3.5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_18px_42px_rgba(0,0,0,0.58)]",
+            showLimitTint && "border-red-500/40",
+          )}
+        >
+          <div className="relative">
+            <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5">
               <Badge variant="outline" className={tokenCardStatusClass}>
                 <span
                   className="h-1.5 w-1.5 rounded-full bg-current"
@@ -992,10 +950,7 @@ export function AccountCard(props: AccountCardProps) {
                   ) : null}
                 </Badge>
               ) : isWorkingNow ? (
-                <Badge
-                  variant="outline"
-                  className={tokenCardWorkingNowClass}
-                >
+                <Badge variant="outline" className={tokenCardWorkingNowClass}>
                   <span
                     className="h-1.5 w-1.5 rounded-full bg-current"
                     aria-hidden
@@ -1024,387 +979,394 @@ export function AccountCard(props: AccountCardProps) {
                     "Re-login is required to refresh the account token."
                   }
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+                  <span
+                    className="h-1.5 w-1.5 rounded-full bg-current"
+                    aria-hidden
+                  />
                   Expired refresh token
                 </Badge>
               ) : null}
-          </div>
-          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-200/90">
-            <span>OpenAI</span>
-            <span>{hasLiveSession ? "Live token card" : "Token card"}</span>
-          </div>
-          <p
-            className="mt-1 truncate text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400"
-            title={showAccountId ? `Account ID ${account.accountId}` : undefined}
-          >
-            {snapshotIsEmail && blurred ? (
-              <>
-                {planLabel} · <span className="privacy-blur">{snapshotLabel}</span>
-              </>
-            ) : (
-              planWithSnapshot
-            )}
-            {idSuffix}
-          </p>
-          <div className="mt-3 flex items-center gap-2 text-zinc-200/85">
-            <div className="h-5 w-7 rounded-[4px] border border-amber-200/35 bg-[linear-gradient(145deg,#f2ca7d_0%,#d79a24_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]" />
-            <span className="text-xs tracking-[0.18em]">)))</span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2.5 font-mono text-sm font-medium tracking-[0.22em] text-zinc-100 sm:text-base">
-            <p className="truncate rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5">
-              {tokenCardPrimaryLine}
+            </div>
+            <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-200/90">
+              <span className="inline-flex items-center gap-1.5 text-zinc-100">
+                <OpenAILogoMark className="text-cyan-200/90" />
+                OpenAI
+              </span>
+              <span>{hasLiveSession ? "Live token card" : "Token card"}</span>
+            </div>
+            <p
+              className="mt-1 truncate text-[11px] font-semibold uppercase tracking-[0.13em] text-zinc-300"
+              title={
+                showAccountId ? `Account ID ${account.accountId}` : undefined
+              }
+            >
+              {ACCOUNT_SUBTITLE_LABEL}
+              {idSuffix}
             </p>
-            <p className="truncate rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5">
-              {tokenCardSecondaryLine}
-            </p>
-          </div>
-          <div className="mt-3 border-t border-white/10 pt-2">
-            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">
-              Cardholder name
-            </p>
-            <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-white/12 bg-[linear-gradient(120deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.03)_45%,rgba(255,255,255,0)_100%)] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
-              <div className="flex min-w-0 items-center gap-2">
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(34,211,238,0.6)]"
-                  aria-hidden
-                />
-                <p
-                  className={cn(
-                    "min-w-0 truncate font-mono text-sm tracking-[0.08em] text-zinc-100",
-                    cardholderBlurred && "privacy-blur",
-                  )}
-                >
-                  {cardholderName}
+            <div className="mt-3 flex items-center gap-2 text-zinc-200/85">
+              <div className="h-5 w-7 rounded-[4px] border border-amber-200/35 bg-[linear-gradient(145deg,#f2ca7d_0%,#d79a24_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]" />
+              <span className="text-xs tracking-[0.18em]">)))</span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2.5">
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                  Tokens:
+                </p>
+                <p className="truncate rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 font-mono text-sm font-medium tracking-[0.22em] text-zinc-100 sm:text-base">
+                  {tokenCardPrimaryLine}
                 </p>
               </div>
-              <span className="shrink-0 rounded-full border border-white/15 bg-black/25 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-300">
-                Account
-              </span>
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                  CLI sessions:
+                </p>
+                <p className="truncate rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 font-mono text-sm font-medium tracking-[0.22em] text-zinc-100 sm:text-base">
+                  {tokenCardSecondaryLine}
+                </p>
+              </div>
             </div>
-          </div>
-
-          <div className="mt-3.5 border-t border-white/10 pt-3">
-            <div
-              className={cn(
-                "grid gap-2.5",
-                weeklyOnly ? "grid-cols-1" : "grid-cols-2",
-              )}
-            >
-              {!weeklyOnly && (
+            <div className="mt-3 border-t border-white/10 pt-3">
+              <div
+                className={cn(
+                  "grid gap-2.5",
+                  weeklyOnly ? "grid-cols-1" : "grid-cols-2",
+                )}
+              >
+                {!weeklyOnly && (
+                  <QuotaBar
+                    label={primaryWindowLabel}
+                    percent={primaryRemaining}
+                    resetLabel={primaryReset}
+                    lastSeenLabel={stalePrimaryLastSeen.label}
+                    lastSeenUpToDate={stalePrimaryLastSeen.upToDate}
+                    deactivated={isDeactivated}
+                    isLive={hasLiveSession}
+                    telemetryPending={primaryTelemetryPending}
+                    usageLimitHit={usageLimitHit}
+                    inTokenCard
+                  />
+                )}
                 <QuotaBar
-                  label={primaryWindowLabel}
-                  percent={primaryRemaining}
-                  resetLabel={primaryReset}
-                  lastSeenLabel={stalePrimaryLastSeen.label}
-                  lastSeenUpToDate={stalePrimaryLastSeen.upToDate}
-                  deactivated={isDeactivated}
+                  label="Weekly"
+                  percent={secondaryRemaining}
+                  resetLabel={secondaryReset}
+                  lastSeenLabel={staleSecondaryLastSeen.label}
+                  lastSeenUpToDate={staleSecondaryLastSeen.upToDate}
                   isLive={hasLiveSession}
-                  telemetryPending={primaryTelemetryPending}
-                  usageLimitHit={usageLimitHit}
+                  telemetryPending={secondaryTelemetryPending}
                   inTokenCard
                 />
-              )}
-              <QuotaBar
-                label="Weekly"
-                percent={secondaryRemaining}
-                resetLabel={secondaryReset}
-                lastSeenLabel={staleSecondaryLastSeen.label}
-                lastSeenUpToDate={staleSecondaryLastSeen.upToDate}
-                isLive={hasLiveSession}
-                telemetryPending={secondaryTelemetryPending}
-                inTokenCard
-              />
-            </div>
-          </div>
-
-          <div className="relative mt-3.5 overflow-hidden">
-            <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden>
-              <div className="absolute left-2 right-8 top-3 h-8 rounded-full bg-cyan-500/[0.09] blur-xl animate-pulse" />
-              <div className="absolute left-10 right-2 top-8 h-7 rounded-full bg-indigo-500/[0.07] blur-2xl animate-pulse [animation-delay:350ms]" />
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <div className="relative rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
-                <div className="pointer-events-none absolute inset-0 -z-10 rounded-lg bg-[linear-gradient(90deg,rgba(34,211,238,0.08)_0%,rgba(34,211,238,0)_65%)] animate-pulse" aria-hidden />
-                <p
-                  className="break-words whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/95"
-                  title={effectiveCurrentTaskPreview ?? undefined}
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    {hasNextTaskHint(effectiveCurrentTaskPreview) ? <NextTaskBadge /> : null}
-                    <span>{effectiveCurrentTaskPreview ?? "No active task reported"}</span>
-                    {isWorkingNow ? (
-                      <span
-                        className="inline-block h-3 w-[1.5px] rounded-full bg-cyan-300/85 align-middle animate-pulse"
-                        aria-hidden
-                      />
-                    ) : null}
-                  </span>
-                </p>
+            <div className="relative mt-3.5 overflow-hidden">
+              <div
+                className="pointer-events-none absolute inset-0 -z-10"
+                aria-hidden
+              >
+                <div className="absolute left-2 right-8 top-3 h-8 rounded-full bg-cyan-500/[0.09] blur-xl animate-pulse" />
+                <div className="absolute left-10 right-2 top-8 h-7 rounded-full bg-indigo-500/[0.07] blur-2xl animate-pulse [animation-delay:350ms]" />
               </div>
 
-              {showLastTaskPreview ? (
-                <div className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5">
+              <div className="space-y-1.5">
+                <div className="relative rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
+                  <div
+                    className="pointer-events-none absolute inset-0 -z-10 rounded-lg bg-[linear-gradient(90deg,rgba(34,211,238,0.08)_0%,rgba(34,211,238,0)_65%)] animate-pulse"
+                    aria-hidden
+                  />
                   <p
-                    className="break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-300/90"
-                    title={codexLastTaskPreview ?? undefined}
+                    className="break-words whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/95"
+                    title={effectiveCurrentTaskPreview ?? undefined}
                   >
-                    <span className="font-medium text-zinc-200">Last task:</span>
-                    <span className="ml-1 inline-flex items-center gap-1.5">
-                      {hasNextTaskHint(codexLastTaskPreview) ? <NextTaskBadge /> : null}
-                      <span>{codexLastTaskPreview}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      {hasNextTaskHint(effectiveCurrentTaskPreview) ? (
+                        <NextTaskBadge />
+                      ) : null}
+                      <span>
+                        {effectiveCurrentTaskPreview ??
+                          "No active task reported"}
+                      </span>
+                      {showThinkingIndicator ? (
+                        <span
+                          className="inline-block h-3 w-[1.5px] rounded-full bg-cyan-300/85 align-middle animate-pulse"
+                          aria-hidden
+                        />
+                      ) : null}
                     </span>
                   </p>
                 </div>
-              ) : null}
 
-              {isWorkingNow ? (
-                <div className="inline-flex items-center gap-2 rounded-md border border-cyan-500/20 bg-cyan-500/[0.07] px-2 py-1">
-                  <span className="sr-only">Codex thinking</span>
-                  <span className="flex items-end gap-1" aria-hidden>
-                    <span className="h-2 w-1 rounded-full bg-cyan-300/90 animate-bounce [animation-duration:900ms]" />
-                    <span className="h-3 w-1 rounded-full bg-cyan-300/90 animate-bounce [animation-delay:140ms] [animation-duration:900ms]" />
-                    <span className="h-4 w-1 rounded-full bg-cyan-300/90 animate-bounce [animation-delay:280ms] [animation-duration:900ms]" />
-                    <span className="h-3 w-1 rounded-full bg-cyan-300/90 animate-bounce [animation-delay:420ms] [animation-duration:900ms]" />
-                  </span>
-                  <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-cyan-200/90">
-                    thinking…
-                  </span>
-                </div>
-              ) : null}
-
-              {hasSessionTaskPreviews ? (
-                <div className="mt-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.06] px-2.5 py-2">
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">
-                    CLI session tasks
-                  </p>
-                  <ul className="space-y-1.5">
-                    {sessionTaskPreviews.map((preview) => (
-                      <li
-                        key={preview.sessionKey}
-                        className="grid grid-cols-[auto,1fr] items-start gap-2 text-xs"
-                      >
-                        <span className="inline-flex items-center rounded border border-cyan-500/25 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
-                          {formatSessionKeyLabel(preview.sessionKey)}
-                        </span>
-                        <span
-                          className="break-words whitespace-pre-wrap leading-relaxed text-zinc-200/90"
-                          title={preview.taskPreview}
-                        >
-                          <span className="inline-flex items-center gap-1.5">
-                            {hasNextTaskHint(preview.taskPreview) ? <NextTaskBadge /> : null}
-                            <span>{preview.taskPreview}</span>
-                          </span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="sr-only">
-          <div className="min-w-0 space-y-2">
-            <div className="min-w-0">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                {tokenMetricLabel}
-              </p>
-              <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold tabular-nums">
-                <span>{accessibleTokenMetricValue}</span>
-                {isWorkingNow ? (
-                  <span className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
-                    live
-                  </span>
-                ) : null}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Codex CLI sessions
-              </p>
-              <p className="mt-0.5 text-xs font-semibold tabular-nums">
-                {accessibleCodexSessionValue}
-              </p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                Tracked: {codexTrackedSessionCount}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-3">
-        <Button
-          type="button"
-          size="sm"
-          variant="default"
-          className={cn(
-            "h-8 gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/15 px-3 text-xs font-semibold shadow-none hover:bg-emerald-500/25",
-            canUseLocally
-              ? "text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
-              : "text-muted-foreground",
-          )}
-          disabled={useLocalButtonDisabled}
-          title={useLocalButtonDisabledReason ?? undefined}
-          onClick={() => onAction?.(account, "useLocal")}
-        >
-          Use this account
-        </Button>
-        {hasSnapshotMismatch ? (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => onAction?.(account, "repairSnapshotReadd")}
-            >
-              Re-add snapshot
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => onAction?.(account, "repairSnapshotRename")}
-            >
-              Rename snapshot
-            </Button>
-          </>
-        ) : null}
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 gap-1.5 rounded-lg text-xs text-cyan-700 hover:bg-cyan-500/10 hover:text-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200"
-          disabled={!canUseLocally || useLocalBusy}
-          title={useLocalDisabledReason ?? undefined}
-          onClick={() => onAction?.(account, "terminal")}
-        >
-          <SquareTerminal className="h-3 w-3" />
-          Terminal
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => onAction?.(account, "details")}
-        >
-          <ExternalLink className="h-3 w-3" />
-          Details
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 gap-1.5 rounded-lg text-xs text-cyan-700 hover:bg-cyan-500/10 hover:text-cyan-800 disabled:pointer-events-none disabled:text-muted-foreground dark:text-cyan-300 dark:hover:text-cyan-200"
-          disabled={!hasSessionInventory}
-          title={!hasSessionInventory ? "No tracked sessions" : undefined}
-          onClick={() => onAction?.(account, "sessions")}
-        >
-          <ExternalLink className="h-3 w-3" />
-          Sessions
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 gap-1.5 rounded-lg text-xs text-red-600 hover:bg-red-500/10 hover:text-red-700 disabled:pointer-events-none disabled:text-muted-foreground dark:text-red-400 dark:hover:text-red-300"
-          disabled={deleteBusy}
-          onClick={() => onAction?.(account, "delete")}
-        >
-          <Trash2 className="h-3 w-3" />
-          Delete
-        </Button>
-        {status === "paused" && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 gap-1.5 rounded-lg text-xs text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
-            onClick={() => onAction?.(account, "resume")}
-          >
-            <Play className="h-3 w-3" />
-            Resume
-          </Button>
-        )}
-        {(status === "deactivated" || hasExpiredRefreshToken) && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 gap-1.5 rounded-lg text-xs text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
-            onClick={() => onAction?.(account, "reauth")}
-          >
-            <RotateCcw className="h-3 w-3" />
-            Re-auth
-          </Button>
-        )}
-        </div>
-
-        {liveQuotaDebug ? (
-          <div className="mt-2.5">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-700/90 transition-colors hover:bg-cyan-500/15 hover:text-cyan-800 dark:text-cyan-200/90 dark:hover:text-cyan-100"
-              aria-expanded={showQuotaDebug}
-              aria-label="Debug"
-              onClick={() => setShowQuotaDebug((current) => !current)}
-            >
-              Debug
-              <ChevronDown
-                className={cn(
-                  "h-3 w-3 transition-transform duration-200",
-                  showQuotaDebug && "rotate-180",
-                )}
-              />
-            </button>
-
-            {showQuotaDebug ? (
-              <div className="mt-2 space-y-2 rounded-lg border border-cyan-500/25 bg-[#061325] px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
-                    CLI session logs
-                  </p>
-                  <div className="flex items-center gap-1.5 origin-right scale-90">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/10 hover:text-cyan-100"
-                      onClick={() =>
-                        saveQuotaDebugLogToFile(account.accountId, quotaDebugLogText)
-                      }
+                {showLastTaskPreview ? (
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5">
+                    <p
+                      className="break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-300/90"
+                      title={codexLastTaskPreview ?? undefined}
                     >
-                      <Download className="h-3 w-3" />
-                      Save log file
-                    </Button>
-                    <CopyButton value={quotaDebugLogText} label="Copy logs" />
+                      <span className="font-medium text-zinc-200">
+                        Last task:
+                      </span>
+                      <span className="ml-1 inline-flex items-center gap-1.5">
+                        {hasNextTaskHint(codexLastTaskPreview) ? (
+                          <NextTaskBadge />
+                        ) : null}
+                        <span>{codexLastTaskPreview}</span>
+                      </span>
+                    </p>
+                  </div>
+                ) : null}
+
+                {showThinkingIndicator ? (
+                  <div className="inline-flex items-center gap-2 px-0.5 py-0.5">
+                    <span className="sr-only">Codex thinking</span>
+                    <span className="flex items-end gap-1" aria-hidden>
+                      <span className="h-2 w-1 rounded-full bg-zinc-100/95 shadow-[0_0_8px_rgba(255,255,255,0.25)] animate-bounce [animation-duration:900ms]" />
+                      <span className="h-3 w-1 rounded-full bg-zinc-100/95 shadow-[0_0_8px_rgba(255,255,255,0.25)] animate-bounce [animation-delay:140ms] [animation-duration:900ms]" />
+                      <span className="h-4 w-1 rounded-full bg-cyan-200/95 shadow-[0_0_10px_rgba(103,232,249,0.35)] animate-bounce [animation-delay:280ms] [animation-duration:900ms]" />
+                      <span className="h-3 w-1 rounded-full bg-zinc-100/95 shadow-[0_0_8px_rgba(255,255,255,0.25)] animate-bounce [animation-delay:420ms] [animation-duration:900ms]" />
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-100/95">
+                      thinking…
+                    </span>
+                  </div>
+                ) : null}
+
+                {hasSessionTaskPreviews ? (
+                  <div className="mt-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.06] px-2.5 py-2">
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">
+                      CLI session tasks
+                    </p>
+                    <ul className="space-y-1.5">
+                      {sessionTaskPreviews.map((preview) => (
+                        <li
+                          key={preview.sessionKey}
+                          className="grid grid-cols-[auto,1fr] items-start gap-2 text-xs"
+                        >
+                          <span className="inline-flex items-center rounded border border-cyan-500/25 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                            {formatSessionKeyLabel(preview.sessionKey)}
+                          </span>
+                          <span
+                            className="break-words whitespace-pre-wrap leading-relaxed text-zinc-200/90"
+                            title={preview.taskPreview}
+                          >
+                            <span className="inline-flex items-center gap-1.5">
+                              {hasNextTaskHint(preview.taskPreview) ? (
+                                <NextTaskBadge />
+                              ) : null}
+                              <span>{preview.taskPreview}</span>
+                            </span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="sr-only">
+            <div className="min-w-0 space-y-2">
+              <div className="min-w-0">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {tokenMetricLabel}
+                </p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold tabular-nums">
+                  <span>{accessibleTokenMetricValue}</span>
+                  {isWorkingNow ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                      live
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Codex CLI sessions
+                </p>
+                <p className="mt-0.5 text-xs font-semibold tabular-nums">
+                  {accessibleCodexSessionValue}
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  Tracked: {codexTrackedSessionCount}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              className={cn(
+                "h-8 gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/15 px-3 text-xs font-semibold shadow-none hover:bg-emerald-500/25",
+                canUseLocally
+                  ? "text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
+                  : "text-muted-foreground",
+              )}
+              disabled={useLocalButtonDisabled}
+              title={useLocalButtonDisabledReason ?? undefined}
+              onClick={() => onAction?.(account, "useLocal")}
+            >
+              Use this account
+            </Button>
+            {hasSnapshotMismatch ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => onAction?.(account, "repairSnapshotReadd")}
+                >
+                  Re-add snapshot
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => onAction?.(account, "repairSnapshotRename")}
+                >
+                  Rename snapshot
+                </Button>
+              </>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 rounded-lg text-xs text-cyan-700 hover:bg-cyan-500/10 hover:text-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200"
+              disabled={!canUseLocally || useLocalBusy}
+              title={useLocalDisabledReason ?? undefined}
+              onClick={() => onAction?.(account, "terminal")}
+            >
+              <SquareTerminal className="h-3 w-3" />
+              Terminal
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => onAction?.(account, "details")}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Details
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 rounded-lg text-xs text-cyan-700 hover:bg-cyan-500/10 hover:text-cyan-800 disabled:pointer-events-none disabled:text-muted-foreground dark:text-cyan-300 dark:hover:text-cyan-200"
+              disabled={!hasSessionInventory}
+              title={!hasSessionInventory ? "No tracked sessions" : undefined}
+              onClick={() => onAction?.(account, "sessions")}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Sessions
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 rounded-lg text-xs text-red-600 hover:bg-red-500/10 hover:text-red-700 disabled:pointer-events-none disabled:text-muted-foreground dark:text-red-400 dark:hover:text-red-300"
+              disabled={deleteBusy}
+              onClick={() => onAction?.(account, "delete")}
+            >
+              <Trash2 className="h-3 w-3" />
+              Delete
+            </Button>
+            {status === "paused" && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1.5 rounded-lg text-xs text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                onClick={() => onAction?.(account, "resume")}
+              >
+                <Play className="h-3 w-3" />
+                Resume
+              </Button>
+            )}
+            {(status === "deactivated" || hasExpiredRefreshToken) && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1.5 rounded-lg text-xs text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+                onClick={() => onAction?.(account, "reauth")}
+              >
+                <RotateCcw className="h-3 w-3" />
+                Re-auth
+              </Button>
+            )}
+          </div>
+
+          {liveQuotaDebug ? (
+            <div className="mt-2.5">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-700/90 transition-colors hover:bg-cyan-500/15 hover:text-cyan-800 dark:text-cyan-200/90 dark:hover:text-cyan-100"
+                aria-expanded={showQuotaDebug}
+                aria-label="Debug"
+                onClick={() => setShowQuotaDebug((current) => !current)}
+              >
+                Debug
+                <ChevronDown
+                  className={cn(
+                    "h-3 w-3 transition-transform duration-200",
+                    showQuotaDebug && "rotate-180",
+                  )}
+                />
+              </button>
+
+              {showQuotaDebug ? (
+                <div className="mt-2 space-y-2 rounded-lg border border-cyan-500/25 bg-[#061325] px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
+                      CLI session logs
+                    </p>
+                    <div className="flex items-center gap-1.5 origin-right scale-90">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/10 hover:text-cyan-100"
+                        onClick={() =>
+                          saveQuotaDebugLogToFile(
+                            account.accountId,
+                            quotaDebugLogText,
+                          )
+                        }
+                      >
+                        <Download className="h-3 w-3" />
+                        Save log file
+                      </Button>
+                      <CopyButton value={quotaDebugLogText} label="Copy logs" />
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-cyan-500/20 bg-[#020812] p-1.5">
+                    <ol className="max-h-56 overflow-y-auto font-mono text-[11px] leading-5 text-cyan-100">
+                      {quotaDebugLogText.split("\n").map((line, index) => (
+                        <li
+                          key={`${account.accountId}-debug-line-${index}`}
+                          className="grid grid-cols-[2.2rem_minmax(0,1fr)] gap-2 rounded-sm px-1.5 even:bg-cyan-500/[0.06]"
+                        >
+                          <span className="select-none text-right text-cyan-400/55">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <span className="break-all">{line}</span>
+                        </li>
+                      ))}
+                    </ol>
                   </div>
                 </div>
-                <div className="rounded-md border border-cyan-500/20 bg-[#020812] p-1.5">
-                  <ol className="max-h-56 overflow-y-auto font-mono text-[11px] leading-5 text-cyan-100">
-                    {quotaDebugLogText.split("\n").map((line, index) => (
-                      <li
-                        key={`${account.accountId}-debug-line-${index}`}
-                        className="grid grid-cols-[2.2rem_minmax(0,1fr)] gap-2 rounded-sm px-1.5 even:bg-cyan-500/[0.06]"
-                      >
-                        <span className="select-none text-right text-cyan-400/55">
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <span className="break-all">{line}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
       {showUsageLimitGraceOverlay ? (
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
@@ -1420,13 +1382,25 @@ export function AccountCard(props: AccountCardProps) {
       ) : null}
       {showMissingSnapshotLockOverlay ? (
         <div className="absolute inset-0 z-30 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/45 backdrop-blur-[1.5px]" aria-hidden />
+          <div
+            className="absolute inset-0 bg-black/45 backdrop-blur-[1.5px]"
+            aria-hidden
+          />
           <div className="relative flex w-full max-w-[13rem] flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/75 px-4 py-3.5 text-center shadow-[0_20px_55px_rgba(0,0,0,0.55)] backdrop-blur-md">
             <div className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/25 bg-cyan-400/10">
               <Lock className="h-4 w-4 text-cyan-200" aria-hidden />
             </div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
               Locked account
+            </p>
+            <p
+              className={cn(
+                "max-w-full truncate font-mono text-xs text-zinc-200/90",
+                lockedAccountIdentityBlurred && "privacy-blur",
+              )}
+              title={lockedAccountIdentity}
+            >
+              {lockedAccountIdentity}
             </p>
             <Button
               type="button"

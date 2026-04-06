@@ -13,7 +13,12 @@ from app.core.crypto import TokenEncryptor
 from app.core.usage.models import UsagePayload
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.usage.additional_quota_keys import canonicalize_additional_quota_key
-from app.modules.usage.updater import UsageUpdater, _last_failed_refresh, _last_successful_refresh
+from app.modules.usage.updater import (
+    UsageUpdater,
+    _deactivation_failure_streak,
+    _last_failed_refresh,
+    _last_successful_refresh,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -23,9 +28,11 @@ def _clear_refresh_cache():
     """Clear the module-level freshness cache between tests."""
     _last_successful_refresh.clear()
     _last_failed_refresh.clear()
+    _deactivation_failure_streak.clear()
     yield
     _last_successful_refresh.clear()
     _last_failed_refresh.clear()
+    _deactivation_failure_streak.clear()
 
 
 @dataclass(frozen=True, slots=True)
@@ -426,6 +433,7 @@ async def test_usage_updater_recovers_deactivated_refresh_token_reused_from_sibl
 @pytest.mark.asyncio
 async def test_usage_updater_deactivates_on_account_invalid_4xx(monkeypatch) -> None:
     monkeypatch.setenv("CODEX_LB_USAGE_REFRESH_ENABLED", "true")
+    monkeypatch.setattr("app.modules.usage.updater._DEACTIVATION_FAILURE_THRESHOLD", 1)
     from app.core.clients.usage import UsageFetchError
     from app.core.config.settings import get_settings
 
@@ -456,6 +464,7 @@ async def test_usage_updater_deactivates_on_account_invalid_4xx(monkeypatch) -> 
 @pytest.mark.asyncio
 async def test_usage_updater_deactivates_on_disconnected_account_403(monkeypatch) -> None:
     monkeypatch.setenv("CODEX_LB_USAGE_REFRESH_ENABLED", "true")
+    monkeypatch.setattr("app.modules.usage.updater._DEACTIVATION_FAILURE_THRESHOLD", 1)
     from app.core.clients.usage import UsageFetchError
     from app.core.config.settings import get_settings
 
@@ -481,6 +490,42 @@ async def test_usage_updater_deactivates_on_disconnected_account_403(monkeypatch
     assert update["status"] == AccountStatus.DEACTIVATED
     assert "403" in update["deactivation_reason"]
     assert "Forbidden" in update["deactivation_reason"]
+
+
+@pytest.mark.asyncio
+async def test_usage_updater_defers_deactivation_until_repeated_client_errors(monkeypatch) -> None:
+    monkeypatch.setenv("CODEX_LB_USAGE_REFRESH_ENABLED", "true")
+    monkeypatch.setattr("app.modules.usage.updater._DEACTIVATION_FAILURE_THRESHOLD", 3)
+    monkeypatch.setattr("app.modules.usage.updater._FAILED_REFRESH_BACKOFF_SECONDS", 0)
+    from app.core.clients.usage import UsageFetchError
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    async def stub_fetch_usage_402(**_: Any) -> UsagePayload:
+        raise UsageFetchError(402, "Payment Required")
+
+    monkeypatch.setattr("app.modules.usage.updater.fetch_usage", stub_fetch_usage_402)
+
+    usage_repo = StubUsageRepository()
+    accounts_repo = StubAccountsRepository()
+    updater = UsageUpdater(usage_repo, accounts_repo=accounts_repo)
+
+    acc = _make_account("acc_402_deferred", "workspace_402_deferred", email="deferred@example.com")
+    accounts_repo.accounts_by_id[acc.id] = acc
+
+    await updater.refresh_accounts([acc], latest_usage={})
+    await updater.refresh_accounts([acc], latest_usage={})
+    assert len(accounts_repo.status_updates) == 0
+    assert acc.status == AccountStatus.ACTIVE
+
+    await updater.refresh_accounts([acc], latest_usage={})
+
+    assert len(accounts_repo.status_updates) == 1
+    update = accounts_repo.status_updates[0]
+    assert update["account_id"] == acc.id
+    assert update["status"] == AccountStatus.DEACTIVATED
+    assert "402" in (update["deactivation_reason"] or "")
 
 
 @pytest.mark.asyncio
@@ -542,6 +587,7 @@ async def test_usage_updater_does_not_deactivate_on_401(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_usage_updater_deactivates_on_401_after_forced_refresh_retry(monkeypatch) -> None:
     monkeypatch.setenv("CODEX_LB_USAGE_REFRESH_ENABLED", "true")
+    monkeypatch.setattr("app.modules.usage.updater._DEACTIVATION_FAILURE_THRESHOLD", 1)
     from app.core.clients.usage import UsageFetchError
     from app.core.config.settings import get_settings
 
@@ -753,6 +799,7 @@ async def test_usage_updater_refresh_accounts_returns_false_when_rate_limit_miss
 @pytest.mark.asyncio
 async def test_usage_updater_refresh_accounts_returns_false_on_401_retry_failure(monkeypatch) -> None:
     monkeypatch.setenv("CODEX_LB_USAGE_REFRESH_ENABLED", "true")
+    monkeypatch.setattr("app.modules.usage.updater._DEACTIVATION_FAILURE_THRESHOLD", 1)
     from app.core.clients.usage import UsageFetchError
     from app.core.config.settings import get_settings
 

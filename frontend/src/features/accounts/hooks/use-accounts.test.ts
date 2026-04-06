@@ -44,7 +44,7 @@ describe("useAccounts", () => {
       }),
     ];
 
-    expect(resolveAccountsPollInterval(workingAccounts)).toBe(1_000);
+    expect(resolveAccountsPollInterval(workingAccounts)).toBe(5_000);
   });
 
   it("uses default polling when no account is working now", () => {
@@ -83,7 +83,7 @@ describe("useAccounts", () => {
       }),
     ];
 
-    expect(resolveAccountsPollInterval(trackedAccounts)).toBe(1_000);
+    expect(resolveAccountsPollInterval(trackedAccounts)).toBe(5_000);
   });
 
   it("uses fast polling when only fresh debug raw samples are present", () => {
@@ -120,7 +120,7 @@ describe("useAccounts", () => {
       }),
     ];
 
-    expect(resolveAccountsPollInterval(sampledAccounts)).toBe(1_000);
+    expect(resolveAccountsPollInterval(sampledAccounts)).toBe(5_000);
   });
 
   it("loads accounts and invalidates related queries after mutations", async () => {

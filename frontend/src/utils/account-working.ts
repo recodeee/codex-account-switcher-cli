@@ -489,6 +489,7 @@ type WorkingNowAccount = Pick<
   AccountSummary,
   | "accountId"
   | "codexAuth"
+  | "resetAtPrimary"
   | "codexLiveSessionCount"
   | "codexSessionCount"
   | "codexTrackedSessionCount"
@@ -668,6 +669,7 @@ export function isAccountWorkingNow(
     AccountSummary,
     | "accountId"
     | "codexAuth"
+    | "resetAtPrimary"
     | "status"
     | "codexLiveSessionCount"
     | "codexSessionCount"
@@ -735,12 +737,18 @@ export function isAccountWorkingNow(
       account,
       nowMs,
     );
-    if (
-      usageLimitHitCountdownMs != null &&
-      usageLimitHitCountdownMs <= 0 &&
-      !hasStrongWorkingNowSessionEvidence(account, nowMs)
-    ) {
-      return false;
+    if (usageLimitHitCountdownMs != null && usageLimitHitCountdownMs <= 0) {
+      const primaryResetAtMs =
+        parseResetAtMs(account.resetAtPrimary) ??
+        parseResetAtMs(quotaState.deferredPrimaryQuotaFallback?.resetAt);
+      // Once an account hits the 5h usage limit and the grace window expires,
+      // keep it out of "Working now" until the 5h window reset is reached.
+      if (primaryResetAtMs == null || nowMs < primaryResetAtMs) {
+        return false;
+      }
+      if (!hasStrongWorkingNowSessionEvidence(account, nowMs)) {
+        return false;
+      }
     }
   }
 

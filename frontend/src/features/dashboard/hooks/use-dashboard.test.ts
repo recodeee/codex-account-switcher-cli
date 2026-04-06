@@ -69,9 +69,9 @@ describe("useDashboard", () => {
     const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
       ?.refetchInterval;
     if (typeof refetchInterval === "function") {
-      expect(refetchInterval(query as never)).toBe(1_000);
+      expect(refetchInterval(query as never)).toBe(5_000);
     } else {
-      expect(refetchInterval).toBe(1_000);
+      expect(refetchInterval).toBe(5_000);
     }
   });
 
@@ -159,9 +159,9 @@ describe("useDashboard", () => {
     const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
       ?.refetchInterval;
     if (typeof refetchInterval === "function") {
-      expect(refetchInterval(query as never)).toBe(1_000);
+      expect(refetchInterval(query as never)).toBe(5_000);
     } else {
-      expect(refetchInterval).toBe(1_000);
+      expect(refetchInterval).toBe(5_000);
     }
   });
 
@@ -222,9 +222,9 @@ describe("useDashboard", () => {
     const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
       ?.refetchInterval;
     if (typeof refetchInterval === "function") {
-      expect(refetchInterval(query as never)).toBe(1_000);
+      expect(refetchInterval(query as never)).toBe(5_000);
     } else {
-      expect(refetchInterval).toBe(1_000);
+      expect(refetchInterval).toBe(5_000);
     }
   });
 
