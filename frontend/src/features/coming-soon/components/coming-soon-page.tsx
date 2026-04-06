@@ -2,11 +2,57 @@
 
 import type { FormEvent } from "react";
 import { useState } from "react";
-import { ChevronDown, Clock, ExternalLink, SquareTerminal, Trash2 } from "lucide-react";
 
 import { CodexLogo } from "@/components/brand/codex-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountCard } from "@/features/dashboard/components/account-card";
+import type { AccountSummary } from "@/features/dashboard/schemas";
+
+const DEMO_ACCOUNT_CARD: AccountSummary = {
+  accountId: "coming-soon-demo-account",
+  email: "demo@demo.com",
+  displayName: "demo@demo.com",
+  planType: "team",
+  status: "active",
+  usage: {
+    primaryRemainingPercent: 73,
+    secondaryRemainingPercent: 38,
+  },
+  resetAtPrimary: new Date(
+    Date.now() + (4 * 60 + 37) * 60 * 1000,
+  ).toISOString(),
+  resetAtSecondary: new Date(
+    Date.now() + (6 * 24 * 60 + 23 * 60) * 60 * 1000,
+  ).toISOString(),
+  lastUsageRecordedAtPrimary: new Date().toISOString(),
+  lastUsageRecordedAtSecondary: new Date().toISOString(),
+  windowMinutesPrimary: 300,
+  windowMinutesSecondary: 10080,
+  requestUsage: {
+    requestCount: 0,
+    totalTokens: 216,
+    cachedInputTokens: 0,
+    totalCostUsd: 0,
+  },
+  codexLiveSessionCount: 1,
+  codexTrackedSessionCount: 0,
+  codexSessionCount: 0,
+  codexCurrentTaskPreview: "No active task reported",
+  codexLastTaskPreview: null,
+  codexSessionTaskPreviews: [],
+  codexAuth: {
+    hasSnapshot: true,
+    snapshotName: "demo@demo.com",
+    activeSnapshotName: "demo@demo.com",
+    isActiveSnapshot: true,
+    hasLiveSession: false,
+    liveUsageConfidence: "high",
+    expectedSnapshotName: "demo@demo.com",
+    snapshotNameMatchesEmail: true,
+  },
+  additionalQuotas: [],
+};
 
 export function ComingSoonPage() {
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
@@ -52,8 +98,8 @@ export function ComingSoonPage() {
         </div>
 
         <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">
-          We are preparing something new for recodee.com. If you are interested,
-          enter your email address below and hit submit.
+          We’re building something dangerously useful. Drop your email and we’ll
+          let you know when it’s ready.
         </p>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -64,8 +110,8 @@ export function ComingSoonPage() {
               </h2>
               <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
                 <li>
-                  Detects official Codex CLI login/session signals so you can see
-                  account state in one place.
+                  Detects official Codex CLI login/session signals so you can
+                  see account state in one place.
                 </li>
                 <li>
                   Live account status instead of manual <code>/status</code>{" "}
@@ -76,8 +122,8 @@ export function ComingSoonPage() {
                   quota.
                 </li>
                 <li>
-                  Reset-window planning for multi-account setups with visible usage
-                  windows.
+                  Reset-window planning for multi-account setups with visible
+                  usage windows.
                 </li>
               </ul>
             </div>
@@ -95,156 +141,21 @@ export function ComingSoonPage() {
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-3xl border border-cyan-500/20 bg-[linear-gradient(160deg,rgba(11,31,58,0.98)_0%,rgba(10,22,43,0.99)_54%,rgba(9,16,32,1)_100%)] p-4 shadow-[0_20px_55px_rgba(0,0,0,0.45)]">
-              <div className="rounded-2xl border border-white/10 bg-[linear-gradient(165deg,rgba(15,34,64,0.96)_0%,rgba(11,21,40,0.98)_100%)] p-3.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1">
-                    <p className="text-xs font-semibold tracking-[0.18em] text-slate-100">
-                      OPENAI
-                    </p>
-                    <p className="text-xs font-medium tracking-[0.14em] text-slate-300">
-                      TEAM · demo@demo.com
-                    </p>
-                  </div>
-                  <div className="space-y-1 text-right">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/30 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                      Active
-                    </span>
-                    <p className="text-[11px] font-semibold tracking-[0.16em] text-slate-300">
-                      TOKEN CARD
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2.5">
-                  <div className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
-                    <p className="text-[10px] font-medium tracking-[0.13em] text-slate-400">
-                      TOKENS:
-                    </p>
-                    <p className="mt-1 text-3xl font-semibold leading-none tracking-tight text-white">
-                      81k
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
-                    <p className="text-[10px] font-medium tracking-[0.13em] text-slate-400">
-                      CLI SESSIONS:
-                    </p>
-                    <p className="mt-1 text-3xl font-semibold leading-none tracking-tight text-white">
-                      3
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2.5">
-                  <div className="rounded-lg border border-white/10 bg-black/25 p-2.5">
-                    <div className="mb-1 flex items-center justify-between text-[11px]">
-                      <span className="text-slate-300">5h</span>
-                      <span className="rounded-full border border-emerald-300/25 bg-emerald-500/15 px-1.5 py-0.5 font-semibold text-emerald-300">
-                        73%
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-cyan-500/20">
-                      <div className="h-full w-[73%] rounded-full bg-cyan-300" />
-                    </div>
-                    <p className="mt-2 flex items-center gap-1 text-[11px] text-slate-400">
-                      <Clock className="h-3 w-3" />
-                      in 4h 37m
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">last seen 1m ago</p>
-                  </div>
-
-                  <div className="rounded-lg border border-white/10 bg-black/25 p-2.5">
-                    <div className="mb-1 flex items-center justify-between text-[11px]">
-                      <span className="text-slate-300">DUMMY WEEKLY</span>
-                      <span className="rounded-full border border-emerald-300/25 bg-emerald-500/15 px-1.5 py-0.5 font-semibold text-emerald-300">
-                        38%
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-cyan-500/20">
-                      <div className="h-full w-[38%] rounded-full bg-cyan-300" />
-                    </div>
-                    <p className="mt-2 flex items-center gap-1 text-[11px] text-slate-400">
-                      <Clock className="h-3 w-3" />
-                      in 6d 23h
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">last seen 1m ago</p>
-                  </div>
-                </div>
-
-                <p className="mt-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-slate-200">
-                  No active task reported
-                </p>
-
-                <div className="mt-3 border-t border-white/10 pt-3">
-                  <Button
-                    type="button"
-                    disabled
-                    className="h-10 w-full rounded-xl border border-emerald-400/35 bg-gradient-to-r from-emerald-500/22 via-emerald-500/16 to-cyan-500/14 text-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Use this account
-                  </Button>
-
-                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled
-                      className="h-7 gap-1.5 rounded-lg text-xs text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <SquareTerminal className="h-3 w-3" />
-                      Terminal
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled
-                      className="h-7 gap-1.5 rounded-lg text-xs text-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      Details
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled
-                      className="h-7 gap-1.5 rounded-lg text-xs text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      Sessions
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled
-                      className="h-7 gap-1.5 rounded-lg text-xs text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Delete
-                    </Button>
-                  </div>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled
-                    className="mt-2 h-7 rounded-md border-cyan-500/35 bg-cyan-500/10 px-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    DEBUG
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
+            <div className="[&_button]:pointer-events-none [&_button]:cursor-not-allowed [&_button]:opacity-55">
+              <AccountCard
+                account={DEMO_ACCOUNT_CARD}
+                useLocalBusy
+                deleteBusy
+                onAction={() => {}}
+              />
             </div>
           </div>
         </div>
 
-        <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <form
+          onSubmit={onSubmit}
+          className="mt-8 flex flex-col gap-3 sm:flex-row"
+        >
           <Input
             type="email"
             name="email"
@@ -270,8 +181,8 @@ export function ComingSoonPage() {
 
         {submittedEmail ? (
           <p className="mt-4 text-sm text-emerald-600 dark:text-emerald-400">
-            Thanks! We will keep <span className="font-medium">{submittedEmail}</span>{" "}
-            posted.
+            Thanks! We will keep{" "}
+            <span className="font-medium">{submittedEmail}</span> posted.
           </p>
         ) : null}
       </section>

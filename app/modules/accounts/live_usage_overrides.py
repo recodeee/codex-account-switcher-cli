@@ -1002,12 +1002,14 @@ def _resolve_session_presence_snapshot_names_for_account(
     snapshot_names_from_index: list[str],
     fallback_snapshot_names: list[str],
 ) -> list[str]:
-    """Resolve session-presence snapshot candidates without cross-account leakage.
+    """Resolve snapshot names used only for live-session presence hints.
 
-    Session visibility should primarily follow the selected snapshot. We still
-    allow same-account local-part aliases (e.g. ``recodee`` <->
-    ``recodeeedix``) so existing active-session hints keep working, but avoid
-    inheriting unrelated snapshots from stale index buckets.
+    Unlike quota attribution, live-session presence must tolerate filename
+    aliasing across snapshot renames (for example, long-running terminals that
+    still point at an older snapshot filename for the same account identity).
+    The account-owned candidate list has already gone through canonical
+    resolution + email-identity filtering, so for presence hints we can keep
+    all of those names and augment with the expected email snapshot alias.
     """
 
     if not snapshot_names_from_index:
@@ -1016,59 +1018,9 @@ def _resolve_session_presence_snapshot_names_for_account(
             snapshot_names=fallback_snapshot_names,
         )
 
-    if not selected_snapshot_name:
-        return _augment_session_presence_snapshot_names_with_email_aliases(
-            account_email=account_email,
-            snapshot_names=snapshot_names_from_index,
-        )
-
-    selected = _normalize_snapshot_name(selected_snapshot_name)
-    account_local_part = _normalize_snapshot_local_part(account_email)
-    selected_local_part = _normalize_snapshot_local_part(selected_snapshot_name)
-
-    if selected is None:
-        return fallback_snapshot_names
-
-    scoped_names: list[str] = []
-    seen: set[str] = set()
-    for snapshot_name in snapshot_names_from_index:
-        normalized_snapshot = _normalize_snapshot_name(snapshot_name)
-        if normalized_snapshot is None or normalized_snapshot in seen:
-            continue
-        snapshot_local_part = _normalize_snapshot_local_part(snapshot_name)
-
-        if normalized_snapshot == selected:
-            scoped_names.append(snapshot_name)
-            seen.add(normalized_snapshot)
-            continue
-
-        if account_local_part is None or snapshot_local_part is None:
-            continue
-
-        if snapshot_local_part == account_local_part:
-            scoped_names.append(snapshot_name)
-            seen.add(normalized_snapshot)
-            continue
-
-        if selected_local_part is None:
-            continue
-
-        if (
-            snapshot_local_part.startswith(account_local_part)
-            and selected_local_part.startswith(account_local_part)
-        ):
-            scoped_names.append(snapshot_name)
-            seen.add(normalized_snapshot)
-
-    if scoped_names:
-        return _augment_session_presence_snapshot_names_with_email_aliases(
-            account_email=account_email,
-            snapshot_names=scoped_names,
-        )
-
     return _augment_session_presence_snapshot_names_with_email_aliases(
         account_email=account_email,
-        snapshot_names=fallback_snapshot_names,
+        snapshot_names=snapshot_names_from_index,
     )
 
 

@@ -13,7 +13,7 @@ describe("ComingSoonPage", () => {
     expect(
       screen.getByRole("heading", { name: "What the dashboard currently does" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("TEAM · demo@demo.com")).toBeInTheDocument();
+    expect(screen.getByText("Team · demo@demo.com")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
     expect(screen.getByLabelText("Email address")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Submit" })).toBeInTheDocument();

@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { isLikelyEmailValue } from "@/components/blur-email";
 import { CopyButton } from "@/components/copy-button";
@@ -75,6 +76,10 @@ export type AccountCardProps = {
   showAccountId?: boolean;
   useLocalBusy?: boolean;
   deleteBusy?: boolean;
+  initialSessionTasksCollapsed?: boolean;
+  disableSecondaryActions?: boolean;
+  forceWorkingIndicator?: boolean;
+  taskPanelAddon?: ReactNode;
   onAction?: (account: AccountSummary, action: AccountAction) => void;
 };
 
@@ -623,6 +628,10 @@ export function AccountCard(props: AccountCardProps) {
     showAccountId = false,
     useLocalBusy = false,
     deleteBusy = false,
+    initialSessionTasksCollapsed = false,
+    disableSecondaryActions = false,
+    forceWorkingIndicator = false,
+    taskPanelAddon,
     onAction,
   } = props;
   const tokensRemaining = props.tokensRemaining ?? null;
@@ -639,7 +648,9 @@ export function AccountCard(props: AccountCardProps) {
   }, []);
 
   const [showQuotaDebug, setShowQuotaDebug] = useState(false);
-  const [sessionTasksCollapsed, setSessionTasksCollapsed] = useState(false);
+  const [sessionTasksCollapsed, setSessionTasksCollapsed] = useState(
+    initialSessionTasksCollapsed,
+  );
   const navigate = useNavigate();
   const liveQuotaDebug = account.liveQuotaDebug ?? null;
   const quotaDisplayAccountKey = buildQuotaDisplayAccountKey(account);
@@ -974,7 +985,8 @@ export function AccountCard(props: AccountCardProps) {
   const isCurrentTaskWaiting =
     displayCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL;
   const showWorkingIndicator =
-    isWorkingNow && effectiveCurrentTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
+    (forceWorkingIndicator || isWorkingNow) &&
+    effectiveCurrentTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
   const showWaitingForTaskIndicator =
     isWorkingNow && effectiveCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL;
   const sessionTaskPreviews = useMemo(() => {
@@ -1322,6 +1334,7 @@ export function AccountCard(props: AccountCardProps) {
                       </span>
                     </span>
                   </p>
+                  {taskPanelAddon ? <div className="mt-2">{taskPanelAddon}</div> : null}
                 </div>
 
                 {showLastTaskPreview ? (
@@ -1489,6 +1502,7 @@ export function AccountCard(props: AccountCardProps) {
                   size="sm"
                   variant="ghost"
                   className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+                  disabled={disableSecondaryActions}
                   onClick={() => onAction?.(account, "repairSnapshotReadd")}
                 >
                   Re-add snapshot
@@ -1498,6 +1512,7 @@ export function AccountCard(props: AccountCardProps) {
                   size="sm"
                   variant="ghost"
                   className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+                  disabled={disableSecondaryActions}
                   onClick={() => onAction?.(account, "repairSnapshotRename")}
                 >
                   Rename snapshot
@@ -1509,43 +1524,44 @@ export function AccountCard(props: AccountCardProps) {
               size="sm"
               variant="ghost"
               className="h-7 gap-1.5 rounded-lg text-xs text-cyan-700 hover:bg-cyan-500/10 hover:text-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200"
-              disabled={!canUseLocally || useLocalBusy}
+              disabled={disableSecondaryActions || !canUseLocally || useLocalBusy}
               title={useLocalDisabledReason ?? undefined}
               onClick={() => onAction?.(account, "terminal")}
             >
               <SquareTerminal className="h-3 w-3" />
               Terminal
             </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+                  disabled={disableSecondaryActions}
+                  onClick={() => onAction?.(account, "details")}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Details
+                </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => onAction?.(account, "details")}
-            >
-              <ExternalLink className="h-3 w-3" />
-              Details
+                  className="h-7 gap-1.5 rounded-lg text-xs text-cyan-700 hover:bg-cyan-500/10 hover:text-cyan-800 disabled:pointer-events-none disabled:text-muted-foreground dark:text-cyan-300 dark:hover:text-cyan-200"
+                  disabled={disableSecondaryActions || !hasSessionInventory}
+                  title={!hasSessionInventory ? "No tracked sessions" : undefined}
+                  onClick={() => onAction?.(account, "sessions")}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Sessions
             </Button>
             <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1.5 rounded-lg text-xs text-cyan-700 hover:bg-cyan-500/10 hover:text-cyan-800 disabled:pointer-events-none disabled:text-muted-foreground dark:text-cyan-300 dark:hover:text-cyan-200"
-              disabled={!hasSessionInventory}
-              title={!hasSessionInventory ? "No tracked sessions" : undefined}
-              onClick={() => onAction?.(account, "sessions")}
-            >
-              <ExternalLink className="h-3 w-3" />
-              Sessions
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1.5 rounded-lg text-xs text-red-600 hover:bg-red-500/10 hover:text-red-700 disabled:pointer-events-none disabled:text-muted-foreground dark:text-red-400 dark:hover:text-red-300"
-              disabled={deleteBusy}
-              onClick={() => onAction?.(account, "delete")}
-            >
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1.5 rounded-lg text-xs text-red-600 hover:bg-red-500/10 hover:text-red-700 disabled:pointer-events-none disabled:text-muted-foreground dark:text-red-400 dark:hover:text-red-300"
+                  disabled={deleteBusy || disableSecondaryActions}
+                  onClick={() => onAction?.(account, "delete")}
+                >
               <Trash2 className="h-3 w-3" />
               Delete
             </Button>
@@ -1555,6 +1571,7 @@ export function AccountCard(props: AccountCardProps) {
                 size="sm"
                 variant="ghost"
                 className="h-7 gap-1.5 rounded-lg text-xs text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                disabled={disableSecondaryActions}
                 onClick={() => onAction?.(account, "resume")}
               >
                 <Play className="h-3 w-3" />
@@ -1567,6 +1584,7 @@ export function AccountCard(props: AccountCardProps) {
                 size="sm"
                 variant="ghost"
                 className="h-7 gap-1.5 rounded-lg text-xs text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+                disabled={disableSecondaryActions}
                 onClick={() => onAction?.(account, "reauth")}
               >
                 <RotateCcw className="h-3 w-3" />
