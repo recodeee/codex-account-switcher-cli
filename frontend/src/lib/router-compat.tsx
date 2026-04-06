@@ -104,6 +104,17 @@ function isNextRuntimeDetected(): boolean {
   return Boolean(maybeNextData.__NEXT_DATA__ || maybeNextData.__next_f);
 }
 
+function isJSDOMRuntime(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  return /\bjsdom\b/i.test(navigator.userAgent);
+}
+
+function shouldUseHardNavigationFallback(): boolean {
+  return isNextRuntimeDetected() && !isJSDOMRuntime();
+}
+
 function navigateWithBrowserHistory(
   to: To,
   options?: NavigateOptions & { hardNavigation?: boolean },
@@ -206,7 +217,7 @@ export function useNavigate() {
 
     navigateWithBrowserHistory(to, {
       ...options,
-      hardNavigation: isNextRuntimeDetected(),
+      hardNavigation: shouldUseHardNavigationFallback(),
     });
   };
 }
@@ -332,7 +343,7 @@ export function NavLink({ to, className, children, onClick }: NavLinkProps) {
 
         event.preventDefault();
         navigateWithBrowserHistory(to, {
-          hardNavigation: isNextRuntimeDetected(),
+          hardNavigation: shouldUseHardNavigationFallback(),
         });
       }}
     >
