@@ -87,14 +87,6 @@ collect_frontend_next_pids() {
   done | sort -u
 }
 
-if port_in_use "$port"; then
-  original_port="$port"
-  while port_in_use "$port"; do
-    port=$((port + 1))
-  done
-  echo "[codex-lb] Port ${original_port} is busy. Falling back to ${port}."
-fi
-
 if [ -f "$lock_file" ]; then
   existing_pid="$(python3 - "$lock_file" <<'PY'
 import json, pathlib, sys
@@ -133,6 +125,14 @@ rm -f "$lock_file" 2>/dev/null || true
 
 if normalize_bool "${NEXT_DEV_CLEAR_CACHE_ON_START:-true}"; then
   rm -rf "${frontend_dir}/.next/dev/cache" 2>/dev/null || true
+fi
+
+if port_in_use "$port"; then
+  original_port="$port"
+  while port_in_use "$port"; do
+    port=$((port + 1))
+  done
+  echo "[codex-lb] Port ${original_port} is busy. Falling back to ${port}."
 fi
 
 bun install --frozen-lockfile
