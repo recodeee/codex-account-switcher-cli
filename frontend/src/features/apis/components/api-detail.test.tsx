@@ -231,7 +231,7 @@ describe("ApiDetail", () => {
 		expect(screen.getByRole("switch")).toBeChecked();
 	});
 
-	it("skips enter animation on first selected key render and only animates when the key changes", () => {
+	it("keeps detail card stable without enter animation while key selection changes", () => {
 		const firstKey = createApiKey({ id: "key-first", name: "First key" });
 		const secondKey = createApiKey({ id: "key-second", name: "Second key" });
 
@@ -263,6 +263,6 @@ describe("ApiDetail", () => {
 		);
 
 		const switchedCard = container.firstElementChild;
-		expect(switchedCard).toHaveClass("animate-fade-in-up");
+		expect(switchedCard).not.toHaveClass("animate-fade-in-up");
 	});
 });

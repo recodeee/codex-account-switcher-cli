@@ -98,7 +98,7 @@ describe("AccountDetail", () => {
     expect(card).not.toHaveClass("animate-fade-in-up");
   });
 
-  it("plays enter animation when switching between selected accounts", () => {
+  it("keeps detail card stable when switching between selected accounts", () => {
     const firstAccount = createAccountSummary({
       accountId: "acc-first",
       email: "first@example.com",
@@ -117,6 +117,6 @@ describe("AccountDetail", () => {
     rerender(<AccountDetail {...baseProps} account={secondAccount} />);
     const card = container.firstElementChild;
 
-    expect(card).toHaveClass("animate-fade-in-up");
+    expect(card).not.toHaveClass("animate-fade-in-up");
   });
 });

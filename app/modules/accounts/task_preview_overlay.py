@@ -41,7 +41,9 @@ def overlay_live_codex_task_previews(
         waiting_process_session_counts_by_snapshot,
         process_session_task_previews_by_snapshot,
     ) = (
-        _read_live_process_task_preview_state_by_snapshot()
+        _read_live_process_task_preview_state_by_snapshot(
+            previews_by_snapshot=previews_by_snapshot
+        )
     )
 
     if (
@@ -128,13 +130,20 @@ def overlay_live_codex_task_previews(
                     continue
 
 
-def _read_live_process_task_preview_state_by_snapshot() -> tuple[
+def _read_live_process_task_preview_state_by_snapshot(
+    *,
+    previews_by_snapshot: dict[str, LocalCodexTaskPreview],
+) -> tuple[
     dict[str, str],
     set[str],
     dict[str, int],
     dict[str, list[AccountSessionTaskPreview]],
 ]:
     attribution = read_live_codex_process_session_attribution()
+    mapped_session_pids_by_snapshot = {
+        snapshot_name: sorted(set(session_pids))
+        for snapshot_name, session_pids in attribution.mapped_session_pids_by_snapshot.items()
+    }
     task_previews_by_pid = (
         attribution.task_previews_by_pid
         if attribution.task_previews_by_pid
@@ -145,12 +154,42 @@ def _read_live_process_task_preview_state_by_snapshot() -> tuple[
         }
     )
 
+    if attribution.unattributed_session_pids and previews_by_snapshot:
+        snapshot_names_by_task_preview = _build_snapshot_names_by_task_preview(
+            previews_by_snapshot
+        )
+        unique_snapshot_names = {
+            snapshot_name
+            for snapshot_names in snapshot_names_by_task_preview.values()
+            for snapshot_name in snapshot_names
+        }
+        if snapshot_names_by_task_preview and len(unique_snapshot_names) > 1:
+            for pid in attribution.unattributed_session_pids:
+                session_previews = [
+                    normalized_preview
+                    for normalized_preview in (
+                        _normalize_task_preview_match_text(preview)
+                        for preview in task_previews_by_pid.get(pid, [])
+                    )
+                    if normalized_preview
+                ]
+                inferred_snapshot_name = _infer_snapshot_name_from_session_task_previews(
+                    session_previews=session_previews,
+                    snapshot_names_by_task_preview=snapshot_names_by_task_preview,
+                )
+                if inferred_snapshot_name is None:
+                    continue
+                mapped_session_pids_by_snapshot.setdefault(inferred_snapshot_name, []).append(pid)
+
+    for snapshot_name, session_pids in mapped_session_pids_by_snapshot.items():
+        mapped_session_pids_by_snapshot[snapshot_name] = sorted(set(session_pids))
+
     preview_by_snapshot: dict[str, str] = {}
     waiting_snapshots: set[str] = set()
     waiting_session_counts_by_snapshot: dict[str, int] = {}
     session_task_previews_by_snapshot: dict[str, list[AccountSessionTaskPreview]] = {}
 
-    for snapshot_name, session_pids in attribution.mapped_session_pids_by_snapshot.items():
+    for snapshot_name, session_pids in mapped_session_pids_by_snapshot.items():
         first_preview: str | None = None
         session_task_previews: list[AccountSessionTaskPreview] = []
         for pid in session_pids:
@@ -188,6 +227,40 @@ def _read_live_process_task_preview_state_by_snapshot() -> tuple[
         waiting_session_counts_by_snapshot,
         session_task_previews_by_snapshot,
     )
+
+
+def _build_snapshot_names_by_task_preview(
+    previews_by_snapshot: dict[str, LocalCodexTaskPreview],
+) -> dict[str, set[str]]:
+    snapshot_names_by_task_preview: dict[str, set[str]] = {}
+    for snapshot_name, task_preview in previews_by_snapshot.items():
+        normalized_preview = _normalize_task_preview_match_text(task_preview.text)
+        if normalized_preview is None:
+            continue
+        snapshot_names_by_task_preview.setdefault(normalized_preview, set()).add(snapshot_name)
+    return snapshot_names_by_task_preview
+
+
+def _infer_snapshot_name_from_session_task_previews(
+    *,
+    session_previews: list[str],
+    snapshot_names_by_task_preview: dict[str, set[str]],
+) -> str | None:
+    matched_snapshot_names: set[str] = set()
+    for preview in session_previews:
+        matched_snapshot_names.update(snapshot_names_by_task_preview.get(preview, set()))
+    if len(matched_snapshot_names) != 1:
+        return None
+    return next(iter(matched_snapshot_names))
+
+
+def _normalize_task_preview_match_text(value: str | None) -> str | None:
+    normalized = " ".join((value or "").strip().split())
+    if not normalized:
+        return None
+    if normalized.lower() == _WAITING_FOR_NEW_TASK_PREVIEW.lower():
+        return None
+    return normalized.lower()
 
 
 def _resolve_waiting_snapshot_last_preview(

@@ -6,7 +6,7 @@ import {
 	RefreshCw,
 	Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { AlertMessage } from "@/components/alert-message";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,18 +60,6 @@ export function ApiDetail({
 	onToggleActive,
 }: ApiDetailProps) {
 	const [showAccumulated, setShowAccumulated] = useState(false);
-	const previousApiKeyIdRef = useRef<string | null>(null);
-	const apiKeyId = apiKey?.id ?? null;
-	const shouldAnimateEntry =
-		apiKeyId !== null &&
-		previousApiKeyIdRef.current !== null &&
-		previousApiKeyIdRef.current !== apiKeyId;
-
-	useEffect(() => {
-		if (apiKeyId !== null) {
-			previousApiKeyIdRef.current = apiKeyId;
-		}
-	}, [apiKeyId]);
 
 	const chartData = useMemo(() => {
 		if (!trends) return null;
@@ -119,9 +107,7 @@ export function ApiDetail({
 		trends && (trends.cost.length > 0 || trends.tokens.length > 0);
 
 	return (
-		<div
-			className={`${shouldAnimateEntry ? "animate-fade-in-up " : ""}space-y-4 rounded-xl border bg-card p-5`}
-		>
+		<div className="space-y-4 rounded-xl border bg-card p-5">
 			<div className="flex items-start justify-between">
 				<h2 className="text-base font-semibold">{apiKey.name}</h2>
 				<DropdownMenu>

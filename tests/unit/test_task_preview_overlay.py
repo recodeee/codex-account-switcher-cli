@@ -517,3 +517,88 @@ def test_overlay_suppresses_stale_snapshot_preview_after_recent_termination(monk
 
     assert account.id not in codex_current_task_preview_by_account
     assert account.id not in codex_last_task_preview_by_account
+
+
+def test_overlay_reattributes_unattributed_session_tasks_to_matching_snapshot_previews(
+    monkeypatch,
+) -> None:
+    now = datetime(2026, 4, 6, tzinfo=timezone.utc)
+    work_account = _make_account("acc-work", "work@example.com")
+    personal_account = _make_account("acc-personal", "personal@example.com")
+    codex_auth_by_account = {
+        work_account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="work@example.com",
+            active_snapshot_name="personal@example.com",
+            is_active_snapshot=False,
+            has_live_session=False,
+        ),
+        personal_account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="personal@example.com",
+            active_snapshot_name="personal@example.com",
+            is_active_snapshot=True,
+            has_live_session=False,
+        ),
+    }
+    codex_current_task_preview_by_account: dict[str, str] = {}
+    codex_last_task_preview_by_account: dict[str, str] = {}
+    codex_session_task_previews_by_account: dict[str, list[AccountSessionTaskPreview]] = {}
+
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_snapshot",
+        lambda *, now: {
+            "work@example.com": LocalCodexTaskPreview(
+                text="Investigate work session websocket retry",
+                recorded_at=now,
+            ),
+            "personal@example.com": LocalCodexTaskPreview(
+                text="Prepare personal account release checklist",
+                recorded_at=now,
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_session_id",
+        lambda *, now: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_live_codex_process_session_attribution",
+        lambda: LocalCodexProcessSessionAttribution(
+            counts_by_snapshot={},
+            unattributed_session_pids=[701, 702],
+            mapped_session_pids_by_snapshot={},
+            task_preview_by_pid={
+                701: "Investigate work session websocket retry",
+                702: "Prepare personal account release checklist",
+            },
+            task_previews_by_pid={
+                701: ["Investigate work session websocket retry"],
+                702: ["Prepare personal account release checklist"],
+            },
+        ),
+    )
+
+    overlay_live_codex_task_previews(
+        accounts=[work_account, personal_account],
+        codex_auth_by_account=codex_auth_by_account,
+        codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+        codex_last_task_preview_by_account=codex_last_task_preview_by_account,
+        codex_session_task_previews_by_account=codex_session_task_previews_by_account,
+        live_quota_debug_by_account={},
+        now=now,
+    )
+
+    assert (
+        codex_current_task_preview_by_account[work_account.id]
+        == "Investigate work session websocket retry"
+    )
+    assert (
+        codex_current_task_preview_by_account[personal_account.id]
+        == "Prepare personal account release checklist"
+    )
+
+    work_session_previews = codex_session_task_previews_by_account[work_account.id]
+    personal_session_previews = codex_session_task_previews_by_account[personal_account.id]
+    assert [preview.session_key for preview in work_session_previews] == ["pid:701"]
+    assert [preview.session_key for preview in personal_session_previews] == ["pid:702"]
