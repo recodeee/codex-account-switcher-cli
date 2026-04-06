@@ -80,6 +80,8 @@ export type AccountCardProps = {
   disableSecondaryActions?: boolean;
   forceWorkingIndicator?: boolean;
   taskPanelAddon?: ReactNode;
+  primaryActionLabel?: string;
+  primaryActionAriaLabel?: string;
   onAction?: (account: AccountSummary, action: AccountAction) => void;
 };
 
@@ -632,6 +634,8 @@ export function AccountCard(props: AccountCardProps) {
     disableSecondaryActions = false,
     forceWorkingIndicator = false,
     taskPanelAddon,
+    primaryActionLabel = "Use this account",
+    primaryActionAriaLabel,
     onAction,
   } = props;
   const tokensRemaining = props.tokensRemaining ?? null;
@@ -1490,9 +1494,10 @@ export function AccountCard(props: AccountCardProps) {
               )}
               disabled={useLocalButtonDisabled}
               title={useLocalButtonDisabledReason ?? undefined}
+              aria-label={primaryActionAriaLabel}
               onClick={() => onAction?.(account, "useLocal")}
             >
-              Use this account
+              {primaryActionLabel}
             </Button>
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {hasSnapshotMismatch ? (

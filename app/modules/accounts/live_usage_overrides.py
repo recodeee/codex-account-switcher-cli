@@ -995,6 +995,14 @@ def _normalize_snapshot_local_part(value: str | None) -> str | None:
     return sanitized or None
 
 
+def _is_email_like_snapshot_name(value: str | None) -> bool:
+    normalized = _normalize_snapshot_name(value)
+    if normalized is None or "@" not in normalized:
+        return False
+    _local, _sep, domain = normalized.partition("@")
+    return bool(domain and "." in domain)
+
+
 def _resolve_session_presence_snapshot_names_for_account(
     *,
     account_email: str,
@@ -1018,9 +1026,68 @@ def _resolve_session_presence_snapshot_names_for_account(
             snapshot_names=fallback_snapshot_names,
         )
 
+    if any(_is_email_like_snapshot_name(name) for name in snapshot_names_from_index):
+        return _augment_session_presence_snapshot_names_with_email_aliases(
+            account_email=account_email,
+            snapshot_names=snapshot_names_from_index,
+        )
+
+    if not selected_snapshot_name:
+        return _augment_session_presence_snapshot_names_with_email_aliases(
+            account_email=account_email,
+            snapshot_names=snapshot_names_from_index,
+        )
+
+    selected = _normalize_snapshot_name(selected_snapshot_name)
+    account_local_part = _normalize_snapshot_local_part(account_email)
+    selected_local_part = _normalize_snapshot_local_part(selected_snapshot_name)
+
+    if selected is None:
+        return _augment_session_presence_snapshot_names_with_email_aliases(
+            account_email=account_email,
+            snapshot_names=fallback_snapshot_names,
+        )
+
+    scoped_names: list[str] = []
+    seen: set[str] = set()
+    for snapshot_name in snapshot_names_from_index:
+        normalized_snapshot = _normalize_snapshot_name(snapshot_name)
+        if normalized_snapshot is None or normalized_snapshot in seen:
+            continue
+        snapshot_local_part = _normalize_snapshot_local_part(snapshot_name)
+
+        if normalized_snapshot == selected:
+            scoped_names.append(snapshot_name)
+            seen.add(normalized_snapshot)
+            continue
+
+        if account_local_part is None or snapshot_local_part is None:
+            continue
+
+        if snapshot_local_part == account_local_part:
+            scoped_names.append(snapshot_name)
+            seen.add(normalized_snapshot)
+            continue
+
+        if selected_local_part is None:
+            continue
+
+        if (
+            snapshot_local_part.startswith(account_local_part)
+            and selected_local_part.startswith(account_local_part)
+        ):
+            scoped_names.append(snapshot_name)
+            seen.add(normalized_snapshot)
+
+    if scoped_names:
+        return _augment_session_presence_snapshot_names_with_email_aliases(
+            account_email=account_email,
+            snapshot_names=scoped_names,
+        )
+
     return _augment_session_presence_snapshot_names_with_email_aliases(
         account_email=account_email,
-        snapshot_names=snapshot_names_from_index,
+        snapshot_names=fallback_snapshot_names,
     )
 
 

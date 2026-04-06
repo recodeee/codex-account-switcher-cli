@@ -13,10 +13,15 @@ describe("ComingSoonPage", () => {
     expect(
       screen.getByRole("heading", { name: "What the dashboard currently does" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Agent waiting for email address").length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Team · demo@demo.com")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Submit account tutorial" }),
+    ).toBeDisabled();
     expect(screen.getByLabelText("Email address")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Submit" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Submit" }).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Open dashboard" })).toHaveAttribute(
       "href",
       "/dashboard",
@@ -37,5 +42,16 @@ describe("ComingSoonPage", () => {
 
     expect(screen.getByText(/Thanks! We will keep/i)).toBeInTheDocument();
     expect(screen.getByText("hello@recodee.com")).toBeInTheDocument();
+  });
+
+  it("enables account activation controls once agent email is entered", async () => {
+    const user = userEvent.setup();
+    render(<ComingSoonPage />);
+
+    await user.type(screen.getByLabelText("Agent email address"), "demo@demo.com");
+
+    expect(
+      screen.getByRole("button", { name: "Submit account tutorial" }),
+    ).toBeEnabled();
   });
 });

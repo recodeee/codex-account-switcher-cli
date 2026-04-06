@@ -31,22 +31,28 @@ const DEMO_ACCOUNT_CARD: AccountSummary = {
   windowMinutesSecondary: 10080,
   requestUsage: {
     requestCount: 0,
-    totalTokens: 216,
+    totalTokens: 216000,
     cachedInputTokens: 0,
     totalCostUsd: 0,
   },
   codexLiveSessionCount: 1,
-  codexTrackedSessionCount: 0,
-  codexSessionCount: 0,
-  codexCurrentTaskPreview: "No active task reported",
+  codexTrackedSessionCount: 1,
+  codexSessionCount: 1,
+  codexCurrentTaskPreview: "Agent waiting for email address",
   codexLastTaskPreview: null,
-  codexSessionTaskPreviews: [],
+  codexSessionTaskPreviews: [
+    {
+      sessionKey: "demo-session-1",
+      taskPreview: "Waiting for email address",
+      taskUpdatedAt: new Date().toISOString(),
+    },
+  ],
   codexAuth: {
     hasSnapshot: true,
     snapshotName: "demo@demo.com",
     activeSnapshotName: "demo@demo.com",
     isActiveSnapshot: true,
-    hasLiveSession: false,
+    hasLiveSession: true,
     liveUsageConfidence: "high",
     expectedSnapshotName: "demo@demo.com",
     snapshotNameMatchesEmail: true,
@@ -54,8 +60,13 @@ const DEMO_ACCOUNT_CARD: AccountSummary = {
   additionalQuotas: [],
 };
 
+function isValidEmailAddress(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export function ComingSoonPage() {
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const [agentEmail, setAgentEmail] = useState("");
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -70,6 +81,8 @@ export function ComingSoonPage() {
     setSubmittedEmail(email);
     event.currentTarget.reset();
   };
+
+  const hasValidAgentEmail = isValidEmailAddress(agentEmail);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
@@ -141,11 +154,35 @@ export function ComingSoonPage() {
           </div>
 
           <div className="space-y-4">
-            <div className="[&_button]:pointer-events-none [&_button]:cursor-not-allowed [&_button]:opacity-55">
+            <div>
               <AccountCard
                 account={DEMO_ACCOUNT_CARD}
-                useLocalBusy
+                useLocalBusy={!hasValidAgentEmail}
                 deleteBusy
+                initialSessionTasksCollapsed
+                disableSecondaryActions
+                forceWorkingIndicator
+                primaryActionLabel="Submit"
+                primaryActionAriaLabel="Submit account tutorial"
+                taskPanelAddon={
+                  <div className="rounded-md border border-cyan-400/25 bg-cyan-500/10 p-2.5">
+                    <p className="text-xs font-medium text-cyan-200">
+                      Agent waiting for email address
+                    </p>
+                    <div className="mt-2">
+                      <Input
+                        type="email"
+                        value={agentEmail}
+                        onChange={(event) => {
+                          setAgentEmail(event.currentTarget.value);
+                        }}
+                        placeholder="Enter email address"
+                        aria-label="Agent email address"
+                        className="h-8 border-cyan-500/30 bg-black/30 text-zinc-100 placeholder:text-zinc-500"
+                      />
+                    </div>
+                  </div>
+                }
                 onAction={() => {}}
               />
             </div>
