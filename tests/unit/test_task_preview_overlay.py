@@ -74,6 +74,7 @@ def test_overlay_replaces_stale_preview_with_waiting_for_new_task(
     overlay_live_codex_task_previews(
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
         codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         codex_session_task_previews_by_account={},
@@ -121,6 +122,7 @@ def test_overlay_prefers_live_process_preview_for_snapshot(monkeypatch) -> None:
     overlay_live_codex_task_previews(
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
         codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         codex_session_task_previews_by_account={},
@@ -177,6 +179,7 @@ def test_overlay_includes_live_process_session_task_previews(monkeypatch) -> Non
     overlay_live_codex_task_previews(
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
         codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         codex_session_task_previews_by_account=codex_session_task_previews_by_account,
@@ -237,6 +240,7 @@ def test_overlay_keeps_waiting_state_and_adds_last_task_preview(monkeypatch) -> 
     overlay_live_codex_task_previews(
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
         codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         codex_session_task_previews_by_account={},
@@ -295,6 +299,7 @@ def test_overlay_waiting_multi_session_does_not_copy_last_task_from_debug_sample
     overlay_live_codex_task_previews(
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
         codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         codex_session_task_previews_by_account={},
@@ -360,6 +365,7 @@ def test_overlay_waiting_last_task_uses_matching_snapshot_debug_sample_only(monk
     overlay_live_codex_task_previews(
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
         codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         codex_session_task_previews_by_account={},
@@ -439,6 +445,7 @@ def test_overlay_populates_session_task_previews_from_debug_sources_when_process
     overlay_live_codex_task_previews(
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
         codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         codex_session_task_previews_by_account=codex_session_task_previews_by_account,
@@ -508,6 +515,7 @@ def test_overlay_suppresses_stale_snapshot_preview_after_recent_termination(monk
     overlay_live_codex_task_previews(
         accounts=[account],
         codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
         codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         codex_session_task_previews_by_account={},
@@ -582,6 +590,7 @@ def test_overlay_reattributes_unattributed_session_tasks_to_matching_snapshot_pr
     overlay_live_codex_task_previews(
         accounts=[work_account, personal_account],
         codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
         codex_current_task_preview_by_account=codex_current_task_preview_by_account,
         codex_last_task_preview_by_account=codex_last_task_preview_by_account,
         codex_session_task_previews_by_account=codex_session_task_previews_by_account,
@@ -602,3 +611,60 @@ def test_overlay_reattributes_unattributed_session_tasks_to_matching_snapshot_pr
     personal_session_previews = codex_session_task_previews_by_account[personal_account.id]
     assert [preview.session_key for preview in work_session_previews] == ["pid:701"]
     assert [preview.session_key for preview in personal_session_previews] == ["pid:702"]
+
+
+def test_overlay_matches_live_process_snapshot_aliases_for_account(monkeypatch) -> None:
+    now = datetime(2026, 4, 7, tzinfo=timezone.utc)
+    account = _make_account("acc-perzeus", "perzeus@recodee.com")
+    codex_auth_by_account = {
+        account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="perzeus@recodee.com",
+            active_snapshot_name="perzeus@recodee.com",
+            is_active_snapshot=True,
+            has_live_session=True,
+        )
+    }
+    codex_current_task_preview_by_account: dict[str, str] = {}
+    codex_last_task_preview_by_account: dict[str, str] = {}
+    codex_session_task_previews_by_account: dict[str, list[AccountSessionTaskPreview]] = {}
+
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_snapshot",
+        lambda *, now: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_session_id",
+        lambda *, now: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_live_codex_process_session_attribution",
+        lambda: LocalCodexProcessSessionAttribution(
+            counts_by_snapshot={"admin@recodee.com": 1},
+            unattributed_session_pids=[],
+            mapped_session_pids_by_snapshot={"admin@recodee.com": [91001]},
+            task_preview_by_pid={91001: "Investigate recodee alias task mapping"},
+            task_previews_by_pid={91001: ["Investigate recodee alias task mapping"]},
+        ),
+    )
+
+    overlay_live_codex_task_previews(
+        accounts=[account],
+        codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={
+            account.id: ["admin@recodee.com", "perzeus@recodee.com"],
+        },
+        codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+        codex_last_task_preview_by_account=codex_last_task_preview_by_account,
+        codex_session_task_previews_by_account=codex_session_task_previews_by_account,
+        live_quota_debug_by_account={},
+        now=now,
+    )
+
+    assert (
+        codex_current_task_preview_by_account[account.id]
+        == "Investigate recodee alias task mapping"
+    )
+    assert [preview.session_key for preview in codex_session_task_previews_by_account[account.id]] == [
+        "pid:91001"
+    ]

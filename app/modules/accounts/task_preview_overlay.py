@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import re
+from typing import Iterable
 
 from app.db.models import Account
 from app.modules.accounts.codex_live_usage import (
@@ -27,6 +28,7 @@ def overlay_live_codex_task_previews(
     *,
     accounts: list[Account],
     codex_auth_by_account: dict[str, AccountCodexAuthStatus],
+    snapshot_names_by_account: dict[str, list[str]] | None,
     codex_current_task_preview_by_account: dict[str, str],
     codex_last_task_preview_by_account: dict[str, str],
     codex_session_task_previews_by_account: dict[str, list[AccountSessionTaskPreview]],
@@ -58,9 +60,18 @@ def overlay_live_codex_task_previews(
         codex_last_task_preview_by_account.pop(account.id, None)
         codex_auth_status = codex_auth_by_account.get(account.id)
         snapshot_name = codex_auth_status.snapshot_name if codex_auth_status else None
+        snapshot_names = _resolve_account_snapshot_names(
+            selected_snapshot_name=snapshot_name,
+            snapshot_names=snapshot_names_by_account.get(account.id)
+            if snapshot_names_by_account is not None
+            else None,
+        )
         existing_session_task_previews = codex_session_task_previews_by_account.get(account.id, [])
-        if snapshot_name:
-            live_session_task_previews = process_session_task_previews_by_snapshot.get(snapshot_name, [])
+        if snapshot_names:
+            live_session_task_previews = _resolve_session_task_previews_for_snapshot_names(
+                process_session_task_previews_by_snapshot=process_session_task_previews_by_snapshot,
+                snapshot_names=snapshot_names,
+            )
             if not live_session_task_previews:
                 live_session_task_previews = _resolve_session_task_previews_from_debug_sources(
                     debug=live_quota_debug_by_account.get(account.id)
@@ -79,17 +90,30 @@ def overlay_live_codex_task_previews(
                     seen_session_keys.add(session_key)
                     merged_session_task_previews.append(preview)
                 codex_session_task_previews_by_account[account.id] = merged_session_task_previews
-        if snapshot_name:
-            process_preview = process_preview_by_snapshot.get(snapshot_name)
+        if snapshot_names:
+            process_snapshot_name = _resolve_first_matching_snapshot_name(
+                snapshot_names=snapshot_names,
+                candidate_snapshot_names=process_preview_by_snapshot.keys(),
+            )
+            process_preview = (
+                process_preview_by_snapshot.get(process_snapshot_name)
+                if process_snapshot_name is not None
+                else None
+            )
             if process_preview:
                 codex_current_task_preview_by_account[account.id] = process_preview
                 continue
-            if snapshot_name in waiting_process_snapshots:
+            waiting_snapshot_name = _resolve_first_matching_snapshot_name(
+                snapshot_names=snapshot_names,
+                candidate_snapshot_names=waiting_process_snapshots,
+            )
+            if waiting_snapshot_name is not None:
                 codex_current_task_preview_by_account[account.id] = _WAITING_FOR_NEW_TASK_PREVIEW
                 waiting_last_preview = _resolve_waiting_snapshot_last_preview(
-                    snapshot_name=snapshot_name,
+                    snapshot_name=waiting_snapshot_name,
                     has_single_waiting_live_session=(
-                        waiting_process_session_counts_by_snapshot.get(snapshot_name, 0) == 1
+                        waiting_process_session_counts_by_snapshot.get(waiting_snapshot_name, 0)
+                        == 1
                     ),
                     debug=live_quota_debug_by_account.get(account.id)
                     if live_quota_debug_by_account is not None
@@ -101,7 +125,7 @@ def overlay_live_codex_task_previews(
                     codex_last_task_preview_by_account[account.id] = waiting_last_preview.text
                 continue
             if has_recently_terminated_cli_session_snapshot(
-                [snapshot_name],
+                snapshot_names,
                 selected_snapshot_name=snapshot_name,
                 now=now,
             ):
@@ -128,6 +152,78 @@ def overlay_live_codex_task_previews(
                 if preview is not None:
                     codex_current_task_preview_by_account[account.id] = preview.text
                     continue
+
+
+def _resolve_account_snapshot_names(
+    *,
+    selected_snapshot_name: str | None,
+    snapshot_names: list[str] | None,
+) -> list[str]:
+    deduped_snapshot_names: list[str] = []
+    seen_snapshot_names: set[str] = set()
+
+    for value in [selected_snapshot_name, *(snapshot_names or [])]:
+        normalized = _normalize_snapshot_name(value)
+        if normalized is None or normalized in seen_snapshot_names:
+            continue
+        deduped_snapshot_names.append(value.strip())
+        seen_snapshot_names.add(normalized)
+
+    return deduped_snapshot_names
+
+
+def _resolve_first_matching_snapshot_name(
+    *,
+    snapshot_names: list[str],
+    candidate_snapshot_names: Iterable[str],
+) -> str | None:
+    normalized_candidate_snapshot_names: dict[str, str] = {}
+    for candidate_snapshot_name in candidate_snapshot_names:
+        normalized_candidate_snapshot_name = _normalize_snapshot_name(
+            candidate_snapshot_name
+        )
+        if normalized_candidate_snapshot_name is None:
+            continue
+        normalized_candidate_snapshot_names.setdefault(
+            normalized_candidate_snapshot_name,
+            candidate_snapshot_name,
+        )
+
+    for snapshot_name in snapshot_names:
+        normalized = _normalize_snapshot_name(snapshot_name)
+        if normalized is None:
+            continue
+        matched_candidate_snapshot_name = normalized_candidate_snapshot_names.get(
+            normalized
+        )
+        if matched_candidate_snapshot_name is not None:
+            return matched_candidate_snapshot_name
+
+    return None
+
+
+def _resolve_session_task_previews_for_snapshot_names(
+    *,
+    process_session_task_previews_by_snapshot: dict[str, list[AccountSessionTaskPreview]],
+    snapshot_names: list[str],
+) -> list[AccountSessionTaskPreview]:
+    merged_session_task_previews: list[AccountSessionTaskPreview] = []
+    seen_session_keys: set[str] = set()
+
+    for snapshot_name in snapshot_names:
+        for mapped_snapshot_name, mapped_previews in process_session_task_previews_by_snapshot.items():
+            if _normalize_snapshot_name(mapped_snapshot_name) != _normalize_snapshot_name(
+                snapshot_name
+            ):
+                continue
+            for preview in mapped_previews:
+                normalized_session_key = preview.session_key.strip()
+                if not normalized_session_key or normalized_session_key in seen_session_keys:
+                    continue
+                seen_session_keys.add(normalized_session_key)
+                merged_session_task_previews.append(preview)
+
+    return merged_session_task_previews
 
 
 def _read_live_process_task_preview_state_by_snapshot(

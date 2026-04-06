@@ -169,6 +169,15 @@ class AccountsService:
             account_quota_list.sort(key=lambda quota: quota.display_label or quota.quota_key or quota.limit_name)
 
         snapshot_index = build_snapshot_index()
+        snapshot_names_by_account = {
+            account.id: resolve_snapshot_names_for_account(
+                snapshot_index=snapshot_index,
+                account_id=account.id,
+                chatgpt_account_id=account.chatgpt_account_id,
+                email=account.email,
+            )
+            for account in accounts
+        }
         codex_auth_by_account = {
             account.id: self._build_codex_auth_status(
                 account=account,
@@ -194,6 +203,7 @@ class AccountsService:
         overlay_live_codex_task_previews(
             accounts=accounts,
             codex_auth_by_account=codex_auth_by_account,
+            snapshot_names_by_account=snapshot_names_by_account,
             codex_current_task_preview_by_account=codex_current_task_preview_by_account,
             codex_last_task_preview_by_account=codex_last_task_preview_by_account,
             codex_session_task_previews_by_account=codex_session_task_previews_by_account,
