@@ -247,6 +247,12 @@ export function AppSidebar() {
             <p className="text-xs text-slate-400">
               Monitoring your Codex sessions
             </p>
+            <NavLink
+              to="/coming-soon"
+              className="mt-1 inline-flex text-xs font-medium text-slate-300 transition-colors hover:text-white"
+            >
+              Coming soon page
+            </NavLink>
           </div>
         )}
       </div>

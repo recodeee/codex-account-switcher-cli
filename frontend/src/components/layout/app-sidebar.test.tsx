@@ -18,6 +18,9 @@ describe("AppSidebar", () => {
     const sidebar = screen.getByLabelText("Primary sidebar");
     expect(sidebar).toHaveClass("w-72");
     expect(screen.getByRole("button", { name: "Collapse navigation menu" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Coming soon page" }),
+    ).toHaveAttribute("href", "/coming-soon");
   });
 
   it("collapses and persists the preference when toggled", async () => {

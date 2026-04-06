@@ -42,6 +42,11 @@ export function ComingSoonPage() {
           We are preparing something new for recodee.com. If you are interested,
           enter your email address below and hit submit.
         </p>
+        <div className="mt-4">
+          <Button type="button" variant="outline" size="sm" asChild>
+            <a href="/dashboard">Open dashboard</a>
+          </Button>
+        </div>
 
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-3 sm:flex-row">
           <Input
