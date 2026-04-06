@@ -6,6 +6,8 @@ import { parseAuthSnapshotFile } from "../lib/accounts/auth-parser";
 import { resolveAuthPath } from "../lib/config/paths";
 
 export default class LoginCommand extends BaseCommand {
+  protected readonly syncExternalAuthBeforeRun = false;
+
   static description =
     "Run `codex login` and save the resulting ~/.codex/auth.json as a named account (or infer one from auth email)";
 
@@ -34,6 +36,12 @@ export default class LoginCommand extends BaseCommand {
     await this.runSafe(async () => {
       const { args, flags } = await this.parse(LoginCommand);
       const providedName = args.name as string | undefined;
+      const status = await this.accounts.getStatus();
+
+      if (status.autoSwitchEnabled) {
+        await this.accounts.setAutoSwitchEnabled(false);
+        this.log("Auto-switch disabled before login.");
+      }
 
       await this.runCodexLogin(Boolean(flags["device-auth"]));
       await this.waitForCodexAuthSnapshot();
@@ -41,17 +49,12 @@ export default class LoginCommand extends BaseCommand {
       const resolvedName = providedName
         ? { name: providedName, source: "explicit" as const }
         : await this.accounts.resolveLoginAccountNameFromCurrentAuth();
-      const forceOverwrite = Boolean(flags.force) || resolvedName.source === "existing-email";
+      const forceOverwrite = Boolean(flags.force);
       const savedName = await this.accounts.saveAccount(resolvedName.name, {
         force: forceOverwrite,
       });
 
-      const suffix =
-        resolvedName.source === "explicit"
-          ? ""
-          : resolvedName.source === "existing-email"
-            ? " (refreshed existing email snapshot)"
-          : " (inferred from auth email)";
+      const suffix = resolvedName.source === "explicit" ? "" : " (inferred from auth email)";
       this.log(`Saved current Codex auth tokens as "${savedName}"${suffix}.`);
     });
   }

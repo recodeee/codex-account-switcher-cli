@@ -67,10 +67,65 @@ export interface ResolvedDefaultAccountName {
 
 export interface ResolvedLoginAccountName {
   name: string;
-  source: "existing-email" | "inferred";
+  source: "inferred";
+}
+
+export interface ExternalAuthSyncResult {
+  synchronized: boolean;
+  savedName?: string;
+  autoSwitchDisabled: boolean;
 }
 
 export class AccountService {
+  public async syncExternalAuthSnapshotIfNeeded(): Promise<ExternalAuthSyncResult> {
+    const authPath = resolveAuthPath();
+    if (!(await this.pathExists(authPath))) {
+      return {
+        synchronized: false,
+        autoSwitchDisabled: false,
+      };
+    }
+
+    await this.materializeAuthSymlink(authPath);
+
+    const incomingSnapshot = await parseAuthSnapshotFile(authPath);
+    if (incomingSnapshot.authMode !== "chatgpt") {
+      return {
+        synchronized: false,
+        autoSwitchDisabled: false,
+      };
+    }
+
+    const activeName = await this.getCurrentAccountName();
+    if (activeName) {
+      const activeSnapshotPath = this.accountFilePath(activeName);
+      if (await this.pathExists(activeSnapshotPath)) {
+        const activeSnapshot = await parseAuthSnapshotFile(activeSnapshotPath);
+        if (this.snapshotsShareIdentity(activeSnapshot, incomingSnapshot)) {
+          return {
+            synchronized: false,
+            autoSwitchDisabled: false,
+          };
+        }
+      }
+    }
+
+    const status = await this.getStatus();
+    const autoSwitchDisabled = status.autoSwitchEnabled;
+    if (autoSwitchDisabled) {
+      await this.setAutoSwitchEnabled(false);
+    }
+
+    const resolvedName = await this.resolveLoginAccountNameFromCurrentAuth();
+    const savedName = await this.saveAccount(resolvedName.name);
+
+    return {
+      synchronized: true,
+      savedName,
+      autoSwitchDisabled,
+    };
+  }
+
   public async listAccountNames(): Promise<string[]> {
     const accountsDir = resolveAccountsDir();
     if (!(await this.pathExists(accountsDir))) {
@@ -236,27 +291,8 @@ export class AccountService {
   }
 
   public async resolveLoginAccountNameFromCurrentAuth(): Promise<ResolvedLoginAccountName> {
-    const authPath = resolveAuthPath();
-    await this.ensureAuthFileExists(authPath);
-
-    const incomingSnapshot = await parseAuthSnapshotFile(authPath);
-    const email = incomingSnapshot.email?.trim().toLowerCase();
-    if (!email || !email.includes("@")) {
-      throw new AccountNameInferenceError();
-    }
-
-    const existingAccountName = await this.findExistingAccountNameByEmail(email);
-    if (existingAccountName) {
-      return {
-        name: existingAccountName,
-        source: "existing-email",
-      };
-    }
-
-    const baseCandidate = this.normalizeAccountName(email);
-    const uniqueName = await this.resolveUniqueInferredName(baseCandidate, incomingSnapshot);
     return {
-      name: uniqueName,
+      name: await this.inferAccountNameFromCurrentAuth(),
       source: "inferred",
     };
   }
@@ -579,6 +615,17 @@ export class AccountService {
     await fsp.mkdir(dirPath, { recursive: true });
   }
 
+  private async materializeAuthSymlink(authPath: string): Promise<void> {
+    const stat = await fsp.lstat(authPath);
+    if (!stat.isSymbolicLink()) {
+      return;
+    }
+
+    const snapshotData = await fsp.readFile(authPath);
+    await this.removeIfExists(authPath);
+    await fsp.writeFile(authPath, snapshotData);
+  }
+
   private async assertSafeSnapshotOverwrite(input: {
     authPath: string;
     destinationPath: string;
@@ -608,12 +655,6 @@ export class AccountService {
     const existingIdentity = this.renderSnapshotIdentity(existingSnapshot, existingEmail);
     const incomingIdentity = this.renderSnapshotIdentity(incomingSnapshot, incomingEmail);
     throw new SnapshotEmailMismatchError(input.accountName, existingIdentity, incomingIdentity);
-  }
-
-  private async replaceSymlink(target: string, linkPath: string): Promise<void> {
-    await this.removeIfExists(linkPath);
-    const absoluteTarget = path.resolve(target);
-    await fsp.symlink(absoluteTarget, linkPath);
   }
 
   private async removeIfExists(target: string): Promise<void> {
@@ -703,45 +744,6 @@ export class AccountService {
     throw new AccountNameInferenceError();
   }
 
-  private async findExistingAccountNameByEmail(email: string): Promise<string | null> {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      return null;
-    }
-
-    const activeName = await this.getCurrentAccountName();
-    if (activeName) {
-      const activeSnapshotPath = this.accountFilePath(activeName);
-      if (await this.pathExists(activeSnapshotPath)) {
-        const activeSnapshot = await parseAuthSnapshotFile(activeSnapshotPath);
-        if (activeSnapshot.email?.trim().toLowerCase() === normalizedEmail) {
-          return activeName;
-        }
-      }
-    }
-
-    const canonicalEmailName = this.normalizeAccountName(normalizedEmail);
-    const canonicalSnapshotPath = this.accountFilePath(canonicalEmailName);
-    if (await this.pathExists(canonicalSnapshotPath)) {
-      const canonicalSnapshot = await parseAuthSnapshotFile(canonicalSnapshotPath);
-      if (canonicalSnapshot.email?.trim().toLowerCase() === normalizedEmail) {
-        return canonicalEmailName;
-      }
-    }
-
-    const accountNames = await this.listAccountNames();
-    for (const accountName of accountNames) {
-      if (accountName === activeName || accountName === canonicalEmailName) continue;
-
-      const snapshot = await parseAuthSnapshotFile(this.accountFilePath(accountName));
-      if (snapshot.email?.trim().toLowerCase() === normalizedEmail) {
-        return accountName;
-      }
-    }
-
-    return null;
-  }
-
   private async loadReconciledRegistry(): Promise<RegistryData> {
     const accountNames = await this.listAccountNames();
     const loaded = await loadRegistry();
@@ -764,12 +766,7 @@ export class AccountService {
 
     const authPath = resolveAuthPath();
     await this.ensureDir(path.dirname(authPath));
-
-    if (process.platform === "win32") {
-      await fsp.copyFile(source, authPath);
-    } else {
-      await this.replaceSymlink(source, authPath);
-    }
+    await fsp.copyFile(source, authPath);
 
     await this.writeCurrentName(name);
   }

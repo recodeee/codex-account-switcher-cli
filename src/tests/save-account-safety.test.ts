@@ -214,7 +214,7 @@ test("inferAccountNameFromCurrentAuth returns email-shaped duplicate suffix for 
   });
 });
 
-test("resolveLoginAccountNameFromCurrentAuth reuses canonical email snapshot when email already exists", async (t) => {
+test("resolveLoginAccountNameFromCurrentAuth creates an email-shaped duplicate when canonical email snapshot identity differs", async (t) => {
   await withIsolatedCodexDir(t, async ({ accountsDir, authPath }) => {
     const service = new AccountService();
     const email = "csoves@edixai.com";
@@ -238,13 +238,13 @@ test("resolveLoginAccountNameFromCurrentAuth reuses canonical email snapshot whe
 
     const resolved = await service.resolveLoginAccountNameFromCurrentAuth();
     assert.deepEqual(resolved, {
-      name: email,
-      source: "existing-email",
+      name: `${email}--dup-2`,
+      source: "inferred",
     });
   });
 });
 
-test("resolveLoginAccountNameFromCurrentAuth prefers active alias snapshot when it matches auth email", async (t) => {
+test("resolveLoginAccountNameFromCurrentAuth ignores active alias and infers canonical email snapshot", async (t) => {
   await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
     const service = new AccountService();
     const activeName = "team-primary";
@@ -270,8 +270,8 @@ test("resolveLoginAccountNameFromCurrentAuth prefers active alias snapshot when 
 
     const resolved = await service.resolveLoginAccountNameFromCurrentAuth();
     assert.deepEqual(resolved, {
-      name: activeName,
-      source: "existing-email",
+      name: email,
+      source: "inferred",
     });
   });
 });
@@ -452,5 +452,122 @@ test("listAccountMappings returns active flag and identity metadata for each sna
         },
       ],
     );
+  });
+});
+
+test("syncExternalAuthSnapshotIfNeeded disables auto-switch and snapshots external codex login into inferred email name", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const previousName = "odin@recodee.com";
+    const incomingEmail = "odin@edixai.com";
+    const currentPath = path.join(codexDir, "current");
+    const registryPath = path.join(accountsDir, "registry.json");
+
+    await fsp.writeFile(
+      path.join(accountsDir, `${previousName}.json`),
+      buildAuthPayload(previousName, {
+        accountId: "acct-prev",
+        userId: "user-prev",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, `${previousName}\n`, "utf8");
+    await fsp.writeFile(
+      registryPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          autoSwitch: {
+            enabled: true,
+            threshold5hPercent: 10,
+            thresholdWeeklyPercent: 5,
+          },
+          api: {
+            usage: true,
+          },
+          activeAccountName: previousName,
+          accounts: {
+            [previousName]: {
+              name: previousName,
+              createdAt: new Date().toISOString(),
+              email: previousName,
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload(incomingEmail, {
+        accountId: "acct-new",
+        userId: "user-new",
+      }),
+      "utf8",
+    );
+
+    const result = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(result, {
+      synchronized: true,
+      savedName: incomingEmail,
+      autoSwitchDisabled: true,
+    });
+
+    assert.equal((await fsp.readFile(currentPath, "utf8")).trim(), incomingEmail);
+
+    const parsed = await parseAuthSnapshotFile(path.join(accountsDir, `${incomingEmail}.json`));
+    assert.equal(parsed.email, incomingEmail);
+
+    const registry = JSON.parse(await fsp.readFile(registryPath, "utf8")) as {
+      autoSwitch: { enabled: boolean };
+    };
+    assert.equal(registry.autoSwitch.enabled, false);
+  });
+});
+
+test("syncExternalAuthSnapshotIfNeeded materializes auth symlink so external codex login can no longer overwrite snapshot files", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("symlink conversion behavior is Unix-specific in this test");
+    return;
+  }
+
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const activeName = "team-primary";
+    const snapshotPath = path.join(accountsDir, `${activeName}.json`);
+    const currentPath = path.join(codexDir, "current");
+
+    await fsp.writeFile(snapshotPath, buildAuthPayload("team-primary@edixai.com"), "utf8");
+    await fsp.symlink(snapshotPath, authPath);
+    await fsp.writeFile(currentPath, `${activeName}\n`, "utf8");
+
+    const before = await fsp.lstat(authPath);
+    assert.equal(before.isSymbolicLink(), true);
+
+    const result = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(result, {
+      synchronized: false,
+      autoSwitchDisabled: false,
+    });
+
+    const after = await fsp.lstat(authPath);
+    assert.equal(after.isSymbolicLink(), false);
+  });
+});
+
+test("useAccount writes auth.json as a regular file (never symlink)", async (t) => {
+  await withIsolatedCodexDir(t, async ({ accountsDir }) => {
+    const service = new AccountService();
+    const accountName = "regular-file-check";
+    const sourcePath = path.join(accountsDir, `${accountName}.json`);
+
+    await fsp.writeFile(sourcePath, buildAuthPayload("regular-file-check@edixai.com"), "utf8");
+    await service.useAccount(accountName);
+
+    const authStat = await fsp.lstat(path.join(process.env.CODEX_AUTH_CODEX_DIR as string, "auth.json"));
+    assert.equal(authStat.isSymbolicLink(), false);
   });
 });
