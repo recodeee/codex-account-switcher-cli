@@ -65,6 +65,11 @@ export interface ResolvedDefaultAccountName {
   source: "active" | "inferred";
 }
 
+export interface ResolvedLoginAccountName {
+  name: string;
+  source: "existing-email" | "inferred";
+}
+
 export class AccountService {
   public async listAccountNames(): Promise<string[]> {
     const accountsDir = resolveAccountsDir();
@@ -226,6 +231,32 @@ export class AccountService {
 
     return {
       name: await this.inferAccountNameFromCurrentAuth(),
+      source: "inferred",
+    };
+  }
+
+  public async resolveLoginAccountNameFromCurrentAuth(): Promise<ResolvedLoginAccountName> {
+    const authPath = resolveAuthPath();
+    await this.ensureAuthFileExists(authPath);
+
+    const incomingSnapshot = await parseAuthSnapshotFile(authPath);
+    const email = incomingSnapshot.email?.trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      throw new AccountNameInferenceError();
+    }
+
+    const existingAccountName = await this.findExistingAccountNameByEmail(email);
+    if (existingAccountName) {
+      return {
+        name: existingAccountName,
+        source: "existing-email",
+      };
+    }
+
+    const baseCandidate = this.normalizeAccountName(email);
+    const uniqueName = await this.resolveUniqueInferredName(baseCandidate, incomingSnapshot);
+    return {
+      name: uniqueName,
       source: "inferred",
     };
   }
@@ -670,6 +701,45 @@ export class AccountService {
     }
 
     throw new AccountNameInferenceError();
+  }
+
+  private async findExistingAccountNameByEmail(email: string): Promise<string | null> {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      return null;
+    }
+
+    const activeName = await this.getCurrentAccountName();
+    if (activeName) {
+      const activeSnapshotPath = this.accountFilePath(activeName);
+      if (await this.pathExists(activeSnapshotPath)) {
+        const activeSnapshot = await parseAuthSnapshotFile(activeSnapshotPath);
+        if (activeSnapshot.email?.trim().toLowerCase() === normalizedEmail) {
+          return activeName;
+        }
+      }
+    }
+
+    const canonicalEmailName = this.normalizeAccountName(normalizedEmail);
+    const canonicalSnapshotPath = this.accountFilePath(canonicalEmailName);
+    if (await this.pathExists(canonicalSnapshotPath)) {
+      const canonicalSnapshot = await parseAuthSnapshotFile(canonicalSnapshotPath);
+      if (canonicalSnapshot.email?.trim().toLowerCase() === normalizedEmail) {
+        return canonicalEmailName;
+      }
+    }
+
+    const accountNames = await this.listAccountNames();
+    for (const accountName of accountNames) {
+      if (accountName === activeName || accountName === canonicalEmailName) continue;
+
+      const snapshot = await parseAuthSnapshotFile(this.accountFilePath(accountName));
+      if (snapshot.email?.trim().toLowerCase() === normalizedEmail) {
+        return accountName;
+      }
+    }
+
+    return null;
   }
 
   private async loadReconciledRegistry(): Promise<RegistryData> {

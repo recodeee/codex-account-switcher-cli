@@ -11,6 +11,7 @@ from typing import Literal
 from app.core.utils.time import to_utc_naive
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
+from app.modules.accounts.codex_auth_switcher import resolve_snapshot_name_candidates_for_account
 from app.modules.accounts.codex_live_usage import (
     LocalCodexLiveUsage,
     LocalCodexLiveUsageSample,
@@ -174,7 +175,12 @@ def apply_local_live_usage_overrides(
             continue
 
         selected_snapshot_name = codex_auth_status.snapshot_name
-        snapshot_names_from_index = snapshot_index.snapshots_by_account_id.get(account.id, [])
+        snapshot_names_from_index = resolve_snapshot_name_candidates_for_account(
+            snapshot_index=snapshot_index,
+            account_id=account.id,
+            chatgpt_account_id=account.chatgpt_account_id,
+            email=account.email,
+        )
         is_effective_active_snapshot = codex_auth_status.is_active_snapshot or _account_matches_active_snapshot(
             active_snapshot_name=snapshot_index.active_snapshot_name,
             selected_snapshot_name=selected_snapshot_name,

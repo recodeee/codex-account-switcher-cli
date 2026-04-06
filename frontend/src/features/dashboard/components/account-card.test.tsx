@@ -46,7 +46,11 @@ describe("AccountCard", () => {
     expect(screen.getByText("Tokens used")).toBeInTheDocument();
     expect(screen.getByText("Codex CLI sessions")).toBeInTheDocument();
     expect(screen.getByText("98,765k")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
+    const cliSessionsLabel = screen.getByText("CLI sessions:");
+    expect(cliSessionsLabel.parentElement).not.toBeNull();
+    expect(
+      within(cliSessionsLabel.parentElement as HTMLElement).getByText(/^3$/),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sessions" })).toBeInTheDocument();
   });
 
@@ -1522,6 +1526,95 @@ describe("AccountCard", () => {
     expect(screen.getByText("sess-alpha-123456")).toBeInTheDocument();
     expect(screen.getByText("sess-beta-abcdef")).toBeInTheDocument();
     expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows per-session state pills for waiting, thinking, and finished tasks", () => {
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Review sticky session routing edge-cases",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-waiting",
+          taskPreview: "Waiting for new task",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+        {
+          sessionKey: "sess-thinking",
+          taskPreview: "Refactor session quota aggregation",
+          taskUpdatedAt: "2026-04-05T10:01:00.000Z",
+        },
+        {
+          sessionKey: "sess-finished",
+          taskPreview: "Task finished",
+          taskUpdatedAt: "2026-04-05T10:02:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 3,
+      codexSessionCount: 3,
+      codexTrackedSessionCount: 3,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("sess-waiting")).toBeInTheDocument();
+    expect(screen.getByText("sess-thinking")).toBeInTheDocument();
+    expect(screen.getByText("sess-finished")).toBeInTheDocument();
+    expect(screen.getByText("waiting")).toBeInTheDocument();
+    expect(screen.getByText("thinking")).toBeInTheDocument();
+    expect(screen.getByText("task finished")).toBeInTheDocument();
+  });
+
+  it("allows collapsing and expanding CLI session tasks list", async () => {
+    const user = userEvent.setup();
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Investigate websocket sticky routing",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-alpha-123456",
+          taskPreview: "Investigate websocket sticky routing",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+        {
+          sessionKey: "sess-beta-abcdef",
+          taskPreview: "Waiting for new task",
+          taskUpdatedAt: "2026-04-05T10:01:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 2,
+      codexSessionCount: 2,
+      codexTrackedSessionCount: 2,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const toggle = screen.getByRole("button", { name: /CLI session tasks/i });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Session 1")).toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Session 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("sess-alpha-123456")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Session 1")).toBeInTheDocument();
+    expect(screen.getByText("sess-alpha-123456")).toBeInTheDocument();
   });
 
   it("shows last task context when a waiting live session exposes a fallback preview", () => {

@@ -1,30 +1,53 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" viewBox="0 0 40 32">
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 40 32" fill="none">
+  <defs>
+    <linearGradient id="leftLoop" x1="9" y1="16" x2="18" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FB4B7A" />
+      <stop offset="100%" stop-color="#F8FAFC" />
+    </linearGradient>
+    <linearGradient id="rightLoop" x1="22" y1="16" x2="31" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F8FAFC" />
+      <stop offset="100%" stop-color="#12C48B" />
+    </linearGradient>
+    <linearGradient id="bridge" x1="14.8" y1="16" x2="25.2" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FB4B7A" />
+      <stop offset="50%" stop-color="#F8FAFC" />
+      <stop offset="100%" stop-color="#12C48B" />
+    </linearGradient>
+  </defs>
+
   <path
     d="M17.55 11.41A8 8 0 1 0 17.55 20.59"
-    stroke="#E11D48"
+    stroke="url(#leftLoop)"
+    stroke-width="5.2"
     stroke-linecap="round"
     stroke-linejoin="round"
-    stroke-width="5.2"
   />
   <path
     d="M22.45 11.41A8 8 0 1 1 22.45 20.59"
-    stroke="#10B981"
+    stroke="url(#rightLoop)"
+    stroke-width="5.2"
     stroke-linecap="round"
     stroke-linejoin="round"
-    stroke-width="5.2"
   />
   <path
     d="M14.8 10.6 25.2 21.4"
-    stroke="#059669"
+    stroke="url(#bridge)"
     stroke-linecap="round"
     stroke-linejoin="round"
-    stroke-width="5.4"
+    stroke-width="5.45"
   />
   <path
-    d="M15.8 9.7 26.2 20.3"
-    stroke="#fff"
+    d="M15.85 9.75 26.15 20.25"
+    stroke="#ffffff"
     stroke-linecap="round"
     stroke-linejoin="round"
     stroke-width="1.9"
+  />
+  <path
+    d="M24.2 10.35 14.55 21"
+    stroke="#0F172A"
+    stroke-linecap="round"
+    stroke-width="1.1"
+    opacity="0.18"
   />
 </svg>

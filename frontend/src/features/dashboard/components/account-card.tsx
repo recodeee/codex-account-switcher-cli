@@ -175,6 +175,57 @@ function WaitingForTaskPill({ className }: { className?: string }) {
   );
 }
 
+function ThinkingTaskPill({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "inline-flex h-7 items-center gap-2 rounded-full bg-indigo-500/14 px-2.5 text-indigo-200",
+        className,
+      )}
+    >
+      <span className="sr-only">Thinking</span>
+      <span className="flex items-end gap-0.5" aria-hidden>
+        <span className="h-1.5 w-1 rounded-full bg-zinc-100/95 animate-pulse [animation-duration:900ms]" />
+        <span className="h-2.5 w-1 rounded-full bg-indigo-100/95 animate-pulse [animation-delay:140ms] [animation-duration:900ms]" />
+        <span className="h-3 w-1 rounded-full bg-cyan-200/95 animate-pulse [animation-delay:280ms] [animation-duration:900ms]" />
+      </span>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-100/95">
+        thinking
+      </span>
+    </div>
+  );
+}
+
+type SessionTaskState = "finished" | "waiting" | "thinking";
+
+function resolveSessionTaskState(taskPreview: string): SessionTaskState {
+  const normalized = taskPreview.trim().toLowerCase();
+  if (normalized === TASK_FINISHED_LABEL.toLowerCase()) {
+    return "finished";
+  }
+  if (normalized === WAITING_FOR_NEW_TASK_LABEL.toLowerCase()) {
+    return "waiting";
+  }
+  return "thinking";
+}
+
+function SessionTaskStatePill({
+  taskPreview,
+  className,
+}: {
+  taskPreview: string;
+  className?: string;
+}) {
+  const state = resolveSessionTaskState(taskPreview);
+  if (state === "finished") {
+    return <TaskFinishedPill className={className} />;
+  }
+  if (state === "waiting") {
+    return <WaitingForTaskPill className={className} />;
+  }
+  return <ThinkingTaskPill className={className} />;
+}
+
 function formatSessionKeyLabel(sessionKey: string): string {
   const normalized = sessionKey.trim();
   if (normalized.length <= 18) {
@@ -581,6 +632,7 @@ export function AccountCard(props: AccountCardProps) {
   }, []);
 
   const [showQuotaDebug, setShowQuotaDebug] = useState(false);
+  const [sessionTasksCollapsed, setSessionTasksCollapsed] = useState(false);
   const navigate = useNavigate();
   const liveQuotaDebug = account.liveQuotaDebug ?? null;
   const mergedPrimaryRemainingPercent = getMergedQuotaRemainingPercent(
@@ -1245,41 +1297,61 @@ export function AccountCard(props: AccountCardProps) {
 
                 {hasSessionTaskRows ? (
                   <div className="mt-2 border-t border-white/10 pt-2">
-                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                      CLI session tasks
-                    </p>
-                    <ul className="space-y-1.5">
-                      {sessionTaskRows.map((preview) => (
-                        <li
-                          key={`${preview.sessionKey}-${preview.ordinal}`}
-                          className="space-y-1 rounded-md border border-white/10 bg-black/20 px-2 py-1.5"
-                        >
-                          <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                            <span>Session {preview.ordinal}</span>
-                            {!preview.synthetic ? (
-                              <span
-                                className="max-w-[62%] truncate font-mono text-zinc-500"
-                                title={preview.sessionKey}
-                              >
-                                {formatSessionKeyLabel(preview.sessionKey)}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div title={preview.taskPreview}>
-                            {preview.taskPreview === TASK_FINISHED_LABEL ? (
-                              <TaskFinishedPill />
-                            ) : (
+                    <button
+                      type="button"
+                      className="mb-1.5 inline-flex w-full items-center justify-between gap-2 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:bg-black/30"
+                      aria-expanded={!sessionTasksCollapsed}
+                      onClick={() => setSessionTasksCollapsed((current) => !current)}
+                    >
+                      <span>CLI session tasks</span>
+                      <span className="inline-flex items-center gap-1 text-zinc-300">
+                        <span className="font-mono text-[10px]">
+                          {sessionTaskRows.length}
+                        </span>
+                        <ChevronDown
+                          className={cn(
+                            "h-3.5 w-3.5 transition-transform duration-200",
+                            sessionTasksCollapsed && "-rotate-90",
+                          )}
+                        />
+                      </span>
+                    </button>
+                    {!sessionTasksCollapsed ? (
+                      <ul className="space-y-1.5">
+                        {sessionTaskRows.map((preview) => (
+                          <li
+                            key={`${preview.sessionKey}-${preview.ordinal}`}
+                            className="space-y-1 rounded-md border border-white/10 bg-black/20 px-2 py-1.5"
+                          >
+                            <div className="flex items-start justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                              <span>Session {preview.ordinal}</span>
+                              <div className="flex min-w-0 flex-col items-end gap-1">
+                                {!preview.synthetic ? (
+                                  <span
+                                    className="max-w-[11rem] truncate font-mono text-zinc-500"
+                                    title={preview.sessionKey}
+                                  >
+                                    {formatSessionKeyLabel(preview.sessionKey)}
+                                  </span>
+                                ) : null}
+                                <SessionTaskStatePill
+                                  taskPreview={preview.taskPreview}
+                                  className="h-5 px-2 text-[9px]"
+                                />
+                              </div>
+                            </div>
+                            <div title={preview.taskPreview}>
                               <span className="inline-flex items-center gap-1.5 break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/95">
                                 {hasNextTaskHint(preview.taskPreview) ? (
                                   <NextTaskBadge />
                                 ) : null}
                                 <span>{preview.taskPreview}</span>
                               </span>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

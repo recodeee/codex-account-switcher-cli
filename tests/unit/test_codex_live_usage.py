@@ -2038,6 +2038,68 @@ def test_read_live_codex_process_session_counts_by_snapshot_uses_previous_active
     assert counts == {"tokio": 1}
 
 
+def test_read_live_codex_process_session_counts_by_snapshot_uses_rollout_start_for_pre_switch_session_ownership(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "default" / "current"
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text("odin@edixai.com", encoding="utf-8")
+    os.utime(current_path, (1_500.0, 1_500.0))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_LB_UNLABELED_PROCESS_START_TOLERANCE_SECONDS", "0")
+
+    registry_path = tmp_path / "accounts" / "registry.json"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "activeAccountName": "odin@edixai.com",
+                "previousActiveAccountName": "zeus@edixai.com",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_AUTH_REGISTRY_PATH", str(registry_path))
+
+    rollout_path = (
+        tmp_path
+        / "sessions"
+        / "1970"
+        / "01"
+        / "01"
+        / "rollout-1970-01-01T00-16-40-019d5a6a-4665-7873-9714-9efb95b24268.jsonl"
+    )
+    rollout_path.parent.mkdir(parents=True, exist_ok=True)
+    rollout_path.write_text("{\"type\":\"event_msg\"}\n", encoding="utf-8")
+    os.utime(rollout_path, (1_000.0, 1_000.0))
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(852, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._process_belongs_to_current_user",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda _pid: 1_600.0,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._resolve_process_rollout_path",
+        lambda _pid: rollout_path,
+    )
+
+    counts = read_live_codex_process_session_counts_by_snapshot()
+
+    assert counts == {"zeus@edixai.com": 1}
+
+
 def test_read_live_codex_process_session_counts_by_snapshot_uses_process_home_default_scope_paths(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

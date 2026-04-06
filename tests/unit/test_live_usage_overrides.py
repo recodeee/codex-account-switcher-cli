@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app.core.auth import generate_unique_account_id
 from app.core.crypto import TokenEncryptor
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
@@ -52,11 +53,16 @@ def _clear_terminated_cli_session_snapshot_cache() -> None:
     _terminated_cli_session_snapshot_cache.clear()
 
 
-def _make_account(account_id: str, email: str) -> Account:
+def _make_account(
+    account_id: str,
+    email: str,
+    *,
+    chatgpt_account_id: str | None = None,
+) -> Account:
     encryptor = TokenEncryptor()
     return Account(
         id=account_id,
-        chatgpt_account_id=f"chatgpt-{account_id}",
+        chatgpt_account_id=chatgpt_account_id or f"chatgpt-{account_id}",
         email=email,
         plan_type="plus",
         access_token_encrypted=encryptor.encrypt("access"),
@@ -178,6 +184,71 @@ def test_apply_local_live_usage_overrides_marks_active_snapshot_live_from_proces
     assert candidates == []
     assert codex_auth_by_account[account.id].has_live_session is True
     assert codex_session_counts_by_account[account.id] == 1
+
+
+def test_apply_local_live_usage_overrides_ignores_process_sessions_from_legacy_id_alias_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Legacy rows can carry a stale persisted account.id that points to a
+    # multi-snapshot bucket (same ChatGPT account id, multiple emails).
+    # Session attribution must follow the account's canonical email snapshot,
+    # not whatever appears in the stale id bucket.
+    account = _make_account(
+        "legacy-id",
+        "zeus@example.com",
+        chatgpt_account_id="chatgpt-shared",
+    )
+    canonical_account_id = generate_unique_account_id(
+        "chatgpt-shared",
+        "zeus@example.com",
+    )
+    snapshot_index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={
+            "legacy-id": ["viktor@example.com", "zeus@example.com"],
+            canonical_account_id: ["zeus@example.com"],
+        },
+        active_snapshot_name="viktor@example.com",
+    )
+    codex_auth_by_account = {
+        account.id: AccountCodexAuthStatus(
+            has_snapshot=True,
+            snapshot_name="zeus@example.com",
+            active_snapshot_name="viktor@example.com",
+            is_active_snapshot=False,
+            has_live_session=False,
+        )
+    }
+    codex_session_counts_by_account = {account.id: 0}
+
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_by_snapshot",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_local_codex_live_usage_samples_by_snapshot",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_live_codex_process_session_counts_by_snapshot",
+        lambda: {"viktor@example.com": 4},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.live_usage_overrides.read_runtime_live_session_counts_by_snapshot",
+        lambda: {},
+    )
+
+    candidates = apply_local_live_usage_overrides(
+        accounts=[account],
+        snapshot_index=snapshot_index,
+        codex_auth_by_account=codex_auth_by_account,
+        primary_usage={},
+        secondary_usage={},
+        codex_live_session_counts_by_account=codex_session_counts_by_account,
+    )
+
+    assert candidates == []
+    assert codex_auth_by_account[account.id].has_live_session is False
+    assert codex_session_counts_by_account[account.id] == 0
 
 
 def test_apply_local_live_usage_overrides_preserves_runtime_session_count_without_process_visibility(

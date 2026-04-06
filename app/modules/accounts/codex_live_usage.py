@@ -622,6 +622,17 @@ def _resolve_session_rollout_started_at(session_id: str) -> float | None:
         return None
 
     path = max(candidates, key=_safe_mtime)
+    return _resolve_rollout_started_at_from_path(path)
+
+
+def _resolve_process_session_started_at(pid: int) -> float | None:
+    rollout_path = _resolve_process_rollout_path(pid)
+    if rollout_path is None:
+        return None
+    return _resolve_rollout_started_at_from_path(rollout_path)
+
+
+def _resolve_rollout_started_at_from_path(path: Path) -> float | None:
     match = _ROLLOUT_SESSION_FILE_RE.match(path.name)
     if match is None:
         return None
@@ -1526,6 +1537,16 @@ def _resolve_unlabeled_default_scope_snapshot_name(
     selection_changed_at = _safe_mtime(default_current_path)
     if selection_changed_at > 0:
         started_at = _read_process_started_at(pid)
+        rollout_started_at = _resolve_process_session_started_at(pid)
+        if rollout_started_at is not None and (
+            started_at is None or rollout_started_at < started_at
+        ):
+            # Some long-running sessions are represented by new process IDs
+            # after account switches (for example after reconnect/restart).
+            # When available, use rollout filename start time as the stronger
+            # ownership signal so pre-switch sessions do not get remapped to
+            # the currently active snapshot.
+            started_at = rollout_started_at
         if started_at is not None:
             tolerance_seconds = float(_unlabeled_process_start_tolerance_seconds())
             if (started_at + tolerance_seconds) < selection_changed_at:

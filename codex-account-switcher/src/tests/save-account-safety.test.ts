@@ -214,6 +214,90 @@ test("inferAccountNameFromCurrentAuth returns email-shaped duplicate suffix for 
   });
 });
 
+test("resolveLoginAccountNameFromCurrentAuth reuses canonical email snapshot when email already exists", async (t) => {
+  await withIsolatedCodexDir(t, async ({ accountsDir, authPath }) => {
+    const service = new AccountService();
+    const email = "csoves@edixai.com";
+
+    await fsp.writeFile(
+      path.join(accountsDir, `${email}.json`),
+      buildAuthPayload(email, {
+        accountId: "acct-a",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload(email, {
+        accountId: "acct-b",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+
+    const resolved = await service.resolveLoginAccountNameFromCurrentAuth();
+    assert.deepEqual(resolved, {
+      name: email,
+      source: "existing-email",
+    });
+  });
+});
+
+test("resolveLoginAccountNameFromCurrentAuth prefers active alias snapshot when it matches auth email", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const activeName = "team-primary";
+    const email = "csoves@edixai.com";
+
+    await fsp.writeFile(
+      path.join(accountsDir, `${activeName}.json`),
+      buildAuthPayload(email, {
+        accountId: "acct-a",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(path.join(codexDir, "current"), `${activeName}\n`, "utf8");
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload(email, {
+        accountId: "acct-b",
+        userId: "user-a",
+      }),
+      "utf8",
+    );
+
+    const resolved = await service.resolveLoginAccountNameFromCurrentAuth();
+    assert.deepEqual(resolved, {
+      name: activeName,
+      source: "existing-email",
+    });
+  });
+});
+
+test("resolveLoginAccountNameFromCurrentAuth infers email snapshot when no existing snapshot matches email", async (t) => {
+  await withIsolatedCodexDir(t, async ({ authPath }) => {
+    const service = new AccountService();
+    const email = "new-user@edixai.com";
+
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload(email, {
+        accountId: "acct-new",
+        userId: "user-new",
+      }),
+      "utf8",
+    );
+
+    const resolved = await service.resolveLoginAccountNameFromCurrentAuth();
+    assert.deepEqual(resolved, {
+      name: email,
+      source: "inferred",
+    });
+  });
+});
+
 test("inferAccountNameFromCurrentAuth ignores active alias and still infers email-shaped name", async (t) => {
   await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
     const service = new AccountService();
