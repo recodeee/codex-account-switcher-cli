@@ -45,6 +45,8 @@ certs/
 .sisyphus/
 
 .specstory/
+logs/*
+!logs/.gitkeep
 
 .agents/hooks/state/
 .agents/.personality_migration

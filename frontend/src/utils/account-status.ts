@@ -48,7 +48,12 @@ export function resolveEffectiveAccountStatus(input: {
   isActiveSnapshot?: boolean;
   hasLiveSession?: boolean;
   hasRecentUsageSignal?: boolean;
+  allowDeactivatedOverride?: boolean;
 }): DashboardAccountStatus {
+  const allowDeactivatedOverride = input.allowDeactivatedOverride ?? true;
+  if (input.status === "deactivated" && !allowDeactivatedOverride) {
+    return "deactivated";
+  }
   if (
     (
       input.hasLiveSession ||

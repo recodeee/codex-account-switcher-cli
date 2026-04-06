@@ -18,18 +18,6 @@ type LocationSnapshot = {
   search: string;
 };
 
-function isNextRuntimeEnvironment(): boolean {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return false;
-  }
-
-  if (typeof (window as typeof window & { __NEXT_DATA__?: unknown }).__NEXT_DATA__ !== "undefined") {
-    return true;
-  }
-
-  return document.querySelector('script[src*="/_next/"]') !== null;
-}
-
 function notifyLocationChanged() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new PopStateEvent("popstate"));
@@ -94,22 +82,10 @@ function navigateTo(url: string, options?: NavigateOptions) {
     return;
   }
 
-  const currentUrl = new URL(window.location.href);
   const nextUrl = new URL(url, window.location.href);
   const sameOrigin = nextUrl.origin === window.location.origin;
-  const pathChanged = currentUrl.pathname !== nextUrl.pathname;
-  const nextRuntimeDetected = isNextRuntimeEnvironment();
 
   if (!sameOrigin) {
-    if (options?.replace) {
-      window.location.replace(nextUrl.toString());
-      return;
-    }
-    window.location.assign(nextUrl.toString());
-    return;
-  }
-
-  if (nextRuntimeDetected && pathChanged) {
     if (options?.replace) {
       window.location.replace(nextUrl.toString());
       return;
@@ -222,12 +198,6 @@ export function NavLink({ to, className, children, onClick }: NavLinkProps) {
           event.ctrlKey ||
           event.shiftKey
         ) {
-          return;
-        }
-
-        if (isNextRuntimeEnvironment()) {
-          event.preventDefault();
-          window.location.assign(new URL(to, window.location.href).toString());
           return;
         }
 

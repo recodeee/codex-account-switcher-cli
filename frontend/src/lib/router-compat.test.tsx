@@ -39,7 +39,7 @@ describe("NavLink", () => {
     expect(window.location.pathname).toBe("/accounts");
   });
 
-  it("prefers full navigation over pushState when running in Next runtime", async () => {
+  it("uses history pushState when running in Next runtime", async () => {
     const user = userEvent.setup();
     window.history.pushState({}, "", "/apis");
     setNextRuntimeFlag();
@@ -49,11 +49,11 @@ describe("NavLink", () => {
     render(<NavLink to="/accounts">Accounts</NavLink>);
     await user.click(screen.getByRole("link", { name: "Accounts" }));
 
-    expect(pushStateSpy).not.toHaveBeenCalled();
-    expect(window.location.pathname).toBe("/apis");
+    expect(pushStateSpy).toHaveBeenCalled();
+    expect(window.location.pathname).toBe("/accounts");
   });
 
-  it("prefers full navigation for query links in Next runtime", async () => {
+  it("uses history pushState for query links in Next runtime", async () => {
     const user = userEvent.setup();
     window.history.pushState({}, "", "/apis");
     setNextRuntimeFlag();
@@ -63,8 +63,8 @@ describe("NavLink", () => {
     render(<NavLink to="/apis?selected=key_1">Key 1</NavLink>);
     await user.click(screen.getByRole("link", { name: "Key 1" }));
 
-    expect(pushStateSpy).not.toHaveBeenCalled();
+    expect(pushStateSpy).toHaveBeenCalled();
     expect(window.location.pathname).toBe("/apis");
-    expect(window.location.search).toBe("");
+    expect(window.location.search).toBe("?selected=key_1");
   });
 });

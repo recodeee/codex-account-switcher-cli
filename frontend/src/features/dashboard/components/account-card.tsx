@@ -569,6 +569,7 @@ export function AccountCard(props: AccountCardProps) {
     isActiveSnapshot,
     hasLiveSession: hasActiveCliSession,
     hasRecentUsageSignal: recentUsageSignal,
+    allowDeactivatedOverride: false,
   });
   const primaryRemainingRaw =
     mergedPrimaryRemainingPercent ??

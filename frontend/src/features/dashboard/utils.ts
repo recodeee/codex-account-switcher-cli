@@ -182,6 +182,7 @@ function buildGroupedWindowEntries(
       hasLiveSession: hasActiveCliSessionSignal(account),
       hasRecentUsageSignal:
         (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account),
+      allowDeactivatedOverride: false,
     });
     return effectiveStatus !== "deactivated";
   });
@@ -365,6 +366,7 @@ export function buildDashboardView(
       hasLiveSession: hasActiveCliSessionSignal(account),
       hasRecentUsageSignal:
         (account.codexAuth?.hasSnapshot ?? false) && hasRecentUsageSignal(account),
+      allowDeactivatedOverride: false,
     });
     return effectiveStatus === "active";
   });

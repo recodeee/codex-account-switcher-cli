@@ -380,6 +380,7 @@ export function AccountCards({
         hasRecentUsageSignal:
           (account.codexAuth?.hasSnapshot ?? false) &&
           hasRecentUsageSignal(account, nowMs),
+        allowDeactivatedOverride: false,
       });
 
       if (isAccountWorkingNow(account, nowMs)) {

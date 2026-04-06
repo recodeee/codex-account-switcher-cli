@@ -334,7 +334,7 @@ describe("AccountListItem", () => {
     expect(screen.queryByTestId("missing-snapshot-badge")).not.toBeInTheDocument();
   });
 
-  it("treats deactivated accounts with active snapshots as active in list rows", () => {
+  it("keeps deactivated status visible in list rows even with active snapshots", () => {
     const account = createAccountSummary({
       status: "deactivated",
       usage: {
@@ -360,10 +360,10 @@ describe("AccountListItem", () => {
     );
 
     expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
-    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
   });
 
-  it("treats deactivated accounts with live sessions as active in list rows", () => {
+  it("keeps deactivated status visible in list rows with live sessions", () => {
     const account = createAccountSummary({
       status: "deactivated",
       usage: {
@@ -390,10 +390,10 @@ describe("AccountListItem", () => {
     );
 
     expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
-    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
   });
 
-  it("treats deactivated accounts with local snapshots as active in list rows", () => {
+  it("keeps deactivated status visible in list rows with local snapshots", () => {
     const account = createAccountSummary({
       status: "deactivated",
       codexLiveSessionCount: 0,
@@ -422,10 +422,10 @@ describe("AccountListItem", () => {
     );
 
     expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
-    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
   });
 
-  it("treats deactivated accounts with fresh CLI debug samples as active in list rows", () => {
+  it("keeps deactivated status visible in list rows with fresh CLI debug samples", () => {
     const account = createAccountSummary({
       status: "deactivated",
       codexLiveSessionCount: 0,
@@ -479,7 +479,7 @@ describe("AccountListItem", () => {
     );
 
     expect(screen.getByRole("button", { name: "Use this" })).toBeEnabled();
-    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
   });
 
   it("shows live badge and live background when account is working now", () => {

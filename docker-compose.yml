@@ -13,17 +13,13 @@ services:
     ports:
       - "2455:2455"
     command:
-      - fastapi
-      - run
-      - app/main.py
-      - --host
-      - 0.0.0.0
-      - --port
-      - "2455"
-      - --reload
+      - sh
+      - /app/scripts/run-server-dev.sh
     volumes:
       # Bind-mount backend source for instant FastAPI reload on Python edits.
       - ./app:/app/app:rw
+      - ./scripts:/app/scripts:rw
+      - ./logs:/var/log/codex-lb:rw
       - ${HOME}/.codex:/home/app/.codex:rw
       - /proc:/host_proc:ro
       - codex-lb-data:/var/lib/codex-lb
@@ -49,16 +45,18 @@ services:
         CMD ["sh", "-c", "bun run sync-version && ./node_modules/.bin/next dev --port 5173 --hostname 0.0.0.0"]
     ports:
       - "5173:5173"
+    env_file:
+      - ./.env.local
     command:
       - sh
-      - -c
-      - bun install --frozen-lockfile && bun run sync-version && ./node_modules/.bin/next dev --port 5173 --hostname 0.0.0.0
+      - /app/scripts/run-frontend-dev.sh
     environment:
       API_PROXY_TARGET: http://server:2455
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "100"
     volumes:
       - ./frontend:/app:rw
+      - ./logs:/var/log/codex-lb:rw
       - codex-lb-frontend-node-modules:/app/node_modules
 
   postgres:

@@ -140,6 +140,7 @@ export function AccountListItem({
     isActiveSnapshot,
     hasLiveSession: hasActiveCliSession,
     hasRecentUsageSignal: recentUsageSignal,
+    allowDeactivatedOverride: false,
   });
   const title = account.displayName || account.email;
   const titleIsEmail = isEmailLabel(title, account.email);

@@ -424,7 +424,7 @@ describe("AccountCard", () => {
     );
   });
 
-  it("treats deactivated accounts with active snapshot as active in dashboard cards", () => {
+  it("keeps deactivated status visible even when active snapshot is present", () => {
     const account = createAccountSummary({
       status: "deactivated",
       usage: {
@@ -441,9 +441,9 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
   });
 
   it("shows expired refresh token badge and re-auth action when refresh token re-login is required", () => {
@@ -465,12 +465,12 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
     expect(screen.getByText("Expired refresh token")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
   });
 
-  it("treats deactivated accounts with local snapshots as active in dashboard cards", () => {
+  it("keeps deactivated status visible for local snapshots in dashboard cards", () => {
     const account = createAccountSummary({
       status: "deactivated",
       usage: {
@@ -494,12 +494,12 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
   });
 
-  it("treats deactivated accounts with fresh CLI debug samples as active in dashboard cards", () => {
+  it("keeps deactivated status visible with fresh CLI debug samples", () => {
     const account = createAccountSummary({
       status: "deactivated",
       codexLiveSessionCount: 0,
@@ -544,12 +544,12 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
   });
 
-  it("treats deactivated snapshot accounts with recent usage as active", () => {
+  it("keeps deactivated snapshot accounts disconnected even with recent usage", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       status: "deactivated",
@@ -570,9 +570,9 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Re-auth" })).not.toBeInTheDocument();
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
   });
 
