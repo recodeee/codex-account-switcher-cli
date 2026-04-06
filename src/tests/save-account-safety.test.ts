@@ -214,6 +214,35 @@ test("inferAccountNameFromCurrentAuth returns email-shaped duplicate suffix for 
   });
 });
 
+test("inferAccountNameFromCurrentAuth ignores active alias and still infers email-shaped name", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const activeName = "work";
+    const currentPath = path.join(codexDir, "current");
+
+    await fsp.writeFile(
+      path.join(accountsDir, `${activeName}.json`),
+      buildAuthPayload("admin@recodee.com", {
+        accountId: "acct-admin",
+        userId: "user-admin",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, `${activeName}\n`, "utf8");
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload("admin@recodee.com", {
+        accountId: "acct-admin",
+        userId: "user-admin",
+      }),
+      "utf8",
+    );
+
+    const inferred = await service.inferAccountNameFromCurrentAuth();
+    assert.equal(inferred, "admin@recodee.com");
+  });
+});
+
 test("resolveDefaultAccountNameFromCurrentAuth reuses active snapshot name when identity matches", async (t) => {
   await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
     const service = new AccountService();

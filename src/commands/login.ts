@@ -40,7 +40,7 @@ export default class LoginCommand extends BaseCommand {
 
       const resolvedName = providedName
         ? { name: providedName, source: "explicit" as const }
-        : await this.accounts.resolveDefaultAccountNameFromCurrentAuth();
+        : { name: await this.accounts.inferAccountNameFromCurrentAuth(), source: "inferred" as const };
       const savedName = await this.accounts.saveAccount(resolvedName.name, {
         force: Boolean(flags.force),
       });
@@ -48,9 +48,7 @@ export default class LoginCommand extends BaseCommand {
       const suffix =
         resolvedName.source === "explicit"
           ? ""
-          : resolvedName.source === "active"
-            ? " (reused active account name)"
-            : " (inferred from auth email)";
+          : " (inferred from auth email)";
       this.log(`Saved current Codex auth tokens as "${savedName}"${suffix}.`);
     });
   }
