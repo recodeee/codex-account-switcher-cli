@@ -17,6 +17,7 @@ import { CopyButton } from "@/components/copy-button";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "@/lib/router-compat";
 import { cn } from "@/lib/utils";
 import type { AccountSummary } from "@/features/dashboard/schemas";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
@@ -74,11 +75,52 @@ export type AccountCardProps = {
   onAction?: (account: AccountSummary, action: AccountAction) => void;
 };
 
+function formatPlanWithSnapshot(
+  planType: string,
+  snapshotName?: string | null,
+): string {
+  const planLabel = formatSlug(planType);
+  const normalizedSnapshotName = snapshotName?.trim();
+  if (!normalizedSnapshotName) {
+    return `${planLabel} · No snapshot`;
+  }
+  return `${planLabel} · ${normalizedSnapshotName}`;
+}
+
+function getPlanSnapshotDetails(
+  planType: string,
+  snapshotName?: string | null,
+): {
+  planLabel: string;
+  snapshotLabel: string;
+  snapshotIsEmail: boolean;
+} {
+  const planLabel = formatSlug(planType);
+  const normalizedSnapshotName = snapshotName?.trim();
+  if (!normalizedSnapshotName) {
+    return {
+      planLabel,
+      snapshotLabel: "No snapshot",
+      snapshotIsEmail: false,
+    };
+  }
+  return {
+    planLabel,
+    snapshotLabel: normalizedSnapshotName,
+    snapshotIsEmail: isLikelyEmailValue(normalizedSnapshotName),
+  };
+}
+
+function isCodexOnlyPlanType(planType: string): boolean {
+  const normalized = planType.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return normalized === "self_serve_business_usage_based";
+}
+
 const NEAR_ZERO_QUOTA_PERCENT = 5;
 const WAITING_FOR_NEW_TASK_LABEL = "Waiting for new task";
+const TASK_FINISHED_LABEL = "Task finished";
 const SESSION_TASK_PREVIEW_MAX_ROWS = 4;
 const NEXT_TASK_PREVIEW_PATTERN = /\bnext(?:\.?js)?\b|\bturbopack\b/i;
-const ACCOUNT_SUBTITLE_LABEL = "CODEX ONLY ACCOUNT";
 
 function hasNextTaskHint(taskPreview: string | null | undefined): boolean {
   const normalized = taskPreview?.trim();
@@ -100,27 +142,6 @@ function NextTaskBadge() {
   );
 }
 
-function OpenAILogoMark({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      className={cn("h-3.5 w-3.5", className)}
-      aria-hidden
-    >
-      <path
-        d="M12 4.25a3.75 3.75 0 0 1 3.63 2.82l2.4.87a3.75 3.75 0 0 1 1.22 6.26l.42 2.52a3.75 3.75 0 0 1-5.02 3.95L12.5 22a3.75 3.75 0 0 1-5-1.7l-2.54-.38a3.75 3.75 0 0 1-2.45-5.89l-.74-2.45a3.75 3.75 0 0 1 3.82-4.82l1.83-1.8A3.75 3.75 0 0 1 12 4.25Z"
-        stroke="currentColor"
-        strokeWidth={1.25}
-        strokeLinejoin="round"
-        opacity={0.7}
-      />
-      <circle cx="12" cy="12" r="2.2" fill="currentColor" />
-      <circle cx="12" cy="12" r="4.8" stroke="currentColor" strokeOpacity={0.55} />
-    </svg>
-  );
-}
-
 function formatSessionKeyLabel(sessionKey: string): string {
   const normalized = sessionKey.trim();
   if (normalized.length <= 18) {
@@ -135,7 +156,7 @@ function resolveSessionTaskPreview(
   const normalized = taskPreview?.trim();
   return normalized && normalized.length > 0
     ? normalized
-    : WAITING_FOR_NEW_TASK_LABEL;
+    : TASK_FINISHED_LABEL;
 }
 
 function normalizeNearZeroQuotaPercent(value: number): number {
@@ -251,18 +272,18 @@ function QuotaBar({
       </div>
       <div className="min-h-[16px]">
         {isLive && !deactivated ? (
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-cyan-700 dark:text-cyan-300">
-            <Activity className="h-3 w-3" />
-            <span>
-              {usageLimitHit
-                ? "Usage limit hit"
-                : telemetryPending
-                  ? "Telemetry pending"
-                  : liveTelemetryUnavailable
-                    ? "Live session detected"
-                    : "Live token status"}
-            </span>
-          </div>
+          usageLimitHit || telemetryPending || liveTelemetryUnavailable ? (
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-cyan-700 dark:text-cyan-300">
+              <Activity className="h-3 w-3" />
+              <span>
+                {usageLimitHit
+                  ? "Usage limit hit"
+                  : telemetryPending
+                    ? "Telemetry pending"
+                    : "Live session detected"}
+              </span>
+            </div>
+          ) : null
         ) : lastSeenLabel ? (
           <div
             className={cn(
@@ -530,6 +551,7 @@ export function AccountCard(props: AccountCardProps) {
   }, []);
 
   const [showQuotaDebug, setShowQuotaDebug] = useState(false);
+  const navigate = useNavigate();
   const liveQuotaDebug = account.liveQuotaDebug ?? null;
   const mergedPrimaryRemainingPercent = getMergedQuotaRemainingPercent(
     account,
@@ -738,6 +760,20 @@ export function AccountCard(props: AccountCardProps) {
     usageLimitHitCountdownMs,
   ]);
 
+  const handleUnlock = () => {
+    onAction?.(account, "reauth");
+
+    const selectedAccountId = encodeURIComponent(account.accountId);
+    const unlockTarget = `/accounts?selected=${selectedAccountId}&oauth=prompt`;
+    if (typeof window !== "undefined") {
+      const currentPath = `${window.location.pathname}${window.location.search}`;
+      if (currentPath === unlockTarget) {
+        return;
+      }
+    }
+    navigate(unlockTarget);
+  };
+
   const primaryReset = formatQuotaResetLabel(primaryResetAt);
   const secondaryReset = formatQuotaResetLabel(secondaryResetAt);
   const primaryWindowLabel = formatWindowLabel("primary", primaryWindowMinutes);
@@ -762,6 +798,15 @@ export function AccountCard(props: AccountCardProps) {
 
   const title = account.displayName || account.email;
   const compactId = formatCompactAccountId(account.accountId);
+  const planWithSnapshot = formatPlanWithSnapshot(
+    account.planType,
+    account.codexAuth?.snapshotName,
+  );
+  const { planLabel, snapshotLabel, snapshotIsEmail } = getPlanSnapshotDetails(
+    account.planType,
+    account.codexAuth?.snapshotName,
+  );
+  const showCodexOnlyAccountSubtitle = isCodexOnlyPlanType(account.planType);
   const snapshotName = account.codexAuth?.snapshotName?.trim() ?? null;
   const hasResolvedSnapshot = Boolean(snapshotName);
   const showMissingSnapshotLockOverlay = !hasResolvedSnapshot;
@@ -820,8 +865,14 @@ export function AccountCard(props: AccountCardProps) {
     effectiveCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL &&
     codexLastTaskPreview != null &&
     codexLastTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
-  const showThinkingIndicator =
+  const displayCurrentTaskPreview =
+    effectiveCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL
+      ? TASK_FINISHED_LABEL
+      : effectiveCurrentTaskPreview;
+  const showWorkingIndicator =
     isWorkingNow && effectiveCurrentTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
+  const showTaskFinishedIndicator =
+    isWorkingNow && effectiveCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL;
   const sessionTaskPreviews = useMemo(() => {
     const seenSessionKeys = new Set<string>();
     const normalized = (account.codexSessionTaskPreviews ?? [])
@@ -892,9 +943,6 @@ export function AccountCard(props: AccountCardProps) {
     status === "deactivated" &&
       "border-zinc-500/35 bg-zinc-500/14 text-zinc-300",
   );
-  const tokenCardWorkingNowClass =
-    "h-7 gap-1.5 rounded-full border border-cyan-500/35 bg-cyan-500/14 px-3 text-[11px] font-semibold tracking-[0.02em] text-cyan-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
-
   return (
     <div className="relative">
       <div
@@ -949,14 +997,27 @@ export function AccountCard(props: AccountCardProps) {
                     </span>
                   ) : null}
                 </Badge>
-              ) : isWorkingNow ? (
-                <Badge variant="outline" className={tokenCardWorkingNowClass}>
-                  <span
-                    className="h-1.5 w-1.5 rounded-full bg-current"
-                    aria-hidden
-                  />
-                  Working now
-                </Badge>
+              ) : showWorkingIndicator ? (
+                <div className="inline-flex h-7 items-center gap-2 rounded-full bg-cyan-500/10 px-2.5 text-cyan-200">
+                  <span className="sr-only">Codex working</span>
+                  <span className="flex items-end gap-1" aria-hidden>
+                    <span className="h-2 w-1 rounded-full bg-zinc-100/95 shadow-[0_0_8px_rgba(255,255,255,0.25)] animate-bounce [animation-duration:900ms]" />
+                    <span className="h-3 w-1 rounded-full bg-zinc-100/95 shadow-[0_0_8px_rgba(255,255,255,0.25)] animate-bounce [animation-delay:140ms] [animation-duration:900ms]" />
+                    <span className="h-4 w-1 rounded-full bg-cyan-200/95 shadow-[0_0_10px_rgba(103,232,249,0.35)] animate-bounce [animation-delay:280ms] [animation-duration:900ms]" />
+                    <span className="h-3 w-1 rounded-full bg-zinc-100/95 shadow-[0_0_8px_rgba(255,255,255,0.25)] animate-bounce [animation-delay:420ms] [animation-duration:900ms]" />
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-100/95">
+                    working...
+                  </span>
+                </div>
+              ) : showTaskFinishedIndicator ? (
+                <div className="inline-flex h-7 items-center gap-2 rounded-full bg-emerald-500/10 px-2.5 text-emerald-200">
+                  <span className="sr-only">Task finished</span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-100/95">
+                    task finished
+                  </span>
+                </div>
               ) : null}
               {showWeeklyUsageLimitDetailBadge ? (
                 <Badge
@@ -989,7 +1050,12 @@ export function AccountCard(props: AccountCardProps) {
             </div>
             <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-200/90">
               <span className="inline-flex items-center gap-1.5 text-zinc-100">
-                <OpenAILogoMark className="text-cyan-200/90" />
+                <img
+                  src="/openai.svg"
+                  alt=""
+                  className="h-3.5 w-3.5 opacity-80 brightness-0 invert"
+                  aria-hidden
+                />
                 OpenAI
               </span>
               <span>{hasLiveSession ? "Live token card" : "Token card"}</span>
@@ -1000,7 +1066,16 @@ export function AccountCard(props: AccountCardProps) {
                 showAccountId ? `Account ID ${account.accountId}` : undefined
               }
             >
-              {ACCOUNT_SUBTITLE_LABEL}
+              {showCodexOnlyAccountSubtitle ? (
+                "CODEX ONLY ACCOUNT"
+              ) : snapshotIsEmail && blurred ? (
+                <>
+                  {planLabel} ·{" "}
+                  <span className="privacy-blur">{snapshotLabel}</span>
+                </>
+              ) : (
+                planWithSnapshot
+              )}
               {idSuffix}
             </p>
             <div className="mt-3 flex items-center gap-2 text-zinc-200/85">
@@ -1083,15 +1158,9 @@ export function AccountCard(props: AccountCardProps) {
                         <NextTaskBadge />
                       ) : null}
                       <span>
-                        {effectiveCurrentTaskPreview ??
+                        {displayCurrentTaskPreview ??
                           "No active task reported"}
                       </span>
-                      {showThinkingIndicator ? (
-                        <span
-                          className="inline-block h-3 w-[1.5px] rounded-full bg-cyan-300/85 align-middle animate-pulse"
-                          aria-hidden
-                        />
-                      ) : null}
                     </span>
                   </p>
                 </div>
@@ -1112,21 +1181,6 @@ export function AccountCard(props: AccountCardProps) {
                         <span>{codexLastTaskPreview}</span>
                       </span>
                     </p>
-                  </div>
-                ) : null}
-
-                {showThinkingIndicator ? (
-                  <div className="inline-flex items-center gap-2 px-0.5 py-0.5">
-                    <span className="sr-only">Codex thinking</span>
-                    <span className="flex items-end gap-1" aria-hidden>
-                      <span className="h-2 w-1 rounded-full bg-zinc-100/95 shadow-[0_0_8px_rgba(255,255,255,0.25)] animate-bounce [animation-duration:900ms]" />
-                      <span className="h-3 w-1 rounded-full bg-zinc-100/95 shadow-[0_0_8px_rgba(255,255,255,0.25)] animate-bounce [animation-delay:140ms] [animation-duration:900ms]" />
-                      <span className="h-4 w-1 rounded-full bg-cyan-200/95 shadow-[0_0_10px_rgba(103,232,249,0.35)] animate-bounce [animation-delay:280ms] [animation-duration:900ms]" />
-                      <span className="h-3 w-1 rounded-full bg-zinc-100/95 shadow-[0_0_8px_rgba(255,255,255,0.25)] animate-bounce [animation-delay:420ms] [animation-duration:900ms]" />
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-100/95">
-                      thinking…
-                    </span>
                   </div>
                 ) : null}
 
@@ -1194,15 +1248,15 @@ export function AccountCard(props: AccountCardProps) {
           </div>
 
           {/* Actions */}
-          <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-3">
+          <div className="mt-3.5 border-t border-white/10 pt-3">
             <Button
               type="button"
               size="sm"
               variant="default"
               className={cn(
-                "h-8 gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/15 px-3 text-xs font-semibold shadow-none hover:bg-emerald-500/25",
+                "h-9 w-full justify-center gap-1.5 rounded-xl border border-emerald-400/35 bg-gradient-to-r from-emerald-500/22 via-emerald-500/16 to-cyan-500/14 px-3 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition-colors hover:from-emerald-500/30 hover:via-emerald-500/22 hover:to-cyan-500/20",
                 canUseLocally
-                  ? "text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
+                  ? "text-emerald-700 hover:text-emerald-800 dark:text-emerald-200 dark:hover:text-emerald-100"
                   : "text-muted-foreground",
               )}
               disabled={useLocalButtonDisabled}
@@ -1211,6 +1265,7 @@ export function AccountCard(props: AccountCardProps) {
             >
               Use this account
             </Button>
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {hasSnapshotMismatch ? (
               <>
                 <Button
@@ -1302,6 +1357,7 @@ export function AccountCard(props: AccountCardProps) {
                 Re-auth
               </Button>
             )}
+            </div>
           </div>
 
           {liveQuotaDebug ? (
@@ -1383,10 +1439,10 @@ export function AccountCard(props: AccountCardProps) {
       {showMissingSnapshotLockOverlay ? (
         <div className="absolute inset-0 z-30 flex items-center justify-center px-4">
           <div
-            className="absolute inset-0 bg-black/45 backdrop-blur-[1.5px]"
+            className="pointer-events-none absolute inset-0 bg-black/45 backdrop-blur-[1.5px]"
             aria-hidden
           />
-          <div className="relative flex w-full max-w-[13rem] flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/75 px-4 py-3.5 text-center shadow-[0_20px_55px_rgba(0,0,0,0.55)] backdrop-blur-md">
+          <div className="relative z-10 flex w-full max-w-[13rem] flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/75 px-4 py-3.5 text-center shadow-[0_20px_55px_rgba(0,0,0,0.55)] backdrop-blur-md">
             <div className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/25 bg-cyan-400/10">
               <Lock className="h-4 w-4 text-cyan-200" aria-hidden />
             </div>
@@ -1407,7 +1463,7 @@ export function AccountCard(props: AccountCardProps) {
               size="sm"
               variant="outline"
               className="h-7 rounded-lg border-white/15 bg-white/[0.04] px-3 text-xs font-semibold text-zinc-100 hover:border-cyan-400/35 hover:bg-cyan-400/12 hover:text-cyan-100"
-              onClick={() => onAction?.(account, "reauth")}
+              onClick={handleUnlock}
             >
               Unlock
             </Button>

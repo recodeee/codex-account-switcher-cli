@@ -224,6 +224,25 @@ describe("AccountCard", () => {
     expect(screen.getByRole("button", { name: "Unlock" })).toBeInTheDocument();
   });
 
+  it("shows codex-only subtitle only for self-serve business usage based plan", () => {
+    const account = createAccountSummary({
+      planType: "self_serve_business_usage_based",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "codexina@edixai.com",
+        activeSnapshotName: "codexina@edixai.com",
+        isActiveSnapshot: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("CODEX ONLY ACCOUNT")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Self serve business usage based · codexina@edixai.com"),
+    ).not.toBeInTheDocument();
+  });
+
   it("calls reauth action when unlock is clicked for a missing snapshot", async () => {
     const user = userEvent.setup({ delay: null });
     const account = createAccountSummary({
@@ -241,6 +260,29 @@ describe("AccountCard", () => {
     await user.click(screen.getByRole("button", { name: "Unlock" }));
 
     expect(onAction).toHaveBeenCalledWith(account, "reauth");
+  });
+
+  it("navigates to OAuth prompt when unlock is clicked without action handler", async () => {
+    const user = userEvent.setup({ delay: null });
+    const account = createAccountSummary({
+      accountId: "locked+acct@example.com",
+      codexAuth: {
+        hasSnapshot: false,
+        snapshotName: null,
+        activeSnapshotName: null,
+        isActiveSnapshot: false,
+      },
+    });
+
+    window.history.replaceState({}, "", "/dashboard");
+    render(<AccountCard account={account} />);
+
+    await user.click(screen.getByRole("button", { name: "Unlock" }));
+
+    const params = new URLSearchParams(window.location.search);
+    expect(window.location.pathname).toBe("/accounts");
+    expect(params.get("selected")).toBe(account.accountId);
+    expect(params.get("oauth")).toBe("prompt");
   });
 
   it("enables use this account button when snapshot exists and 5h quota is available", () => {
@@ -677,7 +719,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.queryByText("Working now")).not.toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
   });
 
   it("shows live token and 5h status affordances for working accounts", () => {
@@ -698,7 +740,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getAllByText("Live token status").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Live token status")).not.toBeInTheDocument();
     expect(screen.getAllByText(/^live$/i).length).toBeGreaterThanOrEqual(1);
   });
 
@@ -727,7 +769,7 @@ describe("AccountCard", () => {
 
     expect(screen.getByText("Rate limited")).toBeInTheDocument();
     expect(screen.getAllByText("Usage limit hit").length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText("Working now")).not.toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
   });
 
   it("shows usage-limit badge when remaining tokens are depleted", () => {
@@ -1110,7 +1152,7 @@ describe("AccountCard", () => {
     expect(screen.getAllByText("17%").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("77%").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Telemetry pending")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Live token status").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Live token status")).not.toBeInTheDocument();
   });
 
   it("does not use deferred mixed-session samples for live quota fallback when baseline usage is missing", () => {
@@ -1261,7 +1303,7 @@ describe("AccountCard", () => {
     expect(
       screen.getByText("Trace session-affinity fallback for codex websocket flow"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Codex thinking")).toBeInTheDocument();
+    expect(screen.getByText("working...")).toBeInTheDocument();
   });
 
   it("shows a Next.js badge when task previews mention next.js or turbopack", () => {
@@ -1312,7 +1354,7 @@ describe("AccountCard", () => {
     expect(
       screen.getByText("Review sticky session cleanup edge-cases"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Codex thinking")).not.toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
   });
 
   it("shows a current task placeholder when no task preview is available", () => {
@@ -1347,8 +1389,8 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
-    expect(screen.getByText("Waiting for new task")).toBeInTheDocument();
-    expect(screen.queryByText("Codex thinking")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Task finished").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
   });
 
   it("renders per-session task previews with waiting fallback", () => {
@@ -1383,7 +1425,7 @@ describe("AccountCard", () => {
     expect(screen.getByText("CLI session tasks")).toBeInTheDocument();
     expect(screen.getByText("sess-alpha-123456")).toBeInTheDocument();
     expect(screen.getByText("sess-beta-abcdef")).toBeInTheDocument();
-    expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Task finished").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows last task context when a waiting live session exposes a fallback preview", () => {
@@ -1407,7 +1449,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Waiting for new task")).toBeInTheDocument();
+    expect(screen.getAllByText("Task finished").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Last task:")).toBeInTheDocument();
     expect(
       screen.getByText("Investigate Zeus quota overlay mapping"),
@@ -1451,7 +1493,7 @@ describe("AccountCard", () => {
 
       expect(screen.queryByText("Current task")).not.toBeInTheDocument();
       expect(screen.queryByText("Investigate codexina rollout session mapping")).not.toBeInTheDocument();
-      expect(screen.getByText("Waiting for new task")).toBeInTheDocument();
+      expect(screen.getByText("Task finished")).toBeInTheDocument();
       expect(screen.queryByText(/leaves in/i)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -1470,10 +1512,10 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.queryByText("Working now")).not.toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
   });
 
-  it("shows working indicator when runtime session is live even if snapshot is not globally active", () => {
+  it("shows task finished state when runtime session is live without a task preview", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexAuth: {
@@ -1489,7 +1531,8 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Working now")).toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Task finished").length).toBeGreaterThanOrEqual(1);
   });
 
   it("does not show working indicator when only diagnostic debug raw samples exist", () => {
@@ -1526,7 +1569,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.queryByText("Working now")).not.toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
   });
 
   it("does not infer codex session count from debug raw samples when counters are zero", () => {
@@ -1599,7 +1642,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByText("Working now")).toBeInTheDocument();
+    expect(screen.getByText("working...")).toBeInTheDocument();
     expect(screen.queryByText("Live token status")).not.toBeInTheDocument();
     expect(screen.getByText("63%")).toBeInTheDocument();
   });
