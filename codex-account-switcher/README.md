@@ -19,6 +19,14 @@ Codex stores your authentication session in a single `auth.json` file. This tool
 npm i -g @imdeadpool/codex-account-switcher
 ```
 
+During global install, the package asks for permission to add an optional shell hook
+(`~/.bashrc` or `~/.zshrc`) that auto-runs a silent snapshot sync after successful
+official `codex login`.
+
+- Choose `y` to enable fully automatic login snapshot capture.
+- Choose `n` (default) to skip.
+- Set `CODEX_AUTH_SKIP_POSTINSTALL=1` to always suppress this prompt.
+
 ## Usage
 
 ```sh
@@ -37,7 +45,7 @@ codex-auth save <name>
 # force overwrite a name even when it currently maps to a different email
 codex-auth save <name> --force
 
-# switch active account (symlinks on macOS/Linux; copies on Windows)
+# switch active account
 codex-auth use <name>
 
 # or pick interactively
@@ -80,7 +88,7 @@ codex-auth daemon --watch
 
 - `codex-auth save <name> [--force]` – Validates `<name>`, ensures `auth.json` exists, then snapshots it to `~/.codex/accounts/<name>.json`. By default, it blocks overwriting a name when the existing snapshot email differs from current auth. If `name` is omitted, it first tries reusing the active snapshot name when identity matches; otherwise it infers one from auth email.
 - `codex-auth login [name] [--device-auth] [--force]` – Runs `codex login` (optionally with device auth), waits for refreshed auth snapshot detection, then saves it. If `name` is omitted, it always infers one from auth email with unique-suffix handling for multi-workspace identities.
-- `codex-auth use [name]` – Accepts a name or launches an interactive selector with the current account pre-selected. Copies on Windows, creates a symlink elsewhere, and records the active name.
+- `codex-auth use [name]` – Accepts a name or launches an interactive selector with the current account pre-selected, writes `~/.codex/auth.json` as a regular file from the chosen snapshot, and records the active name.
 - `codex-auth list [--details]` – Lists all saved snapshots alphabetically and marks the active one with `*`. `--details` adds per-snapshot mapping metadata (email, account id, user id, and usage metadata) for easier session/account troubleshooting.
 - `codex-auth current` – Prints the active account name, or a friendly message if none is active.
 - `codex-auth remove [query|--all]` – Removes snapshots interactively or by selector. If the active account is removed, the best remaining account is activated automatically.
@@ -113,5 +121,5 @@ Usage refresh is hybrid:
 
 Notes:
 
-- Works on macOS/Linux (symlink) and Windows (copy).
+- Works on macOS/Linux/Windows (regular-file auth snapshot activation).
 - Requires Node 18+.
