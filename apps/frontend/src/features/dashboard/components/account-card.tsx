@@ -1488,7 +1488,7 @@ export function AccountCard(props: AccountCardProps) {
                           "rounded-lg border px-2.5 py-2",
                           isCurrentTaskWaiting
                             ? "border-cyan-400/20 bg-black/55 hover:border-cyan-300/35 hover:bg-black/65 hover:shadow-[0_0_0_1px_rgba(34,211,238,0.14),0_8px_18px_rgba(0,0,0,0.35)]"
-                            : "border-white/10 bg-black/25 hover:border-white/20 hover:bg-black/35",
+                            : "border-indigo-400/20 bg-[linear-gradient(145deg,rgba(56,189,248,0.08)_0%,rgba(79,70,229,0.2)_60%,rgba(15,23,42,0.75)_100%)] hover:border-cyan-300/35 hover:shadow-[0_0_0_1px_rgba(99,102,241,0.18),0_8px_18px_rgba(6,24,44,0.45)]",
                         ),
                   )}
                 >
@@ -1505,6 +1505,15 @@ export function AccountCard(props: AccountCardProps) {
                   ) : null}
                   {!hideCurrentTaskPreview ? (
                     <div>
+                      {!isCurrentTaskWaiting && displayCurrentTaskPreview ? (
+                        <div className="mb-1 inline-flex h-5 items-center gap-1.5 rounded-full border border-indigo-300/30 bg-indigo-500/15 px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-indigo-100/95">
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-cyan-200/95"
+                            aria-hidden
+                          />
+                          Codex reply
+                        </div>
+                      ) : null}
                       <p
                         className="break-words whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/95"
                         title={effectiveCurrentTaskPreview ?? undefined}
@@ -1633,15 +1642,24 @@ export function AccountCard(props: AccountCardProps) {
                             <li
                               key={sessionTaskRowKey}
                               className={cn(
-                                "space-y-1.5 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 transition-all duration-200",
+                                "relative overflow-hidden space-y-1.5 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 transition-all duration-200",
                                 sessionTaskState === "waiting" &&
                                   "ring-1 ring-cyan-500/10 hover:border-cyan-300/30 hover:bg-black/35",
                                 sessionTaskState === "thinking" &&
-                                  "border-indigo-400/22 bg-indigo-500/[0.1] hover:border-indigo-300/35",
+                                  "border-indigo-300/35 bg-[linear-gradient(155deg,rgba(34,211,238,0.1)_0%,rgba(99,102,241,0.24)_45%,rgba(15,23,42,0.9)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_10px_18px_rgba(6,24,44,0.45)] hover:border-cyan-300/40",
                                 sessionTaskState === "finished" &&
                                   "border-emerald-400/22 bg-emerald-500/[0.1] hover:border-emerald-300/35",
                               )}
                             >
+                              {sessionTaskState === "thinking" ? (
+                                <div
+                                  className="pointer-events-none absolute inset-0 -z-10"
+                                  aria-hidden
+                                >
+                                  <div className="absolute -left-10 top-0 h-14 w-32 rounded-full bg-cyan-300/15 blur-2xl" />
+                                  <div className="absolute right-0 top-4 h-14 w-32 rounded-full bg-indigo-300/20 blur-2xl" />
+                                </div>
+                              ) : null}
                               <div className="flex items-start justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
                                 <span>Session {preview.ordinal}</span>
                                 <div className="flex min-w-0 flex-col items-end gap-1">
@@ -1661,12 +1679,25 @@ export function AccountCard(props: AccountCardProps) {
                                 </div>
                               </div>
                               <div title={preview.taskPreview}>
-                                <span className="inline-flex items-center gap-1.5 break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/95">
-                                  {hasNextTaskHint(preview.taskPreview) ? (
-                                    <NextTaskBadge />
+                                <div
+                                  className={cn(
+                                    "rounded-md px-2 py-1",
+                                    sessionTaskState === "thinking" &&
+                                      "border border-indigo-200/25 bg-black/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                                  )}
+                                >
+                                  {sessionTaskState === "thinking" ? (
+                                    <div className="mb-1 inline-flex h-4 items-center gap-1 rounded-full border border-indigo-200/30 bg-indigo-400/15 px-1.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-indigo-100">
+                                      Codex
+                                    </div>
                                   ) : null}
-                                  <span>{displaySessionTaskPreview}</span>
-                                </span>
+                                  <span className="inline-flex items-center gap-1.5 break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/95">
+                                    {hasNextTaskHint(preview.taskPreview) ? (
+                                      <NextTaskBadge />
+                                    ) : null}
+                                    <span>{displaySessionTaskPreview}</span>
+                                  </span>
+                                </div>
                                 {sessionTaskPreviewExcerpt.truncated ? (
                                   <button
                                     type="button"

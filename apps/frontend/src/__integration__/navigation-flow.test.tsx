@@ -20,6 +20,10 @@ describe("navigation flow integration", () => {
     expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
     expect(screen.getByText("Monitoring your Codex sessions")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/accounts");
+
+    await user.click(screen.getByRole("link", { name: "Billing" }));
+    expect(await screen.findByRole("heading", { name: "Billing" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/billing");
   });
 
   it("switches route content from the account dropdown menu", async () => {
@@ -35,5 +39,10 @@ describe("navigation flow integration", () => {
 
     expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/accounts");
+
+    await user.click(screen.getByRole("button", { name: "Open account menu" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Billing" }));
+    expect(await screen.findByRole("heading", { name: "Billing" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/billing");
   });
 });

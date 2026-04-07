@@ -318,15 +318,19 @@ class UsageUpdater:
             if _should_deactivate_for_usage_error(exc.status_code):
                 await self._maybe_deactivate_for_client_error(account, exc)
                 return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
-            if exc.status_code == 401 and _is_invalidated_token_error(exc.message):
-                await self._maybe_deactivate_for_client_error(account, exc)
+            initial_invalidated_token_error = (
+                exc.status_code == 401 and _is_invalidated_token_error(exc.message)
+            )
+            if exc.status_code != 401:
+                return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
+            if not self._auth_manager:
+                if initial_invalidated_token_error:
+                    await self._maybe_deactivate_for_client_error(account, exc)
                 return AccountRefreshResult(
                     usage_written=False,
                     fetch_succeeded=False,
-                    invalidated_token_error=True,
+                    invalidated_token_error=initial_invalidated_token_error,
                 )
-            if exc.status_code != 401 or not self._auth_manager:
-                return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
             try:
                 account = await self._auth_manager.ensure_fresh(account, force=True)
             except RefreshError as refresh_exc:
@@ -339,6 +343,8 @@ class UsageUpdater:
                     usage_written=False,
                     fetch_succeeded=False,
                     invalidated_token_error=(
+                        initial_invalidated_token_error
+                        or
                         refresh_exc.code in _DEACTIVATING_REFRESH_ERROR_CODES
                         or _is_invalidated_token_error(refresh_exc.message)
                     ),
@@ -350,10 +356,13 @@ class UsageUpdater:
                     account_id=usage_account_id,
                 )
             except UsageFetchError as retry_exc:
-                invalidated_token_error = False
+                invalidated_token_error = initial_invalidated_token_error
                 if retry_exc.status_code == 401:
                     await self._maybe_deactivate_for_client_error(account, retry_exc)
-                    invalidated_token_error = _is_invalidated_token_error(retry_exc.message)
+                    invalidated_token_error = (
+                        invalidated_token_error
+                        or _is_invalidated_token_error(retry_exc.message)
+                    )
                 elif _should_deactivate_for_usage_error(retry_exc.status_code):
                     await self._maybe_deactivate_for_client_error(account, retry_exc)
                 return AccountRefreshResult(

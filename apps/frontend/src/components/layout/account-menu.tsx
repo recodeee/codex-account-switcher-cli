@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Eye,
   EyeOff,
+  CreditCard,
   Home,
   KeyRound,
   LayoutDashboard,
@@ -41,6 +42,7 @@ import { hasActiveCliSessionSignal } from "@/utils/account-working";
 const NAV_ICONS: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/accounts": Users,
+  "/billing": CreditCard,
   "/apis": KeyRound,
   "/devices": MonitorSmartphone,
   "/storage": Home,

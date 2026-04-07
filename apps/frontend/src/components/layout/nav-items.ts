@@ -7,6 +7,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/accounts", label: "Accounts" },
+  { to: "/billing", label: "Billing" },
   { to: "/apis", label: "APIs" },
   { to: "/devices", label: "Devices" },
   { to: "/storage", label: "Storage", isComingSoon: true },

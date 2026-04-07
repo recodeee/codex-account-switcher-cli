@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  CreditCard,
   HardDrive,
   KeyRound,
   LayoutDashboard,
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
 const NAV_ICONS: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/accounts": Users,
+  "/billing": CreditCard,
   "/apis": KeyRound,
   "/devices": MonitorSmartphone,
   "/storage": HardDrive,
