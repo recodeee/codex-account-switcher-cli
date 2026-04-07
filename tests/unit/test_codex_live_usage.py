@@ -3061,6 +3061,45 @@ def test_read_local_codex_task_previews_by_session_id_does_not_fallback_to_old_t
     assert session_id not in previews
 
 
+def test_read_local_codex_task_previews_by_session_id_marks_task_finished_after_response_completed_event(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+
+    day_dir = _sessions_day_dir(sessions_root, now)
+    session_id = "019d5a6a-4665-7873-9714-9efb95b24272"
+    rollout_path = day_dir / f"rollout-2026-04-04T21-33-31-{session_id}.jsonl"
+
+    task_payload = {
+        "timestamp": (now - timedelta(seconds=10)).isoformat().replace("+00:00", "Z"),
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": "Investigate stale snapshot mapping"}],
+        },
+    }
+    completed_payload = {
+        "timestamp": (now - timedelta(seconds=2)).isoformat().replace("+00:00", "Z"),
+        "type": "response.completed",
+        "response": {"id": "resp_1", "status": "completed"},
+    }
+    rollout_path.write_text(
+        "\n".join([json.dumps(task_payload), json.dumps(completed_payload)]) + "\n",
+        encoding="utf-8",
+    )
+    ts = now.timestamp()
+    os.utime(rollout_path, (ts, ts))
+
+    previews = read_local_codex_task_previews_by_session_id(now=now)
+    assert session_id in previews
+    assert previews[session_id].text == "Task finished"
+
+
 def test_iter_running_codex_commands_includes_plain_codex_terminal_session_via_rollout_fd(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

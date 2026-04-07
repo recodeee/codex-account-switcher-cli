@@ -34,6 +34,7 @@ _ROLLOUT_SESSION_FILE_RE = re.compile(
 )
 _RESET_AT_MATCH_TOLERANCE_SECONDS = 30
 _TASK_PREVIEW_SOFT_MAX_LENGTH = 2000
+_TASK_FINISHED_LABEL = "Task finished"
 _TASK_PREVIEW_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _TASK_PREVIEW_BEARER_RE = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._-]+")
 _TASK_PREVIEW_SECRET_ASSIGNMENT_RE = re.compile(
@@ -71,6 +72,7 @@ _TASK_PREVIEW_OMX_EXPLORE_HEADER_RE = re.compile(
 _TASK_PREVIEW_OMX_EXPLORE_USER_REQUEST_RE = re.compile(
     r"(?is)\buser request:\s*(.+)$"
 )
+_TASK_PREVIEW_FINISHED_EVENT_TYPES = {"response.completed", "response_completed"}
 _DEFAULT_PROC_ROOT = Path("/proc")
 
 
@@ -2492,6 +2494,11 @@ def _extract_recent_task_previews_from_file(path: Path, *, limit: int) -> list[L
             event, preview = _task_preview_event_from_line(raw_line)
             if event == "clear":
                 return False
+            if event == "finished":
+                if preview is not None and preview.text not in seen_texts:
+                    seen_texts.add(preview.text)
+                    collected.append(preview)
+                return False
             if event != "task" or preview is None:
                 continue
             if preview.text in seen_texts:
@@ -2542,7 +2549,15 @@ def _task_preview_event_from_line(raw_line: str) -> tuple[str, LocalCodexTaskPre
     if not isinstance(payload, dict):
         return ("skip", None)
 
-    if payload.get("type") != "response_item":
+    payload_type = payload.get("type")
+    if payload_type in _TASK_PREVIEW_FINISHED_EVENT_TYPES:
+        timestamp = _parse_timestamp(payload.get("timestamp")) or datetime.now(timezone.utc)
+        return (
+            "finished",
+            LocalCodexTaskPreview(text=_TASK_FINISHED_LABEL, recorded_at=timestamp),
+        )
+
+    if payload_type != "response_item":
         return ("skip", None)
 
     message_payload = payload.get("payload")

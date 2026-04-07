@@ -31,7 +31,7 @@ const DEMO_ACCOUNT_CARD: AccountSummary = {
   windowMinutesSecondary: 10080,
   requestUsage: {
     requestCount: 0,
-    totalTokens: 216000,
+    totalTokens: 216,
     cachedInputTokens: 0,
     totalCostUsd: 0,
   },
@@ -262,7 +262,7 @@ function DemoCardAnnotations() {
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 hidden xl:block"
     >
-      <div className="absolute left-[-210px] top-[212px]">
+      <div className="absolute left-[-210px] top-[98px]">
         <p className="font-[cursive] text-lg italic text-cyan-200/90">
           Your tokens left
         </p>
@@ -275,14 +275,14 @@ function DemoCardAnnotations() {
           fill="none"
         >
           <path
-            d="M4 10 C 56 14, 96 30, 144 54"
+            d="M4 10 C 48 14, 78 14, 104 16"
             stroke="rgb(103 232 249 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeDasharray="4 5"
           />
           <path
-            d="M136 47 L 147 55 L 132 57"
+            d="M96 9 L 107 17 L 92 19"
             stroke="rgb(103 232 249 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
@@ -291,7 +291,7 @@ function DemoCardAnnotations() {
         </svg>
       </div>
 
-      <div className="absolute right-[-230px] top-[212px] text-right">
+      <div className="absolute right-[-132px] top-[98px] text-right">
         <p className="font-[cursive] text-lg italic text-emerald-200/90">
           Your active Codex
         </p>
@@ -304,14 +304,14 @@ function DemoCardAnnotations() {
           fill="none"
         >
           <path
-            d="M176 10 C 126 15, 88 33, 34 54"
+            d="M176 10 C 126 15, 88 14, 34 16"
             stroke="rgb(167 243 208 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeDasharray="4 5"
           />
           <path
-            d="M42 47 L 30 55 L 45 57"
+            d="M42 9 L 30 17 L 45 19"
             stroke="rgb(167 243 208 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
@@ -320,24 +320,20 @@ function DemoCardAnnotations() {
         </svg>
       </div>
 
-      <div className="absolute right-[-210px] top-[456px] text-right">
+      <div className="absolute right-[-190px] top-[324px] text-right">
         <p className="font-[cursive] text-lg italic text-sky-200/90">
           Drop your email here
         </p>
-        <svg
-          viewBox="0 0 150 64"
-          className="mt-1 h-16 w-[150px]"
-          fill="none"
-        >
+        <svg viewBox="0 0 190 64" className="mt-1 h-16 w-[190px]" fill="none">
           <path
-            d="M146 10 C 110 18, 82 32, 24 52"
+            d="M186 10 C 144 18, 102 16, 14 16"
             stroke="rgb(125 211 252 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeDasharray="4 5"
           />
           <path
-            d="M32 45 L 20 53 L 35 55"
+            d="M22 9 L 10 17 L 25 19"
             stroke="rgb(125 211 252 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
@@ -394,10 +390,12 @@ export function ComingSoonPage() {
           <div className="hidden lg:block">
             <div className="mb-2 flex w-full items-center justify-center gap-3 text-zinc-100">
               <CodexLogo size={26} title="recodee.com logo" />
-              <p className="text-2xl font-semibold tracking-tight">recodee.com</p>
+              <p className="text-2xl font-semibold tracking-tight">
+                recodee.com
+              </p>
             </div>
 
-            <div className="mx-auto w-full max-w-[1480px] rounded-[32px] border-[5px] border-zinc-500/70 bg-zinc-900/60 p-2 shadow-[0_26px_60px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.12)]">
+            <div className="mx-auto w-full max-w-[1480px]">
               <div className="relative overflow-hidden rounded-[24px] border border-white/12 bg-black/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                 <img
                   src="/commingsoon.jpg"

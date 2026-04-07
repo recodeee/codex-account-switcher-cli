@@ -37,9 +37,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <Script id="theme-bootstrap" strategy="beforeInteractive">
-          {themeBootstrapScript}
-        </Script>
+        <Script
+          id="theme-bootstrap"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: themeBootstrapScript }}
+        />
       </head>
       <body>
         <AppProviders>{children}</AppProviders>

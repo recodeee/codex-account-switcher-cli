@@ -1491,6 +1491,39 @@ describe("AccountCard", () => {
     expect(screen.queryByText("working...")).not.toBeInTheDocument();
   });
 
+  it("shows working when any session task is thinking even if current preview is waiting", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Waiting for new task",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-admin-thinking",
+          taskPreview: "Investigate stuck admin routing",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "admin@recodee.com",
+        activeSnapshotName: "admin@recodee.com",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("working...")).toBeInTheDocument();
+    expect(screen.queryByText("waiting for new task")).not.toBeInTheDocument();
+    expect(screen.getByText("Investigate stuck admin routing")).toBeInTheDocument();
+    expect(screen.getByText("thinking")).toBeInTheDocument();
+  });
+
   it("fills session task rows up to live CLI session count", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
@@ -1600,6 +1633,37 @@ describe("AccountCard", () => {
     expect(screen.getByText("waiting")).toBeInTheDocument();
     expect(screen.getByText("thinking")).toBeInTheDocument();
     expect(screen.getByText("task finished")).toBeInTheDocument();
+    expect(screen.getByText("1 finished")).toBeInTheDocument();
+  });
+
+  it("treats done-style task previews as finished instead of thinking", () => {
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Investigate snapshot handoff",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-done",
+          taskPreview: "Task is done already.",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("sess-done")).toBeInTheDocument();
+    expect(screen.getByText("task finished")).toBeInTheDocument();
+    expect(screen.queryByText("thinking")).not.toBeInTheDocument();
+    expect(screen.getByText("1 finished")).toBeInTheDocument();
   });
 
   it("treats waiting-for-user task previews as waiting instead of thinking", () => {

@@ -130,6 +130,8 @@ function isCodexOnlyPlanType(planType: string): boolean {
 const NEAR_ZERO_QUOTA_PERCENT = 5;
 const WAITING_FOR_NEW_TASK_LABEL = "Waiting for new task";
 const TASK_FINISHED_LABEL = "Task finished";
+const TASK_FINISHED_PREVIEW_RE =
+  /^(?:task\s+)?(?:is\s+)?(?:already\s+)?(?:done|complete(?:d)?|finished)(?:\s+already)?[.!]?$/i;
 const UNKNOWN_TOKENS_SYNC_LABEL = "syncing…";
 const NEXT_TASK_PREVIEW_PATTERN = /\bnext(?:\.?js)?\b|\bturbopack\b/i;
 
@@ -280,7 +282,10 @@ function resolveWaitingTaskHelperText(taskPreview: string): string {
 
 function resolveSessionTaskState(taskPreview: string): SessionTaskState {
   const normalized = taskPreview.trim().toLowerCase();
-  if (normalized === TASK_FINISHED_LABEL.toLowerCase()) {
+  if (
+    normalized === TASK_FINISHED_LABEL.toLowerCase() ||
+    TASK_FINISHED_PREVIEW_RE.test(taskPreview.trim())
+  ) {
     return "finished";
   }
   if (isWaitingTaskPreview(taskPreview)) {
@@ -1069,10 +1074,17 @@ export function AccountCard(props: AccountCardProps) {
   const waitingTaskPillLabel = resolveWaitingTaskPillLabel(
     displayCurrentTaskPreview,
   );
+  const hasThinkingSessionTaskPreview = (account.codexSessionTaskPreviews ?? []).some(
+    (preview) =>
+      resolveSessionTaskState(resolveSessionTaskPreview(preview.taskPreview)) ===
+      "thinking",
+  );
   const showWorkingIndicator =
-    (forceWorkingIndicator || isWorkingNow) && !isCurrentTaskWaiting;
+    forceWorkingIndicator ||
+    hasThinkingSessionTaskPreview ||
+    (isWorkingNow && !isCurrentTaskWaiting);
   const showWaitingForTaskIndicator =
-    isWorkingNow && isCurrentTaskWaiting;
+    !showWorkingIndicator && isWorkingNow && isCurrentTaskWaiting;
   const hideTaskContainerChrome = hideCurrentTaskPreview && Boolean(taskPanelAddon);
   const sessionTaskPreviews = useMemo(() => {
     const seenSessionKeys = new Set<string>();
@@ -1447,7 +1459,7 @@ export function AccountCard(props: AccountCardProps) {
                     <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                       <button
                         type="button"
-                        className="inline-flex min-w-[13rem] flex-1 items-center justify-between gap-2 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:bg-black/30"
+                        className="inline-flex min-w-[13rem] flex-1 items-center justify-between gap-2 rounded-md border border-white/10 bg-black/25 px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:border-white/20 hover:bg-black/35"
                         aria-expanded={!sessionTasksCollapsed}
                         onClick={() =>
                           setSessionTasksCollapsed((current) => !current)
@@ -1472,6 +1484,11 @@ export function AccountCard(props: AccountCardProps) {
                       <span className="inline-flex h-6 items-center rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-cyan-200">
                         {sessionTaskSummary.waitingCount} waiting
                       </span>
+                      {sessionTaskSummary.finishedCount > 0 ? (
+                        <span className="inline-flex h-6 items-center rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-200">
+                          {sessionTaskSummary.finishedCount} finished
+                        </span>
+                      ) : null}
                     </div>
                     {!sessionTasksCollapsed ? (
                       <ul className="space-y-1.5">
@@ -1483,13 +1500,13 @@ export function AccountCard(props: AccountCardProps) {
                             <li
                               key={`${preview.sessionKey}-${preview.ordinal}`}
                               className={cn(
-                                "space-y-1 rounded-md border px-2 py-1.5 transition-all duration-200",
+                                "space-y-1.5 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 transition-all duration-200",
                                 sessionTaskState === "waiting" &&
-                                  "border-cyan-400/18 bg-black/45 hover:border-cyan-300/30 hover:bg-black/60",
+                                  "ring-1 ring-cyan-500/10 hover:border-cyan-300/30 hover:bg-black/35",
                                 sessionTaskState === "thinking" &&
-                                  "border-indigo-400/20 bg-indigo-500/[0.08] hover:border-indigo-300/30",
+                                  "border-indigo-400/22 bg-indigo-500/[0.1] hover:border-indigo-300/35",
                                 sessionTaskState === "finished" &&
-                                  "border-emerald-400/20 bg-emerald-500/[0.08] hover:border-emerald-300/30",
+                                  "border-emerald-400/22 bg-emerald-500/[0.1] hover:border-emerald-300/35",
                               )}
                             >
                               <div className="flex items-start justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">

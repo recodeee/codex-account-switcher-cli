@@ -1,0 +1,14 @@
+# Supabase local state
+.branches/*
+.temp/*
+
+# Keep folders tracked
+!.branches/.gitkeep
+!.temp/.gitkeep
+
+# Supabase local env overrides
+.env
+.env.local
+
+# Supabase CLI generated metadata
+.volumes/

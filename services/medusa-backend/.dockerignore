@@ -1,0 +1,12 @@
+.git
+.gitignore
+.serena
+node_modules
+.pnpm-store
+.yarn
+dist
+.medusa
+coverage
+*.log
+.env
+.env.*

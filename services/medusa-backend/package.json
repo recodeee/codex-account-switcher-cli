@@ -1,0 +1,65 @@
+{
+  "name": "codex-lb-medusa-backend",
+  "version": "0.0.1",
+  "description": "Medusa backend service for codex-lb commerce layer.",
+  "author": "Medusa (https://medusajs.com)",
+  "license": "MIT",
+  "keywords": [
+    "sqlite",
+    "postgres",
+    "typescript",
+    "ecommerce",
+    "headless",
+    "medusa"
+  ],
+  "scripts": {
+    "build": "medusa build",
+    "seed": "medusa exec ./src/scripts/seed.ts",
+    "link-admin-customers": "medusa exec ./src/scripts/link-admin-users-to-customers.ts",
+    "start": "medusa start",
+    "dev": "node ./scripts/dev-singleton.js",
+    "dev:tee": "node ./scripts/dev-singleton.js 2>&1 | tee -a ../medusa-backend.log",
+    "test:integration:http": "TEST_TYPE=integration:http NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit",
+    "test:integration:modules": "TEST_TYPE=integration:modules NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
+    "test:unit": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
+    "email:dev": "email-preview --dir ./src/email-templates --port 9004 --hostname 0.0.0.0"
+  },
+  "dependencies": {
+    "@medusajs/admin-sdk": "2.13.4",
+    "@medusajs/admin-shared": "2.13.4",
+    "@medusajs/cli": "2.13.4",
+    "@medusajs/dashboard": "2.13.4",
+    "@medusajs/draft-order": "2.13.4",
+    "@medusajs/email-preview-server": "^0.0.10",
+    "@medusajs/file-s3": "2.13.4",
+    "@medusajs/framework": "2.13.4",
+    "@medusajs/icons": "^2.13.4",
+    "@medusajs/js-sdk": "2.13.4",
+    "@medusajs/medusa": "2.13.4",
+    "@medusajs/types": "2.13.4",
+    "@medusajs/ui": "4.1.4",
+    "@react-email/components": "^1.0.9",
+    "@react-email/render": "^2.0.4",
+    "@tanstack/react-query": "5.64.2"
+  },
+  "devDependencies": {
+    "@medusajs/test-utils": "2.13.4",
+    "@swc/core": "1.5.7",
+    "@swc/jest": "^0.2.36",
+    "@types/jest": "29.5.13",
+    "@types/node": "20.0.0",
+    "@types/react": "18.3.23",
+    "@types/react-dom": "18.3.7",
+    "jest": "29.7.0",
+    "prop-types": "15.8.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "ts-node": "10.9.2",
+    "typescript": "5.8.3",
+    "vite": "5.2.11",
+    "yalc": "1.0.0-pre.53"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
