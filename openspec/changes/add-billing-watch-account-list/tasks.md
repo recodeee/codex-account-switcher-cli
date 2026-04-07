@@ -1,0 +1,5 @@
+- [x] Add frontend-architecture requirement coverage for account-level seat list access from Billing.
+- [x] Add `Watch` action column/button in the Billing business-account table.
+- [x] Add account list dialog UI with member rows (name, role, seat type, date added).
+- [x] Add/adjust billing component tests for watch button + account list dialog rendering.
+- [x] Validate specs with `openspec validate --specs`.

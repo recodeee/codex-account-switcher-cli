@@ -1212,9 +1212,9 @@ export function AccountCard(props: AccountCardProps) {
       ? WAITING_FOR_NEW_TASK_LABEL
       : null);
   const showLastTaskPreview =
-    effectiveCurrentTaskPreview === WAITING_FOR_NEW_TASK_LABEL &&
     codexLastTaskPreview != null &&
-    codexLastTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
+    codexLastTaskPreview !== WAITING_FOR_NEW_TASK_LABEL &&
+    codexLastTaskPreview !== effectiveCurrentTaskPreview;
   const displayCurrentTaskPreview = effectiveCurrentTaskPreview;
   const currentTaskPreviewExcerpt = displayCurrentTaskPreview
     ? getTaskPreviewExcerpt(displayCurrentTaskPreview)
@@ -1597,7 +1597,7 @@ export function AccountCard(props: AccountCardProps) {
                             className="h-1.5 w-1.5 rounded-full bg-cyan-200/95"
                             aria-hidden
                           />
-                          Codex reply
+                          Prompt task
                         </div>
                       ) : null}
                       <p
@@ -1645,7 +1645,7 @@ export function AccountCard(props: AccountCardProps) {
                         title={codexLastTaskPreview ?? undefined}
                       >
                         <span className="font-medium text-zinc-200">
-                          Last task:
+                          Last codex response:
                         </span>
                         <span className="ml-1 inline-flex items-center gap-1.5">
                           {hasNextTaskHint(codexLastTaskPreview) ? (

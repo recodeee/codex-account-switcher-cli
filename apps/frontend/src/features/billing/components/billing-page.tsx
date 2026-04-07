@@ -1,5 +1,14 @@
 import { format } from "date-fns";
-import { Building2, CalendarClock, Euro, Sparkles, Users2 } from "lucide-react";
+import {
+  Building2,
+  CalendarClock,
+  ChevronDown,
+  Euro,
+  Eye,
+  MoreHorizontal,
+  Sparkles,
+  Users2,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +36,16 @@ type BusinessPlanAccount = {
   domain: string;
   chatgptSeatsInUse: number;
   codexSeatsInUse: number;
+  members: BusinessPlanMember[];
+};
+
+type BusinessPlanMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: "Owner" | "Member";
+  seatType: "ChatGPT" | "Codex";
+  dateAdded: string;
 };
 
 const CHATGPT_MONTHLY_SEAT_PRICE_EUR = 26;
@@ -39,17 +58,201 @@ const BUSINESS_PLAN_ACCOUNTS: BusinessPlanAccount[] = [
     domain: "edixai.com",
     chatgptSeatsInUse: 5,
     codexSeatsInUse: 5,
+    members: [
+      {
+        id: "member-bianka-belovics",
+        name: "Bianka Belovics",
+        email: "bia@edixai.com",
+        role: "Member",
+        seatType: "ChatGPT",
+        dateAdded: "Mar 30, 2026",
+      },
+      {
+        id: "member-business-webu",
+        name: "business webu",
+        email: "webubusiness@gmail.com",
+        role: "Member",
+        seatType: "ChatGPT",
+        dateAdded: "Mar 31, 2026",
+      },
+      {
+        id: "member-csoves",
+        name: "Csoves",
+        email: "csoves@edixai.com",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Mar 23, 2026",
+      },
+      {
+        id: "member-denver",
+        name: "denver",
+        email: "denver@edixai.com",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Mar 23, 2026",
+      },
+      {
+        id: "member-edixai-owner",
+        name: "Edix.ai (You)",
+        email: "admin@edixai.com",
+        role: "Owner",
+        seatType: "ChatGPT",
+        dateAdded: "Mar 23, 2026",
+      },
+      {
+        id: "member-nagy-viktor-csoves",
+        name: "Nagy Viktor",
+        email: "csoves.com@gmail.com",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Apr 3, 2026",
+      },
+      {
+        id: "member-nagy-viktor-second",
+        name: "Nagy Viktor",
+        email: "nagyvikt007@gmail.com",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Apr 3, 2026",
+      },
+      {
+        id: "member-viktor",
+        name: "Viktor",
+        email: "thedailyscooby@gmail.com",
+        role: "Member",
+        seatType: "ChatGPT",
+        dateAdded: "Apr 3, 2026",
+      },
+      {
+        id: "member-viktor-nagy",
+        name: "Viktor Nagy",
+        email: "nagyviktordp@edixai.com",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Apr 3, 2026",
+      },
+      {
+        id: "member-zeus",
+        name: "Zeus",
+        email: "zeus@edixai.com",
+        role: "Member",
+        seatType: "ChatGPT",
+        dateAdded: "Apr 1, 2026",
+      },
+    ],
   },
   {
     id: "business-plan-kozpont",
     domain: "kozpontihusbolt.hu",
     chatgptSeatsInUse: 5,
     codexSeatsInUse: 5,
+    members: [
+      {
+        id: "member-kozpont-admin",
+        name: "Kozpont Admin",
+        email: "admin@kozpontihusbolt.hu",
+        role: "Owner",
+        seatType: "ChatGPT",
+        dateAdded: "Mar 23, 2026",
+      },
+      {
+        id: "member-kozpont-support",
+        name: "Support Team",
+        email: "support@kozpontihusbolt.hu",
+        role: "Member",
+        seatType: "ChatGPT",
+        dateAdded: "Mar 24, 2026",
+      },
+      {
+        id: "member-kozpont-ops",
+        name: "Ops Coordinator",
+        email: "ops@kozpontihusbolt.hu",
+        role: "Member",
+        seatType: "ChatGPT",
+        dateAdded: "Mar 25, 2026",
+      },
+      {
+        id: "member-kozpont-sales",
+        name: "Sales Lead",
+        email: "sales@kozpontihusbolt.hu",
+        role: "Member",
+        seatType: "ChatGPT",
+        dateAdded: "Mar 28, 2026",
+      },
+      {
+        id: "member-kozpont-finance",
+        name: "Finance",
+        email: "finance@kozpontihusbolt.hu",
+        role: "Member",
+        seatType: "ChatGPT",
+        dateAdded: "Mar 29, 2026",
+      },
+      {
+        id: "member-kozpont-codex-1",
+        name: "Automation 1",
+        email: "codex1@kozpontihusbolt.hu",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Mar 26, 2026",
+      },
+      {
+        id: "member-kozpont-codex-2",
+        name: "Automation 2",
+        email: "codex2@kozpontihusbolt.hu",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Mar 27, 2026",
+      },
+      {
+        id: "member-kozpont-codex-3",
+        name: "Automation 3",
+        email: "codex3@kozpontihusbolt.hu",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Mar 30, 2026",
+      },
+      {
+        id: "member-kozpont-codex-4",
+        name: "Automation 4",
+        email: "codex4@kozpontihusbolt.hu",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Mar 31, 2026",
+      },
+      {
+        id: "member-kozpont-codex-5",
+        name: "Automation 5",
+        email: "codex5@kozpontihusbolt.hu",
+        role: "Member",
+        seatType: "Codex",
+        dateAdded: "Apr 1, 2026",
+      },
+    ],
   },
 ];
 
+function getInitials(value: string): string {
+  const words = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) {
+    return "?";
+  }
+
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
+}
+
 export function BillingPage() {
   const [businessPlanDetailsOpen, setBusinessPlanDetailsOpen] = useState(false);
+  const [selectedBusinessAccount, setSelectedBusinessAccount] = useState<BusinessPlanAccount | null>(
+    null,
+  );
 
   const cycleLabel = useMemo(
     () => `${format(BILLING_CYCLE_START, "MMM d")} - ${format(BILLING_CYCLE_END, "MMM d")}`,
@@ -157,6 +360,7 @@ export function BillingPage() {
                   <TableHead>ChatGPT seats</TableHead>
                   <TableHead>Codex seats</TableHead>
                   <TableHead>Monthly ChatGPT cost</TableHead>
+                  <TableHead className="w-[130px] text-right">Accounts list</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -175,6 +379,19 @@ export function BillingPage() {
                       <TableCell>{account.chatgptSeatsInUse} seats in use</TableCell>
                       <TableCell>{account.codexSeatsInUse} seats in use</TableCell>
                       <TableCell>€{accountMonthlyCost}/month</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-full px-3"
+                          aria-label={`Watch ${account.domain} accounts list`}
+                          onClick={() => setSelectedBusinessAccount(account)}
+                        >
+                          <Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                          Watch
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -271,6 +488,79 @@ export function BillingPage() {
                 {businessPlanTotals.codexSeatsInUse} Codex.
               </p>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={selectedBusinessAccount !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedBusinessAccount(null);
+          }
+        }}
+      >
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[96vw] 2xl:max-w-[1400px]">
+          <DialogHeader>
+            <DialogTitle>{selectedBusinessAccount?.domain} · Accounts list</DialogTitle>
+            <DialogDescription>
+              Check and edit seat assignments for members in this business account.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="overflow-hidden rounded-xl border border-border/70">
+            <Table>
+              <TableHeader className="bg-muted/30">
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Seat type</TableHead>
+                  <TableHead>Date added</TableHead>
+                  <TableHead className="w-[50px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedBusinessAccount?.members.map((member) => (
+                  <TableRow key={member.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[11px] font-semibold uppercase text-white">
+                          {getInitials(member.name)}
+                        </div>
+                        <div>
+                          <p className="font-medium">{member.name}</p>
+                          <p className="text-sm text-muted-foreground">{member.email}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1 text-base">
+                        {member.role}
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1 text-base">
+                        {member.seatType}
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                      </span>
+                    </TableCell>
+                    <TableCell>{member.dateAdded}</TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="h-8 w-8 text-muted-foreground"
+                        aria-label={`Open actions for ${member.name}`}
+                      >
+                        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         </DialogContent>
       </Dialog>

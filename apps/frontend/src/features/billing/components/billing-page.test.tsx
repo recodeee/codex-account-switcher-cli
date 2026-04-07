@@ -31,4 +31,23 @@ describe("BillingPage", () => {
     expect(within(detailsDialog).getByText("Total business plan monthly cost: €260/month")).toBeInTheDocument();
     expect(within(detailsDialog).getByText("Renews on Apr 23")).toBeInTheDocument();
   });
+
+  it("opens account list dialog from watch button", async () => {
+    const user = userEvent.setup({ delay: null });
+
+    renderWithProviders(<BillingPage />);
+
+    await user.click(screen.getByRole("button", { name: "Watch edixai.com accounts list" }));
+
+    const accountListDialog = await screen.findByRole("dialog", {
+      name: "edixai.com · Accounts list",
+    });
+
+    expect(within(accountListDialog).getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
+    expect(within(accountListDialog).getByRole("columnheader", { name: "Role" })).toBeInTheDocument();
+    expect(within(accountListDialog).getByRole("columnheader", { name: "Seat type" })).toBeInTheDocument();
+    expect(within(accountListDialog).getByRole("columnheader", { name: "Date added" })).toBeInTheDocument();
+    expect(within(accountListDialog).getByText("Bianka Belovics")).toBeInTheDocument();
+    expect(within(accountListDialog).getByText("bia@edixai.com")).toBeInTheDocument();
+  });
 });

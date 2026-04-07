@@ -1392,6 +1392,7 @@ describe("AccountCard", () => {
       codexLiveSessionCount: 2,
       codexSessionCount: 2,
       codexCurrentTaskPreview: "Trace session-affinity fallback for codex websocket flow",
+      codexLastTaskPreview: "Merged fallback summary and shipped diagnostics",
       codexAuth: {
         hasSnapshot: true,
         snapshotName: "main",
@@ -1404,8 +1405,13 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
+    expect(screen.getByText("Prompt task")).toBeInTheDocument();
     expect(
       screen.getByText("Trace session-affinity fallback for codex websocket flow"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Last codex response:")).toBeInTheDocument();
+    expect(
+      screen.getByText("Merged fallback summary and shipped diagnostics"),
     ).toBeInTheDocument();
     expect(screen.getByText("working...")).toBeInTheDocument();
   });
@@ -2004,7 +2010,7 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Last task:")).toBeInTheDocument();
+    expect(screen.getByText("Last codex response:")).toBeInTheDocument();
     expect(
       screen.getByText("Investigate Zeus quota overlay mapping"),
     ).toBeInTheDocument();
