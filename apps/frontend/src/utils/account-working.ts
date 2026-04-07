@@ -4,6 +4,7 @@ const LIVE_TELEMETRY_STALE_AFTER_MS = 5 * 60 * 1000;
 const LIVE_TELEMETRY_WORKING_GRACE_AFTER_MS = 20 * 60 * 1000;
 const WORKING_NOW_LIMIT_HIT_GRACE_MS = 60 * 1000;
 const WORKING_NOW_DEPLETED_QUOTA_THRESHOLD_PERCENT = 5;
+const WORKING_NOW_LOW_QUOTA_FALLBACK_THRESHOLD_PERCENT = 15;
 const RECENT_USAGE_SIGNAL_STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 const RESET_ALIGNMENT_TOLERANCE_MS = 30 * 1000;
 const STATUS_ONLY_TASK_PREVIEW_RE =
@@ -870,6 +871,18 @@ export function isAccountWorkingNow(
     if (isFreshTimestamp(secondaryFallbackRecordedAt, nowMs)) {
       return true;
     }
+  }
+
+  const hasCodexSnapshotVisibility = account.codexAuth?.hasSnapshot ?? false;
+  const primaryRemainingPercent = account.usage?.primaryRemainingPercent;
+  const hasLowQuotaFallbackWorkingSignal =
+    !hasCodexSnapshotVisibility &&
+    account.status !== "deactivated" &&
+    typeof primaryRemainingPercent === "number" &&
+    Number.isFinite(primaryRemainingPercent) &&
+    primaryRemainingPercent <= WORKING_NOW_LOW_QUOTA_FALLBACK_THRESHOLD_PERCENT;
+  if (hasLowQuotaFallbackWorkingSignal) {
+    return true;
   }
 
   return Math.max(account.codexTrackedSessionCount ?? 0, account.codexSessionCount ?? 0, 0) > 0;

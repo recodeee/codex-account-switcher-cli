@@ -13,6 +13,7 @@ import {
   MonitorSmartphone,
   PanelsTopLeft,
   Settings2,
+  Share2,
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
 const NAV_ICONS: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/accounts": Users,
+  "/referrals": Share2,
   "/projects": PanelsTopLeft,
   "/billing": CreditCard,
   "/apis": KeyRound,

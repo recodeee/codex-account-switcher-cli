@@ -13,6 +13,7 @@ import { BillingPage } from "@/features/billing/components/billing-page";
 import { DashboardPage } from "@/features/dashboard/components/dashboard-page";
 import { DevicesPage } from "@/features/devices/components/devices-page";
 import { ProjectsPage } from "@/features/projects/components/projects-page";
+import { ReferralsPage } from "@/features/referrals/components/referrals-page";
 import { SessionsPage } from "@/features/sessions/components/sessions-page";
 import { SettingsPage } from "@/features/settings/components/settings-page";
 import { StoragePage } from "@/features/storage/components/storage-page";
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/accounts" element={<AccountsPage />} />
+            <Route path="/referrals" element={<ReferralsPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/apis" element={<ApisPage />} />

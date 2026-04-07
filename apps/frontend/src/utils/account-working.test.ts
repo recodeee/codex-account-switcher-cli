@@ -66,6 +66,48 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account)).toBe(true);
   });
 
+  it("returns true for low-quota accounts when codex snapshot visibility is unavailable", () => {
+    const account = createAccountSummary({
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 10,
+        secondaryRemainingPercent: 56,
+      },
+      codexAuth: null,
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
+    expect(isAccountWorkingNow(account)).toBe(true);
+  });
+
+  it("keeps low-quota accounts out of working-now when codex snapshot visibility exists but no live signal is present", () => {
+    const account = createAccountSummary({
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 10,
+        secondaryRemainingPercent: 56,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "admin",
+        activeSnapshotName: "odin",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
+    expect(isAccountWorkingNow(account)).toBe(false);
+  });
+
   it("returns true when 5h is depleted but tracked sessions are still present", () => {
     const account = createAccountSummary({
       usage: {

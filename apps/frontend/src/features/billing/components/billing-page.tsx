@@ -415,7 +415,9 @@ export function BillingPage() {
   const [selectedBusinessAccountId, setSelectedBusinessAccountId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [pulsedSeatControlKey, setPulsedSeatControlKey] = useState<string | null>(null);
   const persistRequestIdRef = useRef(0);
+  const seatControlPulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -443,6 +445,24 @@ export function BillingPage() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (seatControlPulseTimeoutRef.current !== null) {
+        clearTimeout(seatControlPulseTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  function pulseSeatControl(controlKey: string) {
+    setPulsedSeatControlKey(controlKey);
+    if (seatControlPulseTimeoutRef.current !== null) {
+      clearTimeout(seatControlPulseTimeoutRef.current);
+    }
+    seatControlPulseTimeoutRef.current = setTimeout(() => {
+      setPulsedSeatControlKey((currentValue) => (currentValue === controlKey ? null : currentValue));
+    }, 180);
+  }
 
   function persistBusinessPlanAccounts(nextAccounts: BusinessPlanAccount[]) {
     const requestId = ++persistRequestIdRef.current;
@@ -650,6 +670,7 @@ export function BillingPage() {
         return previousAccounts;
       },
     );
+    pulseSeatControl(`${accountId}:${seatType}`);
   }
 
   function updateBillingCycleBoundary(
@@ -795,6 +816,10 @@ export function BillingPage() {
               <TableBody>
                 {businessPlanAccounts.map((account) => {
                   const accountMonthlyCost = account.chatgptSeatsInUse * CHATGPT_MONTHLY_SEAT_PRICE_EUR;
+                  const chatgptSeatControlKey = `${account.id}:ChatGPT`;
+                  const codexSeatControlKey = `${account.id}:Codex`;
+                  const isChatgptSeatControlPulsing = pulsedSeatControlKey === chatgptSeatControlKey;
+                  const isCodexSeatControlPulsing = pulsedSeatControlKey === codexSeatControlKey;
                   return (
                     <TableRow key={account.id}>
                       <TableCell>
@@ -809,26 +834,29 @@ export function BillingPage() {
                         <div
                           role="group"
                           aria-label={`ChatGPT seats for ${account.domain}`}
-                          className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/40 p-0.5"
+                          className="inline-flex select-none items-center gap-1 rounded-md border border-border/70 bg-muted/40 p-0.5 shadow-sm"
                         >
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-xs"
-                            className="h-6 w-6"
+                            className="h-7 w-7 cursor-pointer rounded-md transition-transform duration-150 ease-out hover:scale-105 active:scale-90 active:bg-accent/70 disabled:cursor-not-allowed disabled:scale-100"
                             aria-label={`Decrease ChatGPT seats for ${account.domain}`}
+                            disabled={account.chatgptSeatsInUse <= 0}
                             onClick={() => adjustSeatsInUse(account.id, "ChatGPT", -1)}
                           >
                             <Minus className="h-3 w-3" aria-hidden="true" />
                           </Button>
-                          <span className="min-w-6 text-center text-sm font-medium tabular-nums">
+                          <span
+                            className={`min-w-6 text-center text-sm font-medium tabular-nums transition-transform duration-150 ease-out ${isChatgptSeatControlPulsing ? "scale-110" : "scale-100"}`}
+                          >
                             {account.chatgptSeatsInUse}
                           </span>
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-xs"
-                            className="h-6 w-6"
+                            className="h-7 w-7 cursor-pointer rounded-md transition-transform duration-150 ease-out hover:scale-105 active:scale-90 active:bg-accent/70 disabled:cursor-not-allowed disabled:scale-100"
                             aria-label={`Increase ChatGPT seats for ${account.domain}`}
                             onClick={() => adjustSeatsInUse(account.id, "ChatGPT", 1)}
                           >
@@ -840,26 +868,29 @@ export function BillingPage() {
                         <div
                           role="group"
                           aria-label={`Codex seats for ${account.domain}`}
-                          className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/40 p-0.5"
+                          className="inline-flex select-none items-center gap-1 rounded-md border border-border/70 bg-muted/40 p-0.5 shadow-sm"
                         >
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-xs"
-                            className="h-6 w-6"
+                            className="h-7 w-7 cursor-pointer rounded-md transition-transform duration-150 ease-out hover:scale-105 active:scale-90 active:bg-accent/70 disabled:cursor-not-allowed disabled:scale-100"
                             aria-label={`Decrease Codex seats for ${account.domain}`}
+                            disabled={account.codexSeatsInUse <= 0}
                             onClick={() => adjustSeatsInUse(account.id, "Codex", -1)}
                           >
                             <Minus className="h-3 w-3" aria-hidden="true" />
                           </Button>
-                          <span className="min-w-6 text-center text-sm font-medium tabular-nums">
+                          <span
+                            className={`min-w-6 text-center text-sm font-medium tabular-nums transition-transform duration-150 ease-out ${isCodexSeatControlPulsing ? "scale-110" : "scale-100"}`}
+                          >
                             {account.codexSeatsInUse}
                           </span>
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-xs"
-                            className="h-6 w-6"
+                            className="h-7 w-7 cursor-pointer rounded-md transition-transform duration-150 ease-out hover:scale-105 active:scale-90 active:bg-accent/70 disabled:cursor-not-allowed disabled:scale-100"
                             aria-label={`Increase Codex seats for ${account.domain}`}
                             onClick={() => adjustSeatsInUse(account.id, "Codex", 1)}
                           >

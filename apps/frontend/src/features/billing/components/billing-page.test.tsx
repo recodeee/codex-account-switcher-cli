@@ -108,8 +108,20 @@ describe("BillingPage", () => {
 
     renderWithProviders(<BillingPage />);
 
-    await user.click(screen.getByRole("button", { name: "Increase ChatGPT seats for edixai.com" }));
-    await user.click(screen.getByRole("button", { name: "Decrease Codex seats for edixai.com" }));
+    const increaseChatgptSeatsButton = screen.getByRole("button", {
+      name: "Increase ChatGPT seats for edixai.com",
+    });
+    const decreaseCodexSeatsButton = screen.getByRole("button", {
+      name: "Decrease Codex seats for edixai.com",
+    });
+
+    expect(increaseChatgptSeatsButton).toBeEnabled();
+    expect(decreaseCodexSeatsButton).toBeEnabled();
+    expect(increaseChatgptSeatsButton).toHaveClass("cursor-pointer");
+    expect(decreaseCodexSeatsButton).toHaveClass("cursor-pointer");
+
+    await user.click(increaseChatgptSeatsButton);
+    await user.click(decreaseCodexSeatsButton);
 
     const businessAccountRow = screen.getByText("edixai.com").closest("tr");
     expect(businessAccountRow).not.toBeNull();
@@ -150,14 +162,19 @@ describe("BillingPage", () => {
       target: { value: "2026-04-05" },
     });
 
+    await user.click(screen.getByRole("button", { name: "Business plan details" }));
     await user.click(
-      screen.getByRole("button", {
-        name: "Billing cycle end for kronakert.hu",
+      await screen.findByRole("button", {
+        name: "Billing cycle end for kronakert.hu in details",
       }),
     );
-    fireEvent.change(await screen.findByLabelText("Billing cycle end for kronakert.hu input"), {
+    fireEvent.change(
+      await screen.findByLabelText("Billing cycle end for kronakert.hu in details input"),
+      {
       target: { value: "2026-05-08" },
-    });
+      },
+    );
+    await user.click(screen.getByRole("button", { name: "Close" }));
 
     await user.click(screen.getByRole("button", { name: "Watch kronakert.hu accounts list" }));
 
