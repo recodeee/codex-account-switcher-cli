@@ -13,7 +13,7 @@ from app.core.auth.refresh import RefreshError
 from app.core.clients.usage import UsageFetchError, fetch_usage
 from app.core.config.settings import get_settings
 from app.core.crypto import TokenEncryptor
-from app.core.plan_types import coerce_account_plan_type
+from app.core.plan_types import coerce_account_plan_type, normalize_account_plan_type
 from app.core.usage.models import UsagePayload
 from app.core.utils.request_id import get_request_id
 from app.core.utils.time import utcnow
@@ -531,6 +531,12 @@ class UsageUpdater:
 
     async def _sync_plan_type(self, account: Account, payload: UsagePayload) -> bool:
         next_plan_type = coerce_account_plan_type(payload.plan_type, account.plan_type or "free")
+        inferred_plan_type = await self._infer_plan_type_from_sibling_account(
+            account=account,
+            next_plan_type=next_plan_type,
+        )
+        if inferred_plan_type is not None:
+            next_plan_type = inferred_plan_type
 
         if _is_workspace_membership_downgraded_to_free(
             chatgpt_account_id=account.chatgpt_account_id,
@@ -566,6 +572,44 @@ class UsageUpdater:
             chatgpt_account_id=account.chatgpt_account_id,
         )
         return False
+
+    async def _infer_plan_type_from_sibling_account(
+        self,
+        *,
+        account: Account,
+        next_plan_type: str,
+    ) -> str | None:
+        if self._accounts_repo is None:
+            return None
+        if not _is_self_serve_business_usage_based_plan_type(next_plan_type):
+            return None
+        normalized_chatgpt_account_id = (account.chatgpt_account_id or "").strip()
+        if not normalized_chatgpt_account_id:
+            return None
+
+        sibling = await self._accounts_repo.get_token_donor_by_chatgpt_account_id(
+            normalized_chatgpt_account_id,
+            exclude_account_id=account.id,
+        )
+        if sibling is None:
+            return None
+
+        sibling_plan_type = normalize_account_plan_type(sibling.plan_type)
+        if sibling_plan_type is None or sibling_plan_type == "free":
+            return None
+        if sibling_plan_type == next_plan_type:
+            return None
+
+        logger.info(
+            "Usage refresh inferred updated plan type from sibling account "
+            "account_id=%s sibling_account_id=%s previous_plan_type=%s inferred_plan_type=%s request_id=%s",
+            account.id,
+            sibling.id,
+            next_plan_type,
+            sibling_plan_type,
+            get_request_id(),
+        )
+        return sibling_plan_type
 
     async def _sync_account_from_repo(self, account: Account) -> None:
         if not self._accounts_repo:
@@ -889,6 +933,11 @@ def _is_workspace_membership_downgraded_to_free(
         return False
 
     return normalized_current_plan_type != "free"
+
+
+def _is_self_serve_business_usage_based_plan_type(plan_type: str | None) -> bool:
+    normalized_plan_type = (plan_type or "").strip().lower().replace("-", "_")
+    return normalized_plan_type == "self_serve_business_usage_based"
 
 
 # Treat usage 4xx signals that indicate account-level invalidity as

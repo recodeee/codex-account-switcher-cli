@@ -1,0 +1,4 @@
+- [x] Update dashboard account card copy from `Last task` to `Last codex response`.
+- [x] Show prior response context when available and distinct from current prompt preview.
+- [x] Add/adjust dashboard account-card tests for new label and visibility behavior.
+- [x] Validate specs with `openspec validate --specs`.

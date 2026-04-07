@@ -998,6 +998,77 @@ async def test_usage_updater_syncs_plan_type_from_usage_payload(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_usage_updater_infers_team_plan_from_sibling_when_usage_reports_self_serve_business(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CODEX_LB_USAGE_REFRESH_ENABLED", "true")
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    async def stub_fetch_usage(**_: Any) -> UsagePayload:
+        return UsagePayload.model_validate({"plan_type": "self_serve_business_usage_based"})
+
+    monkeypatch.setattr("app.modules.usage.updater.fetch_usage", stub_fetch_usage)
+
+    usage_repo = StubUsageRepository()
+    accounts_repo = StubAccountsRepository()
+    updater = UsageUpdater(usage_repo, accounts_repo=accounts_repo)
+
+    shared_chatgpt_account_id = "b6bb52b6-3b65-4073-a5d2-90c4f13a84e1"
+    codex_only_account = _make_account(
+        "acc_codex_only",
+        shared_chatgpt_account_id,
+        email="codex-only@example.com",
+    )
+    codex_only_account.plan_type = "self_serve_business_usage_based"
+    codex_only_account.last_refresh = datetime(2026, 4, 7, 10, 0, tzinfo=timezone.utc).replace(tzinfo=None)
+
+    sibling_team_account = _make_account(
+        "acc_team_sibling",
+        shared_chatgpt_account_id,
+        email="team@example.com",
+    )
+    sibling_team_account.plan_type = "team"
+    sibling_team_account.last_refresh = datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc).replace(tzinfo=None)
+
+    accounts_repo.accounts_by_id[codex_only_account.id] = codex_only_account
+    accounts_repo.accounts_by_id[sibling_team_account.id] = sibling_team_account
+
+    await updater.refresh_accounts([codex_only_account], latest_usage={})
+
+    assert codex_only_account.plan_type == "team"
+    assert len(accounts_repo.token_updates) == 1
+    assert accounts_repo.token_updates[0]["plan_type"] == "team"
+
+
+@pytest.mark.asyncio
+async def test_usage_updater_keeps_self_serve_plan_when_no_sibling_plan_is_known(monkeypatch) -> None:
+    monkeypatch.setenv("CODEX_LB_USAGE_REFRESH_ENABLED", "true")
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    async def stub_fetch_usage(**_: Any) -> UsagePayload:
+        return UsagePayload.model_validate({"plan_type": "self_serve_business_usage_based"})
+
+    monkeypatch.setattr("app.modules.usage.updater.fetch_usage", stub_fetch_usage)
+
+    usage_repo = StubUsageRepository()
+    accounts_repo = StubAccountsRepository()
+    updater = UsageUpdater(usage_repo, accounts_repo=accounts_repo)
+
+    account = _make_account("acc_self_serve", "workspace_self_serve", email="self-serve@example.com")
+    account.plan_type = "self_serve_business_usage_based"
+    accounts_repo.accounts_by_id[account.id] = account
+
+    await updater.refresh_accounts([account], latest_usage={})
+
+    assert account.plan_type == "self_serve_business_usage_based"
+    assert len(accounts_repo.token_updates) == 0
+
+
+@pytest.mark.asyncio
 async def test_usage_updater_deactivates_workspace_account_when_usage_downgrades_to_free(
     monkeypatch,
 ) -> None:
