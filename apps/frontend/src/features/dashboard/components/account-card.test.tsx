@@ -1142,6 +1142,61 @@ describe("AccountCard", () => {
     }
   });
 
+  it("does not repeatedly auto-terminate when remaining quota display changes after grace expiry", () => {
+    vi.useFakeTimers();
+    try {
+      const now = new Date("2026-04-05T00:00:00.000Z");
+      vi.setSystemTime(now);
+      const nowIso = now.toISOString();
+      const account = createAccountSummary({
+        accountId: "account-auto-terminate-once",
+        status: "rate_limited",
+        usage: {
+          primaryRemainingPercent: 0,
+          secondaryRemainingPercent: 66,
+        },
+        codexLiveSessionCount: 1,
+        codexTrackedSessionCount: 1,
+        codexSessionCount: 1,
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "auto-terminate-main",
+          activeSnapshotName: "auto-terminate-main",
+          isActiveSnapshot: true,
+          hasLiveSession: true,
+        },
+        lastUsageRecordedAtPrimary: nowIso,
+        lastUsageRecordedAtSecondary: nowIso,
+      });
+      const onAction = vi.fn();
+
+      const { rerender } = render(<AccountCard account={account} onAction={onAction} />);
+
+      act(() => {
+        vi.advanceTimersByTime(61_000);
+      });
+      expect(onAction).toHaveBeenCalledWith(account, "terminateCliSessions");
+
+      const refreshedAccount = {
+        ...account,
+        usage: {
+          primaryRemainingPercent: 42,
+          secondaryRemainingPercent: 66,
+        },
+        lastUsageRecordedAtPrimary: new Date("2026-04-05T00:01:10.000Z").toISOString(),
+        lastUsageRecordedAtSecondary: new Date("2026-04-05T00:01:10.000Z").toISOString(),
+      };
+      rerender(<AccountCard account={refreshedAccount} onAction={onAction} />);
+
+      const terminateCalls = onAction.mock.calls.filter(
+        ([, action]) => action === "terminateCliSessions",
+      );
+      expect(terminateCalls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not show a live-session fallback label when runtime sessions have no telemetry timestamps yet", () => {
     const account = createAccountSummary({
       usage: {

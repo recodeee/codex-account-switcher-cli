@@ -690,7 +690,7 @@ export function AccountCards({
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-3">
       {items.map((account, index) => (
         <div
-          key={`${keyPrefix}-${buildAccountEntryKey(account)}`}
+          key={`${keyPrefix}-${account.accountId}`}
           className={
             keyPrefix === "working"
               ? "min-w-0 animate-working-account-enter"

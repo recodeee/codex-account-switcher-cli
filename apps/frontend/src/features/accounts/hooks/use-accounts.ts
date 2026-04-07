@@ -217,6 +217,10 @@ export function useAccountMutations() {
       };
     },
     onSuccess: (response) => {
+      if (response.terminatedSessionCount <= 0) {
+        void invalidateAccountRelatedQueries(queryClient);
+        return;
+      }
       const noun = response.terminatedSessionCount === 1 ? "session" : "sessions";
       toast.success(
         `Terminated ${response.terminatedSessionCount} CLI ${noun} for ${response.snapshotName}`,

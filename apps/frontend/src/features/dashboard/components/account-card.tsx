@@ -1098,12 +1098,11 @@ export function AccountCard(props: AccountCardProps) {
   const autoTerminateSignature = [
     account.accountId,
     account.codexAuth?.snapshotName ?? "",
-    account.status,
-    String(primaryRemaining ?? ""),
   ].join("|");
   const lastAutoTerminateSignatureRef = useRef<string | null>(null);
   useEffect(() => {
     const shouldAutoTerminateLiveSessions =
+      hasActiveCliSession &&
       usageLimitHit &&
       usageLimitHitCountdownMs != null &&
       usageLimitHitCountdownMs <= 0;
@@ -1123,6 +1122,7 @@ export function AccountCard(props: AccountCardProps) {
   }, [
     account,
     autoTerminateSignature,
+    hasActiveCliSession,
     onAction,
     usageLimitHit,
     usageLimitHitCountdownMs,
