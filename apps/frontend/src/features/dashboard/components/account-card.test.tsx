@@ -1407,8 +1407,8 @@ describe("AccountCard", () => {
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
     expect(screen.getByText("Prompt task")).toBeInTheDocument();
     expect(
-      screen.getByText("Trace session-affinity fallback for codex websocket flow"),
-    ).toBeInTheDocument();
+      screen.getAllByText("Trace session-affinity fallback for codex websocket flow").length,
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Last codex response:")).toBeInTheDocument();
     expect(
       screen.getByText("Merged fallback summary and shipped diagnostics"),
@@ -1566,6 +1566,30 @@ describe("AccountCard", () => {
     expect(screen.getByText("Session 4")).toBeInTheDocument();
     expect(screen.getByText("0 assigned")).toBeInTheDocument();
     expect(screen.getByText("4 waiting")).toBeInTheDocument();
+  });
+
+  it("uses current task preview as fallback for the first live session row", () => {
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Reconcile sticky session mapping drift",
+      codexLiveSessionCount: 3,
+      codexSessionCount: 3,
+      codexTrackedSessionCount: 3,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(
+      screen.getAllByText("Reconcile sticky session mapping drift").length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("1 assigned")).toBeInTheDocument();
+    expect(screen.getByText("2 waiting")).toBeInTheDocument();
   });
 
   it("renders per-session task previews with waiting fallback", () => {
@@ -2012,8 +2036,8 @@ describe("AccountCard", () => {
     expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Last codex response:")).toBeInTheDocument();
     expect(
-      screen.getByText("Investigate Zeus quota overlay mapping"),
-    ).toBeInTheDocument();
+      screen.getAllByText("Investigate Zeus quota overlay mapping").length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("hides stale current task preview after usage-limit grace expires", () => {
@@ -2044,7 +2068,9 @@ describe("AccountCard", () => {
       });
 
       render(<AccountCard account={account} />);
-      expect(screen.getByText("Investigate codexina rollout session mapping")).toBeInTheDocument();
+      expect(
+        screen.getAllByText("Investigate codexina rollout session mapping").length,
+      ).toBeGreaterThanOrEqual(1);
       expect(screen.getByText(/leaves in/i)).toBeInTheDocument();
 
       act(() => {

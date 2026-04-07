@@ -356,7 +356,7 @@ function resolveSessionTaskStateForRow(
     }
     return baseState;
   }
-  if (row.synthetic) {
+  if (row.synthetic && isWaitingTaskPreview(row.taskPreview)) {
     return "waiting";
   }
   if (hasLiveCliSessions) {
@@ -1268,6 +1268,26 @@ export function AccountCard(props: AccountCardProps) {
       synthetic: false,
     }));
     const targetCount = Math.max(codexLiveSessionCount, rows.length);
+    const fallbackCurrentTaskPreview = codexCurrentTaskPreview?.trim() || null;
+    const fallbackLastTaskPreview = codexLastTaskPreview?.trim() || null;
+    const fallbackSessionTaskPreview =
+      fallbackCurrentTaskPreview && !isWaitingTaskPreview(fallbackCurrentTaskPreview)
+        ? fallbackCurrentTaskPreview
+        : fallbackLastTaskPreview && !isWaitingTaskPreview(fallbackLastTaskPreview)
+          ? fallbackLastTaskPreview
+          : null;
+    if (rows.length === 0 && targetCount > 0 && fallbackSessionTaskPreview) {
+      rows.push({
+        sessionKey: "live-session-1",
+        taskPreview: fallbackSessionTaskPreview,
+        taskUpdatedAt:
+          account.lastUsageRecordedAtPrimary ??
+          account.lastUsageRecordedAtSecondary ??
+          null,
+        ordinal: 1,
+        synthetic: true,
+      });
+    }
     for (let index = rows.length; index < targetCount; index += 1) {
       rows.push({
         sessionKey: `live-session-${index + 1}`,
@@ -1278,7 +1298,14 @@ export function AccountCard(props: AccountCardProps) {
       });
     }
     return rows;
-  }, [codexLiveSessionCount, sessionTaskPreviews]);
+  }, [
+    account.lastUsageRecordedAtPrimary,
+    account.lastUsageRecordedAtSecondary,
+    codexCurrentTaskPreview,
+    codexLastTaskPreview,
+    codexLiveSessionCount,
+    sessionTaskPreviews,
+  ]);
   const hasSessionTaskRows = sessionTaskRows.length > 0;
   const hasLiveCliSessions = codexLiveSessionCount > 0;
   const sessionTaskStates = useMemo(
