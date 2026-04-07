@@ -1,7 +1,7 @@
--- Initial WEBU seed data for Medusa-linked environment
+-- Initial commerce seed data for Medusa-linked environment
 -- Idempotent inserts only.
 
-insert into webu.settings (key, value, description)
+insert into commerce.settings (key, value, description)
 values
   (
     'project.runtime',
@@ -26,12 +26,12 @@ set
   description = excluded.description,
   updated_at = now();
 
-insert into webu.seed_history (seed_name, metadata)
+insert into commerce.seed_history (seed_name, metadata)
 values (
-  '20260324135100_webu_medusa_seed',
+  '20260324135100_commerce_medusa_seed',
   jsonb_build_object(
     'status', 'applied',
-    'source', 'supabase/migrations/20260324135100_webu_medusa_seed.sql'
+    'source', 'supabase/migrations/20260324135100_commerce_medusa_seed.sql'
   )
 )
 on conflict (seed_name) do nothing;

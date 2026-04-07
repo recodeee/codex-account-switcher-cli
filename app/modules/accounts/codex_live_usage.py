@@ -1748,6 +1748,14 @@ def _resolve_unlabeled_default_scope_snapshot_name(
                 )
                 if inferred_previous_snapshot_name:
                     return inferred_previous_snapshot_name
+                inferred_latest_previous_snapshot_name = (
+                    _infer_latest_previous_snapshot_name_from_registry_usage(
+                        current_snapshot_name=snapshot_name,
+                        selection_changed_at=selection_changed_at,
+                    )
+                )
+                if inferred_latest_previous_snapshot_name:
+                    return inferred_latest_previous_snapshot_name
                 return None
 
     return snapshot_name
@@ -1840,6 +1848,61 @@ def _infer_recent_previous_snapshot_name_from_registry(
                 return None
 
     return candidate_snapshot_name
+
+
+def _infer_latest_previous_snapshot_name_from_registry_usage(
+    *,
+    current_snapshot_name: str,
+    selection_changed_at: float,
+) -> str | None:
+    payload = _read_registry_payload()
+    if payload is None:
+        return None
+
+    raw_accounts = payload.get("accounts")
+    if not isinstance(raw_accounts, dict):
+        return None
+
+    candidate_last_usage_ts: float | None = None
+    candidate_snapshot_names: set[str] = set()
+    timestamp_tie_tolerance_seconds = 1.0
+
+    for snapshot_key, raw_account in raw_accounts.items():
+        if not isinstance(raw_account, dict):
+            continue
+
+        raw_snapshot_name = raw_account.get("name", snapshot_key)
+        if not isinstance(raw_snapshot_name, str):
+            continue
+
+        snapshot_name = raw_snapshot_name.strip()
+        if not snapshot_name or snapshot_name == current_snapshot_name:
+            continue
+
+        parsed_last_usage = _parse_timestamp(raw_account.get("lastUsageAt"))
+        if parsed_last_usage is None:
+            continue
+
+        last_usage_ts = parsed_last_usage.timestamp()
+        if last_usage_ts > (selection_changed_at + timestamp_tie_tolerance_seconds):
+            continue
+
+        if candidate_last_usage_ts is None:
+            candidate_last_usage_ts = last_usage_ts
+            candidate_snapshot_names = {snapshot_name}
+            continue
+
+        if last_usage_ts > (candidate_last_usage_ts + timestamp_tie_tolerance_seconds):
+            candidate_last_usage_ts = last_usage_ts
+            candidate_snapshot_names = {snapshot_name}
+            continue
+
+        if abs(last_usage_ts - candidate_last_usage_ts) <= timestamp_tie_tolerance_seconds:
+            candidate_snapshot_names.add(snapshot_name)
+
+    if len(candidate_snapshot_names) == 1:
+        return next(iter(candidate_snapshot_names))
+    return None
 
 
 def _is_eligible_unlabeled_default_scope_process(

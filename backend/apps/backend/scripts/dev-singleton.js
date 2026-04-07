@@ -83,7 +83,7 @@ const getPidCommand = (pid) => {
 }
 
 const isBackendMedusaProcess = (command) =>
-  (command.includes("/services/medusa-backend") || command.includes("/apps/backend")) &&
+  (command.includes("/backend/apps/backend") || command.includes("/apps/backend")) &&
   (command.includes("medusa") || command.includes("node"))
 
 const acquireLock = () => {

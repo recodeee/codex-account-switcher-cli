@@ -8,7 +8,7 @@ Introduce a Medusa commerce backend + Medusa-aware storefront layer into `codex-
 - Add a Medusa backend layer inspired by `WEBU/apps/backend`.
 - Add a Medusa storefront layer into the current Next.js storefront (`frontend/`).
 - Database backend for the Medusa layer: **Supabase**.
-- Planning only in this phase (no implementation code).
+- Begin implementation from this plan without introducing Medusa logic into `app/`.
 
 ## Target architecture (planned)
 1. **Existing Python backend (`app/`) remains dedicated** to codex-lb proxy/dashboard APIs.
@@ -24,9 +24,8 @@ Introduce a Medusa commerce backend + Medusa-aware storefront layer into `codex-
 - Supabase DB, migration, and environment planning for Medusa
 - Task sequencing and status tracking
 
-### Out of scope (this planning phase)
-- Writing production code
-- Data migration execution
+### Out of scope (current phase)
+- Data migration execution on production environments
 - Cutover/deployment execution
 
 ## Task status board
@@ -34,14 +33,14 @@ Status values: `Not Started`, `In Progress`, `Blocked`, `Done`
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
-| T01 | Baseline architecture decision record (service boundaries + repo layout) | Not Started | Must confirm final folder/service topology before coding |
-| T02 | Inventory + map WEBU backend modules to codex-lb needs | Not Started | Determine what to adopt vs skip |
-| T03 | Define Medusa backend bootstrap plan in this repo | Not Started | Separate runtime from Python proxy |
-| T04 | Define Supabase schema + migration strategy for Medusa | Not Started | Include env strategy and migration order |
-| T05 | Define storefront integration adapter for current Next.js app | Not Started | Decide SDK boundary, route ownership |
+| T01 | Baseline architecture decision record (service boundaries + repo layout) | In Progress | Service boundary implemented; ADR write-up pending |
+| T02 | Inventory + map WEBU backend modules to codex-lb needs | Done | Backend scaffold copied into `backend/apps/backend` |
+| T03 | Define Medusa backend bootstrap plan in this repo | Done | Medusa backend service scaffold + runtime scripts added |
+| T04 | Define Supabase schema + migration strategy for Medusa | In Progress | Supabase workspace copied and normalized to `commerce` schema |
+| T05 | Define storefront integration adapter for current Next.js app | Done | `frontend/src/lib/medusa/*` adapter layer created |
 | T06 | Define auth/session strategy between storefront and Medusa | Not Started | Include customer + admin auth approach |
 | T07 | Define storefront route ownership and composition strategy | Not Started | Existing pages vs Medusa-powered commerce routes |
-| T08 | Define local orchestration plan (docker compose/services/networking) | Not Started | Multi-service developer workflow |
+| T08 | Define local orchestration plan (docker compose/services/networking) | Done | `docker-compose.yml` includes optional `medusa` profile |
 | T09 | Define deployment topology + secrets handling for Medusa and Supabase | Not Started | Environment parity + secret isolation |
 | T10 | Define observability + runbook requirements for Medusa path | Not Started | Logging/metrics/alerts for commerce paths |
 | T11 | Define test strategy (unit/integration/contract/e2e) | Not Started | Must include Medusa-storefront contracts |

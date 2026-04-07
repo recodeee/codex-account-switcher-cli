@@ -59,6 +59,54 @@ services:
       - ./logs:/var/log/codex-lb:rw
       - codex-lb-frontend-node-modules:/app/node_modules
 
+  medusa-redis:
+    image: redis:7-alpine
+    profiles: ["medusa"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  medusa-backend:
+    profiles: ["medusa"]
+    build:
+      context: ./backend/apps/backend
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: development
+    depends_on:
+      medusa-redis:
+        condition: service_healthy
+    env_file:
+      - ./.env.local
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 9000
+      REDIS_URL: redis://medusa-redis:6379
+      STORE_CORS: ${MEDUSA_STORE_CORS:-http://localhost:5173,http://127.0.0.1:5173}
+      ADMIN_CORS: ${MEDUSA_ADMIN_CORS:-http://localhost:9000,http://127.0.0.1:9000}
+      AUTH_CORS: ${MEDUSA_AUTH_CORS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:9000,http://127.0.0.1:9000}
+      DATABASE_URL: ${MEDUSA_DATABASE_URL:-}
+      SUPABASE_DB_URL: ${MEDUSA_SUPABASE_DB_URL:-}
+      DB_SCHEMA: ${MEDUSA_DB_SCHEMA:-commerce}
+      PGSSLMODE: ${MEDUSA_PGSSLMODE:-require}
+      JWT_SECRET: ${MEDUSA_JWT_SECRET:-supersecret}
+      COOKIE_SECRET: ${MEDUSA_COOKIE_SECRET:-supersecret}
+    command:
+      - sh
+      - -c
+      - pnpm dev
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./backend/apps/backend:/app:rw
+      - ./logs:/var/log/codex-lb:rw
+      - codex-lb-medusa-node-modules:/app/node_modules
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     profiles: ["postgres"]
@@ -84,3 +132,5 @@ volumes:
     name: codex-lb-postgres-data
   codex-lb-frontend-node-modules:
     name: codex-lb-frontend-node-modules
+  codex-lb-medusa-node-modules:
+    name: codex-lb-medusa-node-modules

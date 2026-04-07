@@ -5,7 +5,7 @@ do $$
 declare
   target_schema text;
 begin
-  foreach target_schema in array array['main_backend', 'public']
+  foreach target_schema in array array['commerce', 'public']
   loop
     if exists (
       select 1
