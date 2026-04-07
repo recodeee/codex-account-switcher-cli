@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pin } from "lucide-react";
+import {
+  Bot,
+  Brain,
+  MessageSquare,
+  Pin,
+  TerminalSquare,
+  User,
+  Wrench,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "@/lib/router-compat";
 import { toast } from "sonner";
@@ -26,6 +34,7 @@ import {
 import { PaginationControls } from "@/features/dashboard/components/filters/pagination-controls";
 import { getDashboardOverview } from "@/features/dashboard/api";
 import type { AccountSummary } from "@/features/dashboard/schemas";
+import { getSessionEvents } from "@/features/sessions/api";
 import { listStickySessions } from "@/features/sticky-sessions/api";
 import { Badge } from "@/components/ui/badge";
 import { usePrivacyStore } from "@/hooks/use-privacy";
@@ -57,6 +66,59 @@ type ActivityRow = {
   progressTone: ProgressTone;
   codexSessionCount: number;
   sortTimestampMs: number;
+};
+
+type PromptTarget = {
+  accountId: string;
+  displayName: string;
+  sessionKey: string | null;
+};
+
+const WATCH_EVENT_BADGE_STYLES: Record<
+  string,
+  {
+    badgeClassName: string;
+    cardClassName: string;
+    dotClassName: string;
+    Icon: typeof MessageSquare;
+  }
+> = {
+  prompt: {
+    badgeClassName: "border-cyan-500/35 bg-cyan-500/10 text-cyan-300",
+    cardClassName: "border-cyan-500/20 bg-cyan-500/[0.05]",
+    dotClassName: "border-cyan-500/45 bg-cyan-500/15 text-cyan-300",
+    Icon: User,
+  },
+  answer: {
+    badgeClassName: "border-emerald-500/35 bg-emerald-500/10 text-emerald-300",
+    cardClassName: "border-emerald-500/20 bg-emerald-500/[0.05]",
+    dotClassName: "border-emerald-500/45 bg-emerald-500/15 text-emerald-300",
+    Icon: Bot,
+  },
+  thinking: {
+    badgeClassName: "border-indigo-500/35 bg-indigo-500/10 text-indigo-300",
+    cardClassName: "border-indigo-500/20 bg-indigo-500/[0.05]",
+    dotClassName: "border-indigo-500/45 bg-indigo-500/15 text-indigo-300",
+    Icon: Brain,
+  },
+  tool: {
+    badgeClassName: "border-violet-500/35 bg-violet-500/10 text-violet-300",
+    cardClassName: "border-violet-500/20 bg-violet-500/[0.05]",
+    dotClassName: "border-violet-500/45 bg-violet-500/15 text-violet-300",
+    Icon: Wrench,
+  },
+  status: {
+    badgeClassName: "border-amber-500/35 bg-amber-500/10 text-amber-300",
+    cardClassName: "border-amber-500/20 bg-amber-500/[0.05]",
+    dotClassName: "border-amber-500/45 bg-amber-500/15 text-amber-300",
+    Icon: TerminalSquare,
+  },
+  event: {
+    badgeClassName: "border-white/15 bg-white/[0.06] text-zinc-300",
+    cardClassName: "border-white/10 bg-white/[0.02]",
+    dotClassName: "border-white/20 bg-white/[0.08] text-zinc-300",
+    Icon: MessageSquare,
+  },
 };
 
 type TerminalSocketMessage =
@@ -147,7 +209,11 @@ async function sendPromptToAccountTerminal(args: {
       }
 
       if (message.type === "error") {
-        fail(message.message?.trim() || "Terminal reported an error.");
+        const errorMessage =
+          typeof message.message === "string" && message.message.trim().length > 0
+            ? message.message.trim()
+            : "Terminal reported an error.";
+        fail(errorMessage);
         return;
       }
 
@@ -375,6 +441,14 @@ function buildWatchLogLines({
   return lines;
 }
 
+function formatTimelineTimestamp(timestamp: string): string {
+  const parsed = Date.parse(timestamp);
+  if (!Number.isFinite(parsed)) {
+    return "Unknown time";
+  }
+  return new Date(parsed).toLocaleString();
+}
+
 export function SessionsPage() {
   const navigate = useNavigate();
   const [offset, setOffset] = useState(0);
@@ -385,7 +459,7 @@ export function SessionsPage() {
   const selectedSessionKey = searchParams.get("sessionKey")?.trim() ?? null;
   const watchMode = searchParams.get("view")?.trim().toLowerCase() === "watch";
   const focusedSessionRowRef = useRef<HTMLTableRowElement | null>(null);
-  const [promptTargetRow, setPromptTargetRow] = useState<ActivityRow | null>(null);
+  const [promptTarget, setPromptTarget] = useState<PromptTarget | null>(null);
   const [promptDraft, setPromptDraft] = useState("");
   const [promptSubmitting, setPromptSubmitting] = useState(false);
 
@@ -578,22 +652,66 @@ export function SessionsPage() {
     watchStatus,
     watchTaskPreview,
   ]);
+  const sessionEventsQuery = useQuery({
+    queryKey: [
+      "sticky-sessions",
+      "session-events",
+      {
+        accountId: selectedAccountId,
+        sessionKey: selectedSessionKey,
+      },
+    ],
+    queryFn: () =>
+      getSessionEvents({
+        accountId: selectedAccountId as string,
+        sessionKey: selectedSessionKey as string,
+        limit: 160,
+      }),
+    enabled:
+      watchMode
+      && selectedSessionKey != null
+      && selectedSessionKey.length > 0
+      && selectedAccountId != null
+      && selectedAccountId.length > 0,
+    refetchInterval: 12_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+  const watchPromptTarget = useMemo<PromptTarget | null>(() => {
+    if (!watchMode || !selectedSessionKey || !selectedAccountId) {
+      return null;
+    }
+    return {
+      accountId: selectedAccountId,
+      displayName:
+        selectedActivityRow?.displayName
+        ?? selectedAccount?.displayName
+        ?? selectedAccountId,
+      sessionKey: selectedSessionKey,
+    };
+  }, [
+    selectedAccount?.displayName,
+    selectedAccountId,
+    selectedActivityRow?.displayName,
+    selectedSessionKey,
+    watchMode,
+  ]);
 
   const closePromptDialog = () => {
     if (promptSubmitting) {
       return;
     }
-    setPromptTargetRow(null);
+    setPromptTarget(null);
     setPromptDraft("");
   };
 
-  const openPromptDialog = (row: ActivityRow) => {
-    setPromptTargetRow(row);
+  const openPromptDialog = (target: PromptTarget) => {
+    setPromptTarget(target);
     setPromptDraft("");
   };
 
   const submitPrompt = async () => {
-    if (!promptTargetRow) {
+    if (!promptTarget) {
       return;
     }
     const prompt = promptDraft.trim();
@@ -605,11 +723,11 @@ export function SessionsPage() {
     setPromptSubmitting(true);
     try {
       await sendPromptToAccountTerminal({
-        accountId: promptTargetRow.accountId,
+        accountId: promptTarget.accountId,
         prompt,
       });
-      toast.success(`Prompt sent to ${promptTargetRow.displayName}`);
-      setPromptTargetRow(null);
+      toast.success(`Prompt sent to ${promptTarget.displayName}`);
+      setPromptTarget(null);
       setPromptDraft("");
     } catch (caught) {
       toast.error(getErrorMessage(caught));
@@ -655,19 +773,34 @@ export function SessionsPage() {
                   Session-only token status and scoped logs.
                 </p>
               </div>
-              <button
-                type="button"
-                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-                onClick={() => {
-                  const params = new URLSearchParams();
-                  if (selectedAccountId) {
-                    params.set("accountId", selectedAccountId);
-                  }
-                  navigate(`/sessions${params.toString() ? `?${params.toString()}` : ""}`);
-                }}
-              >
-                Open full sessions list
-              </button>
+              <div className="flex items-center gap-2">
+                {watchPromptTarget ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => openPromptDialog(watchPromptTarget)}
+                  >
+                    Prompt this session
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    if (selectedAccountId) {
+                      params.set("accountId", selectedAccountId);
+                    }
+                    navigate(`/sessions${params.toString() ? `?${params.toString()}` : ""}`);
+                  }}
+                >
+                  Open full sessions list
+                </Button>
+              </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Badge variant="outline" className="text-[11px] font-mono">
@@ -736,6 +869,113 @@ export function SessionsPage() {
             <p className="mt-1 text-[11px] text-muted-foreground">
               Source: {watchSourceLabel}
             </p>
+          </div>
+
+          <div className="rounded-xl border bg-card">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold">AI timeline</p>
+                <p className="text-xs text-muted-foreground">
+                  Prompt, assistant output, tool calls, and runtime events for this session.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge variant="outline" className="text-[10px] font-medium uppercase tracking-[0.08em]">
+                  {sessionEventsQuery.data?.events.length ?? 0} events
+                </Badge>
+                {sessionEventsQuery.data?.truncated ? (
+                  <Badge variant="outline" className="text-[10px] font-medium uppercase tracking-[0.08em] text-amber-300 border-amber-500/35 bg-amber-500/10">
+                    Truncated
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+            <div className="p-2">
+              {sessionEventsQuery.isLoading ? (
+                <div className="space-y-2 rounded-lg border bg-[#020812] p-3">
+                  <div className="h-3 w-56 rounded bg-cyan-500/15" />
+                  <div className="h-14 rounded bg-cyan-500/[0.08]" />
+                  <div className="h-14 rounded bg-cyan-500/[0.06]" />
+                </div>
+              ) : sessionEventsQuery.isError ? (
+                <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-200">
+                  Failed to load session timeline: {getErrorMessage(sessionEventsQuery.error)}
+                </p>
+              ) : sessionEventsQuery.data?.events.length ? (
+                <div className="space-y-2 rounded-lg border bg-[#020812] p-2">
+                  {sessionEventsQuery.data?.sourceFile ? (
+                    <p className="rounded border border-white/10 bg-white/[0.02] px-2 py-1 font-mono text-[10px] text-zinc-400">
+                      Source: {sessionEventsQuery.data.sourceFile}
+                    </p>
+                  ) : null}
+                  <ol className="max-h-96 space-y-0.5 overflow-y-auto">
+                  {sessionEventsQuery.data.events.map((event, index) => {
+                    const eventStyle =
+                      WATCH_EVENT_BADGE_STYLES[event.kind]
+                      ?? WATCH_EVENT_BADGE_STYLES.event;
+                    const Icon = eventStyle.Icon;
+                    return (
+                      <li
+                        key={`${event.timestamp}-${event.kind}-${event.rawType ?? "event"}-${index}`}
+                        className="relative pl-7"
+                      >
+                        {index < sessionEventsQuery.data.events.length - 1 ? (
+                          <span
+                            aria-hidden="true"
+                            className="absolute bottom-[-8px] left-[0.78rem] top-6 w-px bg-white/10"
+                          />
+                        ) : null}
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "absolute left-0 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border",
+                            eventStyle.dotClassName,
+                          )}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                        </span>
+                        <div
+                          className={cn(
+                            "rounded-lg border px-2.5 py-2",
+                            eventStyle.cardClassName,
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "inline-flex h-5 items-center rounded-md border px-2 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                              eventStyle.badgeClassName,
+                            )}
+                          >
+                            {event.kind}
+                          </span>
+                          <span className="text-[10px] text-zinc-500">
+                            {formatTimelineTimestamp(event.timestamp)}
+                          </span>
+                          <span className="text-[10px] font-semibold text-zinc-200">
+                            {event.title}
+                          </span>
+                          {event.rawType ? (
+                            <span className="text-[10px] text-zinc-500">
+                              {event.rawType}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1.5 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-cyan-100">
+                          {event.text}
+                        </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+                </div>
+              ) : (
+                <p className="rounded-lg border bg-[#020812] px-3 py-2 text-[11px] text-cyan-100/80">
+                  No prompt/answer timeline was captured for this session yet.
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="rounded-xl border bg-card">
@@ -913,7 +1153,13 @@ export function SessionsPage() {
                               size="sm"
                               variant="outline"
                               className="h-7 px-2 text-[11px]"
-                              onClick={() => openPromptDialog(row)}
+                              onClick={() =>
+                                openPromptDialog({
+                                  accountId: row.accountId,
+                                  displayName: row.displayName,
+                                  sessionKey: row.identity,
+                                })
+                              }
                             >
                               Prompt
                             </Button>
@@ -986,7 +1232,7 @@ export function SessionsPage() {
       )}
 
       <Dialog
-        open={promptTargetRow != null}
+        open={promptTarget != null}
         onOpenChange={(open) => {
           if (!open) {
             closePromptDialog();
@@ -1004,8 +1250,13 @@ export function SessionsPage() {
             <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
               Target account:{" "}
               <span className="font-medium text-foreground">
-                {promptTargetRow?.displayName ?? "—"}
+                {promptTarget?.displayName ?? "—"}
               </span>
+              {promptTarget?.sessionKey ? (
+                <span className="ml-2 font-mono text-[11px] text-muted-foreground">
+                  ({promptTarget.sessionKey})
+                </span>
+              ) : null}
             </div>
             <label className="block space-y-2">
               <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

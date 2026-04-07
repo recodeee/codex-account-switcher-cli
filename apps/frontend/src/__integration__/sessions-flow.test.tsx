@@ -221,6 +221,32 @@ describe("sessions flow integration", () => {
           }),
         ),
       ),
+      http.get("/api/sticky-sessions/session-events", () =>
+        HttpResponse.json({
+          sessionKey: "session-watch-logs",
+          resolvedSessionId: "session-watch-logs",
+          sourceFile: "/tmp/rollout-session-watch-logs.jsonl",
+          truncated: false,
+          events: [
+            {
+              timestamp: nowIso,
+              kind: "prompt",
+              title: "Prompt",
+              text: "Collect per-session watch logs",
+              role: "user",
+              rawType: "response_item:message:user",
+            },
+            {
+              timestamp: nowIso,
+              kind: "answer",
+              title: "Assistant answer",
+              text: "Loaded session logs and summarized active quotas.",
+              role: "assistant",
+              rawType: "response_item:message:assistant",
+            },
+          ],
+        }),
+      ),
     );
 
     window.history.pushState(
@@ -232,9 +258,12 @@ describe("sessions flow integration", () => {
 
     expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
     expect(await screen.findByText("Session watch logs")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Prompt this session" })).toBeInTheDocument();
     expect(screen.getAllByText("5h").length).toBeGreaterThan(0);
     expect(screen.getByText("Weekly")).toBeInTheDocument();
-    expect(screen.getByText("Collect per-session watch logs")).toBeInTheDocument();
+    expect(screen.getAllByText("Collect per-session watch logs").length).toBeGreaterThan(0);
+    expect(screen.getByText("AI timeline")).toBeInTheDocument();
+    expect(screen.getByText("Loaded session logs and summarized active quotas.")).toBeInTheDocument();
     expect(screen.getByText(/\$ session=session-watch-logs/i)).toBeInTheDocument();
   });
 
