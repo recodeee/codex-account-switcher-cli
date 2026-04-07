@@ -1611,7 +1611,7 @@ export function AccountCard(props: AccountCardProps) {
                   {!hideCurrentTaskPreview ? (
                     <div>
                       {!isCurrentTaskWaiting && displayCurrentTaskPreview ? (
-                        <div className="mb-1 inline-flex h-5 items-center gap-1.5 rounded-full border border-indigo-300/30 bg-indigo-500/15 px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-indigo-100/95">
+                        <div className="mb-1 inline-flex h-5 items-center gap-1.5 rounded-full border border-indigo-300/40 bg-transparent px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-indigo-100/95">
                           <span
                             className="h-1.5 w-1.5 rounded-full bg-cyan-200/95"
                             aria-hidden
@@ -1790,7 +1790,7 @@ export function AccountCard(props: AccountCardProps) {
                                   )}
                                 >
                                   {sessionTaskState === "thinking" ? (
-                                    <div className="mb-1 inline-flex h-4 items-center gap-1 rounded-full border border-indigo-200/30 bg-indigo-400/15 px-1.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-indigo-100">
+                                    <div className="mb-1 inline-flex h-4 items-center gap-1 rounded-full border border-indigo-200/35 bg-transparent px-1.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-indigo-100">
                                       Prompt
                                     </div>
                                   ) : null}

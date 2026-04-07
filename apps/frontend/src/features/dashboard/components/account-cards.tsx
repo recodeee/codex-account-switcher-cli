@@ -718,6 +718,7 @@ export function AccountCards({
             showAccountId={duplicateAccountIds.has(account.accountId)}
             useLocalBusy={useLocalBusy}
             deleteBusy={deleteBusy}
+            initialSessionTasksCollapsed
             onAction={onAction}
           />
         </div>
