@@ -130,10 +130,13 @@ function isCodexOnlyPlanType(planType: string): boolean {
 const NEAR_ZERO_QUOTA_PERCENT = 5;
 const WAITING_FOR_NEW_TASK_LABEL = "Waiting for new task";
 const TASK_FINISHED_LABEL = "Task finished";
+const TASK_PREVIEW_TRUNCATION_LENGTH = 100;
 const TASK_FINISHED_PREVIEW_RE =
   /^(?:task\s+)?(?:is\s+)?(?:already\s+)?(?:done|complete(?:d)?|finished)(?:\s+already)?[.!]?$/i;
 const UNKNOWN_TOKENS_SYNC_LABEL = "syncing…";
 const NEXT_TASK_PREVIEW_PATTERN = /\bnext(?:\.?js)?\b|\bturbopack\b/i;
+const CURRENT_TASK_PREVIEW_EXPANSION_KEY = "__current_task_preview__";
+const LAST_TASK_PREVIEW_EXPANSION_KEY = "__last_task_preview__";
 
 function hasNextTaskHint(taskPreview: string | null | undefined): boolean {
   const normalized = taskPreview?.trim();
@@ -196,6 +199,23 @@ function resolveWaitingTaskPillLabel(
     return normalized;
   }
   return "waiting";
+}
+
+function getTaskPreviewExcerpt(taskPreview: string): {
+  text: string;
+  truncated: boolean;
+} {
+  if (taskPreview.length <= TASK_PREVIEW_TRUNCATION_LENGTH) {
+    return {
+      text: taskPreview,
+      truncated: false,
+    };
+  }
+
+  return {
+    text: `${taskPreview.slice(0, TASK_PREVIEW_TRUNCATION_LENGTH).trimEnd()}…`,
+    truncated: true,
+  };
 }
 
 function WaitingForTaskPill({
@@ -757,6 +777,18 @@ export function AccountCard(props: AccountCardProps) {
   const [sessionTasksCollapsed, setSessionTasksCollapsed] = useState(
     initialSessionTasksCollapsed,
   );
+  const [expandedTaskPreviewKeys, setExpandedTaskPreviewKeys] = useState<
+    string[]
+  >([]);
+  const isTaskPreviewExpanded = (key: string) =>
+    expandedTaskPreviewKeys.includes(key);
+  const toggleTaskPreviewExpanded = (key: string) => {
+    setExpandedTaskPreviewKeys((current) =>
+      current.includes(key)
+        ? current.filter((value) => value !== key)
+        : [...current, key],
+    );
+  };
   const navigate = useNavigate();
   const liveQuotaDebug = account.liveQuotaDebug ?? null;
   const quotaDisplayAccountKey = buildQuotaDisplayAccountKey(account);
@@ -1098,6 +1130,26 @@ export function AccountCard(props: AccountCardProps) {
     codexLastTaskPreview != null &&
     codexLastTaskPreview !== WAITING_FOR_NEW_TASK_LABEL;
   const displayCurrentTaskPreview = effectiveCurrentTaskPreview;
+  const currentTaskPreviewExcerpt = displayCurrentTaskPreview
+    ? getTaskPreviewExcerpt(displayCurrentTaskPreview)
+    : null;
+  const currentTaskPreviewExpanded = isTaskPreviewExpanded(
+    CURRENT_TASK_PREVIEW_EXPANSION_KEY,
+  );
+  const displayCurrentTaskPreviewText =
+    currentTaskPreviewExcerpt?.truncated && !currentTaskPreviewExpanded
+      ? currentTaskPreviewExcerpt.text
+      : displayCurrentTaskPreview;
+  const lastTaskPreviewExcerpt = codexLastTaskPreview
+    ? getTaskPreviewExcerpt(codexLastTaskPreview)
+    : null;
+  const lastTaskPreviewExpanded = isTaskPreviewExpanded(
+    LAST_TASK_PREVIEW_EXPANSION_KEY,
+  );
+  const displayLastTaskPreviewText =
+    lastTaskPreviewExcerpt?.truncated && !lastTaskPreviewExpanded
+      ? lastTaskPreviewExcerpt.text
+      : codexLastTaskPreview;
   const isCurrentTaskWaiting = displayCurrentTaskPreview
     ? isWaitingTaskPreview(displayCurrentTaskPreview)
     : false;
@@ -1452,20 +1504,36 @@ export function AccountCard(props: AccountCardProps) {
                     />
                   ) : null}
                   {!hideCurrentTaskPreview ? (
-                    <p
-                      className="break-words whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/95"
-                      title={effectiveCurrentTaskPreview ?? undefined}
-                    >
-                      <span className="inline-flex items-center gap-1.5">
-                        {hasNextTaskHint(effectiveCurrentTaskPreview) ? (
-                          <NextTaskBadge />
-                        ) : null}
-                        <span>
-                          {displayCurrentTaskPreview ??
-                            "No active task reported"}
+                    <div>
+                      <p
+                        className="break-words whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/95"
+                        title={effectiveCurrentTaskPreview ?? undefined}
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          {hasNextTaskHint(effectiveCurrentTaskPreview) ? (
+                            <NextTaskBadge />
+                          ) : null}
+                          <span>
+                            {displayCurrentTaskPreviewText ??
+                              "No active task reported"}
+                          </span>
                         </span>
-                      </span>
-                    </p>
+                      </p>
+                      {currentTaskPreviewExcerpt?.truncated ? (
+                        <button
+                          type="button"
+                          className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-200 transition-colors hover:text-cyan-100"
+                          aria-expanded={currentTaskPreviewExpanded}
+                          onClick={() =>
+                            toggleTaskPreviewExpanded(
+                              CURRENT_TASK_PREVIEW_EXPANSION_KEY,
+                            )
+                          }
+                        >
+                          {currentTaskPreviewExpanded ? "Show Less" : "View Full"}
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                   {taskPanelAddon ? (
                     <div className={cn(!hideCurrentTaskPreview && "mt-2")}>
@@ -1476,20 +1544,36 @@ export function AccountCard(props: AccountCardProps) {
 
                 {showLastTaskPreview ? (
                   <div className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5">
-                    <p
-                      className="break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-300/90"
-                      title={codexLastTaskPreview ?? undefined}
-                    >
-                      <span className="font-medium text-zinc-200">
-                        Last task:
-                      </span>
-                      <span className="ml-1 inline-flex items-center gap-1.5">
-                        {hasNextTaskHint(codexLastTaskPreview) ? (
-                          <NextTaskBadge />
-                        ) : null}
-                        <span>{codexLastTaskPreview}</span>
-                      </span>
-                    </p>
+                    <div>
+                      <p
+                        className="break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-300/90"
+                        title={codexLastTaskPreview ?? undefined}
+                      >
+                        <span className="font-medium text-zinc-200">
+                          Last task:
+                        </span>
+                        <span className="ml-1 inline-flex items-center gap-1.5">
+                          {hasNextTaskHint(codexLastTaskPreview) ? (
+                            <NextTaskBadge />
+                          ) : null}
+                          <span>{displayLastTaskPreviewText}</span>
+                        </span>
+                      </p>
+                      {lastTaskPreviewExcerpt?.truncated ? (
+                        <button
+                          type="button"
+                          className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-200 transition-colors hover:text-cyan-100"
+                          aria-expanded={lastTaskPreviewExpanded}
+                          onClick={() =>
+                            toggleTaskPreviewExpanded(
+                              LAST_TASK_PREVIEW_EXPANSION_KEY,
+                            )
+                          }
+                        >
+                          {lastTaskPreviewExpanded ? "Show Less" : "View Full"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
 
@@ -1533,9 +1617,21 @@ export function AccountCard(props: AccountCardProps) {
                       <ul className="space-y-1.5">
                         {sessionTaskRows.map((preview, index) => {
                           const sessionTaskState = sessionTaskStates[index] ?? "waiting";
+                          const sessionTaskRowKey = `${preview.sessionKey}-${preview.ordinal}`;
+                          const sessionTaskPreviewExcerpt = getTaskPreviewExcerpt(
+                            preview.taskPreview,
+                          );
+                          const sessionTaskPreviewExpanded = isTaskPreviewExpanded(
+                            sessionTaskRowKey,
+                          );
+                          const displaySessionTaskPreview =
+                            sessionTaskPreviewExcerpt.truncated &&
+                            !sessionTaskPreviewExpanded
+                              ? sessionTaskPreviewExcerpt.text
+                              : preview.taskPreview;
                           return (
                             <li
-                              key={`${preview.sessionKey}-${preview.ordinal}`}
+                              key={sessionTaskRowKey}
                               className={cn(
                                 "space-y-1.5 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 transition-all duration-200",
                                 sessionTaskState === "waiting" &&
@@ -1569,8 +1665,24 @@ export function AccountCard(props: AccountCardProps) {
                                   {hasNextTaskHint(preview.taskPreview) ? (
                                     <NextTaskBadge />
                                   ) : null}
-                                  <span>{preview.taskPreview}</span>
+                                  <span>{displaySessionTaskPreview}</span>
                                 </span>
+                                {sessionTaskPreviewExcerpt.truncated ? (
+                                  <button
+                                    type="button"
+                                    className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-200 transition-colors hover:text-cyan-100"
+                                    aria-expanded={sessionTaskPreviewExpanded}
+                                    onClick={() =>
+                                      toggleTaskPreviewExpanded(
+                                        sessionTaskRowKey,
+                                      )
+                                    }
+                                  >
+                                    {sessionTaskPreviewExpanded
+                                      ? "Show Less"
+                                      : "View Full"}
+                                  </button>
+                                ) : null}
                                 {sessionTaskState === "waiting" ? (
                                   <p className="mt-1 text-[10px] leading-relaxed text-cyan-200/85">
                                     {resolveWaitingTaskHelperText(

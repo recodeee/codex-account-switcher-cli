@@ -8,6 +8,15 @@ import { createAccountSummary } from "@/test/mocks/factories";
 import { resetWorkingNowLimitHitStateForTests } from "@/utils/account-working";
 import { resetQuotaDisplayFloorCacheForTests } from "@/utils/quota-display";
 
+const TASK_PREVIEW_TRUNCATION_LENGTH = 100;
+
+function truncateTaskPreviewForExpectation(taskPreview: string): string {
+  if (taskPreview.length <= TASK_PREVIEW_TRUNCATION_LENGTH) {
+    return taskPreview;
+  }
+  return `${taskPreview.slice(0, TASK_PREVIEW_TRUNCATION_LENGTH).trimEnd()}…`;
+}
+
 afterEach(() => {
   act(() => {
     usePrivacyStore.setState({ blurred: false });
@@ -1591,6 +1600,73 @@ describe("AccountCard", () => {
     expect(
       screen.getByText("No task assigned yet for this account."),
     ).toBeInTheDocument();
+  });
+
+  it("truncates long current task previews and allows expanding them", async () => {
+    const user = userEvent.setup();
+    const longTaskPreview = `Task trace ${"x".repeat(130)}`;
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: longTaskPreview,
+      codexLiveSessionCount: 0,
+      codexSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const truncated = truncateTaskPreviewForExpectation(longTaskPreview);
+    expect(screen.getByText(truncated)).toBeInTheDocument();
+    expect(screen.queryByText(longTaskPreview)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "View Full" }));
+    expect(screen.getByText(longTaskPreview)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show Less" }));
+    expect(screen.getByText(truncated)).toBeInTheDocument();
+  });
+
+  it("truncates long per-session task previews and allows expanding them", async () => {
+    const user = userEvent.setup();
+    const longSessionTaskPreview = `Token refresh failed ${"z".repeat(140)}`;
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Review session routing",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-long-task",
+          taskPreview: longSessionTaskPreview,
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const truncated = truncateTaskPreviewForExpectation(longSessionTaskPreview);
+    expect(screen.getByText(truncated)).toBeInTheDocument();
+    expect(screen.queryByText(longSessionTaskPreview)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "View Full" }));
+    expect(screen.getByText(longSessionTaskPreview)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show Less" }));
+    expect(screen.getByText(truncated)).toBeInTheDocument();
   });
 
   it("shows per-session state pills for waiting, thinking, and finished tasks", () => {

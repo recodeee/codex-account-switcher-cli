@@ -123,10 +123,19 @@ _last_successful_refresh: dict[str, datetime] = {}
 # short cooldown so dashboard polling does not hammer the same disconnected
 # account on every request.
 _last_failed_refresh: dict[str, datetime] = {}
-_FAILED_REFRESH_BACKOFF_SECONDS = 15
+_FAILED_REFRESH_BACKOFF_SECONDS = 60
 _DEACTIVATING_REFRESH_ERROR_CODES = {"http_401", "invalid_grant", "invalid_token", "token_inactive"}
 _DEACTIVATION_FAILURE_THRESHOLD = 3
 _deactivation_failure_streak: dict[str, int] = {}
+_TOKEN_INVALIDATION_ERROR_MARKERS = (
+    "authentication token has been invalidated",
+    "token has been invalidated",
+    "invalid refresh token",
+    "refresh token expired",
+    "refresh token has expired",
+    "refresh token reused",
+    "already been used",
+)
 
 
 class _UsageRefreshSingleflight:
@@ -288,6 +297,9 @@ class UsageUpdater:
             if _should_deactivate_for_usage_error(exc.status_code):
                 await self._maybe_deactivate_for_client_error(account, exc)
                 return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
+            if exc.status_code == 401 and _is_invalidated_token_error(exc.message):
+                await self._maybe_deactivate_for_client_error(account, exc)
+                return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
             if exc.status_code != 401 or not self._auth_manager:
                 return AccountRefreshResult(usage_written=False, fetch_succeeded=False)
             try:
@@ -435,6 +447,17 @@ class UsageUpdater:
 
     async def _maybe_deactivate_for_client_error(self, account: Account, exc: UsageFetchError) -> None:
         if not self._auth_manager:
+            return
+
+        if exc.status_code == 401 and _is_invalidated_token_error(exc.message):
+            _deactivation_failure_streak.pop(account.id, None)
+            logger.warning(
+                "Deactivating account immediately due to invalidated token account_id=%s message=%s request_id=%s",
+                account.id,
+                exc.message,
+                get_request_id(),
+            )
+            await self._deactivate_for_client_error(account, exc)
             return
 
         attempts = _deactivation_failure_streak.get(account.id, 0) + 1
@@ -828,3 +851,10 @@ def _should_deactivate_for_usage_error(status_code: int) -> bool:
 
 def _should_deactivate_for_refresh_error(exc: RefreshError) -> bool:
     return exc.is_permanent or exc.code in _DEACTIVATING_REFRESH_ERROR_CODES
+
+
+def _is_invalidated_token_error(message: str | None) -> bool:
+    normalized = (message or "").strip().lower()
+    if not normalized:
+        return False
+    return any(marker in normalized for marker in _TOKEN_INVALIDATION_ERROR_MARKERS)

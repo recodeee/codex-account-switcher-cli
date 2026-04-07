@@ -2330,3 +2330,155 @@ Error: connect ECONNREFUSED 127.0.0.1:2455
   address: '127.0.0.1',
   port: 2455
 }
+Failed to proxy http://localhost:2455/api/request-logs?limit=25&offset=0 Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Failed to proxy http://localhost:2455/api/dashboard/overview Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Failed to proxy http://localhost:2455/api/request-logs/usage-summary Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Failed to proxy http://localhost:2455/api/request-logs/options Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Failed to proxy http://localhost:2455/api/request-logs?limit=25&offset=0 Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Failed to proxy http://localhost:2455/api/dashboard/overview Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Failed to proxy http://localhost:2455/api/request-logs/usage-summary Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Failed to proxy http://localhost:2455/api/request-logs/options Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+Error: connect ECONNREFUSED 127.0.0.1:2455
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:2455) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 2455
+}
+ GET /dashboard 200 in 47ms (next.js: 2ms, application-code: 45ms)
+ GET /package.json 404 in 40ms (next.js: 3ms, application-code: 37ms)
+ GET /dashboard 200 in 38ms (next.js: 1799µs, application-code: 36ms)
+ GET /package.json 404 in 27ms (next.js: 2ms, application-code: 25ms)
+ GET /package.json 404 in 19ms (next.js: 2ms, application-code: 17ms)
+ GET /package.json 404 in 21ms (next.js: 2ms, application-code: 19ms)
+ GET /coming-soon 200 in 56ms (next.js: 3ms, application-code: 53ms)
+ GET /dashboard 200 in 43ms (next.js: 1413µs, application-code: 41ms)
+ GET /package.json 404 in 26ms (next.js: 1827µs, application-code: 24ms)
+✓ Compiled in 51ms
+✓ Compiled in 41ms
+✓ Compiled in 42ms
+✓ Compiled in 38ms
+✓ Compiled in 46ms
+✓ Compiled in 46ms
+✓ Compiled in 43ms
+▲ Next.js 16.2.2 (Turbopack)
+- Local:         http://localhost:5174
+- Network:       http://0.0.0.0:5174
+✓ Ready in 224ms
+⚠ Specified "rewrites" will not automatically work with "output: export". See more info here: https://nextjs.org/docs/messages/export-no-custom-routes
+
+ GET /dashboard 200 in 3.2s (next.js: 2.9s, application-code: 313ms)
+ GET /package.json 404 in 217ms (next.js: 188ms, application-code: 29ms)
