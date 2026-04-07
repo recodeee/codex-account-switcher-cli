@@ -1655,7 +1655,9 @@ describe("AccountCard", () => {
 
     await user.click(screen.getByRole("button", { name: "Watch logs" }));
 
-    expect(screen.getByText(/\$ account=acc_123/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(`\\$ account=${account.accountId}`, "i")),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/\$ session=sess-alpha-123456/i),
     ).toBeInTheDocument();

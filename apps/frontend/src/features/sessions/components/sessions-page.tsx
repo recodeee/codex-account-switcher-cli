@@ -297,7 +297,11 @@ export function SessionsPage() {
     if (!selectedSessionKey || !hasFocusedSessionRow) {
       return;
     }
-    focusedSessionRowRef.current?.scrollIntoView({
+    const focusedRow = focusedSessionRowRef.current;
+    if (!focusedRow || typeof focusedRow.scrollIntoView !== "function") {
+      return;
+    }
+    focusedRow.scrollIntoView({
       block: "center",
       behavior: "smooth",
     });

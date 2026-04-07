@@ -1658,11 +1658,11 @@ export function AccountCard(props: AccountCardProps) {
                 ) : null}
 
                 {hasSessionTaskRows ? (
-                  <div className="mt-2 border-t border-white/15 pt-2.5">
+                  <div className="mt-2.5 border-t border-white/20 pt-2.5">
                     <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                       <button
                         type="button"
-                        className="inline-flex min-w-[13rem] flex-1 items-center justify-between gap-2 rounded-md border border-white/10 bg-black/25 px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:border-white/20 hover:bg-black/35"
+                        className="inline-flex min-w-[13rem] flex-1 items-center justify-between gap-2 rounded-lg border border-white/20 bg-white/[0.04] px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300 backdrop-blur-[1.5px] transition-colors hover:border-white/30 hover:bg-white/[0.06]"
                         aria-expanded={!sessionTasksCollapsed}
                         onClick={() =>
                           setSessionTasksCollapsed((current) => !current)
@@ -1681,20 +1681,20 @@ export function AccountCard(props: AccountCardProps) {
                           />
                         </span>
                       </button>
-                      <span className="inline-flex h-6 items-center rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-200">
+                      <span className="inline-flex h-6 items-center rounded-md border border-emerald-400/35 bg-emerald-500/12 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-100">
                         {sessionTaskSummary.assignedCount} assigned
                       </span>
-                      <span className="inline-flex h-6 items-center rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-cyan-200">
+                      <span className="inline-flex h-6 items-center rounded-md border border-cyan-400/35 bg-cyan-500/12 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-cyan-100">
                         {sessionTaskSummary.waitingCount} waiting
                       </span>
                       {sessionTaskSummary.finishedCount > 0 ? (
-                        <span className="inline-flex h-6 items-center rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-200">
+                        <span className="inline-flex h-6 items-center rounded-md border border-emerald-400/35 bg-emerald-500/12 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-100">
                           {sessionTaskSummary.finishedCount} finished
                         </span>
                       ) : null}
                     </div>
                     {!sessionTasksCollapsed ? (
-                      <ul className="space-y-1.5">
+                      <ul className="space-y-2">
                         {sessionTaskRows.map((preview, index) => {
                           const sessionTaskState = sessionTaskStates[index] ?? "waiting";
                           const sessionTaskRowKey = `${preview.sessionKey}-${preview.ordinal}`;
@@ -1713,13 +1713,13 @@ export function AccountCard(props: AccountCardProps) {
                             <li
                               key={sessionTaskRowKey}
                               className={cn(
-                                "relative overflow-hidden space-y-1.5 rounded-xl border border-white/15 bg-white/[0.03] px-2.5 py-2 backdrop-blur-[1.5px] transition-all duration-200",
+                                "relative overflow-hidden space-y-1.5 rounded-xl border border-white/20 bg-white/[0.04] px-2.5 py-2.5 backdrop-blur-[2px] transition-all duration-200",
                                 sessionTaskState === "waiting" &&
-                                  "ring-1 ring-cyan-500/12 hover:border-cyan-300/35 hover:bg-white/[0.05]",
+                                  "ring-1 ring-cyan-500/15 hover:border-cyan-300/45 hover:bg-white/[0.06]",
                                 sessionTaskState === "thinking" &&
-                                  "border-indigo-300/35 bg-indigo-500/[0.14] shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_10px_18px_rgba(6,24,44,0.35)] hover:border-cyan-300/40",
+                                  "border-indigo-300/45 bg-indigo-500/[0.16] shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_10px_18px_rgba(6,24,44,0.28)] hover:border-cyan-300/45",
                                 sessionTaskState === "finished" &&
-                                  "border-emerald-400/25 bg-emerald-500/[0.11] hover:border-emerald-300/35",
+                                  "border-emerald-400/35 bg-emerald-500/[0.13] hover:border-emerald-300/45",
                               )}
                             >
                               {sessionTaskState === "thinking" ? (
@@ -1727,8 +1727,8 @@ export function AccountCard(props: AccountCardProps) {
                                   className="pointer-events-none absolute inset-0 -z-10"
                                   aria-hidden
                                 >
-                                  <div className="absolute -left-10 top-0 h-14 w-32 rounded-full bg-cyan-300/15 blur-2xl" />
-                                  <div className="absolute right-0 top-4 h-14 w-32 rounded-full bg-indigo-300/20 blur-2xl" />
+                                  <div className="absolute -left-8 top-0 h-12 w-24 rounded-full bg-cyan-300/10 blur-xl" />
+                                  <div className="absolute right-0 top-4 h-12 w-24 rounded-full bg-indigo-300/12 blur-xl" />
                                 </div>
                               ) : null}
                               <div className="flex items-start justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
@@ -1754,7 +1754,7 @@ export function AccountCard(props: AccountCardProps) {
                                   className={cn(
                                     "rounded-md px-2 py-1",
                                     sessionTaskState === "thinking" &&
-                                      "border border-indigo-200/25 bg-black/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                                      "border border-indigo-200/30 bg-black/26 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
                                   )}
                                 >
                                   {sessionTaskState === "thinking" ? (
@@ -1795,7 +1795,7 @@ export function AccountCard(props: AccountCardProps) {
                                 <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
                                   <button
                                     type="button"
-                                    className="inline-flex h-6 items-center gap-1 rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-100 transition-colors hover:border-cyan-300/45 hover:bg-cyan-500/15"
+                                    className="inline-flex h-6 items-center gap-1 rounded-md border border-cyan-400/40 bg-cyan-500/12 px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-50 transition-colors hover:border-cyan-300/55 hover:bg-cyan-500/18"
                                     aria-expanded={
                                       expandedSessionLogRowKey ===
                                       sessionTaskRowKey
@@ -1814,7 +1814,7 @@ export function AccountCard(props: AccountCardProps) {
                                   {!preview.synthetic ? (
                                     <button
                                       type="button"
-                                      className="inline-flex h-6 items-center rounded-md border border-white/15 bg-black/25 px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-300 transition-colors hover:border-white/25 hover:text-zinc-100"
+                                      className="inline-flex h-6 items-center rounded-md border border-white/20 bg-white/[0.04] px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-200 transition-colors hover:border-white/35 hover:bg-white/[0.07] hover:text-zinc-50"
                                       onClick={() =>
                                         onAction?.(account, "sessions", {
                                           focusSessionKey: preview.sessionKey,
@@ -1828,7 +1828,7 @@ export function AccountCard(props: AccountCardProps) {
                                 </div>
                                 {expandedSessionLogRowKey ===
                                 sessionTaskRowKey ? (
-                                  <div className="mt-1.5 rounded-lg border border-cyan-500/25 bg-[#020812]/90 p-1.5">
+                                  <div className="mt-1.5 rounded-lg border border-cyan-500/30 bg-[#020812]/92 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                                     <ol className="max-h-40 overflow-y-auto font-mono text-[10px] leading-5 text-cyan-100">
                                       {buildSessionTaskLogLines({
                                         accountId: account.accountId,

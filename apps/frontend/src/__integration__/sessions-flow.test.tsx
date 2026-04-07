@@ -76,6 +76,44 @@ describe("sessions flow integration", () => {
     expect(requestUrl).toContain("activeOnly=false");
   });
 
+  it("highlights and announces a focused session when sessionKey query is present", async () => {
+    server.use(
+      http.get("/api/sticky-sessions", ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("kind") !== "codex_session") {
+          return HttpResponse.json({ entries: [], stalePromptCacheCount: 0, total: 0, hasMore: false });
+        }
+        return HttpResponse.json({
+          entries: [
+            {
+              key: "session-focus-me",
+              accountId: "acc_alpha",
+              displayName: "alpha@example.com",
+              kind: "codex_session",
+              createdAt: "2026-03-10T12:00:00Z",
+              updatedAt: "2026-03-10T12:05:00Z",
+              taskPreview: "Investigate alpha session stream retry bug",
+              taskUpdatedAt: "2026-03-10T12:05:00Z",
+              isActive: true,
+              expiresAt: null,
+              isStale: false,
+            },
+          ],
+          stalePromptCacheCount: 0,
+          total: 1,
+          hasMore: false,
+        });
+      }),
+    );
+
+    window.history.pushState({}, "", "/sessions?accountId=acc_alpha&sessionKey=session-focus-me");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(await screen.findByText(/Focused session:/i)).toBeInTheDocument();
+    expect(screen.getAllByText("session-focus-me").length).toBeGreaterThan(0);
+  });
+
   it("navigates to sessions from header tab", async () => {
     const user = userEvent.setup({ delay: null });
 
