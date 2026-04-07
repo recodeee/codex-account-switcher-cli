@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import { within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
@@ -74,6 +75,51 @@ describe("sessions flow integration", () => {
     const betaAccount = screen.getByText("beta@example.com");
     expect(alphaAccount.compareDocumentPosition(betaAccount) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(requestUrl).toContain("activeOnly=false");
+  });
+
+  it("opens prompt dialog from a session row action", async () => {
+    const user = userEvent.setup({ delay: null });
+
+    server.use(
+      http.get("/api/sticky-sessions", ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("kind") !== "codex_session") {
+          return HttpResponse.json({ entries: [], stalePromptCacheCount: 0, total: 0, hasMore: false });
+        }
+        return HttpResponse.json({
+          entries: [
+            {
+              key: "session-alpha",
+              accountId: "acc_alpha",
+              displayName: "alpha@example.com",
+              kind: "codex_session",
+              createdAt: "2026-03-10T12:00:00Z",
+              updatedAt: "2026-03-10T12:05:00Z",
+              taskPreview: "Investigate alpha session stream retry bug",
+              taskUpdatedAt: "2026-03-10T12:05:00Z",
+              isActive: true,
+              expiresAt: null,
+              isStale: false,
+            },
+          ],
+          stalePromptCacheCount: 0,
+          total: 1,
+          hasMore: false,
+        });
+      }),
+    );
+
+    window.history.pushState({}, "", "/sessions");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Prompt" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText("Send prompt to CLI")).toBeInTheDocument();
+    expect(within(dialog).getByText("alpha@example.com")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Send prompt" })).toBeDisabled();
   });
 
   it("highlights and announces a focused session when sessionKey query is present", async () => {
