@@ -16,9 +16,13 @@ function encodeBase64Url(input: string): string {
     .replace(/=+$/g, "");
 }
 
-function buildAuthPayload(email: string, options?: { accountId?: string; userId?: string }): string {
+function buildAuthPayload(
+  email: string,
+  options?: { accountId?: string; userId?: string; tokenSeed?: string },
+): string {
   const accountId = options?.accountId ?? "acct-1";
   const userId = options?.userId ?? "user-1";
+  const tokenSeed = options?.tokenSeed ?? email;
   const idTokenPayload = {
     email,
     "https://api.openai.com/auth": {
@@ -34,8 +38,8 @@ function buildAuthPayload(email: string, options?: { accountId?: string; userId?
   return JSON.stringify(
     {
       tokens: {
-        access_token: `token-${email}`,
-        refresh_token: `refresh-${email}`,
+        access_token: `token-${tokenSeed}`,
+        refresh_token: `refresh-${tokenSeed}`,
         id_token: idToken,
         account_id: accountId,
       },
@@ -525,6 +529,46 @@ test("syncExternalAuthSnapshotIfNeeded disables auto-switch and snapshots extern
       autoSwitch: { enabled: boolean };
     };
     assert.equal(registry.autoSwitch.enabled, false);
+  });
+});
+
+test("syncExternalAuthSnapshotIfNeeded re-keys active alias to inferred email name when external login identity matches", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const activeAlias = "team-primary";
+    const incomingEmail = "admin@kozpontihusbolt.hu";
+    const currentPath = path.join(codexDir, "current");
+
+    await fsp.writeFile(
+      path.join(accountsDir, `${activeAlias}.json`),
+      buildAuthPayload(incomingEmail, {
+        accountId: "acct-team",
+        userId: "user-team",
+        tokenSeed: "pre-login",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, `${activeAlias}\n`, "utf8");
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload(incomingEmail, {
+        accountId: "acct-team",
+        userId: "user-team",
+        tokenSeed: "post-login",
+      }),
+      "utf8",
+    );
+
+    const result = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(result, {
+      synchronized: true,
+      savedName: incomingEmail,
+      autoSwitchDisabled: false,
+    });
+
+    assert.equal((await fsp.readFile(currentPath, "utf8")).trim(), incomingEmail);
+    const inferredSnapshot = await parseAuthSnapshotFile(path.join(accountsDir, `${incomingEmail}.json`));
+    assert.equal(inferredSnapshot.email, incomingEmail);
   });
 });
 

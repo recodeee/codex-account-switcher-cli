@@ -1,6 +1,8 @@
 # Project-specific
 refs/
 poc/
+WEBU/
+examples/WEBU/
 
 # Python
 .venv/

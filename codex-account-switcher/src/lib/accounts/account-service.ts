@@ -96,16 +96,27 @@ export class AccountService {
       };
     }
 
+    const resolvedName = await this.resolveLoginAccountNameFromCurrentAuth();
     const activeName = await this.getCurrentAccountName();
     if (activeName) {
       const activeSnapshotPath = this.accountFilePath(activeName);
       if (await this.pathExists(activeSnapshotPath)) {
         const activeSnapshot = await parseAuthSnapshotFile(activeSnapshotPath);
         if (this.snapshotsShareIdentity(activeSnapshot, incomingSnapshot)) {
-          return {
-            synchronized: false,
-            autoSwitchDisabled: false,
-          };
+          if (activeName === resolvedName.name) {
+            return {
+              synchronized: false,
+              autoSwitchDisabled: false,
+            };
+          }
+
+          const authMatchesActiveSnapshot = await this.filesMatch(authPath, activeSnapshotPath);
+          if (authMatchesActiveSnapshot) {
+            return {
+              synchronized: false,
+              autoSwitchDisabled: false,
+            };
+          }
         }
       }
     }
@@ -116,7 +127,6 @@ export class AccountService {
       await this.setAutoSwitchEnabled(false);
     }
 
-    const resolvedName = await this.resolveLoginAccountNameFromCurrentAuth();
     const savedName = await this.saveAccount(resolvedName.name);
 
     return {
@@ -692,6 +702,15 @@ export class AccountService {
     try {
       await fsp.access(targetPath, fs.constants.F_OK);
       return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async filesMatch(firstPath: string, secondPath: string): Promise<boolean> {
+    try {
+      const [first, second] = await Promise.all([fsp.readFile(firstPath), fsp.readFile(secondPath)]);
+      return first.equals(second);
     } catch {
       return false;
     }
