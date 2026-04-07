@@ -1,0 +1,11 @@
+{
+  "name": "codex-lb-dev",
+  "private": true,
+  "packageManager": "bun@1.3.11",
+  "scripts": {
+    "dev": "bash ./scripts/dev-all.sh",
+    "dev:all": "bash ./scripts/dev-all.sh",
+    "dev:frontend": "cd apps/frontend && bun run dev",
+    "dev:frontend-only": "cd apps/frontend && bun run dev:frontend"
+  }
+}
