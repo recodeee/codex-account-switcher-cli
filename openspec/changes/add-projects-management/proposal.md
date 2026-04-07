@@ -6,7 +6,8 @@ Operators need a first-class place to group and manage work contexts. A navigati
 
 - Add a top-level `Projects` route and active navigation item in the React dashboard.
 - Add backend dashboard API endpoints for listing, creating, updating, and deleting projects.
-- Persist projects in the database with validation and unique project names.
+- Persist projects in the database with validation and unique project names, including optional project path, sandbox mode, and git branch planner metadata.
+- Add dashboard prompt-dispatch helpers so operators can inject project context (path/sandbox/branch) directly into Codex task prompts.
 - Add frontend and backend tests covering project CRUD behavior and navigation flow.
 
 ## Impact

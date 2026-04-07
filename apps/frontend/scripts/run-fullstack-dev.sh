@@ -46,6 +46,11 @@ wait_for_backend="${WAIT_FOR_APP_BACKEND:-false}"
 backend_host="${APP_BACKEND_HOST:-0.0.0.0}"
 backend_port="${APP_BACKEND_PORT:-2455}"
 backend_pid=""
+start_medusa_backend="${START_MEDUSA_BACKEND:-true}"
+wait_for_medusa="${WAIT_FOR_MEDUSA_BACKEND:-false}"
+medusa_port="${MEDUSA_BACKEND_PORT:-9000}"
+medusa_dir="${repo_root}/apps/backend"
+medusa_pid=""
 
 if [ -z "${API_PROXY_TARGET:-}" ]; then
   export API_PROXY_TARGET="http://localhost:${backend_port}"
@@ -55,6 +60,9 @@ cleanup() {
   set +e
   if [ -n "$backend_pid" ] && kill -0 "$backend_pid" 2>/dev/null; then
     kill "$backend_pid" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$medusa_pid" ] && kill -0 "$medusa_pid" 2>/dev/null; then
+    kill "$medusa_pid" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT INT TERM
@@ -84,6 +92,34 @@ if normalize_bool "$start_app_backend"; then
       fi
     else
       echo "[codex-lb] /app backend booting in background on :${backend_port}."
+    fi
+  fi
+fi
+
+if normalize_bool "$start_medusa_backend"; then
+  if [ ! -d "$medusa_dir" ]; then
+    echo "[codex-lb] Warning: Medusa backend directory not found at ${medusa_dir}. Skipping startup." >&2
+  elif port_in_use "$medusa_port"; then
+    echo "[codex-lb] Medusa backend already running on :${medusa_port}. Reusing it."
+  else
+    if ! command -v bun >/dev/null 2>&1; then
+      echo "[codex-lb] Warning: bun not found, cannot auto-start Medusa backend." >&2
+    else
+      echo "[codex-lb] Starting Medusa backend on :${medusa_port} (apps/backend)."
+      (
+        cd "$medusa_dir"
+        exec bun run dev
+      ) &
+      medusa_pid="$!"
+      if normalize_bool "$wait_for_medusa"; then
+        if wait_for_port "$medusa_port" 15; then
+          echo "[codex-lb] Medusa backend is ready on :${medusa_port}."
+        else
+          echo "[codex-lb] Warning: Medusa backend did not open :${medusa_port} within timeout." >&2
+        fi
+      else
+        echo "[codex-lb] Medusa backend booting in background on :${medusa_port}."
+      fi
     fi
   fi
 fi

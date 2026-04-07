@@ -53,6 +53,7 @@ export async function getMedusaConnectionSnapshot(): Promise<MedusaConnectionSna
     if (error instanceof Error) {
       throw new Error(
         `Failed to fetch ${runtime.backendUrl}/store/regions (${error.message})`,
+        { cause: error },
       );
     }
     throw error;

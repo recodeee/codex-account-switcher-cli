@@ -1,13 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getMedusaRuntimeConfig } from "@/lib/medusa/config";
 
 const ORIGINAL_ENV = { ...process.env };
-const ORIGINAL_URL = window.location.href;
-
 afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
-  window.history.replaceState({}, "", ORIGINAL_URL);
+  vi.unstubAllGlobals();
 });
 
 describe("getMedusaRuntimeConfig", () => {
@@ -29,7 +27,12 @@ describe("getMedusaRuntimeConfig", () => {
     delete process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY;
     delete process.env.MEDUSA_PUBLISHABLE_KEY;
 
-    window.history.replaceState({}, "", "https://dashboard.example.com/settings");
+    vi.stubGlobal("window", {
+      location: {
+        hostname: "dashboard.example.com",
+        protocol: "https:",
+      },
+    } as unknown as Window & typeof globalThis);
 
     expect(getMedusaRuntimeConfig()).toEqual({
       backendUrl: "https://dashboard.example.com:9000",

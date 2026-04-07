@@ -1351,10 +1351,10 @@ def _build_default_sample_debug_overrides(
         baseline_secondary_usage=baseline_secondary_usage,
         sample_sources=[sample.source for sample in default_scope_samples],
         preferred_account_id=active_account_id,
-        # Deferred debug/session hints should only reflect confident ownership
-        # so stale/ambiguous default-scope samples don't mark extra accounts
-        # as "Working now".
-        allow_low_confidence_assignments=False,
+        # Allow near-but-not-tied low-confidence matches so mixed default-scope
+        # sessions can still surface additional active accounts in "Working
+        # now" when fingerprint attribution is plausible.
+        allow_low_confidence_assignments=True,
         # Keep immediate attribution for a brand-new single default-scope
         # sample (common right after switching), but avoid spreading
         # multi-session ambiguous fingerprints across accounts.
@@ -1809,9 +1809,9 @@ def _apply_local_default_session_fingerprint_overrides(
         baseline_secondary_usage=baseline_secondary_usage,
         sample_sources=sample_sources,
         preferred_account_id=active_account_id,
-        # Default-scope fallback is presence-only attribution. Keep it strict:
-        # only confident ownership can create per-account live-session hints.
-        allow_low_confidence_assignments=False,
+        # Allow near-but-not-tied low-confidence matches so fallback presence
+        # attribution can keep multiple truly active accounts visible.
+        allow_low_confidence_assignments=True,
         # Conservative in mixed default-scope fallback mode: do not force-map
         # unresolved fingerprint samples to an account, because that can mark
         # the wrong account as "Working now" when multiple snapshots are
