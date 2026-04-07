@@ -1,10 +1,7 @@
 import { Flags } from "@oclif/core";
-import { spawn } from "node:child_process";
 import prompts from "prompts";
 import { BaseCommand } from "../lib/base-command";
-import { fetchLatestNpmVersion, isVersionNewer } from "../lib/update-check";
-
-const PACKAGE_NAME = "@imdeadpool/codex-account-switcher";
+import { fetchLatestNpmVersion, isVersionNewer, PACKAGE_NAME, runGlobalNpmInstall } from "../lib/update-check";
 
 export default class ListCommand extends BaseCommand {
   static description = "List accounts managed under ~/.codex";
@@ -80,28 +77,12 @@ export default class ListCommand extends BaseCommand {
       return;
     }
 
-    const installExitCode = await this.runGlobalInstall();
+    const installExitCode = await runGlobalNpmInstall(PACKAGE_NAME);
     if (installExitCode === 0) {
       this.log("Global update completed.");
       return;
     }
 
     this.warn(`Global update failed (exit code ${installExitCode}). Try: npm i -g ${PACKAGE_NAME}@latest`);
-  }
-
-  private async runGlobalInstall(): Promise<number> {
-    return new Promise((resolve) => {
-      const child = spawn("npm", ["i", "-g", `${PACKAGE_NAME}@latest`], {
-        stdio: "inherit",
-      });
-
-      child.on("error", () => {
-        resolve(1);
-      });
-
-      child.on("exit", (code) => {
-        resolve(typeof code === "number" ? code : 1);
-      });
-    });
   }
 }

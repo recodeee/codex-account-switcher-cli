@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 const SEMVER_TRIPLET = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/;
+export const PACKAGE_NAME = "@imdeadpool/codex-account-switcher";
 
 export function parseVersionTriplet(version: string): [number, number, number] | null {
   const match = version.trim().match(SEMVER_TRIPLET);
@@ -67,6 +68,25 @@ export async function fetchLatestNpmVersion(packageName: string, timeoutMs = 2_5
       }
 
       resolve(trimmed.replace(/^"+|"+$/g, ""));
+    });
+  });
+}
+
+export async function runGlobalNpmInstall(
+  packageName: string,
+  version: "latest" | string = "latest",
+): Promise<number> {
+  return new Promise((resolve) => {
+    const child = spawn("npm", ["i", "-g", `${packageName}@${version}`], {
+      stdio: "inherit",
+    });
+
+    child.on("error", () => {
+      resolve(1);
+    });
+
+    child.on("exit", (code) => {
+      resolve(typeof code === "number" ? code : 1);
     });
   });
 }
