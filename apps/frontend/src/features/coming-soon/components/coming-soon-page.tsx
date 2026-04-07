@@ -392,30 +392,32 @@ export function ComingSoonPage() {
                 Stay in flow instead of babysitting status checks.
               </p>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPreviewOpen(true);
-                }}
-                className="mt-6 block w-full text-left"
-                aria-label="Open Codex app screenshot fullscreen"
-              >
-                <div className="relative overflow-hidden rounded">
-                  <img
-                    src="/app.png"
-                    alt=""
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-35"
-                    loading="lazy"
-                  />
-                  <img
-                    src="/app.png"
-                    alt="Codex app screenshot"
-                    className="relative z-10 h-auto w-full rounded-[14px] border border-black/45 shadow-[0_24px_72px_rgba(6,10,25,0.62)]"
-                    loading="lazy"
-                  />
-                </div>
-              </button>
+              <div className="mt-6 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPreviewOpen(true);
+                  }}
+                  className="block w-full max-w-[1220px]"
+                  aria-label="Open Codex app screenshot fullscreen"
+                >
+                  <div className="relative overflow-hidden rounded-[22px] border border-white/12">
+                    <img
+                      src="/app.png"
+                      alt=""
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 h-full w-full rounded-[22px] object-cover opacity-35"
+                      loading="lazy"
+                    />
+                    <img
+                      src="/app.png"
+                      alt="Codex app screenshot"
+                      className="relative z-10 h-auto w-full rounded-[22px] border border-black/45 shadow-[0_24px_72px_rgba(6,10,25,0.62)]"
+                      loading="lazy"
+                    />
+                  </div>
+                </button>
+              </div>
 
               <TechStackStrip className="mt-4 space-y-2 [&>div:first-child]:text-[10px] [&>div:first-child]:tracking-[0.18em] [&>div:first-child]:text-zinc-300/80 [&>div:nth-child(2)]:gap-2 [&_a]:border-transparent" />
             </div>
@@ -447,8 +449,14 @@ export function ComingSoonPage() {
               <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl">
                 <img
                   src="/app.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-28 blur-2xl"
+                />
+                <img
+                  src="/app.png"
                   alt="Codex app screenshot fullscreen"
-                  className="max-h-[92vh] w-full max-w-[98vw] rounded-xl border border-white/15 object-contain shadow-[0_30px_120px_rgba(0,0,0,0.65)]"
+                  className="relative z-10 h-[95vh] w-[97vw] rounded-xl border border-white/15 object-contain shadow-[0_30px_120px_rgba(0,0,0,0.65)]"
                 />
               </div>
             </DialogContent>

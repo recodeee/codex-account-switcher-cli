@@ -5,6 +5,8 @@ const PRIVACY_STORAGE_KEY = "codex-lb-privacy";
 type PrivacyState = {
   /** Whether emails are blurred across the dashboard. */
   blurred: boolean;
+  /** Hydrate privacy preference from localStorage after mount. */
+  initialize: () => void;
   /** Toggle email blur on/off and persist to localStorage. */
   toggle: () => void;
 };
@@ -28,7 +30,10 @@ function persist(value: boolean): void {
 }
 
 export const usePrivacyStore = create<PrivacyState>((set, get) => ({
-  blurred: readStored(),
+  blurred: false,
+  initialize: () => {
+    set({ blurred: readStored() });
+  },
   toggle: () => {
     const next = !get().blurred;
     persist(next);
