@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "@/lib/router-compat";
+import { useNavigate, useSearchParams } from "@/lib/router-compat";
 
 import { EmptyState } from "@/components/empty-state";
 import { SpinnerBlock } from "@/components/ui/spinner";
@@ -15,12 +15,17 @@ import {
 } from "@/components/ui/table";
 import { PaginationControls } from "@/features/dashboard/components/filters/pagination-controls";
 import { getDashboardOverview } from "@/features/dashboard/api";
+import type { AccountSummary } from "@/features/dashboard/schemas";
 import { listStickySessions } from "@/features/sticky-sessions/api";
 import { Badge } from "@/components/ui/badge";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { cn } from "@/lib/utils";
 import { getFreshDebugRawSampleCount } from "@/utils/account-working";
-import { formatLastUsageLabel } from "@/utils/formatters";
+import {
+  formatLastUsageLabel,
+  formatQuotaResetLabel,
+  formatWindowLabel,
+} from "@/utils/formatters";
 
 const DEFAULT_LIMIT = 25;
 const WAITING_FOR_NEW_TASK_LABEL = "Waiting for new task";
@@ -160,13 +165,93 @@ function buildFallbackSourceLabel({
   return "Session telemetry pending";
 }
 
+function formatQuotaPercent(value: number | null | undefined): string {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "--";
+  }
+  const clamped = Math.max(0, Math.min(100, value));
+  return `${Math.round(clamped)}%`;
+}
+
+type QuotaTone = "healthy" | "warning" | "critical" | "unknown";
+
+function resolveQuotaTone(value: number | null | undefined): QuotaTone {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "unknown";
+  }
+  const clamped = Math.max(0, Math.min(100, value));
+  if (clamped >= 70) {
+    return "healthy";
+  }
+  if (clamped >= 30) {
+    return "warning";
+  }
+  return "critical";
+}
+
+function quotaFillClassName(tone: QuotaTone): string {
+  if (tone === "healthy") {
+    return "bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400";
+  }
+  if (tone === "warning") {
+    return "bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300";
+  }
+  if (tone === "critical") {
+    return "bg-gradient-to-r from-rose-600 via-red-500 to-orange-400";
+  }
+  return "bg-muted-foreground/45";
+}
+
+function buildWatchLogLines({
+  accountId,
+  sessionKey,
+  sourceLabel,
+  status,
+  taskPreview,
+  taskUpdatedAt,
+  liveQuotaDebug,
+}: {
+  accountId: string;
+  sessionKey: string;
+  sourceLabel: string;
+  status: "live" | "idle";
+  taskPreview: string;
+  taskUpdatedAt: string | null | undefined;
+  liveQuotaDebug: AccountSummary["liveQuotaDebug"] | null | undefined;
+}): string[] {
+  const lines: string[] = [
+    `$ account=${accountId}`,
+    `$ session=${sessionKey}`,
+    `$ source=${sourceLabel}`,
+    `$ state=${status}`,
+    `$ task_updated_at=${taskUpdatedAt ?? "unknown"}`,
+    `$ task_preview=${taskPreview}`,
+  ];
+
+  const rawSamples = liveQuotaDebug?.rawSamples ?? [];
+  const scopedSamples = rawSamples.filter(
+    (sample) =>
+      sample.source.includes(sessionKey) ||
+      (sample.snapshotName != null && sample.snapshotName.trim().length > 0),
+  );
+  const debugSamples = (scopedSamples.length > 0 ? scopedSamples : rawSamples).slice(0, 8);
+  for (const [index, sample] of debugSamples.entries()) {
+    lines.push(
+      `$ quota-sample#${index + 1} src=${sample.source} 5h=${formatQuotaPercent(sample.primary?.remainingPercent)} weekly=${formatQuotaPercent(sample.secondary?.remainingPercent)}`,
+    );
+  }
+  return lines;
+}
+
 export function SessionsPage() {
+  const navigate = useNavigate();
   const [offset, setOffset] = useState(0);
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [searchParams] = useSearchParams();
   const blurred = usePrivacyStore((s) => s.blurred);
   const selectedAccountId = searchParams.get("accountId");
   const selectedSessionKey = searchParams.get("sessionKey")?.trim() ?? null;
+  const watchMode = searchParams.get("view")?.trim().toLowerCase() === "watch";
   const focusedSessionRowRef = useRef<HTMLTableRowElement | null>(null);
 
   const sessionsQuery = useQuery({
@@ -289,9 +374,75 @@ export function SessionsPage() {
   const hasFocusedSessionRow = selectedSessionKey
     ? activityRows.some((row) => row.identity === selectedSessionKey)
     : false;
+  const selectedStickyEntry = useMemo(
+    () =>
+      selectedSessionKey
+        ? (entries ?? []).find(
+            (entry) =>
+              entry.key === selectedSessionKey &&
+              (!selectedAccountId || entry.accountId === selectedAccountId),
+          ) ?? null
+        : null,
+    [entries, selectedAccountId, selectedSessionKey],
+  );
+  const selectedActivityRow = useMemo(
+    () =>
+      selectedSessionKey
+        ? activityRows.find((row) => row.identity === selectedSessionKey) ?? null
+        : null,
+    [activityRows, selectedSessionKey],
+  );
+  const selectedAccount = useMemo(
+    () =>
+      selectedAccountId
+        ? overviewQuery.data?.accounts.find(
+            (account) => account.accountId === selectedAccountId,
+          ) ?? null
+        : null,
+    [overviewQuery.data?.accounts, selectedAccountId],
+  );
   const emptyDescription = selectedAccountId
     ? "No Codex sessions were found for the selected account."
     : "Codex sessions will appear here once routed requests create sticky session mappings.";
+  const watchTaskPreview =
+    selectedStickyEntry?.taskPreview?.trim() ||
+    selectedActivityRow?.currentTask ||
+    WAITING_FOR_NEW_TASK_LABEL;
+  const watchSourceLabel =
+    selectedActivityRow?.sourceLabel ??
+    (selectedStickyEntry ? "Sticky mapping" : "Dashboard overview");
+  const watchStatus = selectedActivityRow?.status ?? "idle";
+  const watchPrimaryPercent = selectedAccount?.usage?.primaryRemainingPercent ?? null;
+  const watchSecondaryPercent =
+    selectedAccount?.usage?.secondaryRemainingPercent ?? null;
+  const watchPrimaryLabel = formatWindowLabel(
+    "primary",
+    selectedAccount?.windowMinutesPrimary,
+  );
+  const watchPrimaryReset = formatQuotaResetLabel(selectedAccount?.resetAtPrimary);
+  const watchSecondaryReset = formatQuotaResetLabel(selectedAccount?.resetAtSecondary);
+  const watchLogLines = useMemo(() => {
+    if (!selectedSessionKey || !selectedAccountId) {
+      return [];
+    }
+    return buildWatchLogLines({
+      accountId: selectedAccountId,
+      sessionKey: selectedSessionKey,
+      sourceLabel: watchSourceLabel,
+      status: watchStatus,
+      taskPreview: watchTaskPreview,
+      taskUpdatedAt: selectedStickyEntry?.taskUpdatedAt ?? null,
+      liveQuotaDebug: selectedAccount?.liveQuotaDebug,
+    });
+  }, [
+    selectedAccount?.liveQuotaDebug,
+    selectedAccountId,
+    selectedSessionKey,
+    selectedStickyEntry?.taskUpdatedAt,
+    watchSourceLabel,
+    watchStatus,
+    watchTaskPreview,
+  ]);
 
   useEffect(() => {
     if (!selectedSessionKey || !hasFocusedSessionRow) {
@@ -320,6 +471,120 @@ export function SessionsPage() {
         <div className="py-8">
           <SpinnerBlock />
         </div>
+      ) : watchMode && selectedSessionKey ? (
+        <section className="space-y-4">
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold">Session watch logs</p>
+                <p className="text-xs text-muted-foreground">
+                  Session-only token status and scoped logs.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => {
+                  const params = new URLSearchParams();
+                  if (selectedAccountId) {
+                    params.set("accountId", selectedAccountId);
+                  }
+                  navigate(`/sessions${params.toString() ? `?${params.toString()}` : ""}`);
+                }}
+              >
+                Open full sessions list
+              </button>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="text-[11px] font-mono">
+                {selectedAccountId ?? "unknown-account"}
+              </Badge>
+              <Badge variant="outline" className="text-[11px] font-mono">
+                {selectedSessionKey}
+              </Badge>
+              <Badge
+                variant={watchStatus === "live" ? "secondary" : "outline"}
+                className="text-[11px]"
+              >
+                {watchStatus === "live" ? "Live" : "Idle"}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {[
+              {
+                label: watchPrimaryLabel,
+                percent: watchPrimaryPercent,
+                resetLabel: watchPrimaryReset,
+              },
+              {
+                label: "Weekly",
+                percent: watchSecondaryPercent,
+                resetLabel: watchSecondaryReset,
+              },
+            ].map((quota) => {
+              const tone = resolveQuotaTone(quota.percent);
+              const clampedPercent =
+                typeof quota.percent === "number" && !Number.isNaN(quota.percent)
+                  ? Math.max(0, Math.min(100, quota.percent))
+                  : 0;
+              return (
+                <div key={quota.label} className="rounded-xl border bg-card px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                      {quota.label}
+                    </p>
+                    <p className="text-xs font-semibold">{formatQuotaPercent(quota.percent)}</p>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted/50">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-[width] duration-300",
+                        quotaFillClassName(tone),
+                      )}
+                      style={{ width: `${clampedPercent}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Reset: {quota.resetLabel}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Current task
+            </p>
+            <p className="mt-1 text-sm">{watchTaskPreview}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Source: {watchSourceLabel}
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-card">
+            <div className="border-b px-4 py-3">
+              <p className="text-sm font-semibold">Session logs</p>
+            </div>
+            <div className="p-2">
+              <ol className="max-h-72 overflow-y-auto rounded-lg border bg-[#020812] p-2 font-mono text-[11px] leading-5 text-cyan-100">
+                {watchLogLines.map((line, lineIndex) => (
+                  <li
+                    key={`${selectedSessionKey}-watch-log-${lineIndex}`}
+                    className="grid grid-cols-[2.2rem_minmax(0,1fr)] gap-2 rounded-sm px-1.5 even:bg-cyan-500/[0.06]"
+                  >
+                    <span className="select-none text-right text-cyan-400/55">
+                      {String(lineIndex + 1).padStart(2, "0")}
+                    </span>
+                    <span className="break-all">{line}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </section>
       ) : !hasSessionRows && !hasUnmappedCliRows ? (
         <EmptyState
           icon={Pin}

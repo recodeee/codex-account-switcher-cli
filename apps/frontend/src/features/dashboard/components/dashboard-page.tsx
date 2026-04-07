@@ -67,7 +67,7 @@ export function DashboardPage() {
     (
       account: AccountSummary,
       action: string,
-      context?: { focusSessionKey?: string },
+      context?: { focusSessionKey?: string; source?: "session-panel" | "watch-logs" },
     ) => {
       switch (action) {
         case "details":
@@ -103,6 +103,9 @@ export function DashboardPage() {
             const focusSessionKey = context?.focusSessionKey?.trim();
             if (focusSessionKey) {
               searchParams.set("sessionKey", focusSessionKey);
+            }
+            if (context?.source === "watch-logs") {
+              searchParams.set("view", "watch");
             }
             navigate(`/sessions?${searchParams.toString()}`);
           }

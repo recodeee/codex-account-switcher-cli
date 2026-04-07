@@ -378,6 +378,60 @@ describe("dashboard flow integration", () => {
     expect(window.location.search).toContain("accountId=acc_with_sessions");
   });
 
+  it("routes watch logs to session-focused sessions view", async () => {
+    const user = userEvent.setup({ delay: null });
+    const nowIso = new Date().toISOString();
+
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_watch_logs",
+                email: "watchlogs@example.com",
+                displayName: "watchlogs@example.com",
+                codexSessionCount: 2,
+                codexTrackedSessionCount: 2,
+                codexLiveSessionCount: 2,
+                codexCurrentTaskPreview: "Review sticky routing",
+                codexSessionTaskPreviews: [
+                  {
+                    sessionKey: "sess-watch-001",
+                    taskPreview: "Review sticky routing",
+                    taskUpdatedAt: nowIso,
+                  },
+                ],
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "watch",
+                  activeSnapshotName: "watch",
+                  isActiveSnapshot: true,
+                  hasLiveSession: true,
+                },
+                lastUsageRecordedAtPrimary: nowIso,
+                lastUsageRecordedAtSecondary: nowIso,
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/dashboard");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    const watchButtons = await screen.findAllByRole("button", { name: "Watch logs" });
+    await user.click(watchButtons[0]);
+
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/sessions");
+    expect(window.location.search).toContain("accountId=acc_watch_logs");
+    expect(window.location.search).toContain("sessionKey=sess-watch-001");
+    expect(window.location.search).toContain("view=watch");
+  });
+
   it("deletes an account from the dashboard card actions", async () => {
     const user = userEvent.setup({ delay: null });
 

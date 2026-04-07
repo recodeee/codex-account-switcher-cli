@@ -1663,6 +1663,43 @@ describe("AccountCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("routes watch logs clicks to sessions page context when action handler is provided", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Investigate websocket sticky routing",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-alpha-123456",
+          taskPreview: "Investigate websocket sticky routing",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} onAction={onAction} />);
+
+    await user.click(screen.getByRole("button", { name: "Watch logs" }));
+
+    expect(onAction).toHaveBeenCalledWith(account, "sessions", {
+      focusSessionKey: "sess-alpha-123456",
+      source: "watch-logs",
+    });
+    expect(
+      screen.queryByText(new RegExp(`\\$ account=${account.accountId}`, "i")),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens focused session view from a session task panel row", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();

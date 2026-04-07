@@ -114,6 +114,84 @@ describe("sessions flow integration", () => {
     expect(screen.getAllByText("session-focus-me").length).toBeGreaterThan(0);
   });
 
+  it("renders a session-only watch logs view with 5h and weekly status", async () => {
+    const nowIso = new Date().toISOString();
+    const resetPrimary = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+    const resetSecondary = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString();
+
+    server.use(
+      http.get("/api/sticky-sessions", ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("kind") !== "codex_session") {
+          return HttpResponse.json({ entries: [], stalePromptCacheCount: 0, total: 0, hasMore: false });
+        }
+        return HttpResponse.json({
+          entries: [
+            {
+              key: "session-watch-logs",
+              accountId: "acc_watch",
+              displayName: "watch@example.com",
+              kind: "codex_session",
+              createdAt: nowIso,
+              updatedAt: nowIso,
+              taskPreview: "Collect per-session watch logs",
+              taskUpdatedAt: nowIso,
+              isActive: true,
+              expiresAt: null,
+              isStale: false,
+            },
+          ],
+          stalePromptCacheCount: 0,
+          total: 1,
+          hasMore: false,
+        });
+      }),
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_watch",
+                email: "watch@example.com",
+                displayName: "watch@example.com",
+                usage: {
+                  primaryRemainingPercent: 19,
+                  secondaryRemainingPercent: 87,
+                },
+                resetAtPrimary: resetPrimary,
+                resetAtSecondary: resetSecondary,
+                codexSessionCount: 1,
+                codexTrackedSessionCount: 1,
+                codexLiveSessionCount: 1,
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "watch",
+                  activeSnapshotName: "watch",
+                  isActiveSnapshot: true,
+                  hasLiveSession: true,
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState(
+      {},
+      "",
+      "/sessions?accountId=acc_watch&sessionKey=session-watch-logs&view=watch",
+    );
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(await screen.findByText("Session watch logs")).toBeInTheDocument();
+    expect(screen.getAllByText("5h").length).toBeGreaterThan(0);
+    expect(screen.getByText("Weekly")).toBeInTheDocument();
+    expect(screen.getByText("Collect per-session watch logs")).toBeInTheDocument();
+    expect(screen.getByText(/\$ session=session-watch-logs/i)).toBeInTheDocument();
+  });
+
   it("navigates to sessions from header tab", async () => {
     const user = userEvent.setup({ delay: null });
 

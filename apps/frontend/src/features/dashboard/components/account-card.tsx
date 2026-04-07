@@ -71,7 +71,7 @@ type AccountAction =
 
 export type AccountActionContext = {
   focusSessionKey?: string;
-  source?: "session-panel";
+  source?: "session-panel" | "watch-logs";
 };
 
 export type AccountCardProps = {
@@ -390,6 +390,21 @@ function formatSessionKeyLabel(sessionKey: string): string {
     return normalized;
   }
   return `${normalized.slice(0, 6)}…${normalized.slice(-4)}`;
+}
+
+const SESSION_TASK_ACCENT_CLASSES = [
+  "from-cyan-300/90 to-cyan-500/85",
+  "from-violet-300/90 to-violet-500/85",
+  "from-emerald-300/90 to-emerald-500/85",
+  "from-amber-300/90 to-amber-500/85",
+  "from-pink-300/90 to-pink-500/85",
+  "from-sky-300/90 to-sky-500/85",
+] as const;
+
+function resolveSessionTaskAccentClass(index: number): string {
+  const paletteSize = SESSION_TASK_ACCENT_CLASSES.length;
+  const normalizedIndex = Math.abs(index) % paletteSize;
+  return SESSION_TASK_ACCENT_CLASSES[normalizedIndex];
 }
 
 function resolveSessionTaskPreview(
@@ -1722,6 +1737,13 @@ export function AccountCard(props: AccountCardProps) {
                                   "border-emerald-400/35 bg-emerald-500/[0.13] hover:border-emerald-300/45",
                               )}
                             >
+                              <span
+                                className={cn(
+                                  "pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-xl bg-gradient-to-b opacity-85",
+                                  resolveSessionTaskAccentClass(index),
+                                )}
+                                aria-hidden
+                              />
                               {sessionTaskState === "thinking" ? (
                                 <div
                                   className="pointer-events-none absolute inset-0 -z-10"
@@ -1800,13 +1822,20 @@ export function AccountCard(props: AccountCardProps) {
                                       expandedSessionLogRowKey ===
                                       sessionTaskRowKey
                                     }
-                                    onClick={() =>
+                                    onClick={() => {
+                                      if (onAction && !preview.synthetic) {
+                                        onAction(account, "sessions", {
+                                          focusSessionKey: preview.sessionKey,
+                                          source: "watch-logs",
+                                        });
+                                        return;
+                                      }
                                       setExpandedSessionLogRowKey((current) =>
                                         current === sessionTaskRowKey
                                           ? null
                                           : sessionTaskRowKey,
-                                      )
-                                    }
+                                      );
+                                    }}
                                   >
                                     <Eye className="h-3 w-3" />
                                     Watch logs
