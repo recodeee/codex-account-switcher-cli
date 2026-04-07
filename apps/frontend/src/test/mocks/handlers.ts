@@ -30,6 +30,13 @@ import {
 
 const MODEL_OPTION_DELIMITER = ":::";
 const STATUS_ORDER = ["ok", "rate_limit", "quota", "error"] as const;
+const PROJECT_SANDBOX_MODES = new Set([
+	"read-only",
+	"workspace-write",
+	"danger-full-access",
+]);
+const WINDOWS_DRIVE_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
+const GIT_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 
 // ── Zod schemas for mock request bodies ──
 
@@ -62,6 +69,26 @@ const DeviceUpdatePayloadSchema = z
 	.object({
 		name: z.string().optional(),
 		ipAddress: z.string().optional(),
+	})
+	.passthrough();
+
+const ProjectCreatePayloadSchema = z
+	.object({
+		name: z.string().optional(),
+		description: z.string().nullable().optional(),
+		projectPath: z.string().nullable().optional(),
+		sandboxMode: z.string().optional(),
+		gitBranch: z.string().nullable().optional(),
+	})
+	.passthrough();
+
+const ProjectUpdatePayloadSchema = z
+	.object({
+		name: z.string().optional(),
+		description: z.string().nullable().optional(),
+		projectPath: z.string().nullable().optional(),
+		sandboxMode: z.string().optional(),
+		gitBranch: z.string().nullable().optional(),
 	})
 	.passthrough();
 
@@ -130,6 +157,16 @@ type MockState = {
 		createdAt: string;
 		updatedAt: string;
 	}>;
+	projects: Array<{
+		id: string;
+		name: string;
+		description: string | null;
+		projectPath: string | null;
+		sandboxMode: "read-only" | "workspace-write" | "danger-full-access";
+		gitBranch: string | null;
+		createdAt: string;
+		updatedAt: string;
+	}>;
 	stickySessions: Array<{
 		key: string;
 		accountId: string;
@@ -151,6 +188,7 @@ function createInitialState(): MockState {
 		apiKeys: createDefaultApiKeys(),
 		firewallEntries: [],
 		devices: [],
+		projects: [],
 		stickySessions: [],
 	};
 }
@@ -167,6 +205,97 @@ function parseDateValue(value: string | null): number | null {
 	}
 	const timestamp = new Date(value).getTime();
 	return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function normalizeProjectPath(
+	value: unknown,
+): { ok: true; value: string | null } | { ok: false; code: "invalid_project_path"; message: string } {
+	if (value == null) {
+		return { ok: true, value: null };
+	}
+	const normalized = String(value).trim();
+	if (!normalized) {
+		return { ok: true, value: null };
+	}
+	if (normalized.length > 1024) {
+		return {
+			ok: false,
+			code: "invalid_project_path",
+			message: "Project path must be 1024 characters or fewer",
+		};
+	}
+	const isAbsolute =
+		normalized.startsWith("/") ||
+		normalized.startsWith("\\\\") ||
+		WINDOWS_DRIVE_ABSOLUTE_PATH_PATTERN.test(normalized);
+	if (!isAbsolute) {
+		return {
+			ok: false,
+			code: "invalid_project_path",
+			message: "Project path must be absolute",
+		};
+	}
+	return { ok: true, value: normalized };
+}
+
+function normalizeProjectSandboxMode(
+	value: unknown,
+): { ok: true; value: "read-only" | "workspace-write" | "danger-full-access" } | {
+	ok: false;
+	code: "invalid_project_sandbox";
+	message: string;
+} {
+	if (value == null) {
+		return { ok: true, value: "workspace-write" };
+	}
+	const normalized = String(value).trim().toLowerCase();
+	if (!normalized) {
+		return { ok: true, value: "workspace-write" };
+	}
+	if (!PROJECT_SANDBOX_MODES.has(normalized)) {
+		return {
+			ok: false,
+			code: "invalid_project_sandbox",
+			message: "Sandbox mode must be one of: read-only, workspace-write, danger-full-access",
+		};
+	}
+	return {
+		ok: true,
+		value: normalized as "read-only" | "workspace-write" | "danger-full-access",
+	};
+}
+
+function normalizeProjectGitBranch(
+	value: unknown,
+): { ok: true; value: string | null } | { ok: false; code: "invalid_project_branch"; message: string } {
+	if (value == null) {
+		return { ok: true, value: null };
+	}
+	const normalized = String(value).trim();
+	if (!normalized) {
+		return { ok: true, value: null };
+	}
+	if (normalized.length > 255) {
+		return {
+			ok: false,
+			code: "invalid_project_branch",
+			message: "Git branch must be 255 characters or fewer",
+		};
+	}
+	if (
+		!GIT_BRANCH_PATTERN.test(normalized) ||
+		normalized.startsWith("/") ||
+		normalized.endsWith("/") ||
+		normalized.includes("..") ||
+		normalized.endsWith(".lock")
+	) {
+		return {
+			ok: false,
+			code: "invalid_project_branch",
+			message: "Git branch contains invalid characters",
+		};
+	}
+	return { ok: true, value: normalized };
 }
 
 function filterRequestLogs(
@@ -803,6 +932,252 @@ export const handlers = [
 			);
 		}
 		state.devices = state.devices.filter((entry) => entry.id !== deviceId);
+		return HttpResponse.json({ status: "deleted" });
+	}),
+
+	http.get("/api/projects", () => {
+		return HttpResponse.json({ entries: state.projects });
+	}),
+
+	http.post("/api/projects", async ({ request }) => {
+		const payload = await parseJsonBody(request, ProjectCreatePayloadSchema);
+		const name = String(payload?.name || "").trim();
+		const descriptionRaw = payload?.description;
+		const description =
+			typeof descriptionRaw === "string" ? descriptionRaw.trim() : null;
+		const projectPathResult = normalizeProjectPath(payload?.projectPath);
+		const sandboxModeResult = normalizeProjectSandboxMode(payload?.sandboxMode);
+		const gitBranchResult = normalizeProjectGitBranch(payload?.gitBranch);
+
+		if (!name) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_project_name",
+						message: "Project name is required",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (name.length > 128) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_project_name",
+						message: "Project name must be 128 characters or fewer",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (description && description.length > 512) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_project_description",
+						message: "Project description must be 512 characters or fewer",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (!projectPathResult.ok) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: projectPathResult.code,
+						message: projectPathResult.message,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (!sandboxModeResult.ok) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: sandboxModeResult.code,
+						message: sandboxModeResult.message,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (!gitBranchResult.ok) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: gitBranchResult.code,
+						message: gitBranchResult.message,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (state.projects.some((entry) => entry.name === name)) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "project_name_exists",
+						message: "Project name already exists",
+					},
+				},
+				{ status: 409 },
+			);
+		}
+
+		const now = new Date().toISOString();
+		const created = {
+			id: `project_${state.projects.length + 1}`,
+			name,
+			description: description || null,
+			projectPath: projectPathResult.value,
+			sandboxMode: sandboxModeResult.value,
+			gitBranch: gitBranchResult.value,
+			createdAt: now,
+			updatedAt: now,
+		};
+		state.projects = [...state.projects, created];
+		return HttpResponse.json(created);
+	}),
+
+	http.put("/api/projects/:projectId", async ({ params, request }) => {
+		const projectId = String(params.projectId);
+		const payload = await parseJsonBody(request, ProjectUpdatePayloadSchema);
+		const name = String(payload?.name || "").trim();
+		const descriptionRaw = payload?.description;
+		const description =
+			typeof descriptionRaw === "string" ? descriptionRaw.trim() : null;
+		const projectPathResult = normalizeProjectPath(payload?.projectPath);
+		const sandboxModeResult = normalizeProjectSandboxMode(payload?.sandboxMode);
+		const gitBranchResult = normalizeProjectGitBranch(payload?.gitBranch);
+		const current = state.projects.find((entry) => entry.id === projectId);
+
+		if (!current) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "project_not_found",
+						message: "Project not found",
+					},
+				},
+				{ status: 404 },
+			);
+		}
+
+		if (!name) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_project_name",
+						message: "Project name is required",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (name.length > 128) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_project_name",
+						message: "Project name must be 128 characters or fewer",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (description && description.length > 512) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_project_description",
+						message: "Project description must be 512 characters or fewer",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (!projectPathResult.ok) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: projectPathResult.code,
+						message: projectPathResult.message,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (!sandboxModeResult.ok) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: sandboxModeResult.code,
+						message: sandboxModeResult.message,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (!gitBranchResult.ok) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: gitBranchResult.code,
+						message: gitBranchResult.message,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (
+			state.projects.some(
+				(entry) => entry.id !== projectId && entry.name === name,
+			)
+		) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "project_name_exists",
+						message: "Project name already exists",
+					},
+				},
+				{ status: 409 },
+			);
+		}
+
+		const updated = {
+			...current,
+			name,
+			description: description || null,
+			projectPath: projectPathResult.value,
+			sandboxMode: sandboxModeResult.value,
+			gitBranch: gitBranchResult.value,
+			updatedAt: new Date().toISOString(),
+		};
+		state.projects = state.projects.map((entry) =>
+			entry.id === projectId ? updated : entry,
+		);
+		return HttpResponse.json(updated);
+	}),
+
+	http.delete("/api/projects/:projectId", ({ params }) => {
+		const projectId = String(params.projectId);
+		const exists = state.projects.some((entry) => entry.id === projectId);
+		if (!exists) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "project_not_found",
+						message: "Project not found",
+					},
+				},
+				{ status: 404 },
+			);
+		}
+		state.projects = state.projects.filter((entry) => entry.id !== projectId);
 		return HttpResponse.json({ status: "deleted" });
 	}),
 

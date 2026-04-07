@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Link2,
   MonitorSmartphone,
+  PanelsTopLeft,
   Settings2,
   Users,
 } from "lucide-react";
@@ -27,6 +28,7 @@ import { cn } from "@/lib/utils";
 const NAV_ICONS: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/accounts": Users,
+  "/projects": PanelsTopLeft,
   "/billing": CreditCard,
   "/apis": KeyRound,
   "/devices": MonitorSmartphone,

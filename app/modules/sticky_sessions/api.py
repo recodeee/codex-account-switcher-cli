@@ -7,8 +7,10 @@ from app.core.exceptions import DashboardNotFoundError
 from app.db.models import StickySessionKind
 from app.dependencies import StickySessionsContext, get_sticky_sessions_context
 from app.modules.sticky_sessions.schemas import (
+    StickySessionEventResponse,
     StickySessionDeleteResponse,
     StickySessionEntryResponse,
+    StickySessionEventsResponse,
     StickySessionsDeleteRequest,
     StickySessionsDeleteResponse,
     StickySessionsListResponse,
@@ -101,3 +103,36 @@ async def delete_sticky_session(
     if not deleted:
         raise DashboardNotFoundError("Sticky session not found", code="sticky_session_not_found")
     return StickySessionDeleteResponse(status="deleted")
+
+
+@router.get("/session-events", response_model=StickySessionEventsResponse)
+async def get_sticky_session_events(
+    account_id: str = Query(alias="accountId", min_length=1),
+    session_key: str = Query(alias="sessionKey", min_length=1),
+    limit: int = Query(default=120, ge=1, le=500),
+    context: StickySessionsContext = Depends(get_sticky_sessions_context),
+) -> StickySessionEventsResponse:
+    result = await context.service.get_codex_session_events(
+        account_id=account_id,
+        session_key=session_key,
+        limit=limit,
+    )
+    if result is None:
+        raise DashboardNotFoundError("Sticky session not found", code="sticky_session_not_found")
+    return StickySessionEventsResponse(
+        session_key=result.session_key,
+        resolved_session_id=result.resolved_session_id,
+        source_file=result.source_file,
+        events=[
+            StickySessionEventResponse(
+                timestamp=event.timestamp,
+                kind=event.kind,
+                title=event.title,
+                text=event.text,
+                role=event.role,
+                raw_type=event.raw_type,
+            )
+            for event in result.events
+        ],
+        truncated=result.truncated,
+    )

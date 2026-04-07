@@ -268,6 +268,29 @@ class Device(Base):
     )
 
 
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    project_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sandbox_mode: Mapped[str] = mapped_column(
+        String(64),
+        default="workspace-write",
+        server_default=text("'workspace-write'"),
+        nullable=False,
+    )
+    git_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class ApiKey(Base):
     __tablename__ = "api_keys"
 

@@ -122,6 +122,13 @@ def _write_rollout_with_user_task(
     os.utime(path, (ts, ts))
 
 
+def _append_rollout_payload(path: Path, *, payload: dict[str, object], timestamp: datetime) -> None:
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload) + "\n")
+    ts = timestamp.timestamp()
+    os.utime(path, (ts, ts))
+
+
 @pytest.mark.asyncio
 async def test_sticky_sessions_api_lists_metadata_and_purges_stale(async_client):
     accounts = await _create_accounts()
@@ -506,3 +513,120 @@ async def test_sticky_sessions_cleanup_scheduler_removes_only_stale_prompt_cache
         }
 
     assert remaining == {"cleanup-durable"}
+
+
+@pytest.mark.asyncio
+async def test_sticky_sessions_api_returns_codex_session_events(async_client, monkeypatch, tmp_path):
+    accounts = await _create_accounts()
+    await _set_affinity_ttl(60)
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    session_id = "019d5a6a-4665-7873-9714-9efb95b24268"
+    session_key = f"{session_id}::auth:scope"
+    await _insert_sticky_session(
+        key=session_key,
+        account_id=accounts[0].id,
+        kind=StickySessionKind.CODEX_SESSION,
+        updated_at_offset_seconds=20,
+        task_preview="Collect session logs",
+    )
+
+    sessions_root = tmp_path / "sessions"
+    day_dir = sessions_root / f"{now.year:04d}" / f"{now.month:02d}" / f"{now.day:02d}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    rollout_path = day_dir / f"rollout-{now.strftime('%Y-%m-%dT%H-%M-%S')}-{session_id}.jsonl"
+    _write_rollout_with_user_task(
+        rollout_path,
+        timestamp=now - timedelta(seconds=20),
+        task="Collect per-session watch logs",
+    )
+    _append_rollout_payload(
+        rollout_path,
+        timestamp=now - timedelta(seconds=18),
+        payload={
+            "timestamp": (now - timedelta(seconds=18)).isoformat().replace("+00:00", "Z"),
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "Loaded session logs and summarized active quotas.",
+                    }
+                ],
+            },
+        },
+    )
+    _append_rollout_payload(
+        rollout_path,
+        timestamp=now - timedelta(seconds=16),
+        payload={
+            "timestamp": (now - timedelta(seconds=16)).isoformat().replace("+00:00", "Z"),
+            "type": "response.completed",
+            "response": {"id": "resp_1"},
+        },
+    )
+
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+
+    response = await async_client.get(
+        "/api/sticky-sessions/session-events",
+        params={
+            "accountId": accounts[0].id,
+            "sessionKey": session_key,
+            "limit": "20",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sessionKey"] == session_key
+    assert payload["resolvedSessionId"] == session_id
+    assert payload["sourceFile"] is not None
+    events = payload["events"]
+    assert len(events) == 3
+    assert events[0]["kind"] == "prompt"
+    assert events[0]["text"] == "Collect per-session watch logs"
+    assert events[1]["kind"] == "answer"
+    assert events[1]["text"] == "Loaded session logs and summarized active quotas."
+    assert events[2]["kind"] == "status"
+
+
+@pytest.mark.asyncio
+async def test_sticky_sessions_api_session_events_404_for_wrong_account(async_client, monkeypatch, tmp_path):
+    accounts = await _create_accounts()
+    await _set_affinity_ttl(60)
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    session_id = "019d5a6a-4665-7873-9714-9efb95b24268"
+    session_key = f"{session_id}::auth:scope"
+    await _insert_sticky_session(
+        key=session_key,
+        account_id=accounts[0].id,
+        kind=StickySessionKind.CODEX_SESSION,
+        updated_at_offset_seconds=20,
+    )
+
+    sessions_root = tmp_path / "sessions"
+    day_dir = sessions_root / f"{now.year:04d}" / f"{now.month:02d}" / f"{now.day:02d}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    rollout_path = day_dir / f"rollout-{now.strftime('%Y-%m-%dT%H-%M-%S')}-{session_id}.jsonl"
+    _write_rollout_with_user_task(
+        rollout_path,
+        timestamp=now - timedelta(seconds=20),
+        task="Collect per-session watch logs",
+    )
+
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+
+    response = await async_client.get(
+        "/api/sticky-sessions/session-events",
+        params={
+            "accountId": accounts[1].id,
+            "sessionKey": session_key,
+            "limit": "20",
+        },
+    )
+    assert response.status_code == 404

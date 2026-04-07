@@ -115,10 +115,12 @@ function BulletList({
   items,
   compact = false,
   centered = false,
+  carded = false,
 }: {
   items: InfoItem[];
   compact?: boolean;
   centered?: boolean;
+  carded?: boolean;
 }) {
   return (
     <div className={compact ? "space-y-2.5" : "space-y-3"}>
@@ -128,17 +130,19 @@ function BulletList({
           className={
             centered
               ? "mx-auto flex w-full max-w-3xl items-start gap-3 text-left"
-              : "flex gap-3"
+              : carded
+                ? "flex gap-3 border-b border-white/10 pb-3 last:border-b-0 last:pb-0"
+                : "flex gap-3"
           }
         >
-          <div className="pt-2">
-            <span className="block h-1.5 w-1.5 rounded-full bg-zinc-500" />
+          <div className="pt-2.5">
+            <span className="block h-1 w-1 rounded-full bg-cyan-300/80" />
           </div>
           <div>
             <p
               className={
                 compact
-                  ? "text-base font-medium text-zinc-100"
+                  ? "text-sm font-semibold text-zinc-100"
                   : "text-sm font-medium text-zinc-100 sm:text-[15px]"
               }
             >
@@ -147,7 +151,7 @@ function BulletList({
             <p
               className={
                 compact
-                  ? "mt-1 text-sm leading-7 text-zinc-300"
+                  ? "mt-1 text-sm leading-6 text-zinc-300"
                   : "mt-1 text-sm leading-7 text-zinc-400"
               }
             >
@@ -397,7 +401,7 @@ export function ComingSoonPage() {
                   onClick={() => {
                     setIsPreviewOpen(true);
                   }}
-                  className="block w-full max-w-[1220px]"
+                  className="block w-full max-w-[820px]"
                   aria-label="Open Codex app screenshot fullscreen"
                 >
                   <div className="relative overflow-hidden rounded-[30px]">
@@ -508,29 +512,27 @@ export function ComingSoonPage() {
             </div>
           </div>
 
-          <div className="mx-auto w-full max-w-5xl px-1 py-1">
-            <div className="flex min-h-[56vh] items-center justify-center">
-              <div className="w-full max-w-4xl space-y-6">
-                <div className="space-y-3">
-                  <div className="space-y-2.5">
-                    <SectionHeading
-                      compact
-                      centered
-                      title="What the dashboard currently does"
-                      description="Built around official Codex account and session signals so you can decide faster and rotate accounts with less friction."
-                    />
-                    <BulletList compact centered items={WHAT_IT_DOES} />
-                  </div>
+          <div className="mx-auto w-full max-w-5xl px-1 py-4 sm:py-6">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-5 sm:p-6">
+                <SectionHeading
+                  compact
+                  title="What the dashboard currently does"
+                  description="Built around official Codex account and session signals so you can decide faster and rotate accounts with less friction."
+                />
+                <div className="mt-3">
+                  <BulletList compact items={WHAT_IT_DOES} carded />
+                </div>
+              </div>
 
-                  <div className="space-y-2.5">
-                    <SectionHeading
-                      compact
-                      centered
-                      title="Why this improves daily work"
-                      description="This is about protecting focused work blocks, not just making a prettier dashboard."
-                    />
-                    <BulletList compact centered items={WHY_IT_HELPS} />
-                  </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-5 sm:p-6">
+                <SectionHeading
+                  compact
+                  title="Why this improves daily work"
+                  description="This is about protecting focused work blocks, not just making a prettier dashboard."
+                />
+                <div className="mt-3">
+                  <BulletList compact items={WHY_IT_HELPS} carded />
                 </div>
               </div>
             </div>

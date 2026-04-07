@@ -1,4 +1,5 @@
 const DEFAULT_MEDUSA_BACKEND_URL = "http://localhost:9000";
+const DEFAULT_MEDUSA_BACKEND_PORT = "9000";
 
 export type MedusaRuntimeConfig = {
   backendUrl: string;
@@ -8,6 +9,14 @@ export type MedusaRuntimeConfig = {
 function normalizeUrl(value?: string): string {
   const candidate = value?.trim();
   if (!candidate) {
+    if (typeof window !== "undefined") {
+      const hostname = window.location.hostname?.trim();
+      if (hostname) {
+        const protocol = window.location.protocol === "https:" ? "https" : "http";
+        return `${protocol}://${hostname}:${DEFAULT_MEDUSA_BACKEND_PORT}`;
+      }
+    }
+
     return DEFAULT_MEDUSA_BACKEND_URL;
   }
   return candidate.replace(/\/+$/, "");
@@ -31,4 +40,3 @@ export function getMedusaRuntimeConfig(): MedusaRuntimeConfig {
     publishableKey,
   };
 }
-

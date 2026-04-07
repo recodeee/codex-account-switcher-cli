@@ -62,3 +62,20 @@ class StickySessionsPurgeRequest(DashboardModel):
 
 class StickySessionsPurgeResponse(DashboardModel):
     deleted_count: int
+
+
+class StickySessionEventResponse(DashboardModel):
+    timestamp: datetime
+    kind: Literal["prompt", "answer", "thinking", "tool", "status", "event"]
+    title: str
+    text: str
+    role: str | None = None
+    raw_type: str | None = None
+
+
+class StickySessionEventsResponse(DashboardModel):
+    session_key: str
+    resolved_session_id: str | None = None
+    source_file: str | None = None
+    events: list[StickySessionEventResponse] = Field(default_factory=list)
+    truncated: bool = False

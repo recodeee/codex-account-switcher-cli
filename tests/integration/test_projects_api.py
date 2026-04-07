@@ -1,0 +1,191 @@
+from __future__ import annotations
+
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.asyncio
+async def test_projects_api_crud_and_validation(async_client):
+    initial = await async_client.get("/api/projects")
+    assert initial.status_code == 200
+    assert initial.json() == {"entries": []}
+
+    created = await async_client.post(
+        "/api/projects",
+        json={
+            "name": "recodee-core",
+            "description": "Main dashboard project",
+            "projectPath": "/home/deadpool/projects/recodee-core",
+            "sandboxMode": "workspace-write",
+            "gitBranch": "feature/recodee-core",
+        },
+    )
+    assert created.status_code == 200
+    created_payload = created.json()
+    assert created_payload["name"] == "recodee-core"
+    assert created_payload["description"] == "Main dashboard project"
+    assert created_payload["projectPath"] == "/home/deadpool/projects/recodee-core"
+    assert created_payload["sandboxMode"] == "workspace-write"
+    assert created_payload["gitBranch"] == "feature/recodee-core"
+    assert isinstance(created_payload["id"], str)
+
+    listed = await async_client.get("/api/projects")
+    assert listed.status_code == 200
+    listed_payload = listed.json()
+    assert len(listed_payload["entries"]) == 1
+    assert listed_payload["entries"][0]["id"] == created_payload["id"]
+
+    second = await async_client.post(
+        "/api/projects",
+        json={
+            "name": "ops",
+            "description": "Operations project",
+            "projectPath": "/home/deadpool/projects/ops",
+            "sandboxMode": "read-only",
+            "gitBranch": None,
+        },
+    )
+    assert second.status_code == 200
+    second_payload = second.json()
+
+    updated = await async_client.put(
+        f"/api/projects/{created_payload['id']}",
+        json={
+            "name": "recodee-core-v2",
+            "description": "Updated description",
+            "projectPath": "/home/deadpool/projects/recodee-core-v2",
+            "sandboxMode": "danger-full-access",
+            "gitBranch": "feature/recodee-core-v2",
+        },
+    )
+    assert updated.status_code == 200
+    updated_payload = updated.json()
+    assert updated_payload["id"] == created_payload["id"]
+    assert updated_payload["name"] == "recodee-core-v2"
+    assert updated_payload["description"] == "Updated description"
+    assert updated_payload["projectPath"] == "/home/deadpool/projects/recodee-core-v2"
+    assert updated_payload["sandboxMode"] == "danger-full-access"
+    assert updated_payload["gitBranch"] == "feature/recodee-core-v2"
+
+    update_duplicate_name = await async_client.put(
+        f"/api/projects/{created_payload['id']}",
+        json={"name": second_payload["name"], "description": "collision"},
+    )
+    assert update_duplicate_name.status_code == 409
+    assert update_duplicate_name.json()["error"]["code"] == "project_name_exists"
+
+    update_invalid_name = await async_client.put(
+        f"/api/projects/{created_payload['id']}",
+        json={"name": "   ", "description": "ignored"},
+    )
+    assert update_invalid_name.status_code == 400
+    assert update_invalid_name.json()["error"]["code"] == "invalid_project_name"
+
+    update_invalid_description = await async_client.put(
+        f"/api/projects/{created_payload['id']}",
+        json={"name": "valid-name", "description": "x" * 513},
+    )
+    assert update_invalid_description.status_code == 400
+    assert update_invalid_description.json()["error"]["code"] == "invalid_project_description"
+
+    update_invalid_path = await async_client.put(
+        f"/api/projects/{created_payload['id']}",
+        json={"name": "valid-name", "description": "desc", "projectPath": "./relative/path"},
+    )
+    assert update_invalid_path.status_code == 400
+    assert update_invalid_path.json()["error"]["code"] == "invalid_project_path"
+
+    update_invalid_sandbox = await async_client.put(
+        f"/api/projects/{created_payload['id']}",
+        json={"name": "valid-name", "description": "desc", "sandboxMode": "unknown"},
+    )
+    assert update_invalid_sandbox.status_code == 400
+    assert update_invalid_sandbox.json()["error"]["code"] == "invalid_project_sandbox"
+
+    update_invalid_branch = await async_client.put(
+        f"/api/projects/{created_payload['id']}",
+        json={"name": "valid-name", "description": "desc", "gitBranch": "../bad"},
+    )
+    assert update_invalid_branch.status_code == 400
+    assert update_invalid_branch.json()["error"]["code"] == "invalid_project_branch"
+
+    update_missing = await async_client.put(
+        "/api/projects/missing-project",
+        json={"name": "valid-name", "description": "desc"},
+    )
+    assert update_missing.status_code == 404
+    assert update_missing.json()["error"]["code"] == "project_not_found"
+
+    duplicate_name = await async_client.post(
+        "/api/projects",
+        json={"name": "recodee-core-v2", "description": "another project"},
+    )
+    assert duplicate_name.status_code == 409
+    assert duplicate_name.json()["error"]["code"] == "project_name_exists"
+
+    invalid_name = await async_client.post(
+        "/api/projects",
+        json={"name": "   ", "description": "invalid name"},
+    )
+    assert invalid_name.status_code == 400
+    assert invalid_name.json()["error"]["code"] == "invalid_project_name"
+
+    invalid_description = await async_client.post(
+        "/api/projects",
+        json={"name": "valid-name", "description": "x" * 513},
+    )
+    assert invalid_description.status_code == 400
+    assert invalid_description.json()["error"]["code"] == "invalid_project_description"
+
+    invalid_path = await async_client.post(
+        "/api/projects",
+        json={"name": "valid-name", "description": "desc", "projectPath": "relative/path"},
+    )
+    assert invalid_path.status_code == 400
+    assert invalid_path.json()["error"]["code"] == "invalid_project_path"
+
+    invalid_sandbox = await async_client.post(
+        "/api/projects",
+        json={"name": "valid-name", "description": "desc", "sandboxMode": "invalid"},
+    )
+    assert invalid_sandbox.status_code == 400
+    assert invalid_sandbox.json()["error"]["code"] == "invalid_project_sandbox"
+
+    invalid_branch = await async_client.post(
+        "/api/projects",
+        json={"name": "valid-name", "description": "desc", "gitBranch": "../bad"},
+    )
+    assert invalid_branch.status_code == 400
+    assert invalid_branch.json()["error"]["code"] == "invalid_project_branch"
+
+    deleted = await async_client.delete(f"/api/projects/{created_payload['id']}")
+    assert deleted.status_code == 200
+    assert deleted.json() == {"status": "deleted"}
+
+    missing = await async_client.delete(f"/api/projects/{created_payload['id']}")
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "project_not_found"
+
+
+@pytest.mark.asyncio
+async def test_projects_api_normalizes_empty_description_to_null(async_client):
+    created = await async_client.post(
+        "/api/projects",
+        json={"name": "no-description-project", "description": "   "},
+    )
+    assert created.status_code == 200
+    assert created.json()["description"] is None
+
+
+@pytest.mark.asyncio
+async def test_projects_api_defaults_sandbox_mode(async_client):
+    created = await async_client.post(
+        "/api/projects",
+        json={"name": "defaults-project", "description": "Has defaults"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    assert payload["projectPath"] is None
+    assert payload["sandboxMode"] == "workspace-write"
+    assert payload["gitBranch"] is None

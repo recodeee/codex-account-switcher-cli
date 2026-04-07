@@ -5,11 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useMedusaConnection } from "@/features/settings/hooks/use-medusa-connection";
+import { getMedusaRuntimeConfig } from "@/lib/medusa/config";
 import { getErrorMessageOrNull } from "@/utils/errors";
 
 export function MedusaConnectionSettings() {
   const medusaConnectionQuery = useMedusaConnection();
   const snapshot = medusaConnectionQuery.data;
+  const runtime = getMedusaRuntimeConfig();
   const error = getErrorMessageOrNull(medusaConnectionQuery.error, "Failed to connect to Medusa backend.");
 
   return (
@@ -53,7 +55,7 @@ export function MedusaConnectionSettings() {
               <p className="text-sm font-medium">Backend URL</p>
               <p className="text-xs text-muted-foreground">Store API base used by the frontend.</p>
             </div>
-            <code className="rounded bg-muted px-2 py-1 text-xs">{snapshot?.backendUrl ?? "—"}</code>
+            <code className="rounded bg-muted px-2 py-1 text-xs">{snapshot?.backendUrl ?? runtime.backendUrl}</code>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 p-3">
@@ -61,8 +63,8 @@ export function MedusaConnectionSettings() {
               <p className="text-sm font-medium">Publishable Key</p>
               <p className="text-xs text-muted-foreground">Used as `x-publishable-api-key` for store requests.</p>
             </div>
-            <Badge variant={snapshot?.publishableKeyConfigured ? "default" : "outline"}>
-              {snapshot?.publishableKeyConfigured ? "Configured" : "Missing"}
+            <Badge variant={snapshot?.publishableKeyConfigured ?? runtime.publishableKey ? "default" : "outline"}>
+              {snapshot?.publishableKeyConfigured ?? runtime.publishableKey ? "Configured" : "Missing"}
             </Badge>
           </div>
 

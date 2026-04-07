@@ -31,6 +31,8 @@ from app.modules.oauth.service import OauthService
 from app.modules.proxy.repo_bundle import ProxyRepositories
 from app.modules.proxy.service import ProxyService
 from app.modules.proxy.sticky_repository import StickySessionsRepository
+from app.modules.projects.repository import ProjectsRepository
+from app.modules.projects.service import ProjectsRepositoryPort, ProjectsService
 from app.modules.request_logs.repository import RequestLogsRepository
 from app.modules.request_logs.service import RequestLogsService
 from app.modules.settings.repository import SettingsRepository
@@ -118,6 +120,13 @@ class DevicesContext:
     session: AsyncSession
     repository: DevicesRepository
     service: DevicesService
+
+
+@dataclass(slots=True)
+class ProjectsContext:
+    session: AsyncSession
+    repository: ProjectsRepository
+    service: ProjectsService
 
 
 @dataclass(slots=True)
@@ -267,6 +276,14 @@ def get_devices_context(
     repository = DevicesRepository(session)
     service = DevicesService(cast(DevicesRepositoryPort, repository))
     return DevicesContext(session=session, repository=repository, service=service)
+
+
+def get_projects_context(
+    session: AsyncSession = Depends(get_session),
+) -> ProjectsContext:
+    repository = ProjectsRepository(session)
+    service = ProjectsService(cast(ProjectsRepositoryPort, repository))
+    return ProjectsContext(session=session, repository=repository, service=service)
 
 
 def get_sticky_sessions_context(

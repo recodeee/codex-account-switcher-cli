@@ -24,6 +24,10 @@ describe("navigation flow integration", () => {
     await user.click(screen.getByRole("link", { name: "Billing" }));
     expect(await screen.findByRole("heading", { name: "Billing" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/billing");
+
+    await user.click(screen.getByRole("link", { name: /Projects/i }));
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/projects");
   });
 
   it("switches route content from the account dropdown menu", async () => {
