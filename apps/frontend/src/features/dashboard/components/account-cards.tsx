@@ -693,8 +693,8 @@ export function AccountCards({
           key={`${keyPrefix}-${buildAccountEntryKey(account)}`}
           className={
             keyPrefix === "working"
-              ? "animate-working-account-enter"
-              : "animate-fade-in-up"
+              ? "min-w-0 animate-working-account-enter"
+              : "min-w-0 animate-fade-in-up"
           }
           style={
             keyPrefix === "working"
@@ -728,9 +728,16 @@ export function AccountCards({
   return (
     <div className="space-y-5">
       {groupedAccounts.working.length > 0 ? (
-        <section className="space-y-4 rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.04] p-4 md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
+        <section className="space-y-4 rounded-2xl border border-cyan-500/25 p-4 md:p-6">
+          <div className="flex flex-col gap-3 border-b border-border/70 pb-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0 space-y-1">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/30 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">
+                <span
+                  className="h-1.5 w-1.5 rounded-full bg-current"
+                  aria-hidden="true"
+                />
+                Live account group
+              </div>
               <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">
                 Working now
               </h3>
@@ -739,22 +746,22 @@ export function AccountCards({
                 switch faster.
               </p>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-cyan-700 dark:text-cyan-300">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:w-[32rem] xl:min-w-[32rem]">
+              <span className="inline-flex min-h-8 items-center justify-center rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-cyan-700 dark:text-cyan-300">
                 {groupedAccounts.working.length} working
               </span>
               {workingSummary.liveSessions > 0 ? (
-                <span className="inline-flex items-center rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-cyan-700 dark:text-cyan-300">
+                <span className="inline-flex min-h-8 items-center justify-center rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-cyan-700 dark:text-cyan-300">
                   {workingSummary.liveSessions} live sessions
                 </span>
               ) : null}
               {workingSummary.avgPrimaryRemaining !== null ? (
-                <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-emerald-700 dark:text-emerald-300">
+                <span className="inline-flex min-h-8 items-center justify-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-emerald-700 dark:text-emerald-300">
                   {primaryWindowLabel} avg {workingSummary.avgPrimaryRemaining}%
                 </span>
               ) : null}
               {workingSummary.avgSecondaryRemaining !== null ? (
-                <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-emerald-700 dark:text-emerald-300">
+                <span className="inline-flex min-h-8 items-center justify-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-emerald-700 dark:text-emerald-300">
                   Weekly avg {workingSummary.avgSecondaryRemaining}%
                 </span>
               ) : null}
