@@ -20,7 +20,7 @@ const THEME_BOOTSTRAP_STYLES = `
     }
   }
   body {
-    background-color: inherit;
+    background-color: transparent;
   }
 `;
 
@@ -42,13 +42,6 @@ const THEME_BOOTSTRAP_SCRIPT = `
       root.style.colorScheme = isDark ? "dark" : "light";
       root.style.backgroundColor = backgroundColor;
 
-      const applyBodyColor = () => {
-        if (!document.body) return;
-        document.body.style.backgroundColor = backgroundColor;
-      };
-
-      applyBodyColor();
-      document.addEventListener("DOMContentLoaded", applyBodyColor, { once: true });
     } catch {}
   })();
 `;

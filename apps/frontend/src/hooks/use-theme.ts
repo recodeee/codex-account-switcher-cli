@@ -31,10 +31,6 @@ function applyThemeToDocument(theme: ResolvedTheme): void {
   document.documentElement.classList.toggle("dark", isDark);
   document.documentElement.style.colorScheme = isDark ? "dark" : "light";
   document.documentElement.style.backgroundColor = backgroundColor;
-
-  if (document.body) {
-    document.body.style.backgroundColor = backgroundColor;
-  }
 }
 
 function getSystemTheme(): ResolvedTheme {
