@@ -66,6 +66,9 @@ codex-auth self-update
 # check only (no install)
 codex-auth self-update --check
 
+# reinstall latest even if already up to date
+codex-auth self-update --reinstall
+
 # remove accounts (interactive multi-select)
 codex-auth remove
 
@@ -102,7 +105,7 @@ codex-auth remove-login-hook
 - `codex-auth use [name]` – Accepts a name or launches an interactive selector with the current account pre-selected, writes `~/.codex/auth.json` as a regular file from the chosen snapshot, and records the active name.
 - `codex-auth list [--details]` – Lists all saved snapshots alphabetically and marks the active one with `*`. `--details` adds per-snapshot mapping metadata (email, account id, user id, and usage metadata) for easier session/account troubleshooting.
 - `codex-auth current` – Prints the active account name, or a friendly message if none is active.
-- `codex-auth self-update [--check]` – Checks npm for a newer release. Without flags, it installs the latest version globally when one is available.
+- `codex-auth self-update [--check] [--reinstall] [-y]` – Checks npm for newer release metadata. `--check` prints current/latest/status only. `--reinstall` forces reinstall even when already up to date. `-y` skips confirmation prompts.
 - `codex-auth remove [query|--all]` – Removes snapshots interactively or by selector. If the active account is removed, the best remaining account is activated automatically.
 - `codex-auth status` – Prints auto-switch state, managed service status, active thresholds, and usage mode.
 - `codex-auth config auto ...` – Enables/disables managed auto-switch and updates threshold percentages.

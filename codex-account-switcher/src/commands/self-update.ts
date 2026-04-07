@@ -1,4 +1,5 @@
 import { Flags } from "@oclif/core";
+import prompts from "prompts";
 import { BaseCommand } from "../lib/base-command";
 import { fetchLatestNpmVersion, isVersionNewer, PACKAGE_NAME, runGlobalNpmInstall } from "../lib/update-check";
 
@@ -8,6 +9,16 @@ export default class SelfUpdateCommand extends BaseCommand {
   static flags = {
     check: Flags.boolean({
       description: "Only check whether an update is available",
+      default: false,
+    }),
+    reinstall: Flags.boolean({
+      char: "r",
+      description: "Reinstall the latest version even when already up to date",
+      default: false,
+    }),
+    yes: Flags.boolean({
+      char: "y",
+      description: "Skip confirmation prompts",
       default: false,
     }),
   } as const;
@@ -23,19 +34,43 @@ export default class SelfUpdateCommand extends BaseCommand {
         return;
       }
 
-      if (!isVersionNewer(currentVersion, latestVersion)) {
-        this.log(`codex-auth is up to date (${currentVersion}).`);
+      const hasUpdate = isVersionNewer(currentVersion, latestVersion);
+      if (flags.check) {
+        this.log(`Current: ${currentVersion}`);
+        this.log(`Latest:  ${latestVersion}`);
+        this.log(hasUpdate ? "Status:  update available" : "Status:  up to date");
         return;
       }
 
-      this.log(`Update available: ${currentVersion} -> ${latestVersion}`);
-      if (flags.check) {
+      if (!hasUpdate && !flags.reinstall) {
+        this.log(`codex-auth is up to date (current ${currentVersion}, latest ${latestVersion}).`);
+        this.log("Use `codex-auth self-update --reinstall` if you want to reinstall anyway.");
         return;
+      }
+
+      if (hasUpdate) {
+        this.log(`Update available: ${currentVersion} -> ${latestVersion}`);
+      } else {
+        this.log(`Reinstall requested for latest version (${latestVersion}).`);
+      }
+
+      if (!flags.yes) {
+        const response = await prompts({
+          type: "confirm",
+          name: "proceed",
+          message: "Proceed with global npm update now?",
+          initial: true,
+        });
+
+        if (!response.proceed) {
+          this.log("Update cancelled.");
+          return;
+        }
       }
 
       const exitCode = await runGlobalNpmInstall(PACKAGE_NAME);
       if (exitCode === 0) {
-        this.log("Global update completed.");
+        this.log(`Global update completed (installed ${latestVersion}).`);
         return;
       }
 
