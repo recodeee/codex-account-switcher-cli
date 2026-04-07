@@ -208,8 +208,7 @@ function AmbientLights() {
 function FunFactCard() {
   return (
     <div className="mx-auto mt-4 w-full max-w-4xl">
-      <div className="relative overflow-hidden rounded-[28px] bg-[linear-gradient(180deg,rgba(6,12,24,0.96)_0%,rgba(3,7,16,0.98)_100%)] p-[1px] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(34,211,238,0.12),transparent_42%),radial-gradient(circle_at_15%_20%,rgba(59,130,246,0.09),transparent_36%)]" />
+      <div className="relative overflow-hidden rounded-[28px] bg-[linear-gradient(180deg,rgba(10,14,24,0.96)_0%,rgba(4,8,16,0.98)_100%)] p-[1px] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
         <div className="relative rounded-[27px] px-6 py-7 text-center sm:px-10 sm:py-9">
           <div className="mb-4 flex justify-center">
             <CodexLogo
@@ -371,7 +370,7 @@ export function ComingSoonPage() {
           </div>
 
           <div className="mx-auto w-full max-w-6xl">
-            <div className="rounded-[24px] bg-black/35 p-5 sm:p-7">
+            <div className="space-y-4">
               <div className="mb-4 flex flex-col items-center justify-center gap-3 text-center sm:flex-row sm:gap-4">
                 <CodexLogo size={64} title="recodee.com logo" />
                 <h2 className="text-2xl font-extrabold tracking-tight text-zinc-100 sm:text-3xl">
@@ -401,18 +400,11 @@ export function ComingSoonPage() {
                   className="block w-full max-w-[1220px]"
                   aria-label="Open Codex app screenshot fullscreen"
                 >
-                  <div className="relative overflow-hidden rounded-[22px] border border-white/12">
-                    <img
-                      src="/app.png"
-                      alt=""
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 h-full w-full rounded-[22px] object-cover opacity-35"
-                      loading="lazy"
-                    />
+                  <div className="relative overflow-hidden rounded-[30px]">
                     <img
                       src="/app.png"
                       alt="Codex app screenshot"
-                      className="relative z-10 h-auto w-full rounded-[22px] border border-black/45 shadow-[0_24px_72px_rgba(6,10,25,0.62)]"
+                      className="block h-auto w-full rounded-[30px] shadow-[0_24px_72px_rgba(6,10,25,0.55)]"
                       loading="lazy"
                     />
                   </div>
@@ -426,7 +418,7 @@ export function ComingSoonPage() {
           <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
             <DialogContent
               showCloseButton={false}
-              className="inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-none bg-black/96 p-2 shadow-none sm:max-w-none sm:p-6"
+              className="inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-none bg-black/96 p-0 shadow-none sm:max-w-none"
             >
               <DialogTitle className="sr-only">
                 Codex app screenshot preview
@@ -439,24 +431,24 @@ export function ComingSoonPage() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute right-4 top-4 z-10 h-10 w-10 rounded-full border border-white/15 bg-black/65 text-zinc-100 hover:bg-black/80"
+                  className="absolute right-4 top-4 z-50 h-10 w-10 rounded-full border border-white/15 bg-black/65 text-zinc-100 hover:bg-black/80"
                   aria-label="Close fullscreen preview"
                 >
                   <XIcon className="size-5" />
                 </Button>
               </DialogClose>
 
-              <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl">
+              <div className="relative z-0 flex h-full w-full items-center justify-center overflow-hidden rounded-2xl">
                 <img
                   src="/app.png"
                   alt=""
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-28 blur-2xl"
+                  className="pointer-events-none absolute inset-0 z-0 h-full w-full scale-110 rounded-2xl object-cover opacity-28 blur-2xl"
                 />
                 <img
                   src="/app.png"
                   alt="Codex app screenshot fullscreen"
-                  className="relative z-10 h-[95vh] w-[97vw] rounded-xl border border-white/15 object-contain shadow-[0_30px_120px_rgba(0,0,0,0.65)]"
+                  className="relative z-10 h-full w-full rounded-2xl border border-white/15 object-contain shadow-[0_30px_120px_rgba(0,0,0,0.65)]"
                 />
               </div>
             </DialogContent>
