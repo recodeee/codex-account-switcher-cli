@@ -51,7 +51,7 @@ describe("BillingPage", () => {
     expect(within(accountListDialog).getByText("bia@edixai.com")).toBeInTheDocument();
   });
 
-  it("lets me change seat type and remove member accounts from the row action button", async () => {
+  it("lets me change seat type from dropdown and remove member accounts from the row action button", async () => {
     const user = userEvent.setup({ delay: null });
 
     renderWithProviders(<BillingPage />);
@@ -62,8 +62,10 @@ describe("BillingPage", () => {
       name: "kozpontihusbolt.hu · Accounts list",
     });
 
-    await user.click(within(accountListDialog).getByRole("button", { name: "Open actions for Automation 1" }));
-    await user.click(screen.getByRole("menuitem", { name: "Change seat type to ChatGPT" }));
+    await user.click(
+      within(accountListDialog).getByRole("combobox", { name: "Seat type for Automation 1" }),
+    );
+    await user.click(screen.getByRole("option", { name: "ChatGPT" }));
 
     const automationOneRow = screen.getByText("Automation 1").closest("tr");
     expect(automationOneRow).not.toBeNull();

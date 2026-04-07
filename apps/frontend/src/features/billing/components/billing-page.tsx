@@ -25,9 +25,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
@@ -605,7 +611,30 @@ export function BillingPage() {
                           </div>
                         </TableCell>
                         <TableCell>{member.role}</TableCell>
-                        <TableCell>{member.seatType}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={member.seatType}
+                            onValueChange={(nextSeatType) =>
+                              updateMemberSeatType(
+                                selectedBusinessAccount.id,
+                                member.id,
+                                nextSeatType === "Codex" ? "Codex" : "ChatGPT",
+                              )
+                            }
+                          >
+                            <SelectTrigger
+                              size="sm"
+                              className="h-8 w-[140px]"
+                              aria-label={`Seat type for ${member.name}`}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ChatGPT">ChatGPT</SelectItem>
+                              <SelectItem value="Codex">Codex</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
                         <TableCell>{member.dateAdded}</TableCell>
                         <TableCell>
                           <DropdownMenu>
@@ -622,18 +651,6 @@ export function BillingPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
                               <DropdownMenuLabel>{member.name}</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onSelect={() =>
-                                  updateMemberSeatType(
-                                    selectedBusinessAccount.id,
-                                    member.id,
-                                    member.seatType === "Codex" ? "ChatGPT" : "Codex",
-                                  )
-                                }
-                              >
-                                Change seat type to {member.seatType === "Codex" ? "ChatGPT" : "Codex"}
-                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 variant="destructive"
                                 onSelect={() => removeMemberAccount(selectedBusinessAccount.id, member.id)}
