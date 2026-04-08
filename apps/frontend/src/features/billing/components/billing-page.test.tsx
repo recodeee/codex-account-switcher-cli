@@ -294,7 +294,7 @@ describe("BillingPage", () => {
     const dialog = await screen.findByRole("dialog", { name: "edixai.com · Accounts list" });
     expect(within(dialog).getByText(/Business/)).toBeInTheDocument();
     expect(within(dialog).getByText("Owner")).toBeInTheDocument();
-    expect(within(dialog).getByText("ChatGPT")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("ChatGPT").length).toBeGreaterThan(0);
     expect(within(dialog).getByText("Mar 23, 2026")).toBeInTheDocument();
     expect(within(dialog).getByText("admin@edixai.com")).toBeInTheDocument();
   });

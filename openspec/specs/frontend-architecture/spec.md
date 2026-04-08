@@ -230,6 +230,27 @@ The backend API response schemas SHALL be optimized to eliminate over-fetching a
 - **WHEN** the frontend fetches `GET /api/request-logs/options`
 - **THEN** the response includes `statuses` (list of available status values) alongside `account_ids` and `model_options`
 
+### Requirement: Billing member lists align with dashboard accounts
+
+The Billing business-account dialog SHALL group dashboard accounts into existing billed business accounts by the email domain after `@`, SHALL keep unmatched personal-email accounts inside existing billed business accounts instead of creating new billing-account rows, and SHALL let operators add or remove member accounts directly from the dialog before saving the updated account list.
+
+#### Scenario: Dashboard accounts are grouped into billed businesses by email domain
+
+- **WHEN** the Billing page opens a business-account `Accounts list` dialog
+- **AND** dashboard accounts include emails that match the billed business domain
+- **THEN** those dashboard accounts appear inside that billed business-account member list
+
+#### Scenario: Personal-email dashboard accounts do not create extra billing businesses
+
+- **WHEN** a dashboard account email does not match any billed business domain
+- **THEN** the account is assigned to an existing billed business account instead of creating a new billing-account row
+
+#### Scenario: Operator adds and removes members from the billing dialog
+
+- **WHEN** an operator adds a member account or removes one from the `Accounts list` dialog and saves
+- **THEN** the Billing update payload persists the edited member list
+- **AND** the business-account seat totals are recomputed from the resulting member seat assignments
+
 ### Requirement: Frontend test infrastructure
 
 The frontend project SHALL include a Vitest-based test infrastructure with React Testing Library and MSW v2 for API mocking. Tests SHALL be colocated with source files as `.test.ts(x)`. Shared test utilities (render wrapper, MSW server, data factories) SHALL reside in `src/test/`.
@@ -303,4 +324,3 @@ The Accounts page MUST render known additional quotas with their mapped user-fac
 - **WHEN** an account summary contains an additional quota whose canonical key corresponds to `gpt-5.3-codex-spark`
 - **AND** the raw upstream `limitName` has changed from an earlier alias
 - **THEN** the Accounts page renders the quota label as `GPT-5.3-Codex-Spark`
-

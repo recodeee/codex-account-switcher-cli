@@ -47,7 +47,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useBilling } from "@/features/billing/hooks/use-billing";
-import type { BillingAccount, BillingAccountCreateRequest } from "@/features/billing/schemas";
+import { buildManagedMembersByBillingAccount, getSeatUsageFromMembers } from "@/features/billing/member-assignment";
+import type { BillingAccount, BillingAccountCreateRequest, BillingMember } from "@/features/billing/schemas";
+import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import { getErrorMessageOrNull } from "@/utils/errors";
 import { formatEuro } from "@/utils/formatters";
 
@@ -76,6 +78,11 @@ type EditAccountForm = {
   renewalAt: string;
   chatgptSeatsInUse: string;
   codexSeatsInUse: string;
+};
+
+type AccountListForm = {
+  name: string;
+  email: string;
 };
 
 function formatStatusLabel(value: BillingAccount["subscriptionStatus"] | BillingAccount["paymentStatus"]) {
@@ -152,6 +159,11 @@ const DEFAULT_EDIT_ACCOUNT_FORM: EditAccountForm = {
   codexSeatsInUse: "0",
 };
 
+const DEFAULT_ACCOUNT_LIST_FORM: AccountListForm = {
+  name: "",
+  email: "",
+};
+
 export function BillingPage() {
   const {
     billingQuery,
@@ -159,6 +171,7 @@ export function BillingPage() {
     createAccountMutation,
     deleteAccountMutation,
   } = useBilling();
+  const dashboardQuery = useDashboard();
   const [selectedBusinessAccountId, setSelectedBusinessAccountId] = useState<string | null>(null);
   const [editingBusinessAccountId, setEditingBusinessAccountId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -170,8 +183,17 @@ export function BillingPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingBusinessAccountId, setDeletingBusinessAccountId] = useState<string | null>(null);
   const [deleteFormError, setDeleteFormError] = useState<string | null>(null);
+  const [accountListMembers, setAccountListMembers] = useState<BillingMember[]>([]);
+  const [accountListForm, setAccountListForm] = useState(DEFAULT_ACCOUNT_LIST_FORM);
+  const [accountListFormOpen, setAccountListFormOpen] = useState(false);
+  const [accountListError, setAccountListError] = useState<string | null>(null);
 
   const accounts = useMemo(() => billingQuery.data?.accounts ?? [], [billingQuery.data]);
+  const managedMembersByBillingAccount = useMemo(
+    () =>
+      buildManagedMembersByBillingAccount(accounts, dashboardQuery.data?.accounts ?? []),
+    [accounts, dashboardQuery.data?.accounts],
+  );
   const selectedBusinessAccount = useMemo(
     () =>
       selectedBusinessAccountId === null
@@ -192,6 +214,16 @@ export function BillingPage() {
         ? null
         : accounts.find((account) => account.id === deletingBusinessAccountId) ?? null,
     [accounts, deletingBusinessAccountId],
+  );
+  const selectedBusinessAccountMembers = useMemo(() => {
+    if (!selectedBusinessAccount) {
+      return [];
+    }
+    return accountListMembers;
+  }, [accountListMembers, selectedBusinessAccount]);
+  const selectedBusinessAccountSeatUsage = useMemo(
+    () => getSeatUsageFromMembers(selectedBusinessAccountMembers),
+    [selectedBusinessAccountMembers],
   );
 
   const entitledCount = useMemo(
@@ -239,6 +271,14 @@ export function BillingPage() {
     setDeletingBusinessAccountId(account.id);
     setDeleteFormError(null);
     setDeleteDialogOpen(true);
+  }
+
+  function openAccountListDialog(account: BillingAccount) {
+    setSelectedBusinessAccountId(account.id);
+    setAccountListMembers(managedMembersByBillingAccount[account.id] ?? account.members);
+    setAccountListForm(DEFAULT_ACCOUNT_LIST_FORM);
+    setAccountListFormOpen(false);
+    setAccountListError(null);
   }
 
   function resetDeleteDialog() {
@@ -356,6 +396,83 @@ export function BillingPage() {
       resetDeleteDialog();
     } catch (error) {
       setDeleteFormError(getErrorMessageOrNull(error, "Failed to delete subscription account."));
+    }
+  }
+
+  function resetAccountListDialog() {
+    setSelectedBusinessAccountId(null);
+    setAccountListMembers([]);
+    setAccountListForm(DEFAULT_ACCOUNT_LIST_FORM);
+    setAccountListFormOpen(false);
+    setAccountListError(null);
+  }
+
+  function handleAddAccountListMember(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const name = accountListForm.name.trim();
+    const email = accountListForm.email.trim().toLowerCase();
+
+    if (!name) {
+      setAccountListError("Account name is required.");
+      return;
+    }
+
+    if (!email || !email.includes("@")) {
+      setAccountListError("Account email must be valid.");
+      return;
+    }
+
+    if (accountListMembers.some((member) => member.email.trim().toLowerCase() === email)) {
+      setAccountListError("This account email is already assigned.");
+      return;
+    }
+
+    setAccountListMembers((current) => [
+      ...current,
+      {
+        id: `member-manual-${email.replace(/[^a-z0-9]+/gi, "-")}`,
+        name,
+        email,
+        role: "Member",
+        seatType: "ChatGPT",
+        dateAdded: new Date().toISOString(),
+      },
+    ]);
+    setAccountListForm(DEFAULT_ACCOUNT_LIST_FORM);
+    setAccountListFormOpen(false);
+    setAccountListError(null);
+  }
+
+  function handleRemoveAccountListMember(email: string) {
+    setAccountListMembers((current) =>
+      current.filter((member) => member.email.trim().toLowerCase() !== email.trim().toLowerCase()),
+    );
+    setAccountListError(null);
+  }
+
+  async function handleSaveAccountList() {
+    if (!selectedBusinessAccount) {
+      setAccountListError("Select a subscription account to update.");
+      return;
+    }
+
+    const updatedSeatUsage = getSeatUsageFromMembers(accountListMembers);
+    const updatedAccounts = accounts.map((account) =>
+      account.id === selectedBusinessAccount.id
+        ? {
+            ...account,
+            members: accountListMembers,
+            ...updatedSeatUsage,
+          }
+        : account,
+    );
+
+    try {
+      await updateAccountsMutation.mutateAsync({ accounts: updatedAccounts });
+      setAccountListError(null);
+    } catch (error) {
+      setAccountListError(getErrorMessageOrNull(error, "Failed to update account list."));
     }
   }
 
@@ -569,7 +686,7 @@ export function BillingPage() {
                               size="sm"
                               className="h-8 rounded-full px-3"
                               aria-label={`Watch ${account.domain} accounts list`}
-                              onClick={() => setSelectedBusinessAccountId(account.id)}
+                              onClick={() => openAccountListDialog(account)}
                             >
                               <Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                               Watch
@@ -813,7 +930,7 @@ export function BillingPage() {
             open={selectedBusinessAccountId !== null}
             onOpenChange={(open) => {
               if (!open) {
-                setSelectedBusinessAccountId(null);
+                resetAccountListDialog();
               }
             }}
           >
@@ -857,13 +974,69 @@ export function BillingPage() {
                         Seats in use
                       </p>
                       <p className="mt-1.5 text-sm font-semibold">
-                        {selectedBusinessAccount.chatgptSeatsInUse} ChatGPT ·{" "}
-                        {selectedBusinessAccount.codexSeatsInUse} Codex
+                        {selectedBusinessAccountSeatUsage.chatgptSeatsInUse} ChatGPT ·{" "}
+                        {selectedBusinessAccountSeatUsage.codexSeatsInUse} Codex
                       </p>
                     </div>
                   </div>
 
                   <Separator />
+
+                  <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">Grouped from dashboard accounts</p>
+                      <p className="text-xs text-muted-foreground">
+                        Accounts are matched to business billing rows by email domain. Unmatched emails stay inside
+                        existing billed accounts instead of creating new billing businesses.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setAccountListFormOpen((current) => !current);
+                        setAccountListError(null);
+                      }}
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      Add account
+                    </Button>
+                  </div>
+
+                  {accountListFormOpen ? (
+                    <form
+                      className="grid gap-3 rounded-xl border border-border/70 bg-muted/20 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                      onSubmit={handleAddAccountListMember}
+                    >
+                      <div className="space-y-2">
+                        <Label htmlFor="billing-account-list-name">Account name</Label>
+                        <Input
+                          id="billing-account-list-name"
+                          value={accountListForm.name}
+                          onChange={(event) =>
+                            setAccountListForm((current) => ({ ...current, name: event.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="billing-account-list-email">Account email</Label>
+                        <Input
+                          id="billing-account-list-email"
+                          type="email"
+                          value={accountListForm.email}
+                          onChange={(event) =>
+                            setAccountListForm((current) => ({ ...current, email: event.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button type="submit" className="w-full md:w-auto">
+                          Add member
+                        </Button>
+                      </div>
+                    </form>
+                  ) : null}
 
                   <div className="overflow-hidden rounded-xl border border-border/70">
                     <Table>
@@ -873,10 +1046,11 @@ export function BillingPage() {
                           <TableHead>Role</TableHead>
                           <TableHead>Seat type</TableHead>
                           <TableHead>Date added</TableHead>
+                          <TableHead className="w-[72px] text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedBusinessAccount.members.map((member) => (
+                        {selectedBusinessAccountMembers.map((member) => (
                           <TableRow key={member.id}>
                             <TableCell>
                               <div className="flex items-center gap-3">
@@ -892,12 +1066,24 @@ export function BillingPage() {
                             <TableCell>{member.role}</TableCell>
                             <TableCell>{member.seatType}</TableCell>
                             <TableCell>{formatDisplayDate(member.dateAdded)}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-full text-destructive hover:text-destructive"
+                                aria-label={`Remove ${member.email}`}
+                                onClick={() => handleRemoveAccountListMember(member.email)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))}
-                        {selectedBusinessAccount.members.length === 0 ? (
+                        {selectedBusinessAccountMembers.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={4}
+                              colSpan={5}
                               className="py-8 text-center text-sm text-muted-foreground"
                             >
                               This business account has no members.
@@ -907,6 +1093,17 @@ export function BillingPage() {
                       </TableBody>
                     </Table>
                   </div>
+
+                  {accountListError ? <p className="text-sm text-destructive">{accountListError}</p> : null}
+
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={resetAccountListDialog}>
+                      Close
+                    </Button>
+                    <Button type="button" onClick={() => void handleSaveAccountList()} disabled={editPending}>
+                      {editPending ? "Saving..." : "Save account list"}
+                    </Button>
+                  </DialogFooter>
                 </div>
               ) : null}
             </DialogContent>
