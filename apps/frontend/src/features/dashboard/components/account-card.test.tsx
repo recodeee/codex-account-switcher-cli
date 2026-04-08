@@ -1510,6 +1510,39 @@ describe("AccountCard", () => {
     expect(screen.getByText("working...")).toBeInTheDocument();
   });
 
+  it("renders the OMX planning graph in place of the prompt pill for $ralplan tasks", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan can you make this card show planning mode runtime state",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByText("Prompt task")).not.toBeInTheDocument();
+    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
+    expect(planningGraph).toBeInTheDocument();
+    expect(
+      within(planningGraph).getByText(
+        "$ralplan can you make this card show planning mode runtime state",
+      ),
+    ).toBeInTheDocument();
+    expect(within(planningGraph).getByText("Web")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("Plan")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("DB")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("API")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("Deploy")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("LLM")).toBeInTheDocument();
+  });
+
   it("shows a Next.js badge when task previews mention next.js or turbopack", () => {
     const account = createAccountSummary({
       codexCurrentTaskPreview: "Change the Next.js dev server to Turbopack",
@@ -2170,7 +2203,7 @@ describe("AccountCard", () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
-  it("hides stale current task preview after usage-limit grace expires", () => {
+  it("keeps current task preview visible after usage-limit grace expires while live CLI signals remain", () => {
     vi.useFakeTimers();
     try {
       const now = new Date("2026-04-05T00:00:00.000Z");
@@ -2208,8 +2241,9 @@ describe("AccountCard", () => {
       });
 
       expect(screen.queryByText("Current task")).not.toBeInTheDocument();
-      expect(screen.queryByText("Investigate codexina rollout session mapping")).not.toBeInTheDocument();
-      expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
+      expect(
+        screen.getAllByText("Investigate codexina rollout session mapping").length,
+      ).toBeGreaterThanOrEqual(1);
       expect(screen.queryByText(/leaves in/i)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();

@@ -807,12 +807,15 @@ export function isAccountWorkingNow(
       const primaryResetAtMs =
         parseResetAtMs(account.resetAtPrimary) ??
         parseResetAtMs(quotaState.deferredPrimaryQuotaFallback?.resetAt);
-      // Once an account hits the 5h usage limit and the grace window expires,
-      // keep it out of "Working now" until the 5h window reset is reached.
+      const hasStrongSessionEvidence = hasStrongWorkingNowSessionEvidence(account, nowMs);
+      // After the grace window expires, keep the account in "Working now"
+      // until CLI session signals actually settle (for example the session
+      // panel moves to finished/error), instead of dropping while work is
+      // still in-flight.
       if (primaryResetAtMs == null || nowMs < primaryResetAtMs) {
-        return false;
+        return hasStrongSessionEvidence;
       }
-      if (!hasStrongWorkingNowSessionEvidence(account, nowMs)) {
+      if (!hasStrongSessionEvidence) {
         return false;
       }
     }

@@ -146,9 +146,20 @@ const TASK_FINISHED_PREVIEW_RE =
   /^(?:task\s+)?(?:is\s+)?(?:already\s+)?(?:done|complete(?:d)?|finished)(?:\s+already)?[.!]?$/i;
 const UNKNOWN_TOKENS_SYNC_LABEL = "syncing…";
 const NEXT_TASK_PREVIEW_PATTERN = /\bnext(?:\.?js)?\b|\bturbopack\b/i;
+const OMX_PLANNING_TASK_PREVIEW_PATTERN =
+  /(?:^|\s)\$?ralplan\b|\bconsensus\s+plan\b|\bplanning\s+mode\b|\bplan this\b/i;
+const OMX_PLANNING_NODES = [
+  { key: "web", label: "Web", x: 50, y: 11 },
+  { key: "plan", label: "Plan", x: 81, y: 28 },
+  { key: "db", label: "DB", x: 81, y: 72 },
+  { key: "api", label: "API", x: 50, y: 89 },
+  { key: "deploy", label: "Deploy", x: 19, y: 72 },
+  { key: "llm", label: "LLM", x: 19, y: 28 },
+] as const;
 const CURRENT_TASK_PREVIEW_EXPANSION_KEY = "__current_task_preview__";
 const LAST_TASK_PREVIEW_EXPANSION_KEY = "__last_task_preview__";
 const STALE_SESSION_TASK_MS = 90_000;
+type OmxPlanningNodeKey = (typeof OMX_PLANNING_NODES)[number]["key"];
 
 function hasNextTaskHint(taskPreview: string | null | undefined): boolean {
   const normalized = taskPreview?.trim();
@@ -156,6 +167,110 @@ function hasNextTaskHint(taskPreview: string | null | undefined): boolean {
     return false;
   }
   return NEXT_TASK_PREVIEW_PATTERN.test(normalized);
+}
+
+function isOmxPlanningTaskPreview(taskPreview: string | null | undefined): boolean {
+  const normalized = taskPreview?.trim();
+  if (!normalized) {
+    return false;
+  }
+  return OMX_PLANNING_TASK_PREVIEW_PATTERN.test(normalized);
+}
+
+function resolveOmxPlanningActiveNodeKey(taskPreview: string): OmxPlanningNodeKey {
+  const normalized = taskPreview.trim().toLowerCase();
+  if (!normalized) {
+    return "plan";
+  }
+  if (
+    /\bdeploy\b|\brelease\b|\bship\b|\brollout\b|\bproduction\b/.test(normalized)
+  ) {
+    return "deploy";
+  }
+  if (
+    /\bdb\b|\bdatabase\b|\bsql\b|\bpostgres\b|\bsupabase\b|\bmigration\b/.test(
+      normalized,
+    )
+  ) {
+    return "db";
+  }
+  if (
+    /\bapi\b|\bbackend\b|\bendpoint\b|\broute\b|\bservice\b/.test(normalized)
+  ) {
+    return "api";
+  }
+  if (
+    /\bweb\b|\bui\b|\bfrontend\b|\bnext\b|\breact\b|\blayout\b/.test(normalized)
+  ) {
+    return "web";
+  }
+  if (
+    /\bllm\b|\bmodel\b|\bagent\b|\bprompt\b|\breasoning\b/.test(normalized)
+  ) {
+    return "llm";
+  }
+  return "plan";
+}
+
+function OmxPlanningPromptGraph({
+  prompt,
+  activeNodeKey,
+}: {
+  prompt: string;
+  activeNodeKey: OmxPlanningNodeKey;
+}) {
+  return (
+    <div
+      data-testid="omx-planning-prompt-graph"
+      className="relative mx-auto aspect-square w-full max-w-[18.5rem] overflow-hidden rounded-xl border border-cyan-500/18 bg-[radial-gradient(circle_at_center,rgba(13,57,85,0.36)_0%,rgba(5,14,28,0.94)_62%,rgba(2,8,18,1)_100%)]"
+    >
+      <svg
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        viewBox="0 0 100 100"
+        aria-hidden
+      >
+        {OMX_PLANNING_NODES.map((node) => (
+          <line
+            key={`${node.key}-line`}
+            x1="50"
+            y1="50"
+            x2={String(node.x)}
+            y2={String(node.y)}
+            stroke={node.key === activeNodeKey ? "rgba(34,211,238,0.72)" : "rgba(148,163,184,0.28)"}
+            strokeDasharray="3 2"
+            strokeWidth="0.6"
+          />
+        ))}
+      </svg>
+
+      {OMX_PLANNING_NODES.map((node) => {
+        const nodeActive = node.key === activeNodeKey;
+        return (
+          <div
+            key={node.key}
+            className={cn(
+              "absolute inline-flex min-w-[4.5rem] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border px-2 py-1 text-[10px] font-semibold tracking-[0.08em]",
+              nodeActive
+                ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.2)]"
+                : "border-white/16 bg-slate-900/80 text-zinc-200/95",
+            )}
+            style={{ left: `${node.x}%`, top: `${node.y}%` }}
+          >
+            {node.label}
+          </div>
+        );
+      })}
+
+      <div className="absolute left-1/2 top-1/2 flex h-[7.5rem] w-[7.5rem] -translate-x-1/2 -translate-y-1/2 flex-col justify-center rounded-full border border-white/25 bg-slate-950/90 px-3 text-center shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_16px_40px_rgba(2,6,23,0.45)]">
+        <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-cyan-100/90">
+          Prompt
+        </p>
+        <p className="mt-1 line-clamp-4 break-words text-[10px] leading-snug text-zinc-100/95">
+          {prompt}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function NextTaskBadge() {
@@ -1212,7 +1327,9 @@ export function AccountCard(props: AccountCardProps) {
     usageLimitHitCountdownMs <= 0,
   );
   const codexCurrentTaskPreview = usageLimitHitGraceExpired
-    ? null
+    ? isWorkingNow
+      ? account.codexCurrentTaskPreview?.trim() || null
+      : null
     : account.codexCurrentTaskPreview?.trim() || null;
   const codexLastTaskPreview = account.codexLastTaskPreview?.trim() || null;
   const effectiveCurrentTaskPreview =
@@ -1250,6 +1367,14 @@ export function AccountCard(props: AccountCardProps) {
     : false;
   const waitingTaskPillLabel = resolveWaitingTaskPillLabel(
     displayCurrentTaskPreview,
+  );
+  const showOmxPlanningPromptGraph =
+    !hideCurrentTaskPreview &&
+    Boolean(displayCurrentTaskPreview) &&
+    !isCurrentTaskWaiting &&
+    isOmxPlanningTaskPreview(displayCurrentTaskPreview);
+  const omxPlanningActiveNodeKey = resolveOmxPlanningActiveNodeKey(
+    displayCurrentTaskPreview ?? "",
   );
   const hideTaskContainerChrome = hideCurrentTaskPreview && Boolean(taskPanelAddon);
   const sessionTaskPreviews = useMemo(() => {
@@ -1635,45 +1760,71 @@ export function AccountCard(props: AccountCardProps) {
                   )}
                 >
                   {!hideCurrentTaskPreview ? (
-                    <div>
-                      {!isCurrentTaskWaiting && displayCurrentTaskPreview ? (
-                        <div className="mb-1 inline-flex h-5 items-center gap-1.5 rounded-full border border-indigo-300/40 bg-transparent px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-indigo-100/95">
-                          <span
-                            className="h-1.5 w-1.5 rounded-full bg-cyan-200/95"
-                            aria-hidden
-                          />
-                          Prompt task
-                        </div>
-                      ) : null}
-                      <p
-                        className="break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/95"
-                        title={effectiveCurrentTaskPreview ?? undefined}
-                      >
-                        <span className="inline-flex items-center gap-1.5">
-                          {hasNextTaskHint(effectiveCurrentTaskPreview) ? (
-                            <NextTaskBadge />
-                          ) : null}
-                          <span>
-                            {displayCurrentTaskPreviewText ??
-                              "No active task reported"}
-                          </span>
-                        </span>
-                      </p>
-                      {currentTaskPreviewExcerpt?.truncated ? (
-                        <button
-                          type="button"
-                          className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-200 transition-colors hover:text-cyan-100"
-                          aria-expanded={currentTaskPreviewExpanded}
-                          onClick={() =>
-                            toggleTaskPreviewExpanded(
-                              CURRENT_TASK_PREVIEW_EXPANSION_KEY,
-                            )
+                    showOmxPlanningPromptGraph ? (
+                      <div className="space-y-1.5">
+                        <OmxPlanningPromptGraph
+                          prompt={
+                            displayCurrentTaskPreviewText ??
+                            "No active task reported"
                           }
+                          activeNodeKey={omxPlanningActiveNodeKey}
+                        />
+                        {currentTaskPreviewExcerpt?.truncated ? (
+                          <button
+                            type="button"
+                            className="text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-200 transition-colors hover:text-cyan-100"
+                            aria-expanded={currentTaskPreviewExpanded}
+                            onClick={() =>
+                              toggleTaskPreviewExpanded(
+                                CURRENT_TASK_PREVIEW_EXPANSION_KEY,
+                              )
+                            }
+                          >
+                            {currentTaskPreviewExpanded ? "Show Less" : "View Full"}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div>
+                        {!isCurrentTaskWaiting && displayCurrentTaskPreview ? (
+                          <div className="mb-1 inline-flex h-5 items-center gap-1.5 rounded-full border border-indigo-300/40 bg-transparent px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-indigo-100/95">
+                            <span
+                              className="h-1.5 w-1.5 rounded-full bg-cyan-200/95"
+                              aria-hidden
+                            />
+                            Prompt task
+                          </div>
+                        ) : null}
+                        <p
+                          className="break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/95"
+                          title={effectiveCurrentTaskPreview ?? undefined}
                         >
-                          {currentTaskPreviewExpanded ? "Show Less" : "View Full"}
-                        </button>
-                      ) : null}
-                    </div>
+                          <span className="inline-flex items-center gap-1.5">
+                            {hasNextTaskHint(effectiveCurrentTaskPreview) ? (
+                              <NextTaskBadge />
+                            ) : null}
+                            <span>
+                              {displayCurrentTaskPreviewText ??
+                                "No active task reported"}
+                            </span>
+                          </span>
+                        </p>
+                        {currentTaskPreviewExcerpt?.truncated ? (
+                          <button
+                            type="button"
+                            className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-200 transition-colors hover:text-cyan-100"
+                            aria-expanded={currentTaskPreviewExpanded}
+                            onClick={() =>
+                              toggleTaskPreviewExpanded(
+                                CURRENT_TASK_PREVIEW_EXPANSION_KEY,
+                              )
+                            }
+                          >
+                            {currentTaskPreviewExpanded ? "Show Less" : "View Full"}
+                          </button>
+                        ) : null}
+                      </div>
+                    )
                   ) : null}
                   {taskPanelAddon ? (
                     <div className={cn(!hideCurrentTaskPreview && "mt-2")}>
