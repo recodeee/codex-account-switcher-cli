@@ -608,53 +608,6 @@ export function PlansPage() {
                     </div>
 
                     <div
-                      className="space-y-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3"
-                      data-testid="plan-left-off-card"
-                    >
-                      <p className="text-xs uppercase tracking-wide text-red-200/95">Where plan left off</p>
-                      {planDetail.currentCheckpoint ? (
-                        <div className="space-y-2" data-testid="plan-current-checkpoint">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {(() => {
-                              const roleVisual = getRoleVisual(planDetail.currentCheckpoint.role);
-                              const RoleIcon = roleVisual.icon;
-
-                              return (
-                                <Badge
-                                  variant="outline"
-                                  className={cn("inline-flex items-center gap-1 text-[10px]", roleVisual.badgeClass)}
-                                >
-                                  <RoleIcon className="size-3" />
-                                  {formatRoleLabel(planDetail.currentCheckpoint.role)}
-                                </Badge>
-                              );
-                            })()}
-                            <Badge variant="outline" className="text-[10px]">
-                              {planDetail.currentCheckpoint.checkpointId}
-                            </Badge>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] capitalize",
-                                checkpointStateBadgeClass(planDetail.currentCheckpoint.state),
-                              )}
-                            >
-                              {formatCheckpointState(planDetail.currentCheckpoint.state)}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-red-100/90">
-                            {planDetail.currentCheckpoint.message || "No checkpoint message provided."}
-                          </p>
-                          <p className="text-xs text-red-100/70">
-                            {formatCheckpointTimestamp(planDetail.currentCheckpoint.timestamp)}
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-red-100/80">No checkpoint activity recorded yet.</p>
-                      )}
-                    </div>
-
-                    <div
                       className="space-y-2 rounded-lg border border-border/60 bg-background/30 p-3"
                       data-testid="plan-step-timeline"
                     >
@@ -717,12 +670,16 @@ export function PlansPage() {
                                     {row.items.length > 0 ? (
                                       <ul className="space-y-1.5 pl-6">
                                         {row.items.map((item) => (
-                                          <li key={`${row.role}-${item.id}`} className="flex items-start gap-2">
+                                          <li
+                                            key={`${row.role}-${item.id}`}
+                                            className="group/item flex items-start gap-2"
+                                          >
                                             <StepStatusIcon status={item.status} className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                                             <p
                                               className={cn(
                                                 "text-sm text-foreground/90",
-                                                item.status === "completed" && "text-muted-foreground line-through",
+                                                item.status === "completed" &&
+                                                  "text-muted-foreground line-through transition-[text-decoration-line,color] group-hover/item:text-foreground/90 group-hover/item:[text-decoration-line:none]",
                                               )}
                                             >
                                               {item.title}
@@ -741,6 +698,53 @@ export function PlansPage() {
                         </ul>
                       ) : (
                         <p className="text-xs text-muted-foreground">No phase data available.</p>
+                      )}
+                    </div>
+
+                    <div
+                      className="space-y-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3"
+                      data-testid="plan-left-off-card"
+                    >
+                      <p className="text-xs uppercase tracking-wide text-red-200/95">Where plan left off</p>
+                      {planDetail.currentCheckpoint ? (
+                        <div className="space-y-2" data-testid="plan-current-checkpoint">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {(() => {
+                              const roleVisual = getRoleVisual(planDetail.currentCheckpoint.role);
+                              const RoleIcon = roleVisual.icon;
+
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className={cn("inline-flex items-center gap-1 text-[10px]", roleVisual.badgeClass)}
+                                >
+                                  <RoleIcon className="size-3" />
+                                  {formatRoleLabel(planDetail.currentCheckpoint.role)}
+                                </Badge>
+                              );
+                            })()}
+                            <Badge variant="outline" className="text-[10px]">
+                              {planDetail.currentCheckpoint.checkpointId}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] capitalize",
+                                checkpointStateBadgeClass(planDetail.currentCheckpoint.state),
+                              )}
+                            >
+                              {formatCheckpointState(planDetail.currentCheckpoint.state)}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-red-100/90">
+                            {planDetail.currentCheckpoint.message || "No checkpoint message provided."}
+                          </p>
+                          <p className="text-xs text-red-100/70">
+                            {formatCheckpointTimestamp(planDetail.currentCheckpoint.timestamp)}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-red-100/80">No checkpoint activity recorded yet.</p>
                       )}
                     </div>
 

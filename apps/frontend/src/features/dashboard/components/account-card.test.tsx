@@ -3188,6 +3188,7 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.getByRole("button", { name: /debug/i })).toBeInTheDocument();
+    expect(screen.getByTestId("codex-logs-label")).toHaveTextContent("Codex logs");
     expect(screen.queryByText(/cli session logs/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\$ merged 5h=17% weekly=77%/)).not.toBeInTheDocument();
 

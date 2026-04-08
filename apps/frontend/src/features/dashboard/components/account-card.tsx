@@ -2568,6 +2568,13 @@ export function AccountCard(props: AccountCardProps) {
                   )}
                 />
               </button>
+              <div
+                className="mt-2 flex w-full items-center gap-2 rounded-xl bg-[#020812]/95 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                data-testid="codex-logs-label"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-200/85 shadow-[0_0_0_2px_rgba(34,211,238,0.12)]" />
+                <span>Codex logs</span>
+              </div>
 
               {showQuotaDebug ? (
                 <div className="mt-2 space-y-2 rounded-lg border border-cyan-500/25 bg-[#061325] px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
