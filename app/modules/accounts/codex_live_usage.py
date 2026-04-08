@@ -3011,6 +3011,8 @@ def _rate_limit_snapshot_from_line(
     primary_raw, secondary_raw = _extract_windows(rate_limits)
     primary = _window_from_payload(primary_raw, timestamp)
     secondary = _window_from_payload(secondary_raw, timestamp)
+    if primary is None and secondary is None:
+        return None
     return timestamp, primary, secondary
 
 
