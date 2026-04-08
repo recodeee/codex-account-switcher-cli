@@ -55,6 +55,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
 
 function accountMenuPriorityScore(account: AccountSummary): number {
   let score = 0;
+  if (account.codexAuth?.isActiveSnapshot ?? false) score += 10_000;
   if (hasActiveCliSessionSignal(account)) score += 1_000;
   if (account.codexAuth?.isActiveSnapshot ?? false) score += 400;
   if (account.status === "active") score += 100;
@@ -119,8 +120,10 @@ export function AccountMenu({
   const medusaAdminEmail = medusaUser?.email ?? null;
   const dashboardLoginEmail =
     medusaAdminEmail ?? medusaLastAuthenticatedEmail ?? null;
-  const triggerEmail = dashboardLoginEmail;
-  const showTriggerCodexEmail = Boolean(loggedInEmail);
+  const displayedLoginEmail = dashboardLoginEmail ?? loggedInEmail;
+  const triggerEmail = displayedLoginEmail;
+  const showTriggerCodexEmail =
+    Boolean(loggedInEmail) && loggedInEmail !== displayedLoginEmail;
   const triggerLetter = (triggerEmail?.trim()?.[0] ?? "C").toUpperCase();
 
   return (
@@ -245,9 +248,9 @@ export function AccountMenu({
               "truncate text-xs text-foreground/90",
               blurred ? "privacy-blur" : "",
             )}
-            title={dashboardLoginEmail ?? "No dashboard login recorded yet"}
+            title={displayedLoginEmail ?? "No dashboard login recorded yet"}
           >
-            {dashboardLoginEmail ?? "No dashboard login recorded yet"}
+            {displayedLoginEmail ?? "No dashboard login recorded yet"}
           </p>
 
           {loggedInEmail ? (

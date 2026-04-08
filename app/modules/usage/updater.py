@@ -511,6 +511,17 @@ class UsageUpdater:
     async def _maybe_deactivate_for_client_error(self, account: Account, exc: UsageFetchError) -> None:
         if not self._auth_manager:
             return
+        if _is_invalidated_token_usage_401(exc):
+            _deactivation_failure_streak.pop(account.id, None)
+            logger.warning(
+                "Deactivating account immediately for invalidated-token 401 account_id=%s status=%s message=%s request_id=%s",
+                account.id,
+                exc.status_code,
+                exc.message,
+                get_request_id(),
+            )
+            await self._deactivate_for_client_error(account, exc, skip_log=True)
+            return
 
         attempts = _deactivation_failure_streak.get(account.id, 0) + 1
         if attempts < _DEACTIVATION_FAILURE_THRESHOLD:
@@ -959,3 +970,7 @@ def _is_invalidated_token_error(message: str | None) -> bool:
     if not normalized:
         return False
     return any(marker in normalized for marker in _TOKEN_INVALIDATION_ERROR_MARKERS)
+
+
+def _is_invalidated_token_usage_401(exc: UsageFetchError) -> bool:
+    return exc.status_code == 401 and _is_invalidated_token_error(exc.message)

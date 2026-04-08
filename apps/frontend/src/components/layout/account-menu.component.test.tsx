@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -95,5 +95,15 @@ describe("AccountMenu component", () => {
     expect(screen.getAllByText("Active Codex account").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("odin@recodee.com")).not.toBeInTheDocument();
     expect(screen.queryByText("medusa-secret")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the active Codex account email when no dashboard login email is recorded", async () => {
+    renderWithProviders(<AccountMenu onLogout={() => undefined} />);
+
+    await waitFor(() => {
+      const trigger = screen.getByRole("button", { name: "Open account menu" });
+      expect(trigger).toHaveTextContent("primary@example.com");
+      expect(trigger).not.toHaveTextContent("No dashboard login recorded yet");
+    });
   });
 });

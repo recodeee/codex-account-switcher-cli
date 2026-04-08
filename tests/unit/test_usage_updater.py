@@ -345,7 +345,8 @@ async def test_usage_updater_avoids_invalidated_token_sibling_spam(monkeypatch) 
     await updater.refresh_accounts([acc_a, acc_b], latest_usage={})
 
     assert fetch_calls == [shared, shared]
-    assert len(accounts_repo.status_updates) == 0
+    assert len(accounts_repo.status_updates) == 1
+    assert accounts_repo.status_updates[0]["account_id"] == acc_a.id
 
     await updater.refresh_accounts([acc_a, acc_b], latest_usage={})
 
@@ -728,7 +729,7 @@ async def test_usage_updater_retries_forced_refresh_before_deactivating_invalida
 
 
 @pytest.mark.asyncio
-async def test_usage_updater_defers_invalidated_token_deactivation_until_threshold(monkeypatch) -> None:
+async def test_usage_updater_deactivates_invalidated_token_immediately_even_with_threshold(monkeypatch) -> None:
     monkeypatch.setenv("CODEX_LB_USAGE_REFRESH_ENABLED", "true")
     monkeypatch.setattr("app.modules.usage.updater._DEACTIVATION_FAILURE_THRESHOLD", 3)
     monkeypatch.setattr("app.modules.usage.updater._FAILED_REFRESH_BACKOFF_SECONDS", 0)
@@ -758,12 +759,6 @@ async def test_usage_updater_defers_invalidated_token_deactivation_until_thresho
 
     acc = _make_account("acc_401_invalidated_deferred", "workspace_401_invalidated_deferred")
     accounts_repo.accounts_by_id[acc.id] = acc
-
-    await updater.refresh_accounts([acc], latest_usage={})
-    await updater.refresh_accounts([acc], latest_usage={})
-
-    assert len(accounts_repo.status_updates) == 0
-    assert acc.status == AccountStatus.ACTIVE
 
     await updater.refresh_accounts([acc], latest_usage={})
 
