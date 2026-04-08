@@ -246,6 +246,7 @@ def _materialize_active_auth_snapshot(
                 accounts_dir=accounts_dir,
                 alias_names=legacy_alias_names,
                 canonical_name=snapshot_name,
+                canonical_email=parsed.account.email,
                 raw=raw,
             )
             return
@@ -254,6 +255,7 @@ def _materialize_active_auth_snapshot(
             accounts_dir=accounts_dir,
             alias_names=legacy_alias_names,
             canonical_name=snapshot_name,
+            canonical_email=parsed.account.email,
             raw=raw,
         )
     except OSError:
@@ -333,8 +335,10 @@ def _refresh_legacy_snapshot_aliases(
     accounts_dir: Path,
     alias_names: list[str],
     canonical_name: str,
+    canonical_email: str,
     raw: bytes,
 ) -> None:
+    normalized_canonical_email = canonical_email.strip().lower()
     for alias_name in alias_names:
         if alias_name == canonical_name:
             continue
@@ -342,11 +346,25 @@ def _refresh_legacy_snapshot_aliases(
         try:
             if not alias_path.exists() or not alias_path.is_file():
                 continue
+            alias_email = _snapshot_email(alias_path)
+            if alias_email != normalized_canonical_email:
+                continue
+            if not _is_refreshable_legacy_alias(
+                alias_name=alias_name,
+                canonical_name=canonical_name,
+            ):
+                continue
             if alias_path.read_bytes() == raw:
                 continue
             alias_path.write_bytes(raw)
         except OSError:
             continue
+
+
+def _is_refreshable_legacy_alias(*, alias_name: str, canonical_name: str) -> bool:
+    if _is_email_snapshot_alias(alias_name, base_name=canonical_name):
+        return True
+    return "@" not in alias_name
 
 
 def _snapshot_email(snapshot_path: Path) -> str | None:

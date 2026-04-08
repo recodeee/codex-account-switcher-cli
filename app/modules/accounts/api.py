@@ -6,8 +6,11 @@ from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, WebSoc
 
 from app.core.auth.refresh import RefreshError
 from app.core.audit.service import AuditService
-from app.core.auth.dependencies import set_dashboard_error_format, validate_dashboard_session
-from app.core.config.settings_cache import get_settings_cache
+from app.core.auth.dependencies import (
+    set_dashboard_error_format,
+    validate_dashboard_session,
+    validate_dashboard_websocket_session,
+)
 from app.core.exceptions import DashboardBadRequestError, DashboardConflictError, DashboardNotFoundError
 from app.dependencies import AccountsContext, get_accounts_context
 from app.modules.accounts.codex_auth_switcher import (
@@ -38,8 +41,6 @@ from app.modules.accounts.terminal import (
     open_host_terminal,
     stream_terminal_session,
 )
-from app.modules.dashboard_auth.service import DASHBOARD_SESSION_COOKIE, get_dashboard_session_store
-
 router = APIRouter(
     prefix="/api/accounts",
     tags=["dashboard"],
@@ -232,7 +233,7 @@ async def account_terminal_websocket(
     account_id: str,
     context: AccountsContext = Depends(get_accounts_context),
 ) -> None:
-    if not await _validate_dashboard_websocket_session(websocket):
+    if not await validate_dashboard_websocket_session(websocket):
         return
 
     try:
@@ -263,31 +264,6 @@ async def account_terminal_websocket(
         account_id=resolved_account_id,
         snapshot_name=resolved_snapshot_name,
     )
-
-
-async def _validate_dashboard_websocket_session(websocket: WebSocket) -> bool:
-    settings = await get_settings_cache().get()
-    requires_auth = settings.password_hash is not None or settings.totp_required_on_login
-    if not requires_auth:
-        return True
-
-    session_id = websocket.cookies.get(DASHBOARD_SESSION_COOKIE)
-    state = get_dashboard_session_store().get(session_id)
-    if state is None:
-        await websocket.close(code=4401, reason="Authentication is required")
-        return False
-
-    if settings.password_hash is not None and not state.password_verified:
-        await websocket.close(code=4401, reason="Authentication is required")
-        return False
-
-    if settings.totp_required_on_login and not state.totp_verified:
-        await websocket.close(code=4403, reason="TOTP verification is required")
-        return False
-
-    return True
-
-
 async def _send_terminal_error(websocket: WebSocket, message: str, *, code: str) -> None:
     await websocket.accept()
     await websocket.send_json({"type": "error", "message": message, "code": code})

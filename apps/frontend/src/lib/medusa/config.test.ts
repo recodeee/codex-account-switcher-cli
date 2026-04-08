@@ -70,4 +70,23 @@ describe("getMedusaRuntimeConfig", () => {
       publishableKey: "pk_live_123",
     });
   });
+
+  it("rewrites localhost env URLs to the current browser hostname for non-local access", () => {
+    process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL = "http://localhost:9000";
+    delete process.env.MEDUSA_BACKEND_URL;
+    delete process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY;
+    delete process.env.MEDUSA_PUBLISHABLE_KEY;
+
+    vi.stubGlobal("window", {
+      location: {
+        hostname: "dashboard.example.com",
+        protocol: "https:",
+      },
+    } as unknown as Window & typeof globalThis);
+
+    expect(getMedusaRuntimeConfig()).toEqual({
+      backendUrl: "https://dashboard.example.com:9000",
+      publishableKey: null,
+    });
+  });
 });

@@ -61,3 +61,8 @@ apps/logs/*.log
 .venv
 
 .omx/
+
+# Keep OpenSpec plan workspaces local
+openspec/plan/*
+!openspec/plan/README.md
+!openspec/plan/PLANS.md

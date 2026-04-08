@@ -20,6 +20,37 @@ function normalizeBrowserHostname(value?: string): string | null {
   return hostname;
 }
 
+function isLoopbackHostname(value?: string | null): boolean {
+  const hostname = value?.trim().toLowerCase();
+
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0";
+}
+
+function rewriteLoopbackUrlForBrowserHost(candidate: string): string {
+  if (typeof window === "undefined") {
+    return candidate;
+  }
+
+  const browserHostname = normalizeBrowserHostname(window.location.hostname);
+  if (!browserHostname || isLoopbackHostname(browserHostname)) {
+    return candidate;
+  }
+
+  try {
+    const parsed = new URL(candidate);
+    if (!isLoopbackHostname(parsed.hostname)) {
+      return candidate;
+    }
+
+    const rewritten = new URL(candidate);
+    rewritten.protocol = window.location.protocol;
+    rewritten.hostname = browserHostname;
+    return rewritten.toString().replace(/\/+$/, "");
+  } catch {
+    return candidate;
+  }
+}
+
 function normalizeUrl(value?: string): string {
   const candidate = value?.trim();
   if (!candidate) {
@@ -33,7 +64,7 @@ function normalizeUrl(value?: string): string {
 
     return DEFAULT_MEDUSA_BACKEND_URL;
   }
-  return candidate.replace(/\/+$/, "");
+  return rewriteLoopbackUrlForBrowserHost(candidate.replace(/\/+$/, ""));
 }
 
 function normalizeOptionalValue(value?: string): string | null {

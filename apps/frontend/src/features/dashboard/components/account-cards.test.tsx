@@ -181,6 +181,15 @@ describe("AccountCards", () => {
         accounts={[idle, working]}
         primaryWindow={buildWindow("primary", "acc_working", 1000, 900)}
         secondaryWindow={null}
+        primaryUsageSummary={{
+          totalTokens: 1800,
+          totalCostUsd: 0,
+          totalCostEur: 0,
+          accounts: [
+            { accountId: "acc_working", accountEmail: null, tokens: 1200, costUsd: 0, costEur: 0 },
+            { accountId: "acc_idle", accountEmail: null, tokens: 600, costUsd: 0, costEur: 0 },
+          ],
+        }}
       />,
     );
 
@@ -190,8 +199,10 @@ describe("AccountCards", () => {
       screen.getByText("Accounts with active CLI sessions are grouped first so you can switch faster."),
     ).toBeInTheDocument();
     expect(screen.getByText("2 live sessions")).toBeInTheDocument();
-    expect(screen.getByText(/5h avg \d+%/i)).toBeInTheDocument();
-    expect(screen.getByText(/weekly avg \d+%/i)).toBeInTheDocument();
+    expect(screen.getByText("5h token spend")).toBeInTheDocument();
+    expect(screen.getByText("1.2M")).toBeInTheDocument();
+    expect(screen.queryByText(/weekly avg \d+%/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Weekly token spend")).not.toBeInTheDocument();
 
     const cards = Array.from(container.querySelectorAll(".card-hover"));
     expect(cards).toHaveLength(2);
@@ -199,7 +210,99 @@ describe("AccountCards", () => {
     expect(within(cards[1] as HTMLElement).getByText("idle@example.com")).toBeInTheDocument();
   });
 
-  it("keeps accounts with active CLI task signals in working-now even if status is deactivated", () => {
+  it("appends newly-live cards after the current working-now cards without reordering", () => {
+    const nowIso = new Date().toISOString();
+    const currentWorking = createAccountSummary({
+      accountId: "acc_current_working",
+      email: "current-working@example.com",
+      displayName: "current-working@example.com",
+      usage: {
+        primaryRemainingPercent: 18,
+        secondaryRemainingPercent: 22,
+      },
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "current-working",
+        activeSnapshotName: "current-working",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+    const newLiveCandidate = createAccountSummary({
+      accountId: "acc_new_live_candidate",
+      email: "new-live-candidate@example.com",
+      displayName: "new-live-candidate@example.com",
+      usage: {
+        primaryRemainingPercent: 97,
+        secondaryRemainingPercent: 96,
+      },
+      codexLiveSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "new-live-candidate",
+        activeSnapshotName: "current-working",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
+    const { rerender } = render(
+      <AccountCards
+        accounts={[currentWorking, newLiveCandidate]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    rerender(
+      <AccountCards
+        accounts={[
+          currentWorking,
+          {
+            ...newLiveCandidate,
+            codexLiveSessionCount: 2,
+            codexSessionCount: 2,
+            codexAuth: {
+              hasSnapshot: true,
+              snapshotName: "new-live-candidate",
+              activeSnapshotName: "current-working",
+              isActiveSnapshot: false,
+              hasLiveSession: true,
+            },
+            lastUsageRecordedAtPrimary: nowIso,
+            lastUsageRecordedAtSecondary: nowIso,
+          },
+        ]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const workingSection = screen
+      .getByRole("heading", { name: "Working now" })
+      .closest("section");
+    expect(workingSection).not.toBeNull();
+
+    const titles = Array.from(
+      (workingSection as HTMLElement).querySelectorAll(
+        "p.truncate.text-sm.font-semibold.leading-tight",
+      ),
+    ).map((element) => element.textContent);
+
+    expect(titles).toEqual([
+      "current-working@example.com",
+      "new-live-candidate@example.com",
+    ]);
+  });
+
+  it("keeps deactivated task-only accounts out of working-now", () => {
     const taskingDeactivated = createAccountSummary({
       accountId: "acc_tasking_deactivated",
       email: "tasking-deactivated@example.com",
@@ -239,14 +342,18 @@ describe("AccountCards", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Working now" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No account is working now currently."),
+    ).toBeInTheDocument();
     const cards = Array.from(container.querySelectorAll(".card-hover"));
     expect(cards).toHaveLength(2);
+    const taskingCard = cards.find((card) =>
+      card.textContent?.includes("tasking-deactivated@example.com"),
+    );
+    expect(taskingCard).toBeDefined();
     expect(
-      within(cards[0] as HTMLElement).getByText("tasking-deactivated@example.com"),
-    ).toBeInTheDocument();
-    expect(
-      within(cards[0] as HTMLElement).getByText("Investigate session handoff mismatch"),
+      within(taskingCard as HTMLElement).getByText("Investigate session handoff mismatch"),
     ).toBeInTheDocument();
   });
 
@@ -278,7 +385,7 @@ describe("AccountCards", () => {
     expect(within(card as HTMLElement).getByText("900k")).toBeInTheDocument();
   });
 
-  it("uses the primary window duration label in working summary chips", () => {
+  it("uses the primary window duration label in the working summary", () => {
     const nowIso = new Date().toISOString();
     const working = createAccountSummary({
       accountId: "acc_working",
@@ -302,11 +409,19 @@ describe("AccountCards", () => {
         accounts={[working]}
         primaryWindow={buildWindow("primary", "acc_working", 1000, 900, 50, 480)}
         secondaryWindow={null}
+        primaryUsageSummary={{
+          totalTokens: 1800,
+          totalCostUsd: 0,
+          totalCostEur: 0,
+          accounts: [
+            { accountId: "acc_working", accountEmail: null, tokens: 1800, costUsd: 0, costEur: 0 },
+          ],
+        }}
       />,
     );
 
-    expect(screen.getByText(/8h avg \d+%/i)).toBeInTheDocument();
-    expect(screen.queryByText(/5h avg \d+%/i)).not.toBeInTheDocument();
+    expect(screen.getByText("8h token spend")).toBeInTheDocument();
+    expect(screen.queryByText("5h token spend")).not.toBeInTheDocument();
   });
 
   it("keeps accounts in working-now when primary rounds to 0% but sessions are active", () => {
@@ -432,7 +547,7 @@ describe("AccountCards", () => {
     expect(screen.getByText("depleted-idle@example.com")).toBeInTheDocument();
   });
 
-  it("keeps no-live-telemetry accounts in working-now when snapshot still reports a live session", () => {
+  it("keeps no-live-telemetry accounts in working-now when codex auth still reports live sessions", () => {
     const account = createAccountSummary({
       accountId: "acc_itrexsale",
       email: "itrexsale@example.com",
@@ -1080,7 +1195,9 @@ describe("AccountCards", () => {
     let cardText = cards.map((card) => card.textContent ?? "");
     expect(cardText[0]).toContain("normal-high");
 
-    fireEvent.click(screen.getByRole("button", { name: "Usage-limit available" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Usage-limit soon available" }),
+    );
 
     cards = Array.from(container.querySelectorAll(".card-hover"));
     cardText = cards.map((card) => card.textContent ?? "");
@@ -1197,7 +1314,7 @@ describe("AccountCards", () => {
     expect(screen.getByText("2 live sessions")).toBeInTheDocument();
   });
 
-  it("places tracked-session accounts in the working-now section", () => {
+  it("keeps tracked-session-only accounts out of the working-now section", () => {
     const tracked = createAccountSummary({
       accountId: "acc_tracked",
       email: "tracked@example.com",
@@ -1235,12 +1352,15 @@ describe("AccountCards", () => {
 
     render(<AccountCards accounts={[idle, tracked]} primaryWindow={null} secondaryWindow={null} />);
 
-    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Working now" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No account is working now currently."),
+    ).toBeInTheDocument();
     expect(screen.getByText("tracked@example.com")).toBeInTheDocument();
     expect(screen.queryByText("live sessions")).not.toBeInTheDocument();
   });
 
-  it("places fresh session-task-preview accounts in the working-now section", () => {
+  it("keeps fresh session-task-preview-only accounts out of the working-now section", () => {
     const taskPreviewOnly = createAccountSummary({
       accountId: "acc_task_preview_only",
       email: "task-preview-only@example.com",
@@ -1275,7 +1395,10 @@ describe("AccountCards", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Working now" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No account is working now currently."),
+    ).toBeInTheDocument();
     expect(screen.getByText("task-preview-only@example.com")).toBeInTheDocument();
   });
 

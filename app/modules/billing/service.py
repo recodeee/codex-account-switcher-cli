@@ -17,6 +17,18 @@ class BillingSummaryUnavailableError(RuntimeError):
     """Raised when the live Medusa billing summary cannot be trusted."""
 
 
+class BillingAccountConflictError(RuntimeError):
+    """Raised when a billing account cannot be created because it already exists."""
+
+
+class BillingAccountNotFoundError(RuntimeError):
+    """Raised when a billing account does not exist."""
+
+
+class BillingAccountValidationError(RuntimeError):
+    """Raised when billing account creation input is invalid."""
+
+
 @dataclass(frozen=True, slots=True)
 class BillingMemberData:
     id: str
@@ -54,8 +66,24 @@ class BillingAccountsData:
     accounts: list[BillingAccountData]
 
 
+@dataclass(frozen=True, slots=True)
+class BillingAccountCreateData:
+    domain: str
+    plan_code: str
+    plan_name: str
+    subscription_status: SubscriptionStatus
+    payment_status: PaymentStatus
+    entitled: bool
+    renewal_at: datetime | None
+    chatgpt_seats_in_use: int
+    codex_seats_in_use: int
+
+
 class BillingSummaryProvider(Protocol):
     async def fetch_accounts(self) -> list[BillingAccountData]: ...
+    async def update_accounts(self, accounts: list[BillingAccountData]) -> list[BillingAccountData]: ...
+    async def add_account(self, account: BillingAccountCreateData) -> BillingAccountData: ...
+    async def delete_account(self, account_id: str) -> None: ...
 
 
 class BillingService:
@@ -76,3 +104,17 @@ class BillingService:
 
         set_normal()
         return BillingAccountsData(accounts=accounts)
+
+    async def update_accounts(self, accounts: list[BillingAccountData]) -> BillingAccountsData:
+        updated_accounts = await self._summary_provider.update_accounts(accounts)
+        set_normal()
+        return BillingAccountsData(accounts=updated_accounts)
+
+    async def add_account(self, account: BillingAccountCreateData) -> BillingAccountData:
+        created_account = await self._summary_provider.add_account(account)
+        set_normal()
+        return created_account
+
+    async def delete_account(self, account_id: str) -> None:
+        await self._summary_provider.delete_account(account_id)
+        set_normal()

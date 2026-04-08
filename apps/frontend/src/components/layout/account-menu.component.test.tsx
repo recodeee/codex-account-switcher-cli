@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -33,7 +33,7 @@ describe("AccountMenu component", () => {
     expect(screen.queryByText("No Medusa admin login recorded yet")).not.toBeInTheDocument();
   });
 
-  it("shows the last Medusa admin login row only when one was recorded", async () => {
+  it("uses the last Medusa login as the displayed login when no active Medusa session exists", async () => {
     const user = userEvent.setup({ delay: null });
 
     useMedusaAdminAuthStore.setState({
@@ -48,8 +48,8 @@ describe("AccountMenu component", () => {
 
     expect(screen.queryByRole("menuitem", { name: "Sign in Medusa admin" })).not.toBeInTheDocument();
     expect(screen.queryByText("Medusa admin")).not.toBeInTheDocument();
-    expect(screen.getByText("Last Medusa admin login")).toBeInTheDocument();
-    expect(screen.getAllByText("nagy.viktordp@gmail.com").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("Last Medusa admin login")).not.toBeInTheDocument();
+    expect(screen.getAllByText("nagy.viktordp@gmail.com").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows the backend-authenticated Medusa admin account instead of local credentials", async () => {
@@ -83,16 +83,27 @@ describe("AccountMenu component", () => {
     });
 
     const trigger = screen.getByRole("button", { name: "Open account menu" });
-    expect(trigger).toHaveTextContent("nagy.viktordp@gmail.com");
+    expect(trigger).toHaveTextContent("admin@recodee.com");
 
     await user.click(trigger);
 
     expect(screen.getByRole("menuitem", { name: "Sign out Medusa admin" })).toBeInTheDocument();
     expect(screen.getByText("Logged in account")).toBeInTheDocument();
-    expect(screen.getAllByText("nagy.viktordp@gmail.com").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Current Codex account")).toBeInTheDocument();
-    expect(screen.getByText("admin@recodee.com")).toBeInTheDocument();
+    expect(screen.getAllByText("admin@recodee.com").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Last Medusa admin login")).toBeInTheDocument();
+    expect(screen.getByText("nagy.viktordp@gmail.com")).toBeInTheDocument();
+    expect(screen.getAllByText("Active Codex account").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("odin@recodee.com")).not.toBeInTheDocument();
     expect(screen.queryByText("medusa-secret")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the active Codex account email when no dashboard login email is recorded", async () => {
+    renderWithProviders(<AccountMenu onLogout={() => undefined} />);
+
+    await waitFor(() => {
+      const trigger = screen.getByRole("button", { name: "Open account menu" });
+      expect(trigger).toHaveTextContent("primary@example.com");
+      expect(trigger).not.toHaveTextContent("No dashboard login recorded yet");
+    });
   });
 });

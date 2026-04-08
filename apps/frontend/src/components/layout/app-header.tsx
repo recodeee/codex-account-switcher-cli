@@ -4,7 +4,7 @@ import { NavLink } from "@/lib/router-compat";
 
 import { CodexLogo } from "@/components/brand/codex-logo";
 import { AccountMenu } from "@/components/layout/account-menu";
-import { NAV_ITEMS } from "@/components/layout/nav-items";
+import { flattenNavItems, NAV_ITEMS } from "@/components/layout/nav-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,7 @@ export function AppHeader({
   className,
 }: AppHeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navItems = flattenNavItems(NAV_ITEMS);
   const blurred = usePrivacyStore((s) => s.blurred);
   const togglePrivacy = usePrivacyStore((s) => s.toggle);
   const PrivacyIcon = blurred ? EyeOff : Eye;
@@ -58,7 +59,7 @@ export function AppHeader({
         {/* Desktop nav pills */}
         {!sidebarAware ? (
           <nav className="hidden items-center rounded-lg border border-border/50 bg-muted/40 p-0.5 sm:flex">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -71,7 +72,7 @@ export function AppHeader({
                   )
                 }
               >
-                <span>{item.label}</span>
+                <span className={item.depth > 0 ? "pl-2" : undefined}>{item.label}</span>
                 {item.isComingSoon ? (
                   <Badge
                     variant="secondary"
@@ -131,7 +132,7 @@ export function AppHeader({
                 </SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col gap-0.5 px-4 pt-2">
-                {NAV_ITEMS.map((item) => (
+                {navItems.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -146,7 +147,7 @@ export function AppHeader({
                             : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
-                        <span>{item.label}</span>
+                        <span className={item.depth > 0 ? "pl-4" : undefined}>{item.label}</span>
                         {item.isComingSoon ? (
                           <Badge
                             variant="secondary"

@@ -50,3 +50,17 @@ export type SubscriptionBillingAccount = {
 export type SubscriptionBillingSummary = {
   accounts: SubscriptionBillingAccount[]
 }
+
+export type SubscriptionBillingAccountCreateInput = {
+  domain: string
+  plan_code?: string
+  plan_name?: string
+  subscription_status?: SubscriptionStatus
+  payment_status?: PaymentStatus
+  entitled?: boolean
+  renewal_at?: string | null
+  chatgpt_seats_in_use?: number
+  codex_seats_in_use?: number
+}
+
+export type SubscriptionBillingAccountUpdateInput = SubscriptionBillingAccount

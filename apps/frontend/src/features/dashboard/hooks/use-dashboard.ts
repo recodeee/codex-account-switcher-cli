@@ -6,6 +6,7 @@ import { hasActiveCliSessionSignal } from "@/utils/account-working";
 
 const DEFAULT_DASHBOARD_POLL_MS = 30_000;
 const ACTIVE_DASHBOARD_POLL_MS = 5_000;
+const WEBSOCKET_CONNECTED_SAFETY_POLL_MS = 60_000;
 
 function hasWorkingAccounts(data: DashboardOverview | undefined): boolean {
   if (!data) {
@@ -14,14 +15,21 @@ function hasWorkingAccounts(data: DashboardOverview | undefined): boolean {
   return data.accounts.some((account) => hasActiveCliSessionSignal(account));
 }
 
-export function useDashboard() {
+type UseDashboardOptions = {
+  websocketConnected?: boolean;
+};
+
+export function useDashboard(options: UseDashboardOptions = {}) {
+  const websocketConnected = options.websocketConnected ?? false;
   return useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: getDashboardOverview,
     refetchInterval: (query) =>
-      hasWorkingAccounts(query.state.data as DashboardOverview | undefined)
-        ? ACTIVE_DASHBOARD_POLL_MS
-        : DEFAULT_DASHBOARD_POLL_MS,
+      websocketConnected
+        ? WEBSOCKET_CONNECTED_SAFETY_POLL_MS
+        : hasWorkingAccounts(query.state.data as DashboardOverview | undefined)
+          ? ACTIVE_DASHBOARD_POLL_MS
+          : DEFAULT_DASHBOARD_POLL_MS,
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });

@@ -1,0 +1,7 @@
+- [x] 1. Add OpenSpec delta for live plans runtime observer and fail-closed telemetry behavior.
+- [x] 2. Implement backend runtime observer endpoint and response schemas.
+- [x] 3. Implement plan↔session correlation plus structured event/resume-state readers.
+- [x] 4. Add backend integration tests for live payload and telemetry-missing fallback.
+- [x] 5. Implement frontend runtime observer query/polling and plans detail UI card.
+- [x] 6. Update frontend mocks/integration tests for runtime observer states.
+- [x] 7. Run focused verification (`pytest`, `vitest`, `lint`, `typecheck`, `openspec validate --specs`).

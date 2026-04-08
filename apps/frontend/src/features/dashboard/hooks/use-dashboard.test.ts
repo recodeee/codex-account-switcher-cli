@@ -228,6 +228,43 @@ describe("useDashboard", () => {
     }
   });
 
+  it("uses safety polling cadence when websocket transport is connected", async () => {
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_ws",
+                email: "ws@example.com",
+                displayName: "ws@example.com",
+                codexLiveSessionCount: 1,
+                codexTrackedSessionCount: 1,
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useDashboard({ websocketConnected: true }), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const query = queryClient.getQueryCache().find({ queryKey: ["dashboard", "overview"] });
+    expect(query).toBeDefined();
+    const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
+      ?.refetchInterval;
+    if (typeof refetchInterval === "function") {
+      expect(refetchInterval(query as never)).toBe(60_000);
+    } else {
+      expect(refetchInterval).toBe(60_000);
+    }
+  });
+
   it("exposes error state on request failure", async () => {
     server.use(
       http.get("/api/dashboard/overview", () =>

@@ -1,0 +1,4 @@
+- [x] Reproduce the foreign email-shaped alias corruption with a focused unit test.
+- [x] Restrict auto-import alias refresh to canonical, canonical-duplicate, and non-email legacy aliases for the same email identity.
+- [x] Run targeted unit coverage for codex auth auto-import.
+- [x] Validate specs with `openspec validate --specs`.

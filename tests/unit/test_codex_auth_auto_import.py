@@ -239,3 +239,49 @@ def test_materialize_active_auth_snapshot_creates_canonical_when_active_auth_poi
     assert canonical_snapshot_path.exists()
     assert alias_snapshot_path.read_bytes() == active_auth_path.read_bytes()
     assert canonical_snapshot_path.read_bytes() == active_auth_path.read_bytes()
+
+
+def test_materialize_active_auth_snapshot_does_not_refresh_foreign_email_shaped_alias(
+    tmp_path: Path,
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    active_auth_path = tmp_path / "auth.json"
+    email = "grepolis@megkapja.hu"
+    raw_account_id = "acc-megkapja"
+
+    canonical_snapshot_path = accounts_dir / "grepolis@megkapja.hu.json"
+    foreign_alias_path = accounts_dir / "odin@megkapja.hu.json"
+
+    _write_auth_snapshot(
+        canonical_snapshot_path,
+        email=email,
+        account_id=raw_account_id,
+        access_token="old-canonical-access",
+        refresh_token="old-canonical-refresh",
+    )
+    _write_auth_snapshot(
+        foreign_alias_path,
+        email=email,
+        account_id=raw_account_id,
+        access_token="old-foreign-access",
+        refresh_token="old-foreign-refresh",
+    )
+    original_foreign_bytes = foreign_alias_path.read_bytes()
+
+    _write_auth_snapshot(
+        active_auth_path,
+        email=email,
+        account_id=raw_account_id,
+        access_token="new-active-access",
+        refresh_token="new-active-refresh",
+    )
+
+    _materialize_active_auth_snapshot(
+        accounts_dir=accounts_dir,
+        active_auth_path=active_auth_path,
+        encryptor=TokenEncryptor(),
+    )
+
+    assert canonical_snapshot_path.read_bytes() == active_auth_path.read_bytes()
+    assert foreign_alias_path.read_bytes() == original_foreign_bytes

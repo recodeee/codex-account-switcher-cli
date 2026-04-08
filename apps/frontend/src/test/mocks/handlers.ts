@@ -2,7 +2,10 @@ import { HttpResponse, http } from "msw";
 import { z } from "zod";
 
 import { LIMIT_TYPES, LIMIT_WINDOWS } from "@/features/api-keys/schemas";
-import { BillingAccountSchema } from "@/features/billing/schemas";
+import {
+	BillingAccountCreateRequestSchema,
+	BillingAccountSchema,
+} from "@/features/billing/schemas";
 import {
 	type AccountSummary,
 	type ApiKey,
@@ -135,6 +138,13 @@ const BillingPayloadSchema = z
 	})
 	.passthrough();
 
+const BillingAccountCreatePayloadSchema = BillingAccountCreateRequestSchema.passthrough();
+const BillingAccountDeletePayloadSchema = z
+	.object({
+		id: z.string().min(1),
+	})
+	.passthrough();
+
 const MedusaCredentialsPayloadSchema = z
 	.object({
 		email: z.string().email(),
@@ -189,6 +199,82 @@ type MockState = {
 		createdAt: string;
 		updatedAt: string;
 	}>;
+	openSpecPlans: Array<{
+		slug: string;
+		title: string;
+		status: string;
+		updatedAt: string;
+		roles: Array<{
+			role: string;
+			totalCheckpoints: number;
+			doneCheckpoints: number;
+			tasksMarkdown: string;
+			checkpointsMarkdown: string | null;
+		}>;
+		overallProgress: {
+			totalCheckpoints: number;
+			doneCheckpoints: number;
+			percentComplete: number;
+		};
+		currentCheckpoint: {
+			timestamp: string;
+			role: string;
+			checkpointId: string;
+			state: string;
+			message: string;
+		} | null;
+		summaryMarkdown: string;
+		checkpointsMarkdown: string;
+		runtime: {
+			available: boolean;
+			sessionId: string | null;
+			correlationConfidence: string | null;
+			mode: string | null;
+			phase: string | null;
+			active: boolean;
+			updatedAt: string | null;
+			agents: Array<{
+				name: string;
+				role: string | null;
+				model: string | null;
+				status: string | null;
+				startedAt: string | null;
+				updatedAt: string | null;
+				source: string;
+				authoritative: boolean;
+			}>;
+			events: Array<{
+				ts: string;
+				kind: string;
+				message: string;
+				agentName: string | null;
+				role: string | null;
+				model: string | null;
+				status: string | null;
+				source: string;
+				authoritative: boolean;
+			}>;
+			lastCheckpoint: {
+				timestamp: string;
+				role: string;
+				checkpointId: string;
+				state: string;
+				message: string;
+			} | null;
+			lastError: {
+				timestamp: string;
+				code: string | null;
+				message: string;
+				source: string | null;
+				recoverable: boolean | null;
+			} | null;
+			canResume: boolean;
+			partial: boolean;
+			staleAfterSeconds: number | null;
+			reasons: string[];
+			unavailableReason: string | null;
+		};
+	}>;
 	billingAccounts: z.infer<typeof BillingAccountSchema>[];
 	stickySessions: Array<{
 		key: string;
@@ -219,6 +305,7 @@ function createInitialState(): MockState {
 		firewallEntries: [],
 		devices: [],
 		projects: [],
+		openSpecPlans: createDefaultOpenSpecPlans(),
 		billingAccounts: createDefaultBillingAccounts(),
 		stickySessions: [],
 		medusaCustomer: {
@@ -229,6 +316,227 @@ function createInitialState(): MockState {
 			phone: null,
 		},
 	};
+}
+
+function createDefaultOpenSpecPlans(): MockState["openSpecPlans"] {
+	return [
+		{
+			slug: "projects-plans-page",
+			title: "projects-plans-page",
+			status: "approved",
+			updatedAt: new Date("2026-04-08T09:51:46Z").toISOString(),
+			roles: [
+				{
+					role: "planner",
+					totalCheckpoints: 1,
+					doneCheckpoints: 1,
+					tasksMarkdown: "# planner tasks\\n\\n- [x] [P1] DONE - Draft completed",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "architect",
+					totalCheckpoints: 1,
+					doneCheckpoints: 1,
+					tasksMarkdown: "# architect tasks\\n\\n- [x] [A1] DONE - Architecture approved",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "critic",
+					totalCheckpoints: 1,
+					doneCheckpoints: 1,
+					tasksMarkdown: "# critic tasks\\n\\n- [x] [C1] DONE - Critic approved",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "executor",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# executor tasks\\n\\n- [ ] [E1] READY - Execution pending",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "writer",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# writer tasks\\n\\n- [ ] [W1] READY - Docs pending",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "verifier",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# verifier tasks\\n\\n- [ ] [V1] READY - Verification pending",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "designer",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# designer tasks\\n\\n- [ ] [D1] READY - Design review pending",
+					checkpointsMarkdown: null,
+				},
+			],
+			overallProgress: {
+				totalCheckpoints: 7,
+				doneCheckpoints: 3,
+				percentComplete: 43,
+			},
+			currentCheckpoint: {
+				timestamp: "2026-04-08T09:52:21Z",
+				role: "executor",
+				checkpointId: "E1",
+				state: "IN_PROGRESS",
+				message: "Implementing plans progress UI",
+			},
+			summaryMarkdown:
+				"# Plan Summary: projects-plans-page\\n\\n- **Mode:** ralplan\\n- **Status:** approved\\n",
+			checkpointsMarkdown:
+				"# Plan Checkpoints: projects-plans-page\\n\\n- 2026-04-08T09:52:21Z | role=executor | id=E1 | state=IN_PROGRESS | Implementing plans progress UI\\n",
+			runtime: {
+				available: true,
+				sessionId: "019d6cae-f82e-7670-a403-b5fae5c6e85c",
+				correlationConfidence: "high",
+				mode: "ralplan",
+				phase: "planning",
+				active: true,
+				updatedAt: new Date("2026-04-08T09:53:00Z").toISOString(),
+				agents: [
+					{
+						name: "executor",
+						role: "executor",
+						model: "gpt-5.3-codex",
+						status: "running",
+						startedAt: "2026-04-08T09:52:10Z",
+						updatedAt: "2026-04-08T09:53:00Z",
+						source: "ralplan-runtime",
+						authoritative: true,
+					},
+				],
+				events: [
+					{
+						ts: "2026-04-08T09:52:10Z",
+						kind: "agent_spawned",
+						message: "Executor spawned",
+						agentName: "executor",
+						role: "executor",
+						model: "gpt-5.3-codex",
+						status: "running",
+						source: "ralplan-runtime",
+						authoritative: true,
+					},
+					{
+						ts: "2026-04-08T09:53:00Z",
+						kind: "session_start",
+						message: "Session started",
+						agentName: null,
+						role: null,
+						model: null,
+						status: "active",
+						source: "omx-2026-04-08.jsonl",
+						authoritative: false,
+					},
+				],
+				lastCheckpoint: {
+					timestamp: "2026-04-08T09:52:21Z",
+					role: "executor",
+					checkpointId: "E1",
+					state: "IN_PROGRESS",
+					message: "Implementing plans progress UI",
+				},
+				lastError: null,
+				canResume: true,
+				partial: false,
+				staleAfterSeconds: 5,
+				reasons: ["plan_session_mapping"],
+				unavailableReason: null,
+			},
+		},
+		{
+			slug: "ralplan-openspec-plan-export",
+			title: "ralplan-openspec-plan-export",
+			status: "proposed",
+			updatedAt: new Date("2026-04-08T09:46:52Z").toISOString(),
+			roles: [
+				{
+					role: "planner",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# planner tasks\\n\\n- [ ] [P1] READY - Draft pending",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "architect",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# architect tasks\\n\\n- [ ] [A1] READY - Review pending",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "critic",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# critic tasks\\n\\n- [ ] [C1] READY - Critic pending",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "executor",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# executor tasks\\n\\n- [ ] [E1] READY - Execution pending",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "writer",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# writer tasks\\n\\n- [ ] [W1] READY - Docs pending",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "verifier",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# verifier tasks\\n\\n- [ ] [V1] READY - Verification pending",
+					checkpointsMarkdown: null,
+				},
+				{
+					role: "designer",
+					totalCheckpoints: 1,
+					doneCheckpoints: 0,
+					tasksMarkdown: "# designer tasks\\n\\n- [ ] [D1] READY - Design pending",
+					checkpointsMarkdown: null,
+				},
+			],
+			overallProgress: {
+				totalCheckpoints: 7,
+				doneCheckpoints: 0,
+				percentComplete: 0,
+			},
+			currentCheckpoint: null,
+			summaryMarkdown:
+				"# Plan Summary: ralplan-openspec-plan-export\\n\\n- **Mode:** ralplan\\n- **Status:** proposed\\n",
+			checkpointsMarkdown:
+				"# Plan Checkpoints: ralplan-openspec-plan-export\\n\\nNo checkpoints recorded yet.\\n",
+			runtime: {
+				available: false,
+				sessionId: null,
+				correlationConfidence: null,
+				mode: null,
+				phase: null,
+				active: false,
+				updatedAt: null,
+				agents: [],
+				events: [],
+				lastCheckpoint: null,
+				lastError: null,
+				canResume: false,
+				partial: false,
+				staleAfterSeconds: 30,
+				reasons: ["correlation_unresolved"],
+				unavailableReason: "correlation_unresolved",
+			},
+		},
+	];
 }
 
 function createDefaultBillingAccounts(): z.infer<typeof BillingAccountSchema>[] {
@@ -888,6 +1196,103 @@ export const handlers = [
 		return HttpResponse.json({ accounts: state.billingAccounts });
 	}),
 
+	http.post("/api/billing/accounts", async ({ request }) => {
+		const payload = await parseJsonBody(request, BillingAccountCreatePayloadSchema);
+		if (!payload) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_billing_account_payload",
+						message: "Invalid billing account payload",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+
+		const normalizedDomain = payload.domain.trim().toLowerCase();
+		if (!normalizedDomain) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_billing_account_payload",
+						message: "Domain is required",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+
+		if (state.billingAccounts.some((account) => account.domain.toLowerCase() === normalizedDomain)) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "billing_account_exists",
+						message: `Subscription account already exists for ${normalizedDomain}`,
+					},
+				},
+				{ status: 409 },
+			);
+		}
+
+		const now = new Date();
+		const renewalAt =
+			payload.renewalAt instanceof Date ? payload.renewalAt : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+		const idSuffix = normalizedDomain.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "account";
+		const created = {
+			id: `business-plan-${idSuffix}`,
+			domain: normalizedDomain,
+			planCode: payload.planCode,
+			planName: payload.planName,
+			subscriptionStatus: payload.subscriptionStatus,
+			entitled: payload.entitled,
+			paymentStatus: payload.paymentStatus,
+			billingCycle: {
+				start: now,
+				end: renewalAt,
+			},
+			renewalAt,
+			chatgptSeatsInUse: payload.chatgptSeatsInUse,
+			codexSeatsInUse: payload.codexSeatsInUse,
+			members: [],
+		};
+
+		state.billingAccounts = [...state.billingAccounts, created];
+
+		return HttpResponse.json(created, { status: 200 });
+	}),
+
+	http.delete("/api/billing/accounts", async ({ request }) => {
+		const payload = await parseJsonBody(request, BillingAccountDeletePayloadSchema);
+		if (!payload) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_billing_account_payload",
+						message: "Invalid billing account payload",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+
+		const existing = state.billingAccounts.find((account) => account.id === payload.id);
+		if (!existing) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "billing_account_not_found",
+						message: `Billing account not found: ${payload.id}`,
+					},
+				},
+				{ status: 404 },
+			);
+		}
+
+		state.billingAccounts = state.billingAccounts.filter((account) => account.id !== payload.id);
+		return new HttpResponse(null, { status: 204 });
+	}),
+
 	http.get("/api/firewall/ips", () => {
 		return HttpResponse.json({
 			mode:
@@ -1099,6 +1504,87 @@ export const handlers = [
 		}
 		state.devices = state.devices.filter((entry) => entry.id !== deviceId);
 		return HttpResponse.json({ status: "deleted" });
+	}),
+
+	http.get("/api/projects/plans", () => {
+		return HttpResponse.json({
+			entries: state.openSpecPlans.map((plan) => ({
+				slug: plan.slug,
+				title: plan.title,
+				status: plan.status,
+				updatedAt: plan.updatedAt,
+				roles: plan.roles.map((role) => ({
+					role: role.role,
+					totalCheckpoints: role.totalCheckpoints,
+					doneCheckpoints: role.doneCheckpoints,
+				})),
+				overallProgress: plan.overallProgress,
+				currentCheckpoint: plan.currentCheckpoint,
+			})),
+		});
+	}),
+
+	http.get("/api/projects/plans/:planSlug", ({ params }) => {
+		const planSlug = String(params.planSlug);
+		const plan = state.openSpecPlans.find((entry) => entry.slug === planSlug);
+		if (!plan) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "plan_not_found",
+						message: "Plan not found",
+					},
+				},
+				{ status: 404 },
+			);
+		}
+
+		return HttpResponse.json({
+			slug: plan.slug,
+			title: plan.title,
+			status: plan.status,
+			updatedAt: plan.updatedAt,
+			summaryMarkdown: plan.summaryMarkdown,
+			checkpointsMarkdown: plan.checkpointsMarkdown,
+			roles: plan.roles.map((role) => ({
+				role: role.role,
+				totalCheckpoints: role.totalCheckpoints,
+				doneCheckpoints: role.doneCheckpoints,
+				tasksMarkdown: role.tasksMarkdown,
+				checkpointsMarkdown: role.checkpointsMarkdown,
+			})),
+			overallProgress: plan.overallProgress,
+			currentCheckpoint: plan.currentCheckpoint,
+		});
+	}),
+
+	http.get("/api/projects/plans/:planSlug/runtime", ({ params }) => {
+		const planSlug = String(params.planSlug);
+		const plan = state.openSpecPlans.find((entry) => entry.slug === planSlug);
+		if (!plan) {
+			return HttpResponse.json(
+				{
+					available: false,
+					sessionId: null,
+					correlationConfidence: null,
+					mode: null,
+					phase: null,
+					active: false,
+					updatedAt: null,
+					agents: [],
+					events: [],
+					lastCheckpoint: null,
+					lastError: null,
+					canResume: false,
+					partial: false,
+					staleAfterSeconds: 30,
+					reasons: ["correlation_unresolved"],
+					unavailableReason: "correlation_unresolved",
+				},
+				{ status: 200 },
+			);
+		}
+		return HttpResponse.json(plan.runtime);
 	}),
 
 	http.get("/api/projects", () => {

@@ -1,0 +1,172 @@
+import { screen } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { describe, expect, it } from "vitest";
+
+import App from "@/App";
+import { server } from "@/test/mocks/server";
+import { renderWithProviders } from "@/test/utils";
+
+describe("plans flow integration", () => {
+  it("renders plan progress percent, checkpoint resume card, and designer role", async () => {
+    window.history.pushState({}, "", "/projects/plans");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Plans" })).toBeInTheDocument();
+
+    expect(await screen.findByTestId("plan-progress-percent")).toHaveTextContent("43%");
+    const currentCheckpoint = await screen.findByTestId("plan-current-checkpoint");
+    expect(currentCheckpoint).toHaveTextContent(/executor/i);
+    expect(currentCheckpoint).toHaveTextContent(/E1/);
+    expect(screen.getByText("Designer")).toBeInTheDocument();
+    expect(await screen.findByTestId("plan-summary-content")).toHaveTextContent("Mode");
+    expect(screen.getByTestId("plan-summary-content")).toHaveTextContent("ralplan");
+    expect(await screen.findByTestId("plan-checkpoints-content")).toHaveTextContent("Executor");
+    expect(screen.getByTestId("plan-checkpoints-content")).toHaveTextContent("Implementing plans progress UI");
+    expect(await screen.findByTestId("plan-runtime-observer")).toHaveTextContent("Live plan observer");
+    expect(await screen.findByTestId("plan-runtime-agents")).toHaveTextContent("executor");
+    expect(screen.getByTestId("plan-runtime-agents")).toHaveTextContent("gpt-5.3-codex");
+    expect(await screen.findByTestId("plan-runtime-events")).toHaveTextContent("Executor spawned");
+    expect(await screen.findByTestId("plan-runtime-resume")).toHaveTextContent("Can resume: Yes");
+  });
+
+  it("shows fallback when no current checkpoint exists", async () => {
+    server.use(
+      http.get("/api/projects/plans", () =>
+        HttpResponse.json({
+          entries: [
+            {
+              slug: "plan-no-checkpoint",
+              title: "plan-no-checkpoint",
+              status: "draft",
+              updatedAt: new Date("2026-04-08T10:20:00Z").toISOString(),
+              roles: [
+                { role: "planner", totalCheckpoints: 1, doneCheckpoints: 0 },
+                { role: "architect", totalCheckpoints: 1, doneCheckpoints: 0 },
+                { role: "critic", totalCheckpoints: 1, doneCheckpoints: 0 },
+                { role: "executor", totalCheckpoints: 1, doneCheckpoints: 0 },
+                { role: "writer", totalCheckpoints: 1, doneCheckpoints: 0 },
+                { role: "verifier", totalCheckpoints: 1, doneCheckpoints: 0 },
+                { role: "designer", totalCheckpoints: 1, doneCheckpoints: 0 },
+              ],
+              overallProgress: {
+                totalCheckpoints: 7,
+                doneCheckpoints: 0,
+                percentComplete: 0,
+              },
+              currentCheckpoint: null,
+            },
+          ],
+        }),
+      ),
+      http.get("/api/projects/plans/:planSlug", () =>
+        HttpResponse.json({
+          slug: "plan-no-checkpoint",
+          title: "plan-no-checkpoint",
+          status: "draft",
+          updatedAt: new Date("2026-04-08T10:20:00Z").toISOString(),
+          summaryMarkdown: "# Plan Summary: plan-no-checkpoint",
+          checkpointsMarkdown: "# Plan Checkpoints: plan-no-checkpoint",
+          roles: [
+            {
+              role: "planner",
+              totalCheckpoints: 1,
+              doneCheckpoints: 0,
+              tasksMarkdown: "# planner tasks",
+              checkpointsMarkdown: null,
+            },
+            {
+              role: "architect",
+              totalCheckpoints: 1,
+              doneCheckpoints: 0,
+              tasksMarkdown: "# architect tasks",
+              checkpointsMarkdown: null,
+            },
+            {
+              role: "critic",
+              totalCheckpoints: 1,
+              doneCheckpoints: 0,
+              tasksMarkdown: "# critic tasks",
+              checkpointsMarkdown: null,
+            },
+            {
+              role: "executor",
+              totalCheckpoints: 1,
+              doneCheckpoints: 0,
+              tasksMarkdown: "# executor tasks",
+              checkpointsMarkdown: null,
+            },
+            {
+              role: "writer",
+              totalCheckpoints: 1,
+              doneCheckpoints: 0,
+              tasksMarkdown: "# writer tasks",
+              checkpointsMarkdown: null,
+            },
+            {
+              role: "verifier",
+              totalCheckpoints: 1,
+              doneCheckpoints: 0,
+              tasksMarkdown: "# verifier tasks",
+              checkpointsMarkdown: null,
+            },
+            {
+              role: "designer",
+              totalCheckpoints: 1,
+              doneCheckpoints: 0,
+              tasksMarkdown: "# designer tasks",
+              checkpointsMarkdown: null,
+            },
+          ],
+          overallProgress: {
+            totalCheckpoints: 7,
+            doneCheckpoints: 0,
+            percentComplete: 0,
+          },
+          currentCheckpoint: null,
+        }),
+      ),
+      http.get("/api/projects/plans/:planSlug/runtime", () =>
+        HttpResponse.json({
+          available: false,
+          sessionId: "019d6cae-f82e-7670-a403-b5fae5c6e85c",
+          correlationConfidence: "medium",
+          mode: "ralplan",
+          phase: "planning",
+          active: false,
+          updatedAt: new Date("2026-04-08T10:20:00Z").toISOString(),
+          agents: [],
+          events: [],
+          lastCheckpoint: null,
+          lastError: {
+            timestamp: "2026-04-08T10:19:58Z",
+            code: "agent_events_missing",
+            message: "Agent telemetry missing",
+            source: "runtime",
+            recoverable: true,
+          },
+          canResume: true,
+          partial: true,
+          staleAfterSeconds: 30,
+          reasons: ["agent_events_missing"],
+          unavailableReason: "agent_events_missing",
+        }),
+      ),
+    );
+
+    window.history.pushState({}, "", "/projects/plans");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Plans" })).toBeInTheDocument();
+    expect(await screen.findByText("No checkpoint activity recorded yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No checkpoint log entries yet.")).toBeInTheDocument();
+    expect(await screen.findByText(/Runtime data unavailable/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("plan-runtime-resume")).toHaveTextContent("Can resume: Yes");
+  });
+
+  it("shows a copy starter prompt action for the selected plan", async () => {
+    window.history.pushState({}, "", "/projects/plans");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("button", { name: /copy starter prompt/i })).toBeInTheDocument();
+  });
+});

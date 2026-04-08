@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, WebSocket
 
-from app.core.auth.dependencies import set_dashboard_error_format, validate_dashboard_session
+from app.core.auth.dependencies import (
+    set_dashboard_error_format,
+    validate_dashboard_session,
+    validate_dashboard_websocket_session,
+)
 from app.core.openai.model_registry import get_model_registry, is_public_model
 from app.dependencies import DashboardContext, get_dashboard_context
+from app.modules.dashboard.live_updates import stream_dashboard_overview_updates
 from app.modules.dashboard.schemas import DashboardOverviewResponse
 
 router = APIRouter(
@@ -12,6 +17,7 @@ router = APIRouter(
     tags=["dashboard"],
     dependencies=[Depends(validate_dashboard_session), Depends(set_dashboard_error_format)],
 )
+ws_router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 @router.get("/dashboard/overview", response_model=DashboardOverviewResponse)
@@ -19,6 +25,14 @@ async def get_overview(
     context: DashboardContext = Depends(get_dashboard_context),
 ) -> DashboardOverviewResponse:
     return await context.service.get_overview()
+
+
+@ws_router.websocket("/overview/ws")
+async def stream_overview_updates(websocket: WebSocket) -> None:
+    if not await validate_dashboard_websocket_session(websocket):
+        return
+    await websocket.accept()
+    await stream_dashboard_overview_updates(websocket)
 
 
 @router.get("/models")

@@ -1,40 +1,21 @@
 import { defineConfig, loadEnv } from "@medusajs/framework/utils";
 import { networkInterfaces } from "node:os";
+const {
+  getConfiguredMedusaDbSchema,
+  withDbSchemaSearchPath,
+} = require("./src/lib/database-schema");
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
 const baseDatabaseUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
-const dbSchema = process.env.DB_SCHEMA?.trim();
+const configuredDbSchema = getConfiguredMedusaDbSchema(process.env);
 const pgSslMode = process.env.PGSSLMODE?.toLowerCase().trim();
 const disablePgSsl =
   pgSslMode === "disable" ||
   pgSslMode === "false" ||
   pgSslMode === "0" ||
   pgSslMode === "off";
-const getDatabaseUrl = () => {
-  if (!baseDatabaseUrl || !dbSchema) {
-    return baseDatabaseUrl;
-  }
-
-  try {
-    const parsed = new URL(baseDatabaseUrl);
-    const existingOptions = parsed.searchParams.get("options");
-
-    if (existingOptions?.includes("search_path")) {
-      return parsed.toString();
-    }
-
-    const schemaOption = `-c search_path=${dbSchema}`;
-    parsed.searchParams.set(
-      "options",
-      existingOptions ? `${existingOptions} ${schemaOption}` : schemaOption
-    );
-
-    return parsed.toString();
-  } catch {
-    return baseDatabaseUrl;
-  }
-};
+const getDatabaseUrl = () => withDbSchemaSearchPath(baseDatabaseUrl);
 
 const splitCorsOrigins = (value?: string) =>
   (value || "")
@@ -122,7 +103,7 @@ module.exports = defineConfig({
   },
   projectConfig: {
     databaseUrl: getDatabaseUrl(),
-    databaseSchema: dbSchema || "public",
+    databaseSchema: configuredDbSchema || "public",
     databaseDriverOptions: disablePgSsl ? { ssl: false } : undefined,
 
     http: {

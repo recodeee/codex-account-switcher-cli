@@ -86,7 +86,8 @@ describe("AccountCard", () => {
     expect(within(tokenCardBody as HTMLElement).getByText("Weekly")).toBeInTheDocument();
   });
 
-  it("shows an OMX boosted badge next to the active status when OMX manages the live session", () => {
+  it("shows OMX badge in the right-side token-card badge row", () => {
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
       codexSessionCount: 1,
@@ -98,14 +99,24 @@ describe("AccountCard", () => {
         hasLiveSession: true,
         isOmxBoosted: true,
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} />);
 
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
-    expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.getByText("OMX boosted")).toBeInTheDocument();
-    expect(screen.getByText("Live token card")).toBeInTheDocument();
+    const openAiLabel = screen.getByText("OpenAI");
+    const liveTokenLabel = screen.getByTestId("token-card-label");
+    const badgeRow = screen.getByTestId("token-card-badge-row");
+    const activeBadge = within(badgeRow).getByText("Active");
+    const omxBadge = within(badgeRow).getByText("OMX");
+
+    expect(liveTokenLabel).toHaveTextContent("Live token card");
+    expect(openAiLabel.compareDocumentPosition(liveTokenLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(activeBadge).toBeInTheDocument();
+    expect(omxBadge).toBeInTheDocument();
+    expect(screen.queryByTestId("token-card-badge-row")).toContainElement(activeBadge);
   });
 
   it("does not render the cardholder row", () => {
@@ -558,7 +569,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByRole("button", { name: "Currently used" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
   });
 
   it("disables use this account button for working-now accounts when weekly quota is depleted", () => {
@@ -583,8 +594,8 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByRole("button", { name: "Currently used" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Currently used" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use this account" })).toHaveAttribute(
       "title",
       "Weekly quota shown as 0%.",
     );
@@ -1013,6 +1024,40 @@ describe("AccountCard", () => {
 
     expect(screen.queryByText(/^Usage limit hit$/)).not.toBeInTheDocument();
     expect(screen.getByText("Weekly usage limit hit")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
+    expect(screen.queryByText("waiting for new task")).not.toBeInTheDocument();
+  });
+
+  it("hides active and waiting badges when weekly usage limit is hit during a live session", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 58,
+        secondaryRemainingPercent: 0,
+      },
+      codexCurrentTaskPreview: null,
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("Weekly usage limit hit")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
+    expect(screen.queryByText("waiting for new task")).not.toBeInTheDocument();
   });
 
   it("treats sub-5% 5h quota as depleted for live usage-limit state", () => {
@@ -1082,7 +1127,7 @@ describe("AccountCard", () => {
     }
   });
 
-  it("auto-terminates CLI sessions once the usage-limit grace window expires", () => {
+  it("does not auto-terminate CLI sessions when the usage-limit grace window expires", () => {
     vi.useFakeTimers();
     try {
       const now = new Date("2026-04-05T00:00:00.000Z");
@@ -1115,7 +1160,7 @@ describe("AccountCard", () => {
       act(() => {
         vi.advanceTimersByTime(61_000);
       });
-      expect(onAction).toHaveBeenCalledWith(account, "terminateCliSessions");
+      expect(onAction).not.toHaveBeenCalledWith(account, "terminateCliSessions");
 
       act(() => {
         vi.advanceTimersByTime(5_000);
@@ -1124,13 +1169,13 @@ describe("AccountCard", () => {
         ([calledAccount, action]) =>
           calledAccount === account && action === "terminateCliSessions",
       );
-      expect(terminateCalls).toHaveLength(1);
+      expect(terminateCalls).toHaveLength(0);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("does not repeatedly auto-terminate when telemetry timestamps keep rotating", () => {
+  it("keeps CLI sessions intact when telemetry timestamps keep rotating after grace expiry", () => {
     vi.useFakeTimers();
     try {
       const now = new Date("2026-04-05T00:00:00.000Z");
@@ -1162,7 +1207,7 @@ describe("AccountCard", () => {
       act(() => {
         vi.advanceTimersByTime(61_000);
       });
-      expect(onAction).toHaveBeenCalledWith(account, "terminateCliSessions");
+      expect(onAction).not.toHaveBeenCalledWith(account, "terminateCliSessions");
 
       const refreshedAccount = {
         ...account,
@@ -1174,14 +1219,14 @@ describe("AccountCard", () => {
       const terminateCalls = onAction.mock.calls.filter(
         ([, action]) => action === "terminateCliSessions",
       );
-      expect(terminateCalls).toHaveLength(1);
+      expect(terminateCalls).toHaveLength(0);
       expect(screen.queryByText(/Leaving working now in/i)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("does not repeatedly auto-terminate when remaining quota display changes after grace expiry", () => {
+  it("keeps CLI sessions intact when remaining quota display changes after grace expiry", () => {
     vi.useFakeTimers();
     try {
       const now = new Date("2026-04-05T00:00:00.000Z");
@@ -1214,7 +1259,7 @@ describe("AccountCard", () => {
       act(() => {
         vi.advanceTimersByTime(61_000);
       });
-      expect(onAction).toHaveBeenCalledWith(account, "terminateCliSessions");
+      expect(onAction).not.toHaveBeenCalledWith(account, "terminateCliSessions");
 
       const refreshedAccount = {
         ...account,
@@ -1230,7 +1275,7 @@ describe("AccountCard", () => {
       const terminateCalls = onAction.mock.calls.filter(
         ([, action]) => action === "terminateCliSessions",
       );
-      expect(terminateCalls).toHaveLength(1);
+      expect(terminateCalls).toHaveLength(0);
     } finally {
       vi.useRealTimers();
     }
@@ -1298,8 +1343,6 @@ describe("AccountCard", () => {
       },
       resetAtPrimary: null,
       resetAtSecondary: null,
-      lastUsageRecordedAtPrimary: null,
-      lastUsageRecordedAtSecondary: null,
       codexLiveSessionCount: 1,
       codexSessionCount: 1,
       codexAuth: {
@@ -1309,6 +1352,8 @@ describe("AccountCard", () => {
         isActiveSnapshot: true,
         hasLiveSession: true,
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
       liveQuotaDebug: {
         snapshotsConsidered: ["odin"],
         overrideApplied: false,
@@ -1422,7 +1467,8 @@ describe("AccountCard", () => {
     expect(screen.queryByText("9%")).not.toBeInTheDocument();
     expect(screen.queryByText("26%")).not.toBeInTheDocument();
     expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("Telemetry pending").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Telemetry pending")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/waiting for new task/i).length).toBeGreaterThan(0);
   });
 
   it("keeps baseline usage bars when deferred mixed-session fallback is not trusted", () => {
@@ -1508,6 +1554,39 @@ describe("AccountCard", () => {
       screen.getByText("Merged fallback summary and shipped diagnostics"),
     ).toBeInTheDocument();
     expect(screen.getByText("working...")).toBeInTheDocument();
+  });
+
+  it("renders the OMX planning graph in place of the prompt pill for $ralplan tasks", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan can you make this card show planning mode runtime state",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByText("Prompt task")).not.toBeInTheDocument();
+    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
+    expect(planningGraph).toBeInTheDocument();
+    expect(
+      within(planningGraph).getByText(
+        "$ralplan can you make this card show planning mode runtime state",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Web")).toBeInTheDocument();
+    expect(screen.getByText("Plan")).toBeInTheDocument();
+    expect(screen.getByText("DB")).toBeInTheDocument();
+    expect(screen.getByText("API")).toBeInTheDocument();
+    expect(screen.getByText("Deploy")).toBeInTheDocument();
+    expect(screen.getByText("LLM")).toBeInTheDocument();
   });
 
   it("shows a Next.js badge when task previews mention next.js or turbopack", () => {
@@ -1720,8 +1799,39 @@ describe("AccountCard", () => {
     expect(screen.getByText("1 assigned")).toBeInTheDocument();
     expect(screen.getByText("1 waiting")).toBeInTheDocument();
     expect(
-      screen.getByText("No task assigned yet for this account."),
-    ).toBeInTheDocument();
+      screen.queryByText("No task assigned yet for this account."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders usage-limit session previews in red", () => {
+    const usageLimitPreview = "You've hit your usage limit. Try again at 2:36 PM.";
+    const account = createAccountSummary({
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-limit-usage",
+          taskPreview: usageLimitPreview,
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const highlightedPhrase = screen.getByText(/you['’]ve hit your usage limit/i);
+    expect(highlightedPhrase).toHaveClass("font-semibold", "text-red-200");
+
+    const trailingHint = screen.getByText(/try again at 2:36 pm\./i);
+    expect(trailingHint).toHaveClass("text-red-300/90");
   });
 
   it("shows per-session logs inline when watch logs is clicked", async () => {
@@ -2335,7 +2445,7 @@ describe("AccountCard", () => {
     expect(sessionsValue).toHaveTextContent(/^0$/);
   });
 
-  it("shows working indicator when tracked codex sessions exist without live telemetry", () => {
+  it("does not show working indicator when tracked codex sessions exist without live telemetry", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
       codexTrackedSessionCount: 2,
@@ -2355,10 +2465,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    const workingIndicator = screen.getByText("working...");
-    expect(workingIndicator).toBeInTheDocument();
-    expect(workingIndicator.closest("div")?.className).not.toContain("bg-cyan-500/10");
-    expect(workingIndicator.closest("div")?.className).toContain("border-cyan-500/35");
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
     expect(screen.queryByText("Live token status")).not.toBeInTheDocument();
     expect(screen.getByText("63%")).toBeInTheDocument();
   });

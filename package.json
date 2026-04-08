@@ -6,6 +6,7 @@
     "dev": "bash ./scripts/dev-all.sh",
     "dev:all": "bash ./scripts/dev-all.sh",
     "dev:frontend": "cd apps/frontend && bun run dev",
-    "dev:frontend-only": "cd apps/frontend && bun run dev:frontend"
+    "dev:frontend-only": "cd apps/frontend && bun run dev:frontend",
+    "logs": "bash ./scripts/dev-logs.sh"
   }
 }

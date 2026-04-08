@@ -31,7 +31,8 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account, now.getTime())).toBe(true);
   });
 
-  it("returns true when a live process session count is present", () => {
+  it("returns true when a live process session count has fresh telemetry timestamps", () => {
+    const now = new Date("2026-04-04T12:00:00.000Z");
     const account = createAccountSummary({
       codexAuth: {
         hasSnapshot: true,
@@ -41,14 +42,14 @@ describe("isAccountWorkingNow", () => {
         hasLiveSession: false,
       },
       codexLiveSessionCount: 2,
-      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtPrimary: "2026-04-04T11:58:00.000Z",
       lastUsageRecordedAtSecondary: null,
     });
 
-    expect(isAccountWorkingNow(account)).toBe(true);
+    expect(isAccountWorkingNow(account, now.getTime())).toBe(true);
   });
 
-  it("returns true when tracked codex sessions are present", () => {
+  it("returns false when tracked codex sessions are present without fresh telemetry", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
       codexTrackedSessionCount: 3,
@@ -63,7 +64,7 @@ describe("isAccountWorkingNow", () => {
       lastUsageRecordedAtSecondary: null,
     });
 
-    expect(isAccountWorkingNow(account)).toBe(true);
+    expect(isAccountWorkingNow(account)).toBe(false);
   });
 
   it("returns true for low-quota accounts when codex snapshot visibility is unavailable", () => {
@@ -654,7 +655,7 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account, nowMs)).toBe(false);
   });
 
-  it("keeps live-session accounts visible when no-live-telemetry has no scoped cli samples", () => {
+  it("drops no-live-telemetry accounts when scoped cli samples are missing", () => {
     const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
@@ -688,11 +689,11 @@ describe("isAccountWorkingNow", () => {
       },
     });
 
-    expect(isAccountWorkingNow(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(false);
     expect(hasActiveCliSessionSignal(account, nowMs)).toBe(true);
   });
 
-  it("returns true for active snapshot live sessions even when telemetry samples are missing", () => {
+  it("returns false for active snapshot live sessions when telemetry samples are missing", () => {
     const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
@@ -717,10 +718,10 @@ describe("isAccountWorkingNow", () => {
     });
 
     expect(hasActiveCliSessionSignal(account, nowMs)).toBe(true);
-    expect(isAccountWorkingNow(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(false);
   });
 
-  it("returns true when compatibility codexSessionCount is present", () => {
+  it("returns false when compatibility codexSessionCount is present without fresh telemetry", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
       codexTrackedSessionCount: 0,
@@ -736,7 +737,7 @@ describe("isAccountWorkingNow", () => {
       lastUsageRecordedAtSecondary: null,
     });
 
-    expect(isAccountWorkingNow(account)).toBe(true);
+    expect(isAccountWorkingNow(account)).toBe(false);
   });
 
   it("returns false when only deferred mixed-default raw samples exist without active session signals", () => {
@@ -1356,6 +1357,7 @@ describe("isAccountWorkingNow", () => {
 
   it("keeps merged-depleted 5h accounts out of working-now after grace until reset", () => {
     const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
+    const nowIso = new Date(nowMs).toISOString();
     const account = createAccountSummary({
       usage: {
         primaryRemainingPercent: 44,
@@ -1372,6 +1374,7 @@ describe("isAccountWorkingNow", () => {
         isActiveSnapshot: true,
         hasLiveSession: true,
       },
+      lastUsageRecordedAtPrimary: nowIso,
       liveQuotaDebug: {
         snapshotsConsidered: ["amodeus"],
         overrideApplied: true,
@@ -1453,7 +1456,7 @@ describe("hasActiveCliSessionSignal", () => {
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 0,
       codexSessionCount: 0,
-      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtPrimary: "2026-04-04T11:59:00.000Z",
       lastUsageRecordedAtSecondary: null,
     });
     expect(hasActiveCliSessionSignal(freshTelemetry, nowMs)).toBe(true);

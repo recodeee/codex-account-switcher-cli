@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 
-from fastapi import Request, Security
+from fastapi import Request, Security, WebSocket
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.auth.api_key_cache import get_api_key_cache
@@ -120,6 +120,29 @@ async def validate_dashboard_session(request: Request) -> None:
         raise DashboardAuthError("Authentication is required")
     if settings.totp_required_on_login and not state.totp_verified:
         raise DashboardAuthError("TOTP verification is required for dashboard access", code="totp_required")
+
+
+async def validate_dashboard_websocket_session(websocket: WebSocket) -> bool:
+    settings = await get_settings_cache().get()
+    requires_auth = settings.password_hash is not None or settings.totp_required_on_login
+    if not requires_auth:
+        return True
+
+    session_id = websocket.cookies.get(DASHBOARD_SESSION_COOKIE)
+    state = get_dashboard_session_store().get(session_id)
+    if state is None:
+        await websocket.close(code=4401, reason="Authentication is required")
+        return False
+
+    if settings.password_hash is not None and not state.password_verified:
+        await websocket.close(code=4401, reason="Authentication is required")
+        return False
+
+    if settings.totp_required_on_login and not state.totp_verified:
+        await websocket.close(code=4403, reason="TOTP verification is required")
+        return False
+
+    return True
 
 
 # --- Codex usage caller identity auth ---

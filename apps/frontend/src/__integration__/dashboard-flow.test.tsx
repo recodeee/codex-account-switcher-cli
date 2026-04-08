@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "@/App";
 import {
@@ -15,7 +15,41 @@ import {
 import { server } from "@/test/mocks/server";
 import { renderWithProviders } from "@/test/utils";
 
+class MockWebSocket {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+
+  readyState = MockWebSocket.CONNECTING;
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+
+  constructor(url: string) {
+    void url;
+  }
+
+  close() {
+    this.readyState = MockWebSocket.CLOSED;
+    this.onclose?.({ code: 1000 } as CloseEvent);
+  }
+
+  send() {
+    // noop
+  }
+}
+
 describe("dashboard flow integration", () => {
+  beforeEach(() => {
+    vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("loads dashboard, refetches request logs on filter/pagination, and avoids overview refetch", async () => {
     const user = userEvent.setup({ delay: null });
     const logs = createDefaultRequestLogs();
@@ -146,6 +180,53 @@ describe("dashboard flow integration", () => {
 
   it("switches local codex account from dashboard account card without forcing a working badge", async () => {
     const user = userEvent.setup({ delay: null });
+    const nowIso = new Date().toISOString();
+
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_switch_current",
+                email: "switch-current@example.com",
+                displayName: "switch-current@example.com",
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "switch-current",
+                  activeSnapshotName: "switch-current",
+                  isActiveSnapshot: true,
+                  hasLiveSession: false,
+                },
+                lastUsageRecordedAtPrimary: nowIso,
+                lastUsageRecordedAtSecondary: nowIso,
+              }),
+              createAccountSummary({
+                accountId: "acc_switch_target",
+                email: "switch-target@example.com",
+                displayName: "switch-target@example.com",
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "switch-target",
+                  activeSnapshotName: "switch-current",
+                  isActiveSnapshot: false,
+                  hasLiveSession: false,
+                },
+                lastUsageRecordedAtPrimary: nowIso,
+                lastUsageRecordedAtSecondary: nowIso,
+              }),
+            ],
+          }),
+        ),
+      ),
+      http.post("/api/accounts/:accountId/use-local", ({ params }) =>
+        HttpResponse.json({
+          status: "switched",
+          accountId: String(params.accountId),
+          snapshotName: "switch-target",
+        }),
+      ),
+    );
 
     window.history.pushState({}, "", "/dashboard");
     renderWithProviders(<App />);
@@ -422,6 +503,7 @@ describe("dashboard flow integration", () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /CLI session tasks/i }));
     const watchButtons = await screen.findAllByRole("button", { name: "Watch logs" });
     await user.click(watchButtons[0]);
 

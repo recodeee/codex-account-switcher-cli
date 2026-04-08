@@ -5,6 +5,7 @@ import {
   Eye,
   EyeOff,
   CreditCard,
+  FolderTree,
   Home,
   KeyRound,
   LayoutDashboard,
@@ -20,7 +21,7 @@ import {
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { NAV_ITEMS } from "@/components/layout/nav-items";
+import { flattenNavItems, NAV_ITEMS } from "@/components/layout/nav-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,11 +49,13 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/devices": MonitorSmartphone,
   "/storage": Home,
   "/sessions": Link2,
+  "/projects/plans": FolderTree,
   "/settings": Settings2,
 };
 
 function accountMenuPriorityScore(account: AccountSummary): number {
   let score = 0;
+  if (account.codexAuth?.isActiveSnapshot ?? false) score += 10_000;
   if (hasActiveCliSessionSignal(account)) score += 1_000;
   if (account.codexAuth?.isActiveSnapshot ?? false) score += 400;
   if (account.status === "active") score += 100;
@@ -100,6 +103,7 @@ export function AccountMenu({
     (state) => state.lastAuthenticatedEmail,
   );
   const medusaLogout = useMedusaAdminAuthStore((state) => state.logout);
+  const navItems = useMemo(() => flattenNavItems(NAV_ITEMS), []);
 
   const overviewQuery = useQuery({
     queryKey: ["dashboard", "overview"],
@@ -114,11 +118,22 @@ export function AccountMenu({
     [overviewQuery.data?.accounts],
   );
   const medusaAdminEmail = medusaUser?.email ?? null;
-  const dashboardLoginEmail =
-    medusaLastAuthenticatedEmail ?? medusaAdminEmail ?? loggedInEmail;
+  const dashboardLoginEmail = medusaAdminEmail ?? medusaLastAuthenticatedEmail ?? null;
+  const displayedLoginEmail = dashboardLoginEmail ?? loggedInEmail;
+  const normalizedLoggedInEmail = loggedInEmail?.trim().toLowerCase() ?? null;
+  const normalizedDisplayedLoginEmail =
+    displayedLoginEmail?.trim().toLowerCase() ?? null;
+  const triggerEmail = displayedLoginEmail;
+  const showTriggerCodexEmail =
+    Boolean(loggedInEmail) &&
+    normalizedLoggedInEmail !== normalizedDisplayedLoginEmail;
   const showCodexAccountDetails =
-    Boolean(loggedInEmail) && loggedInEmail !== dashboardLoginEmail;
-  const triggerEmail = dashboardLoginEmail;
+    Boolean(loggedInEmail) &&
+    normalizedLoggedInEmail !== normalizedDisplayedLoginEmail;
+  const showLastMedusaAdminLogin =
+    Boolean(medusaAdminEmail) &&
+    Boolean(medusaLastAuthenticatedEmail) &&
+    medusaLastAuthenticatedEmail !== medusaAdminEmail;
   const triggerLetter = (triggerEmail?.trim()?.[0] ?? "C").toUpperCase();
 
   return (
@@ -128,14 +143,27 @@ export function AccountMenu({
           type="button"
           size="sm"
           variant="ghost"
-          className={cn("h-8 gap-1.5 rounded-lg px-2 text-xs", className)}
+          className={cn("h-10 gap-1.5 rounded-lg px-2 text-xs", className)}
           aria-label="Open account menu"
         >
           <span className="flex h-5 w-5 items-center justify-center rounded-md border border-border/70 bg-muted/40 font-medium">
             {triggerLetter}
           </span>
-          <span className="hidden max-w-[9rem] truncate text-muted-foreground lg:inline">
-            {triggerEmail ?? "Profile"}
+          <span className="hidden min-w-0 sm:flex sm:max-w-[16rem] sm:flex-col sm:items-start sm:leading-tight">
+            <span
+              className="max-w-[16rem] truncate text-xs text-muted-foreground"
+              title={triggerEmail ?? "No dashboard login recorded yet"}
+            >
+              {triggerEmail ?? "No dashboard login recorded yet"}
+            </span>
+            {showTriggerCodexEmail ? (
+              <span
+                className="max-w-[16rem] truncate text-[10px] text-muted-foreground/80"
+                title={loggedInEmail ?? undefined}
+              >
+                Active Codex account: {loggedInEmail}
+              </span>
+            ) : null}
           </span>
         </Button>
       </DropdownMenuTrigger>
@@ -181,7 +209,7 @@ export function AccountMenu({
           </>
         ) : null}
 
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const Icon = NAV_ICONS[item.to] ?? Home;
           return (
             <DropdownMenuItem
@@ -192,7 +220,7 @@ export function AccountMenu({
               }}
             >
                 <Icon className="h-4 w-4" aria-hidden="true" />
-                <span>{item.label}</span>
+                <span className={item.depth > 0 ? "pl-4" : undefined}>{item.label}</span>
                 {item.isComingSoon ? (
                   <Badge
                     variant="secondary"
@@ -230,15 +258,15 @@ export function AccountMenu({
               "truncate text-xs text-foreground/90",
               blurred ? "privacy-blur" : "",
             )}
-            title={dashboardLoginEmail ?? "No dashboard login recorded yet"}
+            title={displayedLoginEmail ?? "No dashboard login recorded yet"}
           >
-            {dashboardLoginEmail ?? "No dashboard login recorded yet"}
+            {displayedLoginEmail ?? "No dashboard login recorded yet"}
           </p>
 
-          {showCodexAccountDetails ? (
+          {showCodexAccountDetails && loggedInEmail ? (
             <>
               <p className="mt-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                Current Codex account
+                Active Codex account
               </p>
               <p
                 className={cn(
@@ -269,7 +297,7 @@ export function AccountMenu({
             </>
           ) : null}
 
-          {medusaLastAuthenticatedEmail ? (
+          {showLastMedusaAdminLogin && medusaLastAuthenticatedEmail ? (
             <>
               <p className="mt-2 text-[10px] uppercase tracking-wider text-muted-foreground">
                 Last Medusa admin login

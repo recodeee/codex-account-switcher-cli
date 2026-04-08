@@ -154,12 +154,18 @@ def apply_local_live_usage_overrides(
     live_process_session_counts_by_snapshot = read_live_codex_process_session_counts_by_snapshot()
     runtime_live_session_counts_by_snapshot = read_runtime_live_session_counts_by_snapshot()
     has_process_session_visibility = bool(live_process_session_counts_by_snapshot)
+    has_relevant_process_session_visibility = _has_relevant_process_session_visibility(
+        accounts=accounts,
+        snapshot_index=snapshot_index,
+        codex_auth_by_account=codex_auth_by_account,
+        live_process_session_counts_by_snapshot=live_process_session_counts_by_snapshot,
+    )
     should_defer_active_snapshot_usage = _should_defer_active_snapshot_usage_override(
         accounts=accounts,
         snapshot_index=snapshot_index,
         codex_auth_by_account=codex_auth_by_account,
         live_usage_by_snapshot=live_usage_by_snapshot,
-    ) and not has_process_session_visibility
+    ) and not has_relevant_process_session_visibility
     (
         debug_raw_samples_by_account,
         confident_raw_samples_by_account,
@@ -267,7 +273,7 @@ def apply_local_live_usage_overrides(
         effective_live_runtime_session_count = (
             live_runtime_session_count if not has_process_session_visibility else 0
         )
-        has_live_runtime_session = effective_live_runtime_session_count > 0
+        has_live_runtime_session = live_runtime_session_count > 0
         has_recently_terminated_cli_session = has_recently_terminated_cli_session_snapshot(
             session_presence_snapshot_names,
             selected_snapshot_name=effective_selected_snapshot_name,
@@ -1686,6 +1692,50 @@ def _log_live_quota_debug(
         override_reason,
         raw_summary,
     )
+
+
+def _has_relevant_process_session_visibility(
+    *,
+    accounts: list[Account],
+    snapshot_index: CodexAuthSnapshotIndex,
+    codex_auth_by_account: dict[str, AccountCodexAuthStatus],
+    live_process_session_counts_by_snapshot: dict[str, int],
+) -> bool:
+    if not live_process_session_counts_by_snapshot:
+        return False
+
+    for account in accounts:
+        codex_auth_status = codex_auth_by_account.get(account.id)
+        if codex_auth_status is None:
+            continue
+
+        selected_snapshot_name = codex_auth_status.snapshot_name
+        snapshot_names_from_index = resolve_snapshot_name_candidates_for_account(
+            snapshot_index=snapshot_index,
+            account_id=account.id,
+            chatgpt_account_id=account.chatgpt_account_id,
+            email=account.email,
+        )
+        snapshot_names = (
+            [selected_snapshot_name]
+            if selected_snapshot_name
+            else snapshot_names_from_index
+        )
+        session_presence_snapshot_names = _resolve_session_presence_snapshot_names_for_account(
+            account_email=account.email,
+            selected_snapshot_name=selected_snapshot_name,
+            snapshot_names_from_index=snapshot_names_from_index,
+            fallback_snapshot_names=snapshot_names,
+        )
+        live_process_session_count = _resolve_live_process_session_count_for_account(
+            snapshot_names=session_presence_snapshot_names,
+            selected_snapshot_name=selected_snapshot_name,
+            live_process_session_counts_by_snapshot=live_process_session_counts_by_snapshot,
+        )
+        if live_process_session_count > 0:
+            return True
+
+    return False
 
 
 def _resolve_live_usage_for_account(

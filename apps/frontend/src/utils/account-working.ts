@@ -417,6 +417,13 @@ export function hasFreshLiveTelemetry(
   >,
   nowMs: number = Date.now(),
 ): boolean {
+  const hasFreshUsageTimestamp =
+    isFreshTimestamp(account.lastUsageRecordedAtPrimary, nowMs) ||
+    isFreshTimestamp(account.lastUsageRecordedAtSecondary, nowMs);
+  if (!hasFreshUsageTimestamp) {
+    return false;
+  }
+
   const liveSessionCount = Math.max(account.codexLiveSessionCount ?? 0, 0);
   if (liveSessionCount > 0) {
     return true;
@@ -426,10 +433,7 @@ export function hasFreshLiveTelemetry(
     return false;
   }
 
-  return (
-    isFreshTimestamp(account.lastUsageRecordedAtPrimary, nowMs) ||
-    isFreshTimestamp(account.lastUsageRecordedAtSecondary, nowMs)
-  );
+  return true;
 }
 
 function hasFreshTaskPreviewSignal(
@@ -826,27 +830,8 @@ export function isAccountWorkingNow(
     return true;
   }
 
-  if (hasTaskPreviewSignal) {
+  if (hasTaskPreviewSignal && (hasFreshLiveSession || hasGraceLiveSessionHint)) {
     return true;
-  }
-
-  if (
-    (account.codexAuth?.hasLiveSession ?? false) &&
-    (account.codexAuth?.isActiveSnapshot ?? false)
-  ) {
-    return true;
-  }
-
-  if (account.codexAuth?.hasLiveSession ?? false) {
-    if (hasTaskPreviewSignal) {
-      return true;
-    }
-    if (
-      account.lastUsageRecordedAtPrimary == null &&
-      account.lastUsageRecordedAtSecondary == null
-    ) {
-      return true;
-    }
   }
 
   const freshDebugRawSampleCount = getFreshDebugRawSampleCount(account, nowMs);
@@ -883,7 +868,7 @@ export function isAccountWorkingNow(
     return true;
   }
 
-  return Math.max(account.codexTrackedSessionCount ?? 0, account.codexSessionCount ?? 0, 0) > 0;
+  return false;
 }
 
 export function resetWorkingNowLimitHitStateForTests(): void {

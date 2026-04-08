@@ -12,6 +12,7 @@ import {
   Link2,
   MonitorSmartphone,
   PanelsTopLeft,
+  FolderTree,
   Settings2,
   Share2,
   Users,
@@ -31,6 +32,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/accounts": Users,
   "/referrals": Share2,
   "/projects": PanelsTopLeft,
+  "/projects/plans": FolderTree,
   "/billing": CreditCard,
   "/apis": KeyRound,
   "/devices": MonitorSmartphone,
@@ -227,34 +229,70 @@ export function AppSidebar() {
           {NAV_ITEMS.map((item) => {
             const Icon = NAV_ICONS[item.to] ?? BarChart3;
             return (
-              <NavLink key={item.to} to={item.to}>
-                {({ isActive }) => (
-                  <span
-                    className={cn(
-                      "flex items-center rounded-2xl px-3.5 py-3 text-sm font-medium transition-all duration-200",
-                      collapsed ? "justify-center px-2.5" : "justify-between",
-                      isActive
-                        ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
-                        : "text-slate-300 hover:bg-white/[0.05] hover:text-white",
-                    )}
-                  >
-                    <span className="flex items-center gap-3">
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                      <span className={collapsed ? "sr-only" : undefined}>
-                        {item.label}
+              <div key={item.to} className="space-y-1">
+                <NavLink to={item.to}>
+                  {({ isActive }) => (
+                    <span
+                      className={cn(
+                        "flex items-center rounded-2xl px-3.5 py-3 text-sm font-medium transition-all duration-200",
+                        collapsed ? "justify-center px-2.5" : "justify-between",
+                        isActive
+                          ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                          : "text-slate-300 hover:bg-white/[0.05] hover:text-white",
+                      )}
+                    >
+                      <span className="flex items-center gap-3">
+                        <Icon className="h-4 w-4" aria-hidden="true" />
+                        <span className={collapsed ? "sr-only" : undefined}>
+                          {item.label}
+                        </span>
                       </span>
+                      {item.isComingSoon && !collapsed ? (
+                        <Badge
+                          variant="secondary"
+                          className="border border-white/10 bg-white/5 px-1.5 py-0 text-[10px] text-slate-400"
+                        >
+                          Soon
+                        </Badge>
+                      ) : null}
                     </span>
-                    {item.isComingSoon && !collapsed ? (
-                      <Badge
-                        variant="secondary"
-                        className="border border-white/10 bg-white/5 px-1.5 py-0 text-[10px] text-slate-400"
-                      >
-                        Soon
-                      </Badge>
-                    ) : null}
-                  </span>
-                )}
-              </NavLink>
+                  )}
+                </NavLink>
+                {!collapsed && item.children?.length ? (
+                  <div className="ml-6 space-y-1 border-l border-white/[0.08] pl-3">
+                    {item.children.map((child) => {
+                      const ChildIcon = NAV_ICONS[child.to] ?? BarChart3;
+                      return (
+                        <NavLink key={child.to} to={child.to}>
+                          {({ isActive }) => (
+                            <span
+                              className={cn(
+                                "flex items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium transition-all duration-200",
+                                isActive
+                                  ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                                  : "text-slate-400 hover:bg-white/[0.05] hover:text-white",
+                              )}
+                            >
+                              <span className="flex items-center gap-2.5">
+                                <ChildIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                                <span>{child.label}</span>
+                              </span>
+                              {child.isComingSoon ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="border border-white/10 bg-white/5 px-1.5 py-0 text-[10px] text-slate-400"
+                                >
+                                  Soon
+                                </Badge>
+                              ) : null}
+                            </span>
+                          )}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </nav>
