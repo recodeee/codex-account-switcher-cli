@@ -23,6 +23,7 @@ describe("plans flow integration", () => {
     expect(await screen.findByTestId("plan-checkpoints-content")).toHaveTextContent("Executor");
     expect(screen.getByTestId("plan-checkpoints-content")).toHaveTextContent("Implementing plans progress UI");
     expect(await screen.findByTestId("plan-runtime-observer")).toHaveTextContent("Live plan observer");
+    expect(await screen.findByTestId("plan-runtime-reason-badges")).toHaveTextContent("plan session mapping");
     expect(await screen.findByTestId("plan-runtime-agents")).toHaveTextContent("executor");
     expect(screen.getByTestId("plan-runtime-agents")).toHaveTextContent("gpt-5.3-codex");
     expect(await screen.findByTestId("plan-runtime-events")).toHaveTextContent("Executor spawned");
@@ -159,6 +160,7 @@ describe("plans flow integration", () => {
     expect(await screen.findByRole("heading", { name: "Plans" })).toBeInTheDocument();
     expect(await screen.findByText("No checkpoint activity recorded yet.")).toBeInTheDocument();
     expect(await screen.findByText("No checkpoint log entries yet.")).toBeInTheDocument();
+    expect(await screen.findByTestId("plan-runtime-reason-badges")).toHaveTextContent("agent events missing");
     expect(await screen.findByText(/Runtime data unavailable/i)).toBeInTheDocument();
     expect(await screen.findByTestId("plan-runtime-resume")).toHaveTextContent("Can resume: Yes");
   });

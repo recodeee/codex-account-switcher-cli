@@ -1562,10 +1562,13 @@ describe("AccountCard", () => {
 
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
     expect(screen.queryByText("Prompt task")).not.toBeInTheDocument();
-    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
-    expect(planningGraph).toBeInTheDocument();
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(codexActiveCard).toBeInTheDocument();
+    expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
+    expect(within(codexActiveCard).getByText("Thinking")).toBeInTheDocument();
     expect(
-      within(planningGraph).getAllByText(
+      within(codexActiveCard).queryAllByText(
         "Trace session-affinity fallback for codex websocket flow",
       ).length,
     ).toBeGreaterThanOrEqual(1);
@@ -1600,10 +1603,10 @@ describe("AccountCard", () => {
     const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
     expect(planningGraph).toBeInTheDocument();
     expect(
-      within(planningGraph).getByText(
+      within(planningGraph).queryByText(
         "$ralplan can you make this card show planning mode runtime state",
       ),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(within(planningGraph).getByText("Planner")).toBeInTheDocument();
     expect(within(planningGraph).getByText("Architect")).toBeInTheDocument();
     expect(within(planningGraph).getByText("Critic")).toBeInTheDocument();
@@ -1658,6 +1661,41 @@ describe("AccountCard", () => {
     );
   });
 
+  it("renders the planning graph when current preview is waiting but newest session preview is ralplan", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Waiting for new task",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "session-old",
+          taskPreview: "Investigate generic dashboard request",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+        {
+          sessionKey: "session-new",
+          taskPreview: "$ralplan finalize consensus acceptance criteria",
+          taskUpdatedAt: "2026-04-05T10:05:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByTestId("omx-planning-prompt-graph")).toBeInTheDocument();
+    expect(screen.queryByTestId("codex-active-agent-card")).not.toBeInTheDocument();
+  });
+
   it("keeps planner highlighted when CLI state is waiting even if prompt keywords map elsewhere", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
@@ -1692,7 +1730,7 @@ describe("AccountCard", () => {
     expect(verifierNode).not.toHaveClass("scale-[1.05]");
   });
 
-  it("falls back to the newest non-waiting prompt in the planning graph", () => {
+  it("keeps newest non-waiting prompt in the last response panel", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
@@ -1713,12 +1751,70 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
     expect(
-      within(planningGraph).getByText(
+      within(codexActiveCard).queryByText(
         "Architect and critic review the runtime ready fail-closed field",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("Last codex response:")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "Architect and critic review the runtime ready fail-closed field",
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps codex-active panel when current prompt is non-ralplan even if last prompt contains ralplan", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Investigate sticky routing for sessions page",
+      codexLastTaskPreview: "$ralplan iterate on reviewer feedback",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
+    expect(
+      within(codexActiveCard).getByText("Investigate sticky routing for sessions page"),
+    ).toBeInTheDocument();
+  });
+
+  it("treats role-keyword prompts without ralplan marker as codex-active mode", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Architect and critic review session-attribution edge cases",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    expect(screen.getByTestId("codex-active-agent-card")).toBeInTheDocument();
   });
 
   it("shows a Next.js badge when task previews mention next.js or turbopack", () => {
@@ -1767,12 +1863,13 @@ describe("AccountCard", () => {
 
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
     expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("codex-active-agent-card")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Review sticky session cleanup edge-cases"),
     ).not.toBeInTheDocument();
   });
 
-  it("shows a waiting placeholder in the planning graph when runtime reports a live session but no task preview", () => {
+  it("renders codex-active panel (not planning graph) when runtime reports a live session but no ralplan prompt", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexCurrentTaskPreview: null,
@@ -1793,8 +1890,11 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
-    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
-    expect(within(planningGraph).getByText("Waiting for new task")).toBeInTheDocument();
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
+    expect(within(codexActiveCard).getByText("Waiting")).toBeInTheDocument();
+    expect(within(codexActiveCard).getByText("Waiting for new task")).toBeInTheDocument();
   });
 
   it("shows waiting for new task without the thinking indicator when a live session has no task preview", () => {
@@ -2113,13 +2213,13 @@ describe("AccountCard", () => {
     });
   });
 
-  it("shows full current task previews in the planning graph without expand controls", () => {
+  it("shows full current task previews in the codex-active panel without expand controls", () => {
     const longTaskPreview = `Task trace ${"x".repeat(130)}`;
     const account = createAccountSummary({
       codexCurrentTaskPreview: longTaskPreview,
-      codexLiveSessionCount: 0,
-      codexSessionCount: 0,
-      codexTrackedSessionCount: 0,
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
       usage: {
         primaryRemainingPercent: 10,
         secondaryRemainingPercent: 67,
@@ -2129,14 +2229,15 @@ describe("AccountCard", () => {
         snapshotName: "main",
         activeSnapshotName: "main",
         isActiveSnapshot: true,
-        hasLiveSession: false,
+        hasLiveSession: true,
       },
     });
 
     render(<AccountCard account={account} />);
 
-    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
-    expect(within(planningGraph).getByText(longTaskPreview)).toBeInTheDocument();
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(within(codexActiveCard).getByText(longTaskPreview)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "View Full" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Show Less" })).not.toBeInTheDocument();
   });
@@ -2449,9 +2550,10 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.queryByText("Waiting for new task")).not.toBeInTheDocument();
-    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
     expect(
-      within(planningGraph).getByText("Investigate Zeus quota overlay mapping"),
+      within(codexActiveCard).queryByText("Investigate Zeus quota overlay mapping"),
     ).toBeInTheDocument();
     expect(screen.getByText("Last codex response:")).toBeInTheDocument();
     expect(

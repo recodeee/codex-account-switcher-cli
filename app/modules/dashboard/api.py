@@ -10,7 +10,11 @@ from app.core.auth.dependencies import (
 from app.core.openai.model_registry import get_model_registry, is_public_model
 from app.dependencies import DashboardContext, get_dashboard_context
 from app.modules.dashboard.live_updates import stream_dashboard_overview_updates
-from app.modules.dashboard.schemas import DashboardOverviewResponse
+from app.modules.dashboard.schemas import (
+    DashboardOverviewResponse,
+    DashboardSystemMonitorResponse,
+)
+from app.modules.dashboard.system_monitor import collect_dashboard_system_monitor_sample
 
 router = APIRouter(
     prefix="/api",
@@ -47,3 +51,20 @@ async def list_models() -> dict:
         if is_public_model(model, None)
     ]
     return {"models": models}
+
+
+@router.get(
+    "/dashboard/system-monitor",
+    response_model=DashboardSystemMonitorResponse,
+)
+async def get_system_monitor() -> DashboardSystemMonitorResponse:
+    sample = collect_dashboard_system_monitor_sample()
+    return DashboardSystemMonitorResponse(
+        sampled_at=sample.sampled_at,
+        cpu_percent=sample.cpu_percent,
+        gpu_percent=sample.gpu_percent,
+        vram_percent=sample.vram_percent,
+        network_mb_s=sample.network_mb_s,
+        memory_percent=sample.memory_percent,
+        spike=sample.spike,
+    )

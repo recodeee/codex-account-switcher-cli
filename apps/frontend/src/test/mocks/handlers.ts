@@ -894,6 +894,18 @@ export const handlers = [
 		);
 	}),
 
+	http.get("/api/dashboard/system-monitor", () => {
+		return HttpResponse.json({
+			sampledAt: new Date().toISOString(),
+			cpuPercent: 39.8,
+			gpuPercent: 33.5,
+			vramPercent: 57.5,
+			networkMbS: 5.3,
+			memoryPercent: 61.2,
+			spike: true,
+		});
+	}),
+
 	http.get("/api/request-logs", ({ request }) => {
 		const url = new URL(request.url);
 		const filtered = filterRequestLogs(url);

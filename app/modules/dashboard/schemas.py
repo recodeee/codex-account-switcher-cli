@@ -32,3 +32,13 @@ class DashboardOverviewResponse(DashboardModel):
     trends: MetricsTrends
     depletion_primary: DepletionResponse | None = None
     depletion_secondary: DepletionResponse | None = None
+
+
+class DashboardSystemMonitorResponse(DashboardModel):
+    sampled_at: datetime
+    cpu_percent: float
+    gpu_percent: float | None = None
+    vram_percent: float | None = None
+    network_mb_s: float
+    memory_percent: float
+    spike: bool

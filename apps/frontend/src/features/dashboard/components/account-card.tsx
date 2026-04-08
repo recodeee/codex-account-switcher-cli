@@ -152,6 +152,7 @@ const USAGE_LIMIT_TASK_PREVIEW_PATTERN =
   /\byou(?:'|’)ve hit your usage limit\b|\busage limit\b|\btry again at\b/i;
 const USAGE_LIMIT_TASK_PREVIEW_HIGHLIGHT_PATTERN =
   /\byou(?:'|’)ve hit your usage limit\b/i;
+const RALPLAN_TASK_MARKER_PATTERN = /\$?ralplan\b/i;
 const OMX_PLANNING_NODES = [
   { key: "planner", label: "Planner", x: 50, y: 11 },
   { key: "critic", label: "Critic", x: 84, y: 26 },
@@ -164,6 +165,72 @@ const LAST_TASK_PREVIEW_EXPANSION_KEY = "__last_task_preview__";
 const STALE_SESSION_TASK_MS = 90_000;
 type OmxPlanningNodeKey = (typeof OMX_PLANNING_NODES)[number]["key"];
 type OmxCliRuntimeState = "finished" | "waiting" | "thinking";
+
+function CpuArchitectureBackdrop({ className }: { className?: string }) {
+  return (
+    <svg
+      className={cn("h-full w-full text-cyan-200/45", className)}
+      viewBox="0 0 200 100"
+      fill="none"
+      aria-hidden
+    >
+      <g stroke="currentColor" strokeWidth="0.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M 0 50 H 56" />
+        <path d="M 200 50 H 144" />
+        <path d="M 88 0 V 28" />
+        <path d="M 112 0 V 28" />
+        <path d="M 88 72 V 100" />
+        <path d="M 112 72 V 100" />
+        <path d="M 0 26 H 34 Q 42 26 42 34 V 38 H 56" />
+        <path d="M 200 26 H 166 Q 158 26 158 34 V 38 H 144" />
+        <path d="M 0 74 H 34 Q 42 74 42 66 V 62 H 56" />
+        <path d="M 200 74 H 166 Q 158 74 158 66 V 62 H 144" />
+      </g>
+
+      <g fill="url(#cpu-pin-grad)">
+        <rect x="72" y="24" width="8" height="6" rx="1.5" />
+        <rect x="94" y="24" width="8" height="6" rx="1.5" />
+        <rect x="120" y="24" width="8" height="6" rx="1.5" />
+        <rect x="72" y="70" width="8" height="6" rx="1.5" />
+        <rect x="94" y="70" width="8" height="6" rx="1.5" />
+        <rect x="120" y="70" width="8" height="6" rx="1.5" />
+        <rect x="56" y="39" width="6" height="8" rx="1.5" />
+        <rect x="56" y="53" width="6" height="8" rx="1.5" />
+        <rect x="138" y="39" width="6" height="8" rx="1.5" />
+        <rect x="138" y="53" width="6" height="8" rx="1.5" />
+      </g>
+
+      <rect
+        x="60"
+        y="30"
+        width="80"
+        height="40"
+        rx="6"
+        fill="#111318"
+        stroke="#202631"
+        strokeWidth="0.8"
+      />
+      <text
+        x="100"
+        y="54"
+        textAnchor="middle"
+        fontSize="14"
+        fontWeight="700"
+        letterSpacing="0.12em"
+        fill="#d6dae2"
+      >
+        CPU
+      </text>
+
+      <defs>
+        <linearGradient id="cpu-pin-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#5b5f69" />
+          <stop offset="100%" stopColor="#2b2f39" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
 
 const OMX_CLI_STATE_STYLES: Record<
   OmxCliRuntimeState,
@@ -275,35 +342,27 @@ function resolveOmxPlanningActiveNodeKey(taskPreview: string): OmxPlanningNodeKe
 }
 
 function OmxPlanningPromptGraph({
-  prompt,
   activeNodeKey,
   cliRuntimeState,
 }: {
-  prompt: string;
   activeNodeKey: OmxPlanningNodeKey;
   cliRuntimeState: OmxCliRuntimeState;
 }) {
   const cliStateStyle =
     OMX_CLI_STATE_STYLES[cliRuntimeState] ?? OMX_CLI_STATE_STYLES.finished;
-  const activeStrokeColor =
-    cliRuntimeState === "thinking"
-      ? "rgba(129,140,248,0.78)"
-      : cliRuntimeState === "waiting"
-        ? "rgba(34,211,238,0.76)"
-        : "rgba(16,185,129,0.78)";
   const activeNodeClasses =
     cliRuntimeState === "thinking"
       ? "border-indigo-200/80 bg-indigo-400/22 text-indigo-50 shadow-[0_0_0_1px_rgba(129,140,248,0.24),0_0_18px_rgba(129,140,248,0.35)]"
       : cliRuntimeState === "waiting"
         ? "border-cyan-200/80 bg-cyan-400/22 text-cyan-50 shadow-[0_0_0_1px_rgba(34,211,238,0.2),0_0_18px_rgba(34,211,238,0.32)]"
         : "border-emerald-200/80 bg-emerald-400/20 text-emerald-50 shadow-[0_0_0_1px_rgba(16,185,129,0.2),0_0_18px_rgba(16,185,129,0.32)]";
-  const centerShellBorderClass =
+  const connectorStrokeClass =
     cliRuntimeState === "thinking"
-      ? "border-indigo-200/50"
+      ? "stroke-indigo-200/45"
       : cliRuntimeState === "waiting"
-        ? "border-cyan-200/50"
-        : "border-emerald-200/50";
-  const centerRuleClass =
+        ? "stroke-cyan-200/45"
+        : "stroke-emerald-200/45";
+  const promptRuleClass =
     cliRuntimeState === "thinking"
       ? "bg-indigo-200/45"
       : cliRuntimeState === "waiting"
@@ -330,29 +389,33 @@ function OmxPlanningPromptGraph({
         aria-hidden
       />
 
+      <div className="pointer-events-none absolute inset-0">
+        <CpuArchitectureBackdrop />
+      </div>
+
       <svg
         className="pointer-events-none absolute inset-0 h-full w-full"
         viewBox="0 0 100 100"
         aria-hidden
       >
-        {OMX_PLANNING_NODES.map((node) => (
-          <line
-            key={`${node.key}-line`}
-            x1="50"
-            y1="50"
-            x2={String(node.x)}
-            y2={String(node.y)}
-            stroke={node.key === activeNodeKey ? activeStrokeColor : "rgba(148,163,184,0.28)"}
-            strokeDasharray="3 2"
-            strokeLinecap="round"
-            strokeWidth={node.key === activeNodeKey ? "0.9" : "0.62"}
-            className={cn(
-              "motion-safe:transition-all motion-safe:duration-300",
-              node.key === activeNodeKey &&
-                "motion-safe:animate-[pulse_1.8s_ease-in-out_infinite]",
-            )}
-          />
-        ))}
+        {OMX_PLANNING_NODES.map((node) => {
+          const nodeActive = node.key === activeNodeKey;
+          return (
+            <line
+              key={`${node.key}-connector`}
+              x1="50"
+              y1="50"
+              x2={String(node.x)}
+              y2={String(node.y)}
+              className={cn(
+                connectorStrokeClass,
+                nodeActive ? "stroke-[0.9]" : "stroke-[0.65]",
+              )}
+              strokeDasharray="3 2"
+              strokeLinecap="round"
+            />
+          );
+        })}
       </svg>
 
       {OMX_PLANNING_NODES.map((node) => {
@@ -394,19 +457,11 @@ function OmxPlanningPromptGraph({
 
       <div
         className={cn(
-          "absolute left-1/2 top-1/2 flex h-[54%] w-[64%] -translate-x-1/2 -translate-y-1/2 flex-col justify-center rounded-xl border bg-[#060A13] px-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_12px_30px_rgba(2,6,23,0.45)]",
-          centerShellBorderClass,
+          "pointer-events-none absolute left-1/2 top-1/2 z-10 h-px w-20 -translate-x-1/2 -translate-y-1/2",
+          promptRuleClass,
         )}
-      >
-        <div className="flex items-center justify-center gap-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-cyan-100/95">
-          <span className={cn("h-px w-5", centerRuleClass)} aria-hidden />
-          <span>Prompt</span>
-          <span className={cn("h-px w-5", centerRuleClass)} aria-hidden />
-        </div>
-        <div className="mt-3 max-h-[52%] overflow-y-auto text-[12px] leading-[1.45] text-zinc-50">
-          <p className="break-words whitespace-pre-wrap">{prompt}</p>
-        </div>
-      </div>
+        aria-hidden
+      />
 
       <div className="absolute bottom-3 right-3 z-20">
         <span
@@ -429,6 +484,56 @@ function OmxPlanningPromptGraph({
           {cliStateStyle.label}
         </span>
       </div>
+    </div>
+  );
+}
+
+function CodexActiveAgentCard({
+  prompt,
+  cliRuntimeState,
+}: {
+  prompt: string;
+  cliRuntimeState: OmxCliRuntimeState;
+}) {
+  const cliStateStyle =
+    OMX_CLI_STATE_STYLES[cliRuntimeState] ?? OMX_CLI_STATE_STYLES.finished;
+  return (
+    <div
+      data-testid="codex-active-agent-card"
+      className="relative mx-auto w-full overflow-hidden rounded-xl border border-cyan-300/30 bg-[#060A13] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_26px_rgba(2,6,23,0.42)]"
+    >
+      <div
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-500/[0.08] via-transparent to-indigo-500/[0.05]"
+        aria-hidden
+      />
+      <div className="relative flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2">
+          <span className="relative inline-flex h-2 w-2">
+            <span
+              className={cn(
+                "absolute inset-0 rounded-full",
+                cliStateStyle.pulseClassName,
+              )}
+              aria-hidden
+            />
+            <span className="absolute inset-0 rounded-full bg-current/80 text-cyan-100" />
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100/95">
+            Codex
+          </span>
+        </div>
+        <span
+          className={cn(
+            "inline-flex h-6 items-center gap-1.5 rounded-full border bg-[#060A13] px-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] shadow-[0_6px_16px_rgba(2,6,23,0.35)] backdrop-blur-sm",
+            cliStateStyle.badgeClassName,
+          )}
+        >
+          {cliStateStyle.label}
+        </span>
+      </div>
+      <p className="relative mt-2 break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/92">
+        {prompt}
+      </p>
     </div>
   );
 }
@@ -1508,24 +1613,13 @@ export function AccountCard(props: AccountCardProps) {
   const isCurrentTaskWaiting = displayCurrentTaskPreview
     ? isWaitingTaskPreview(displayCurrentTaskPreview)
     : false;
-  const newestPromptForPlanningGraph =
+  const currentNonWaitingTaskPreview =
     codexCurrentTaskPreview && !isWaitingTaskPreview(codexCurrentTaskPreview)
       ? codexCurrentTaskPreview
-      : codexLastTaskPreview && !isWaitingTaskPreview(codexLastTaskPreview)
-        ? codexLastTaskPreview
-        : codexCurrentTaskPreview ??
-          codexLastTaskPreview ??
-          (codexLiveSessionCount > 0
-            ? WAITING_FOR_NEW_TASK_LABEL
-            : "No prompt reported yet");
+      : null;
   const waitingTaskPillLabel = resolveWaitingTaskPillLabel(
     displayCurrentTaskPreview,
   );
-  const showOmxPlanningPromptGraph = !hideCurrentTaskPreview && isWorkingNow;
-  const promptDrivenOmxPlanningActiveNodeKey = resolveOmxPlanningActiveNodeKey(
-    newestPromptForPlanningGraph,
-  );
-  const hideTaskContainerChrome = hideCurrentTaskPreview && Boolean(taskPanelAddon);
   const sessionTaskPreviews = useMemo(() => {
     const seenSessionKeys = new Set<string>();
     const normalized = (account.codexSessionTaskPreviews ?? [])
@@ -1544,6 +1638,52 @@ export function AccountCard(props: AccountCardProps) {
       }));
     return normalized;
   }, [account.codexSessionTaskPreviews]);
+  const newestNonWaitingSessionTaskPreview = useMemo(() => {
+    let fallbackPreview: string | null = null;
+    let newestPreview: string | null = null;
+    let newestTimestamp = Number.NEGATIVE_INFINITY;
+
+    for (const preview of sessionTaskPreviews) {
+      const normalizedPreview = preview.taskPreview.trim();
+      if (!normalizedPreview || isWaitingTaskPreview(normalizedPreview)) {
+        continue;
+      }
+      fallbackPreview ??= normalizedPreview;
+      const timestamp = preview.taskUpdatedAt
+        ? Date.parse(preview.taskUpdatedAt)
+        : Number.NaN;
+      if (Number.isFinite(timestamp) && timestamp >= newestTimestamp) {
+        newestTimestamp = timestamp;
+        newestPreview = normalizedPreview;
+      }
+    }
+
+    return newestPreview ?? fallbackPreview;
+  }, [sessionTaskPreviews]);
+  const selectedTaskContextPreview =
+    currentNonWaitingTaskPreview ??
+    newestNonWaitingSessionTaskPreview ??
+    (codexLastTaskPreview && !isWaitingTaskPreview(codexLastTaskPreview)
+      ? codexLastTaskPreview
+      : null);
+  const isRalplanTaskContext =
+    selectedTaskContextPreview != null &&
+    RALPLAN_TASK_MARKER_PATTERN.test(selectedTaskContextPreview);
+  const newestPromptForAgentPanel =
+    selectedTaskContextPreview ??
+    codexCurrentTaskPreview ??
+    codexLastTaskPreview ??
+    (codexLiveSessionCount > 0
+      ? WAITING_FOR_NEW_TASK_LABEL
+      : "No prompt reported yet");
+  const showRalplanPlanningGraph =
+    !hideCurrentTaskPreview && isWorkingNow && isRalplanTaskContext;
+  const showCodexActiveAgentCard =
+    !hideCurrentTaskPreview && isWorkingNow && !isRalplanTaskContext;
+  const promptDrivenOmxPlanningActiveNodeKey = resolveOmxPlanningActiveNodeKey(
+    newestPromptForAgentPanel,
+  );
+  const hideTaskContainerChrome = hideCurrentTaskPreview && Boolean(taskPanelAddon);
   const sessionTaskRows = useMemo(() => {
     const rows: SessionTaskRow[] = sessionTaskPreviews.map((preview, index) => ({
       ...preview,
@@ -1591,10 +1731,15 @@ export function AccountCard(props: AccountCardProps) {
   ]);
   const hasSessionTaskRows = sessionTaskRows.length > 0;
   const shouldRenderTaskPanel =
-    showOmxPlanningPromptGraph ||
+    showRalplanPlanningGraph ||
+    showCodexActiveAgentCard ||
     Boolean(taskPanelAddon) ||
     showLastTaskPreview ||
     hasSessionTaskRows;
+  const hasTaskPanelTopContent =
+    showRalplanPlanningGraph ||
+    showCodexActiveAgentCard ||
+    Boolean(taskPanelAddon);
   const hasLiveCliSessions = codexLiveSessionCount > 0;
   const latestThinkingTaskTimestampMs = useMemo(() => {
     let latest: number | null = null;
@@ -1933,36 +2078,42 @@ export function AccountCard(props: AccountCardProps) {
             {shouldRenderTaskPanel ? (
               <div className="relative mt-3">
                 <div className="space-y-1.5">
-                  <div
-                    className={cn(
-                      "relative transition-all duration-200",
-                      hideTaskContainerChrome
-                        ? "px-0 py-0"
-                        : showOmxPlanningPromptGraph
+                  {hasTaskPanelTopContent ? (
+                    <div
+                      className={cn(
+                        "relative transition-all duration-200",
+                        hideTaskContainerChrome
                           ? "px-0 py-0"
-                          : cn(
-                              "rounded-lg border px-2 py-1.5",
-                              isCurrentTaskWaiting
-                                ? "border-cyan-400/30 bg-transparent hover:border-cyan-300/45 hover:shadow-[0_0_0_1px_rgba(34,211,238,0.16)]"
-                                : "border-indigo-300/30 bg-transparent hover:border-indigo-200/45 hover:shadow-[0_0_0_1px_rgba(129,140,248,0.18)]",
-                            ),
-                    )}
-                  >
-                    {!hideCurrentTaskPreview ? (
-                      showOmxPlanningPromptGraph ? (
-                        <OmxPlanningPromptGraph
-                          prompt={newestPromptForPlanningGraph}
-                          activeNodeKey={omxPlanningActiveNodeKey}
-                          cliRuntimeState={omxPlanningCliRuntimeState}
-                        />
-                      ) : null
-                    ) : null}
-                    {taskPanelAddon ? (
-                      <div className={cn(!hideCurrentTaskPreview && "mt-2")}>
-                        {taskPanelAddon}
-                      </div>
-                    ) : null}
-                  </div>
+                          : showRalplanPlanningGraph || showCodexActiveAgentCard
+                            ? "px-0 py-0"
+                            : cn(
+                                "rounded-lg border px-2 py-1.5",
+                                isCurrentTaskWaiting
+                                  ? "border-cyan-400/30 bg-transparent hover:border-cyan-300/45 hover:shadow-[0_0_0_1px_rgba(34,211,238,0.16)]"
+                                  : "border-indigo-300/30 bg-transparent hover:border-indigo-200/45 hover:shadow-[0_0_0_1px_rgba(129,140,248,0.18)]",
+                              ),
+                      )}
+                    >
+                      {!hideCurrentTaskPreview ? (
+                        showRalplanPlanningGraph ? (
+                          <OmxPlanningPromptGraph
+                            activeNodeKey={omxPlanningActiveNodeKey}
+                            cliRuntimeState={omxPlanningCliRuntimeState}
+                          />
+                        ) : showCodexActiveAgentCard ? (
+                          <CodexActiveAgentCard
+                            prompt={newestPromptForAgentPanel}
+                            cliRuntimeState={omxPlanningCliRuntimeState}
+                          />
+                        ) : null
+                      ) : null}
+                      {taskPanelAddon ? (
+                        <div className={cn(!hideCurrentTaskPreview && "mt-2")}>
+                          {taskPanelAddon}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                 {showLastTaskPreview ? (
                   <div className="rounded-lg border border-white/15 bg-transparent px-2 py-1">
@@ -2000,8 +2151,8 @@ export function AccountCard(props: AccountCardProps) {
                 ) : null}
 
                 {hasSessionTaskRows ? (
-                  <div className="mt-2 border-t border-white/20 pt-2">
-                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                  <div className="mt-1.5 pt-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
                       <button
                         type="button"
                         className="inline-flex min-w-[13rem] flex-1 items-center justify-between gap-2 rounded-lg border border-white/25 bg-transparent px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300 transition-colors hover:border-cyan-300/45"

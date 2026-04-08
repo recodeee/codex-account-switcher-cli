@@ -4,7 +4,7 @@ import { getDashboardOverview } from "@/features/dashboard/api";
 import type { DashboardOverview } from "@/features/dashboard/schemas";
 import { hasActiveCliSessionSignal } from "@/utils/account-working";
 
-const DEFAULT_DASHBOARD_POLL_MS = 30_000;
+const DEFAULT_DASHBOARD_POLL_MS = 10_000;
 const ACTIVE_DASHBOARD_POLL_MS = 5_000;
 const WEBSOCKET_CONNECTED_SAFETY_POLL_MS = 60_000;
 

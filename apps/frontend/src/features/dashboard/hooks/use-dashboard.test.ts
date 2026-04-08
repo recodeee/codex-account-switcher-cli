@@ -112,9 +112,9 @@ describe("useDashboard", () => {
     const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
       ?.refetchInterval;
     if (typeof refetchInterval === "function") {
-      expect(refetchInterval(query as never)).toBe(30_000);
+      expect(refetchInterval(query as never)).toBe(10_000);
     } else {
-      expect(refetchInterval).toBe(30_000);
+      expect(refetchInterval).toBe(10_000);
     }
   });
 

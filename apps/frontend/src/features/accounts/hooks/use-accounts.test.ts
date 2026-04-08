@@ -61,8 +61,8 @@ describe("useAccounts", () => {
       }),
     ];
 
-    expect(resolveAccountsPollInterval(idleAccounts)).toBe(30_000);
-    expect(resolveAccountsPollInterval(undefined)).toBe(30_000);
+    expect(resolveAccountsPollInterval(idleAccounts)).toBe(10_000);
+    expect(resolveAccountsPollInterval(undefined)).toBe(10_000);
   });
 
   it("uses fast polling when tracked sessions are present without live telemetry", () => {

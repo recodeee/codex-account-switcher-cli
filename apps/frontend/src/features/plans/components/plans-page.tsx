@@ -227,10 +227,54 @@ function runtimeStatusBadgeClass(status: string | null): string {
   if (["done", "completed", "finished", "idle", "waiting"].includes(normalizedStatus)) {
     return "border-emerald-500/40 bg-emerald-500/20 text-emerald-200";
   }
-  if (["failed", "error", "blocked", "rejected"].includes(normalizedStatus)) {
+  if (["failed", "error", "blocked", "rejected", "cancelled", "canceled"].includes(normalizedStatus)) {
     return "border-red-500/40 bg-red-500/20 text-red-200";
   }
   return "border-amber-500/40 bg-amber-500/20 text-amber-200";
+}
+
+function formatRuntimeReasonLabel(reason: string): string {
+  return reason.replace(/_/g, " ");
+}
+
+function runtimeReasonBadgeClass(reason: string): string {
+  const normalizedReason = reason.trim().toLowerCase();
+  if (!normalizedReason) {
+    return "border-slate-500/30 bg-slate-500/15 text-slate-300";
+  }
+
+  if (normalizedReason.includes("missing")) {
+    return "border-amber-500/40 bg-amber-500/20 text-amber-200";
+  }
+
+  if (
+    normalizedReason.includes("invalid") ||
+    normalizedReason.includes("failed") ||
+    normalizedReason.includes("error") ||
+    normalizedReason.includes("unresolved")
+  ) {
+    return "border-red-500/40 bg-red-500/20 text-red-200";
+  }
+
+  if (normalizedReason.includes("completed") || normalizedReason.includes("resolved")) {
+    return "border-emerald-500/40 bg-emerald-500/20 text-emerald-200";
+  }
+
+  return "border-slate-500/30 bg-slate-500/15 text-slate-300";
+}
+
+function runtimeConfidenceBadgeClass(confidence: string): string {
+  const normalizedConfidence = confidence.trim().toLowerCase();
+  if (normalizedConfidence === "high") {
+    return "border-emerald-500/40 bg-emerald-500/20 text-emerald-200";
+  }
+  if (normalizedConfidence === "medium") {
+    return "border-amber-500/40 bg-amber-500/20 text-amber-200";
+  }
+  if (normalizedConfidence === "low") {
+    return "border-red-500/40 bg-red-500/20 text-red-200";
+  }
+  return "border-slate-500/30 bg-slate-500/15 text-slate-300";
 }
 
 function normalizeMarkdownLine(line: string): string {
@@ -637,17 +681,49 @@ export function PlansPage() {
                         <p className="text-sm text-muted-foreground">Loading runtime observer…</p>
                       ) : planRuntime ? (
                         <div className="space-y-3">
+                          {planRuntime.reasons.length > 0 ? (
+                            <div
+                              className="flex flex-wrap items-center gap-1.5"
+                              data-testid="plan-runtime-reason-badges"
+                            >
+                              {planRuntime.reasons.map((reason) => (
+                                <Badge
+                                  key={reason}
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] capitalize",
+                                    runtimeReasonBadgeClass(reason),
+                                  )}
+                                >
+                                  {formatRuntimeReasonLabel(reason)}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : null}
+
                           <div className="flex flex-wrap items-center gap-1.5">
                             <Badge variant="outline" className="text-[10px]">
                               Session {planRuntime.sessionId ?? "unresolved"}
                             </Badge>
                             {planRuntime.mode ? (
-                              <Badge variant="outline" className="text-[10px] capitalize">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] capitalize",
+                                  runtimeReasonBadgeClass(planRuntime.mode),
+                                )}
+                              >
                                 {planRuntime.mode}
                               </Badge>
                             ) : null}
                             {planRuntime.phase ? (
-                              <Badge variant="outline" className="text-[10px] capitalize">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] capitalize",
+                                  runtimeStatusBadgeClass(planRuntime.phase),
+                                )}
+                              >
                                 {planRuntime.phase.replace(/_/g, " ")}
                               </Badge>
                             ) : null}
@@ -661,12 +737,21 @@ export function PlansPage() {
                               {planRuntime.active ? "Active" : "Inactive"}
                             </Badge>
                             {planRuntime.partial ? (
-                              <Badge variant="outline" className="text-[10px]">
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500/40 bg-amber-500/20 text-[10px] text-amber-200"
+                              >
                                 Partial
                               </Badge>
                             ) : null}
                             {planRuntime.correlationConfidence ? (
-                              <Badge variant="outline" className="text-[10px] capitalize">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] capitalize",
+                                  runtimeConfidenceBadgeClass(planRuntime.correlationConfidence),
+                                )}
+                              >
                                 {planRuntime.correlationConfidence} confidence
                               </Badge>
                             ) : null}
@@ -680,12 +765,6 @@ export function PlansPage() {
                               Runtime data unavailable
                               {planRuntime.unavailableReason ? ` (${planRuntime.unavailableReason.replace(/_/g, " ")})` : ""}.
                             </div>
-                          ) : null}
-
-                          {planRuntime.reasons.length > 0 ? (
-                            <p className="text-xs text-muted-foreground">
-                              Reasons: {planRuntime.reasons.join(", ")}
-                            </p>
                           ) : null}
 
                           <div className="space-y-1.5" data-testid="plan-runtime-agents">
