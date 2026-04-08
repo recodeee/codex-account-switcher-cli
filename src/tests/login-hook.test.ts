@@ -9,6 +9,7 @@ import {
   LOGIN_HOOK_MARK_END,
   LOGIN_HOOK_MARK_START,
   installLoginHook,
+  renderLoginHookBlock,
   removeLoginHook,
 } from "../lib/config/login-hook";
 
@@ -81,4 +82,17 @@ test("getLoginHookStatus reflects installed state", async (t) => {
     assert.equal(after.installed, true);
     assert.equal(after.rcPath, rcPath);
   });
+});
+
+test("renderLoginHookBlock includes terminal-mode restore guard", () => {
+  const hook = renderLoginHookBlock();
+  assert.ok(hook.includes("__codex_auth_restore_tty"));
+  assert.ok(hook.includes("\\033[>4m"));
+  assert.ok(hook.includes("\\033[<u"));
+  assert.ok(hook.includes("\\033[?2026l"));
+  assert.ok(hook.includes("\\033[?1004l"));
+  assert.ok(hook.includes("\\033[?2004l"));
+  assert.ok(hook.includes("\\033[0m"));
+  assert.ok(hook.includes("\\033[?25h"));
+  assert.ok(hook.includes("CODEX_AUTH_SKIP_TTY_RESTORE"));
 });

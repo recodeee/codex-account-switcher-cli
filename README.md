@@ -26,6 +26,15 @@ official `codex login`.
 - Choose `y` to enable fully automatic login snapshot capture.
 - Choose `n` (default) to skip.
 - Set `CODEX_AUTH_SKIP_POSTINSTALL=1` to always suppress this prompt.
+- Set `CODEX_AUTH_SKIP_TTY_RESTORE=1` to keep the hook from restoring terminal modes after `codex` exits.
+- For a calmer Codex footer, prefer a focused `[tui] status_line` such as:
+
+  ```toml
+  [tui]
+  status_line = ["model-with-reasoning", "git-branch", "context-remaining"]
+  ```
+
+  This remains a manual Codex config choice; `codex-auth` does not rewrite `~/.codex/config.toml`.
 
 ## Usage
 
@@ -111,7 +120,7 @@ codex-auth remove-login-hook
 - `codex-auth config auto ...` – Enables/disables managed auto-switch and updates threshold percentages.
 - `codex-auth config api enable|disable` – Chooses usage source mode (`api` or `local`).
 - `codex-auth daemon --once|--watch` – Runs the auto-switch loop once or continuously.
-- `codex-auth setup-login-hook [-f <path>]` – Installs an optional shell hook in your rc file to auto-sync snapshots after successful official `codex login`.
+- `codex-auth setup-login-hook [-f <path>]` – Installs an optional shell hook in your rc file to auto-sync snapshots after successful official `codex login` and restore common terminal modes before returning to your prompt.
 - `codex-auth hook-status [-f <path>]` – Shows whether the optional login auto-snapshot hook is installed for the selected rc file.
 - `codex-auth remove-login-hook [-f <path>]` – Removes the optional shell hook.
 
