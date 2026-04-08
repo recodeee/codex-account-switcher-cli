@@ -618,7 +618,11 @@ export function AccountCards({
         allowDeactivatedOverride: false,
       });
 
-      const hasWorkingNowSignal = isAccountWorkingNow(account, nowMs);
+      const hasWorkingNowSignal =
+        isAccountWorkingNow(account, nowMs) ||
+        (account.status !== "deactivated" &&
+          (account.codexAuth?.hasLiveSession ?? false) &&
+          hasActiveCliSession);
       if (hasWorkingNowSignal) {
         working.push(account);
         continue;
