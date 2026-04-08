@@ -166,9 +166,16 @@ const STALE_SESSION_TASK_MS = 90_000;
 type OmxPlanningNodeKey = (typeof OMX_PLANNING_NODES)[number]["key"];
 type OmxCliRuntimeState = "finished" | "waiting" | "thinking";
 
-function CpuArchitectureBackdrop({ className }: { className?: string }) {
+function CpuArchitectureBackdrop({
+  className,
+  dataTestId,
+}: {
+  className?: string;
+  dataTestId?: string;
+}) {
   return (
     <svg
+      data-testid={dataTestId}
       className={cn("h-full w-full text-cyan-200/45", className)}
       viewBox="0 0 200 100"
       fill="none"
@@ -390,7 +397,7 @@ function OmxPlanningPromptGraph({
       />
 
       <div className="pointer-events-none absolute inset-0">
-        <CpuArchitectureBackdrop />
+        <CpuArchitectureBackdrop dataTestId="cpu-architecture-backdrop-planning" />
       </div>
 
       <svg
@@ -502,6 +509,12 @@ function CodexActiveAgentCard({
       data-testid="codex-active-agent-card"
       className="relative mx-auto w-full overflow-hidden rounded-xl border border-cyan-300/30 bg-[#060A13] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_26px_rgba(2,6,23,0.42)]"
     >
+      <div className="pointer-events-none absolute inset-0 opacity-55" aria-hidden>
+        <CpuArchitectureBackdrop
+          className="text-cyan-100/28"
+          dataTestId="cpu-architecture-backdrop-codex-active"
+        />
+      </div>
       <div
         className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-500/[0.08] via-transparent to-indigo-500/[0.05]"
         aria-hidden

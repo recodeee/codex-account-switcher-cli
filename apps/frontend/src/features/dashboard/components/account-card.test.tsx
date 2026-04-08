@@ -1565,6 +1565,9 @@ describe("AccountCard", () => {
     expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
     const codexActiveCard = screen.getByTestId("codex-active-agent-card");
     expect(codexActiveCard).toBeInTheDocument();
+    expect(
+      within(codexActiveCard).getByTestId("cpu-architecture-backdrop-codex-active"),
+    ).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Thinking")).toBeInTheDocument();
     expect(
@@ -1607,6 +1610,9 @@ describe("AccountCard", () => {
         "$ralplan can you make this card show planning mode runtime state",
       ),
     ).not.toBeInTheDocument();
+    expect(
+      within(planningGraph).getByTestId("cpu-architecture-backdrop-planning"),
+    ).toBeInTheDocument();
     expect(within(planningGraph).getByText("Planner")).toBeInTheDocument();
     expect(within(planningGraph).getByText("Architect")).toBeInTheDocument();
     expect(within(planningGraph).getByText("Critic")).toBeInTheDocument();
@@ -1865,6 +1871,12 @@ describe("AccountCard", () => {
     expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
     expect(screen.queryByTestId("codex-active-agent-card")).not.toBeInTheDocument();
     expect(
+      screen.queryByTestId("cpu-architecture-backdrop-planning"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("cpu-architecture-backdrop-codex-active"),
+    ).not.toBeInTheDocument();
+    expect(
       screen.queryByText("Review sticky session cleanup edge-cases"),
     ).not.toBeInTheDocument();
   });
@@ -1892,6 +1904,9 @@ describe("AccountCard", () => {
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
     expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
     const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(
+      within(codexActiveCard).getByTestId("cpu-architecture-backdrop-codex-active"),
+    ).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Waiting")).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Waiting for new task")).toBeInTheDocument();
@@ -1953,7 +1968,9 @@ describe("AccountCard", () => {
 
     expect(screen.getByText("working...")).toBeInTheDocument();
     expect(screen.queryByText("waiting for new task")).not.toBeInTheDocument();
-    expect(screen.getByText("Investigate stuck admin routing")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Investigate stuck admin routing").length,
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("thinking")).toBeInTheDocument();
   });
 
@@ -2238,8 +2255,12 @@ describe("AccountCard", () => {
     expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
     const codexActiveCard = screen.getByTestId("codex-active-agent-card");
     expect(within(codexActiveCard).getByText(longTaskPreview)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "View Full" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Show Less" })).not.toBeInTheDocument();
+    expect(
+      within(codexActiveCard).queryByRole("button", { name: "View Full" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(codexActiveCard).queryByRole("button", { name: "Show Less" }),
+    ).not.toBeInTheDocument();
   });
 
   it("truncates long per-session task previews and allows expanding them", async () => {
