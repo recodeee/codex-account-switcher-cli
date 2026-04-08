@@ -1594,6 +1594,11 @@ describe("AccountCard", () => {
     expect(
       within(planningGraph).getByTestId("omx-planning-cli-state"),
     ).toHaveTextContent("Thinking");
+    const thinkingBadge = within(planningGraph).getByTestId("omx-planning-cli-state");
+    expect(thinkingBadge.parentElement).toHaveClass("right-3");
+    expect(thinkingBadge).not.toHaveClass(
+      "shadow-[0_0_14px_rgba(129,140,248,0.45)]",
+    );
   });
 
   it("shows waiting CLI runtime state inside the OMX planning graph when sessions are idle", () => {
@@ -1624,6 +1629,42 @@ describe("AccountCard", () => {
     expect(
       within(planningGraph).getByTestId("omx-planning-cli-state"),
     ).toHaveTextContent("Waiting");
+    const waitingBadge = within(planningGraph).getByTestId("omx-planning-cli-state");
+    expect(waitingBadge.parentElement).toHaveClass("right-3");
+    expect(waitingBadge).not.toHaveClass(
+      "shadow-[0_0_14px_rgba(34,211,238,0.35)]",
+    );
+  });
+
+  it("keeps planner highlighted when CLI state is waiting even if prompt keywords map elsewhere", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "$ralplan verify runtime test handoff",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "session-1",
+          taskPreview: "Waiting for new task",
+          taskUpdatedAt: new Date().toISOString(),
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
+    const plannerNode = within(planningGraph).getByText("Planner").closest("div");
+    const verifierNode = within(planningGraph).getByText("Verifier").closest("div");
+
+    expect(plannerNode).toHaveClass("scale-[1.05]");
+    expect(verifierNode).not.toHaveClass("scale-[1.05]");
   });
 
   it("falls back to the newest non-waiting prompt in the planning graph", () => {

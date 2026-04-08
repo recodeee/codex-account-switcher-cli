@@ -154,11 +154,11 @@ const USAGE_LIMIT_TASK_PREVIEW_HIGHLIGHT_PATTERN =
   /\byou(?:'|’)ve hit your usage limit\b/i;
 const OMX_PLANNING_NODES = [
   { key: "planner", label: "Planner", x: 50, y: 11 },
-  { key: "critic", label: "Critic", x: 81, y: 28 },
-  { key: "engineer", label: "Engineer", x: 81, y: 72 },
+  { key: "critic", label: "Critic", x: 84, y: 26 },
+  { key: "engineer", label: "Engineer", x: 84, y: 74 },
   { key: "verifier", label: "Verifier", x: 50, y: 89 },
-  { key: "writer", label: "Writer", x: 19, y: 72 },
-  { key: "architect", label: "Architect", x: 19, y: 28 },
+  { key: "writer", label: "Writer", x: 16, y: 74 },
+  { key: "architect", label: "Architect", x: 16, y: 26 },
 ] as const;
 const LAST_TASK_PREVIEW_EXPANSION_KEY = "__last_task_preview__";
 const STALE_SESSION_TASK_MS = 90_000;
@@ -177,14 +177,14 @@ const OMX_CLI_STATE_STYLES: Record<
   thinking: {
     label: "Thinking",
     badgeClassName:
-      "border-indigo-300/60 bg-indigo-500/26 text-indigo-50 shadow-[0_0_14px_rgba(129,140,248,0.45)]",
+      "border-indigo-300/60 bg-indigo-500/26 text-indigo-50",
     glowClassName: "from-indigo-500/12 via-cyan-500/14 to-sky-500/12",
     pulseClassName: "bg-cyan-200 motion-safe:animate-pulse",
   },
   waiting: {
     label: "Waiting",
     badgeClassName:
-      "border-cyan-300/55 bg-cyan-500/24 text-cyan-50 shadow-[0_0_14px_rgba(34,211,238,0.35)]",
+      "border-cyan-300/55 bg-cyan-500/24 text-cyan-50",
     glowClassName: "from-cyan-500/10 via-sky-500/12 to-cyan-500/10",
     pulseClassName:
       "bg-cyan-200 motion-safe:animate-ping motion-safe:[animation-duration:1.4s]",
@@ -192,7 +192,7 @@ const OMX_CLI_STATE_STYLES: Record<
   finished: {
     label: "Finished",
     badgeClassName:
-      "border-emerald-300/55 bg-emerald-500/24 text-emerald-50 shadow-[0_0_14px_rgba(16,185,129,0.35)]",
+      "border-emerald-300/55 bg-emerald-500/24 text-emerald-50",
     glowClassName: "from-emerald-500/12 via-teal-500/12 to-emerald-500/12",
     pulseClassName: "bg-emerald-200",
   },
@@ -290,8 +290,7 @@ function OmxPlanningPromptGraph({
     <div
       data-testid="omx-planning-prompt-graph"
       className={cn(
-        "group relative aspect-square w-full overflow-hidden rounded-xl border border-cyan-300/24 bg-transparent",
-        "before:pointer-events-none before:absolute before:inset-[7%] before:rounded-[1rem] before:border before:border-cyan-200/12 before:content-['']",
+        "group relative mx-auto aspect-square w-full max-w-[34rem] overflow-hidden rounded-xl bg-transparent",
       )}
     >
       <div
@@ -361,7 +360,7 @@ function OmxPlanningPromptGraph({
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2">
+      <div className="absolute bottom-3 right-3 z-20">
         <span
           data-testid="omx-planning-cli-state"
           className={cn(
@@ -1475,7 +1474,7 @@ export function AccountCard(props: AccountCardProps) {
     displayCurrentTaskPreview,
   );
   const showOmxPlanningPromptGraph = !hideCurrentTaskPreview;
-  const omxPlanningActiveNodeKey = resolveOmxPlanningActiveNodeKey(
+  const promptDrivenOmxPlanningActiveNodeKey = resolveOmxPlanningActiveNodeKey(
     newestPromptForPlanningGraph,
   );
   const hideTaskContainerChrome = hideCurrentTaskPreview && Boolean(taskPanelAddon);
@@ -1621,6 +1620,12 @@ export function AccountCard(props: AccountCardProps) {
     sessionTaskSummary.waitingCount,
     showWorkingIndicator,
   ]);
+  const omxPlanningActiveNodeKey: OmxPlanningNodeKey = useMemo(() => {
+    if (omxPlanningCliRuntimeState === "waiting") {
+      return "planner";
+    }
+    return promptDrivenOmxPlanningActiveNodeKey;
+  }, [omxPlanningCliRuntimeState, promptDrivenOmxPlanningActiveNodeKey]);
   const quotaDebugLogText = liveQuotaDebug
     ? buildQuotaDebugLogLines(
         liveQuotaDebug,
@@ -1875,6 +1880,8 @@ export function AccountCard(props: AccountCardProps) {
                     "relative transition-all duration-200",
                     hideTaskContainerChrome
                       ? "px-0 py-0"
+                      : showOmxPlanningPromptGraph
+                        ? "px-0 py-0"
                       : cn(
                           "rounded-lg border px-2 py-1.5",
                           isCurrentTaskWaiting
