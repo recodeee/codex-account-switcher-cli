@@ -83,7 +83,12 @@ class OpenSpecPlansService:
             return None
 
         summary_markdown = self._read_markdown(summary_path)
-        checkpoints_markdown = self._read_markdown(plan_dir / "checkpoints.md")
+        checkpoints_path = plan_dir / "checkpoints.md"
+        checkpoints_markdown = (
+            self._read_markdown(checkpoints_path)
+            if checkpoints_path.exists()
+            else ""
+        )
         updated_at = self._last_updated(plan_dir)
         status = _extract_status(summary_markdown)
         title = _extract_title(summary_markdown, slug)
