@@ -1,3 +1,3 @@
-from app.modules.firewall.api import router
+from __future__ import annotations
 
-__all__ = ["router"]
+"""Firewall module package."""

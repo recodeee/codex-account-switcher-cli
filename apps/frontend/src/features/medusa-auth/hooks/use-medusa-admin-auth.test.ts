@@ -1,19 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getMedusaAdminUser, loginMedusaAdmin } from "@/features/medusa-auth/api";
+import {
+  getMedusaAdminSecondFactorStatus,
+  getMedusaAdminUser,
+  loginMedusaAdmin,
+} from "@/features/medusa-auth/api";
 import { useMedusaAdminAuthStore } from "@/features/medusa-auth/hooks/use-medusa-admin-auth";
-import { MedusaClientError } from "@/lib/medusa/client";
 
 vi.mock("@/features/medusa-auth/api", () => ({
   loginMedusaAdmin: vi.fn(),
   getMedusaAdminUser: vi.fn(),
+  getMedusaAdminSecondFactorStatus: vi.fn(),
 }));
 
 function resetStore() {
   useMedusaAdminAuthStore.setState({
     token: null,
     user: null,
-    lastLoginCredentials: null,
+    lastAuthenticatedEmail: null,
+    pendingToken: null,
+    pendingUser: null,
+    secondFactorStatus: null,
+    challengeRequired: false,
+    setupSecret: null,
+    setupQrDataUri: null,
     loading: false,
     error: null,
   });
@@ -25,78 +35,64 @@ describe("useMedusaAdminAuthStore", () => {
     resetStore();
   });
 
-  it("logs in with Medusa admin credentials and stores token + user", async () => {
+  it("remembers the Medusa login email entered by the operator, not the backend user email", async () => {
     vi.mocked(loginMedusaAdmin).mockResolvedValue("jwt-token");
     vi.mocked(getMedusaAdminUser).mockResolvedValue({
       id: "user_123",
-      email: "admin@example.com",
+      email: "admin@recodee.com",
       first_name: "Admin",
       last_name: "User",
       avatar_url: null,
     });
-
-    await useMedusaAdminAuthStore.getState().login("admin@example.com", "secret");
-
-    const next = useMedusaAdminAuthStore.getState();
-    expect(loginMedusaAdmin).toHaveBeenCalledWith({
-      email: "admin@example.com",
-      password: "secret",
+    vi.mocked(getMedusaAdminSecondFactorStatus).mockResolvedValue({
+      email: "admin@recodee.com",
+      totpEnabled: false,
     });
-    expect(getMedusaAdminUser).toHaveBeenCalledWith("jwt-token");
+
+    await useMedusaAdminAuthStore.getState().login("nagy.viktordp@gmail.com", "secret-pass");
+
+    const next = useMedusaAdminAuthStore.getState() as Record<string, unknown>;
     expect(next.token).toBe("jwt-token");
-    expect(next.user?.email).toBe("admin@example.com");
-    expect(next.lastLoginCredentials).toEqual({
-      email: "admin@example.com",
-      password: "secret",
-    });
+    expect(next.user).toMatchObject({ email: "admin@recodee.com" });
+    expect(next.lastAuthenticatedEmail).toBe("nagy.viktordp@gmail.com");
     expect(next.error).toBeNull();
     expect(next.loading).toBe(false);
+    expect("lastLoginCredentials" in next).toBe(false);
   });
 
-  it("maps Medusa API error message when login fails", async () => {
-    vi.mocked(loginMedusaAdmin).mockRejectedValue(
-      new MedusaClientError(
-        "Medusa admin request failed with status 401",
-        401,
-        JSON.stringify({ message: "Invalid email or password" }),
-      ),
-    );
-
-    await expect(
-      useMedusaAdminAuthStore.getState().login("admin@example.com", "bad-pass"),
-    ).rejects.toBeInstanceOf(MedusaClientError);
-
-    const next = useMedusaAdminAuthStore.getState();
-    expect(next.error).toBe("Invalid email or password");
-    expect(next.loading).toBe(false);
-    expect(next.user).toBeNull();
-    expect(next.lastLoginCredentials).toBeNull();
-  });
-
-  it("clears state on logout", () => {
+  it("preserves the remembered login email across logout", () => {
     useMedusaAdminAuthStore.setState({
-      token: "token",
+      token: "jwt-token",
       user: {
         id: "user_123",
-        email: "admin@example.com",
-        first_name: null,
-        last_name: null,
+        email: "admin@recodee.com",
+        first_name: "Admin",
+        last_name: "User",
         avatar_url: null,
       },
-      lastLoginCredentials: {
-        email: "admin@example.com",
-        password: "secret",
+      lastAuthenticatedEmail: "nagy.viktordp@gmail.com",
+      pendingToken: "pending-token",
+      pendingUser: {
+        id: "user_123",
+        email: "admin@recodee.com",
+        first_name: "Admin",
+        last_name: "User",
+        avatar_url: null,
       },
-      error: "some error",
-      loading: false,
+      challengeRequired: true,
+      secondFactorStatus: { email: "admin@recodee.com", totpEnabled: true },
+      error: "Nope",
     });
 
     useMedusaAdminAuthStore.getState().logout();
 
-    const next = useMedusaAdminAuthStore.getState();
-    expect(next.token).toBeNull();
-    expect(next.user).toBeNull();
-    expect(next.lastLoginCredentials).toBeNull();
-    expect(next.error).toBeNull();
+    const loggedOut = useMedusaAdminAuthStore.getState();
+    expect(loggedOut.token).toBeNull();
+    expect(loggedOut.user).toBeNull();
+    expect(loggedOut.pendingToken).toBeNull();
+    expect(loggedOut.pendingUser).toBeNull();
+    expect(loggedOut.challengeRequired).toBe(false);
+    expect(loggedOut.lastAuthenticatedEmail).toBe("nagy.viktordp@gmail.com");
+    expect(loggedOut.error).toBeNull();
   });
 });

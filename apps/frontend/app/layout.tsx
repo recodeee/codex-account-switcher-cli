@@ -73,7 +73,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

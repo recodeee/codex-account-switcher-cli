@@ -1,0 +1,3 @@
+- [ ] Update the dashboard account card CTA label for active local snapshots.
+- [ ] Add regression coverage for active-snapshot and pending-switch button labels.
+- [ ] Validate with targeted frontend tests.

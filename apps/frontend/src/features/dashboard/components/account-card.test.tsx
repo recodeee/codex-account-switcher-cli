@@ -380,7 +380,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Currently used" })).toBeEnabled();
   });
 
   it("disables use this account button when 5h quota is unavailable", () => {
@@ -399,7 +399,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Currently used" })).toBeDisabled();
   });
 
   it("disables use this account button when weekly quota is unavailable", () => {
@@ -418,7 +418,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Currently used" })).toBeDisabled();
   });
 
   it("disables use this account button when weekly quota rounds down to 0% for display", () => {
@@ -437,7 +437,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    const useButton = screen.getByRole("button", { name: "Use this account" });
+    const useButton = screen.getByRole("button", { name: "Currently used" });
     expect(useButton).toBeDisabled();
     expect(useButton).toHaveAttribute("title", "Weekly quota shown as 0%.");
   });
@@ -477,7 +477,7 @@ describe("AccountCard", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Currently used" })).toBeDisabled();
 
     rerender(
       <AccountCard
@@ -492,7 +492,7 @@ describe("AccountCard", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Use this account" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Currently used" })).toBeDisabled();
   });
 
   it("enables use this account button when codex-auth snapshot is unavailable but account is active with quota", () => {
@@ -751,7 +751,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} onAction={onAction} />);
 
-    await user.click(screen.getByRole("button", { name: "Use this account" }));
+    await user.click(screen.getByRole("button", { name: "Currently used" }));
 
     expect(onAction).toHaveBeenCalledWith(account, "useLocal");
   });

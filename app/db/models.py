@@ -246,6 +246,27 @@ class DashboardSettings(Base):
     )
 
 
+class MedusaAdminSecondFactor(Base):
+    __tablename__ = "medusa_admin_second_factor"
+
+    email: Mapped[str] = mapped_column(String(320), primary_key=True)
+    totp_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=false(),
+        nullable=False,
+    )
+    totp_secret_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    totp_last_verified_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class ApiFirewallAllowlist(Base):
     __tablename__ = "api_firewall_allowlist"
 

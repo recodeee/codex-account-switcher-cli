@@ -252,29 +252,29 @@ function DemoCardAnnotations() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 hidden xl:block"
+      className="pointer-events-none absolute inset-0 hidden lg:block"
     >
-      <div className="absolute left-[-210px] top-[98px]">
-        <p className="font-[cursive] text-lg italic text-cyan-200/90">
+      <div className="absolute left-[-132px] top-[102px] xl:left-[-210px] xl:top-[98px]">
+        <p className="font-[cursive] text-sm italic text-cyan-200/90 xl:text-lg">
           Your tokens left
         </p>
-        <p className="-mt-1 font-[cursive] text-lg italic text-cyan-200/90">
+        <p className="-mt-0.5 font-[cursive] text-sm italic text-cyan-200/90 xl:-mt-1 xl:text-lg">
           on the other site
         </p>
         <svg
           viewBox="0 0 170 70"
-          className="ml-[112px] mt-1 h-[70px] w-[170px]"
+          className="ml-[74px] mt-1 h-[52px] w-[126px] xl:ml-[112px] xl:h-[70px] xl:w-[170px]"
           fill="none"
         >
           <path
-            d="M4 10 C 48 14, 78 14, 104 16"
+            d="M4 10 C 42 14, 64 14, 86 16"
             stroke="rgb(103 232 249 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeDasharray="4 5"
           />
           <path
-            d="M96 9 L 107 17 L 92 19"
+            d="M78 9 L 89 17 L 74 19"
             stroke="rgb(103 232 249 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
@@ -283,27 +283,27 @@ function DemoCardAnnotations() {
         </svg>
       </div>
 
-      <div className="absolute right-[-132px] top-[98px] text-right">
-        <p className="font-[cursive] text-lg italic text-emerald-200/90">
+      <div className="absolute right-[-88px] top-[102px] text-right xl:right-[-132px] xl:top-[98px]">
+        <p className="font-[cursive] text-sm italic text-emerald-200/90 xl:text-lg">
           Your active Codex
         </p>
-        <p className="-mt-1 font-[cursive] text-lg italic text-emerald-200/90">
+        <p className="-mt-0.5 font-[cursive] text-sm italic text-emerald-200/90 xl:-mt-1 xl:text-lg">
           CLI sessions
         </p>
         <svg
           viewBox="0 0 180 70"
-          className="mt-1 h-[70px] w-[180px]"
+          className="mt-1 ml-auto h-[52px] w-[132px] xl:h-[70px] xl:w-[180px]"
           fill="none"
         >
           <path
-            d="M176 10 C 126 15, 88 14, 34 16"
+            d="M128 10 C 92 15, 64 14, 26 16"
             stroke="rgb(167 243 208 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeDasharray="4 5"
           />
           <path
-            d="M42 9 L 30 17 L 45 19"
+            d="M34 9 L 22 17 L 37 19"
             stroke="rgb(167 243 208 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
@@ -312,20 +312,20 @@ function DemoCardAnnotations() {
         </svg>
       </div>
 
-      <div className="absolute right-[-190px] top-[324px] text-right">
-        <p className="font-[cursive] text-lg italic text-sky-200/90">
+      <div className="absolute right-[-112px] top-[324px] text-right xl:right-[-190px]">
+        <p className="font-[cursive] text-sm italic text-sky-200/90 xl:text-lg">
           Drop your email here
         </p>
-        <svg viewBox="0 0 190 64" className="mt-1 h-16 w-[190px]" fill="none">
+        <svg viewBox="0 0 190 64" className="mt-1 ml-auto h-12 w-[132px] xl:h-16 xl:w-[190px]" fill="none">
           <path
-            d="M186 10 C 144 18, 102 16, 14 16"
+            d="M128 10 C 98 18, 70 16, 10 16"
             stroke="rgb(125 211 252 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeDasharray="4 5"
           />
           <path
-            d="M22 9 L 10 17 L 25 19"
+            d="M18 9 L 6 17 L 21 19"
             stroke="rgb(125 211 252 / 0.75)"
             strokeWidth="2.5"
             strokeLinecap="round"

@@ -11,7 +11,7 @@ describe("AccountMenu component", () => {
     useMedusaAdminAuthStore.setState({
       token: null,
       user: null,
-      lastLoginCredentials: null,
+      lastAuthenticatedEmail: null,
       loading: false,
       error: null,
       login: async () => undefined,
@@ -28,24 +28,21 @@ describe("AccountMenu component", () => {
 
     expect(screen.getByRole("menuitem", { name: "Sign in Medusa admin" })).toBeInTheDocument();
     expect(screen.getByText("Not signed in")).toBeInTheDocument();
-    expect(screen.getByText("No Medusa credentials used yet")).toBeInTheDocument();
+    expect(screen.getByText("No Medusa admin login recorded yet")).toBeInTheDocument();
   });
 
-  it("shows the last Medusa credentials used for login", async () => {
+  it("shows the backend-authenticated Medusa admin account instead of local credentials", async () => {
     const user = userEvent.setup({ delay: null });
 
     useMedusaAdminAuthStore.setState({
       token: "jwt-token",
+      lastAuthenticatedEmail: "nagy.viktordp@gmail.com",
       user: {
         id: "user_123",
-        email: "admin@example.com",
+        email: "admin@recodee.com",
         first_name: "Admin",
         last_name: "User",
         avatar_url: null,
-      },
-      lastLoginCredentials: {
-        email: "odin@recodee.com",
-        password: "medusa-secret",
       },
     });
 
@@ -54,7 +51,9 @@ describe("AccountMenu component", () => {
     await user.click(screen.getByRole("button", { name: "Open account menu" }));
 
     expect(screen.getByRole("menuitem", { name: "Sign out Medusa admin" })).toBeInTheDocument();
-    expect(screen.getByText("odin@recodee.com")).toBeInTheDocument();
-    expect(screen.getByText("medusa-secret")).toBeInTheDocument();
+    expect(screen.getByText("admin@recodee.com")).toBeInTheDocument();
+    expect(screen.getAllByText("nagy.viktordp@gmail.com").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("odin@recodee.com")).not.toBeInTheDocument();
+    expect(screen.queryByText("medusa-secret")).not.toBeInTheDocument();
   });
 });

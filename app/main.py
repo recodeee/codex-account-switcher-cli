@@ -36,6 +36,7 @@ from app.modules.dashboard import api as dashboard_api
 from app.modules.dashboard_auth import api as dashboard_auth_api
 from app.modules.devices import api as devices_api
 from app.modules.firewall import api as firewall_api
+from app.modules.medusa_admin_auth import api as medusa_admin_auth_api
 from app.modules.health import api as health_api
 from app.modules.oauth import api as oauth_api
 from app.modules.proxy import api as proxy_api
@@ -320,6 +321,7 @@ def create_app() -> FastAPI:
     app.include_router(request_logs_api.router)
     app.include_router(oauth_api.router)
     app.include_router(dashboard_auth_api.router)
+    app.include_router(medusa_admin_auth_api.router)
     app.include_router(settings_api.router)
     app.include_router(firewall_api.router)
     app.include_router(devices_api.router)

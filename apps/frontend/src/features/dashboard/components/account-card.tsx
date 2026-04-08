@@ -1094,6 +1094,9 @@ export function AccountCard(props: AccountCardProps) {
   const useLocalButtonDisabled =
     !canUseLocally || useLocalBusy || useLocalBlockedByWeeklyQuota;
   const useLocalButtonShowsSuccess = isActiveSnapshot || useLocalBusy;
+  const resolvedPrimaryActionLabel = isActiveSnapshot
+    ? "Currently used"
+    : primaryActionLabel;
   const useLocalButtonDisabledReason = useLocalBlockedByWeeklyQuota
     ? "Weekly quota shown as 0%."
     : useLocalDisabledReason;
@@ -2001,7 +2004,7 @@ export function AccountCard(props: AccountCardProps) {
                   className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-300"
                 />
               ) : null}
-              {primaryActionLabel}
+              {resolvedPrimaryActionLabel}
             </Button>
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {hasSnapshotMismatch ? (

@@ -26,6 +26,11 @@ from app.modules.dashboard_auth.service import (
     DashboardAuthService,
     get_dashboard_session_store,
 )
+from app.modules.medusa_admin_auth.repository import MedusaAdminAuthRepository
+from app.modules.medusa_admin_auth.service import (
+    MedusaAdminAuthRepositoryProtocol,
+    MedusaAdminAuthService,
+)
 from app.modules.devices.repository import DevicesRepository
 from app.modules.devices.service import DevicesRepositoryPort, DevicesService
 from app.modules.firewall.repository import FirewallRepository
@@ -83,6 +88,13 @@ class DashboardAuthContext:
     session: AsyncSession
     repository: DashboardAuthRepository
     service: DashboardAuthService
+
+
+@dataclass(slots=True)
+class MedusaAdminAuthContext:
+    session: AsyncSession
+    repository: MedusaAdminAuthRepository
+    service: MedusaAdminAuthService
 
 
 @dataclass(slots=True)
@@ -227,6 +239,14 @@ def get_dashboard_auth_context(
     repository = DashboardAuthRepository(session)
     service = DashboardAuthService(cast(DashboardAuthRepositoryProtocol, repository), get_dashboard_session_store())
     return DashboardAuthContext(session=session, repository=repository, service=service)
+
+
+def get_medusa_admin_auth_context(
+    session: AsyncSession = Depends(get_session),
+) -> MedusaAdminAuthContext:
+    repository = MedusaAdminAuthRepository(session)
+    service = MedusaAdminAuthService(cast(MedusaAdminAuthRepositoryProtocol, repository))
+    return MedusaAdminAuthContext(session=session, repository=repository, service=service)
 
 
 def get_proxy_context(request: Request) -> ProxyContext:

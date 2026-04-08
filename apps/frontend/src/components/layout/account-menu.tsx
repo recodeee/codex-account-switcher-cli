@@ -98,8 +98,8 @@ export function AccountMenu({
   const blurred = usePrivacyStore((state) => state.blurred);
   const togglePrivacy = usePrivacyStore((state) => state.toggle);
   const medusaUser = useMedusaAdminAuthStore((state) => state.user);
-  const medusaLastLoginCredentials = useMedusaAdminAuthStore(
-    (state) => state.lastLoginCredentials,
+  const medusaLastAuthenticatedEmail = useMedusaAdminAuthStore(
+    (state) => state.lastAuthenticatedEmail,
   );
   const medusaLoading = useMedusaAdminAuthStore((state) => state.loading);
   const medusaLogout = useMedusaAdminAuthStore((state) => state.logout);
@@ -117,7 +117,7 @@ export function AccountMenu({
     [overviewQuery.data?.accounts],
   );
   const medusaAdminEmail = medusaUser?.email ?? null;
-  const triggerEmail = medusaAdminEmail ?? loggedInEmail;
+  const triggerEmail = loggedInEmail ?? medusaAdminEmail ?? medusaLastAuthenticatedEmail;
   const triggerLetter = (triggerEmail?.trim()?.[0] ?? "C").toUpperCase();
 
   return (
@@ -257,28 +257,17 @@ export function AccountMenu({
           </p>
 
           <p className="mt-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-            Medusa login used
+            Last Medusa admin login
           </p>
-          {medusaLastLoginCredentials ? (
-            <div className="space-y-1 text-xs text-foreground/90">
-              <p
-                className={cn("truncate", blurred ? "privacy-blur" : "")}
-                title={medusaLastLoginCredentials.email}
-              >
-                {medusaLastLoginCredentials.email}
-              </p>
-              <p
-                className={cn("truncate", blurred ? "privacy-blur" : "")}
-                title={medusaLastLoginCredentials.password}
-              >
-                {medusaLastLoginCredentials.password}
-              </p>
-            </div>
-          ) : (
-            <p className="truncate text-xs text-foreground/90">
-              No Medusa credentials used yet
-            </p>
-          )}
+          <p
+            className={cn(
+              "truncate text-xs text-foreground/90",
+              blurred ? "privacy-blur" : "",
+            )}
+            title={medusaLastAuthenticatedEmail ?? "No Medusa admin login recorded yet"}
+          >
+            {medusaLastAuthenticatedEmail ?? "No Medusa admin login recorded yet"}
+          </p>
         </div>
       </DropdownMenuContent>
 

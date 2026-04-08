@@ -1,10 +1,16 @@
+import { get, post } from "@/lib/api-client";
 import { getMedusaRuntimeConfig } from "@/lib/medusa/config";
 import { MedusaClientError } from "@/lib/medusa/client";
 import {
   MedusaAdminLoginRequestSchema,
   MedusaAdminLoginResponseSchema,
+  MedusaAdminSecondFactorSetupStartResponseSchema,
+  MedusaAdminSecondFactorStatusSchema,
+  MedusaAdminSecondFactorVerifyResponseSchema,
   MedusaAdminUserResponseSchema,
   type MedusaAdminLoginRequest,
+  type MedusaAdminSecondFactorSetupStartResponse,
+  type MedusaAdminSecondFactorStatus,
   type MedusaAdminUser,
 } from "@/features/medusa-auth/schemas";
 
@@ -71,4 +77,65 @@ export async function getMedusaAdminUser(token: string): Promise<MedusaAdminUser
 
   const parsedResponse = MedusaAdminUserResponseSchema.parse(response);
   return parsedResponse.user;
+}
+
+export function getMedusaAdminSecondFactorStatus(
+  email: string,
+): Promise<MedusaAdminSecondFactorStatus> {
+  return get(
+    `/api/medusa-admin-auth/status?email=${encodeURIComponent(email)}`,
+    MedusaAdminSecondFactorStatusSchema,
+  );
+}
+
+export function startMedusaAdminSecondFactorSetup(
+  email: string,
+): Promise<MedusaAdminSecondFactorSetupStartResponse> {
+  return post(
+    "/api/medusa-admin-auth/totp/setup/start",
+    MedusaAdminSecondFactorSetupStartResponseSchema,
+    {
+      body: { email },
+    },
+  );
+}
+
+export function confirmMedusaAdminSecondFactorSetup(payload: {
+  email: string;
+  secret: string;
+  code: string;
+}) {
+  return post(
+    "/api/medusa-admin-auth/totp/setup/confirm",
+    MedusaAdminSecondFactorVerifyResponseSchema,
+    {
+      body: payload,
+    },
+  );
+}
+
+export function verifyMedusaAdminSecondFactor(payload: {
+  email: string;
+  code: string;
+}) {
+  return post(
+    "/api/medusa-admin-auth/totp/verify",
+    MedusaAdminSecondFactorVerifyResponseSchema,
+    {
+      body: payload,
+    },
+  );
+}
+
+export function disableMedusaAdminSecondFactor(payload: {
+  email: string;
+  code: string;
+}) {
+  return post(
+    "/api/medusa-admin-auth/totp/disable",
+    MedusaAdminSecondFactorVerifyResponseSchema,
+    {
+      body: payload,
+    },
+  );
 }
