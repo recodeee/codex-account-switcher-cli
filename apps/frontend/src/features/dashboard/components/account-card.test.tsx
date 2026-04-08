@@ -1748,8 +1748,11 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    const previewTextNode = screen.getByText(usageLimitPreview);
-    expect(previewTextNode.parentElement).toHaveClass("text-red-300");
+    const highlightedPhrase = screen.getByText(/you['’]ve hit your usage limit/i);
+    expect(highlightedPhrase).toHaveClass("font-semibold", "text-red-200");
+
+    const trailingHint = screen.getByText(/try again at 2:36 pm\./i);
+    expect(trailingHint).toHaveClass("text-red-300/90");
   });
 
   it("shows per-session logs inline when watch logs is clicked", async () => {

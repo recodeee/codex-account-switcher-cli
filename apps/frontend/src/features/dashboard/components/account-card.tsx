@@ -148,6 +148,8 @@ const UNKNOWN_TOKENS_SYNC_LABEL = "syncing…";
 const NEXT_TASK_PREVIEW_PATTERN = /\bnext(?:\.?js)?\b|\bturbopack\b/i;
 const USAGE_LIMIT_TASK_PREVIEW_PATTERN =
   /\byou(?:'|’)ve hit your usage limit\b|\busage limit\b|\btry again at\b/i;
+const USAGE_LIMIT_TASK_PREVIEW_HIGHLIGHT_PATTERN =
+  /\byou(?:'|’)ve hit your usage limit\b/i;
 const CURRENT_TASK_PREVIEW_EXPANSION_KEY = "__current_task_preview__";
 const LAST_TASK_PREVIEW_EXPANSION_KEY = "__last_task_preview__";
 const STALE_SESSION_TASK_MS = 90_000;
@@ -166,6 +168,27 @@ function isUsageLimitTaskPreview(taskPreview: string | null | undefined): boolea
     return false;
   }
   return USAGE_LIMIT_TASK_PREVIEW_PATTERN.test(normalized);
+}
+
+function UsageLimitTaskPreviewText({ text }: { text: string }) {
+  const match = USAGE_LIMIT_TASK_PREVIEW_HIGHLIGHT_PATTERN.exec(text);
+  if (!match) {
+    return <span className="text-red-300/90">{text}</span>;
+  }
+
+  const start = match.index;
+  const end = start + match[0].length;
+  const leading = text.slice(0, start);
+  const highlighted = text.slice(start, end);
+  const trailing = text.slice(end);
+
+  return (
+    <span>
+      {leading ? <span className="text-red-300/90">{leading}</span> : null}
+      <span className="font-semibold text-red-200">{highlighted}</span>
+      {trailing ? <span className="text-red-300/90">{trailing}</span> : null}
+    </span>
+  );
 }
 
 function NextTaskBadge() {
@@ -1779,6 +1802,9 @@ export function AccountCard(props: AccountCardProps) {
                             !sessionTaskPreviewExpanded
                               ? sessionTaskPreviewExcerpt.text
                               : preview.taskPreview;
+                          const usageLimitSessionPreview = isUsageLimitTaskPreview(
+                            preview.taskPreview,
+                          );
                           return (
                             <li
                               key={sessionTaskRowKey}
@@ -1833,14 +1859,18 @@ export function AccountCard(props: AccountCardProps) {
                                   <span
                                     className={cn(
                                       "inline-flex items-center gap-1.5 break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/95",
-                                      isUsageLimitTaskPreview(preview.taskPreview) &&
-                                        "text-red-300",
                                     )}
                                   >
                                     {hasNextTaskHint(preview.taskPreview) ? (
                                       <NextTaskBadge />
                                     ) : null}
-                                    <span>{displaySessionTaskPreview}</span>
+                                    {usageLimitSessionPreview ? (
+                                      <UsageLimitTaskPreviewText
+                                        text={displaySessionTaskPreview}
+                                      />
+                                    ) : (
+                                      <span>{displaySessionTaskPreview}</span>
+                                    )}
                                   </span>
                                 </div>
                                 {sessionTaskPreviewExcerpt.truncated ? (
