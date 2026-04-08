@@ -12,6 +12,7 @@ from app.modules.handoffs.schemas import (
     RuntimeHandoffCreateRequest,
     RuntimeHandoffResumeRequest,
     RuntimeHandoffStatus,
+    RuntimeHandoffTriggerReason,
 )
 from app.modules.handoffs.service import RuntimeHandoffService
 from app.tools.codex_auth_multi_runtime import activate_runtime_snapshot, build_runtime_env, build_runtime_paths
@@ -41,7 +42,13 @@ def _parse_args() -> argparse.Namespace:
     create_parser = subparsers.add_parser("create", help="Create a runtime handoff artifact")
     create_parser.add_argument("source_runtime")
     create_parser.add_argument("source_snapshot")
+    create_parser.add_argument(
+        "--trigger-reason",
+        choices=[reason.value for reason in RuntimeHandoffTriggerReason],
+        required=True,
+    )
     create_parser.add_argument("--source-session-id")
+    create_parser.add_argument("--expected-target-runtime")
     create_parser.add_argument("--expected-target-snapshot")
     create_parser.add_argument("--title")
     create_parser.add_argument("--goal", required=True)
@@ -96,8 +103,8 @@ def main() -> int:
         checkpoint = RuntimeHandoffCheckpoint(
             title=args.title,
             goal=args.goal,
-            done=_parse_list(args.done),
-            next=_parse_list(args.next_items),
+            completed_work=_parse_list(args.done),
+            next_steps=_parse_list(args.next_items),
             blockers=_parse_list(args.blockers),
             files_touched=_parse_list(args.files_touched),
             commands_run=_parse_list(args.commands_run),
@@ -107,6 +114,8 @@ def main() -> int:
             source_runtime=args.source_runtime,
             source_snapshot=args.source_snapshot,
             source_session_id=args.source_session_id,
+            trigger_reason=RuntimeHandoffTriggerReason(args.trigger_reason),
+            expected_target_runtime=args.expected_target_runtime,
             expected_target_snapshot=args.expected_target_snapshot,
             checkpoint=checkpoint,
             ttl_hours=args.ttl_hours,

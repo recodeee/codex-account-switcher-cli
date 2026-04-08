@@ -29,11 +29,13 @@ async def test_runtime_handoff_create_list_resume_flow(async_client, monkeypatch
     create_payload = {
         "sourceRuntime": "terminal-a",
         "sourceSnapshot": "source",
+        "triggerReason": "quota_low",
+        "expectedTargetRuntime": "terminal-b",
         "expectedTargetSnapshot": "target",
         "checkpoint": {
             "goal": "Finish larger refactor after quota cap",
-            "done": ["Implemented parser"],
-            "next": ["Add mapper tests"],
+            "completedWork": ["Implemented parser"],
+            "nextSteps": ["Add mapper tests"],
         },
     }
     create_response = await async_client.post("/api/runtime-handoffs", json=create_payload)
@@ -62,4 +64,3 @@ async def test_runtime_handoff_create_list_resume_flow(async_client, monkeypatch
     assert resumed["handoff"]["targetRuntime"] == "terminal-b"
     assert resumed["handoff"]["targetSnapshot"] == "target"
     assert "Finish larger refactor" in resumed["resumePrompt"]
-

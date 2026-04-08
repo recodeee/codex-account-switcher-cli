@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 
 from app.core.exceptions import DashboardBadRequestError
-from app.modules.handoffs.schemas import RuntimeHandoffCheckpoint, RuntimeHandoffCreateRequest, RuntimeHandoffResumeRequest
+from app.modules.handoffs.schemas import (
+    RuntimeHandoffCheckpoint,
+    RuntimeHandoffCreateRequest,
+    RuntimeHandoffResumeRequest,
+    RuntimeHandoffTriggerReason,
+)
 from app.modules.handoffs.service import RuntimeHandoffService
 
 pytestmark = pytest.mark.unit
@@ -36,11 +41,13 @@ def test_create_and_resume_runtime_handoff(monkeypatch: pytest.MonkeyPatch, tmp_
         RuntimeHandoffCreateRequest(
             source_runtime="terminal-a",
             source_snapshot="source",
+            trigger_reason=RuntimeHandoffTriggerReason.QUOTA_LOW,
+            expected_target_runtime="terminal-b",
             expected_target_snapshot="target",
             checkpoint=RuntimeHandoffCheckpoint(
                 goal="Continue migration task",
-                done=["Prepared schema"],
-                next=["Wire API endpoints"],
+                completed_work=["Prepared schema"],
+                next_steps=["Wire API endpoints"],
             ),
         )
     )
@@ -58,6 +65,7 @@ def test_create_and_resume_runtime_handoff(monkeypatch: pytest.MonkeyPatch, tmp_
     )
     assert resumed.status.value == "resumed"
     assert resumed.resume_count == 1
+    assert resumed.last_resumed_at is not None
     assert "Continue migration task" in prompt
     assert resumed.target_runtime == "terminal-b"
     assert resumed.target_snapshot == "target"
@@ -80,12 +88,13 @@ def test_resume_rejects_snapshot_mismatch_without_override(
         RuntimeHandoffCreateRequest(
             source_runtime="terminal-a",
             source_snapshot="source",
+            trigger_reason=RuntimeHandoffTriggerReason.MANUAL_HANDOFF,
             expected_target_snapshot="expected",
             checkpoint=RuntimeHandoffCheckpoint(goal="Continue debugging"),
         )
     )
 
-    with pytest.raises(DashboardBadRequestError, match="does not match expected"):
+    with pytest.raises(DashboardBadRequestError, match="does not match expected handoff compatibility"):
         service.resume_handoff(
             created.id,
             RuntimeHandoffResumeRequest(
@@ -95,3 +104,45 @@ def test_resume_rejects_snapshot_mismatch_without_override(
             ),
         )
 
+
+def test_resume_rejects_checksum_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    handoffs_dir = tmp_path / "handoffs"
+    _write_snapshot(accounts_dir, "source")
+    _write_snapshot(accounts_dir, "target")
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_HANDOFFS_DIR", str(handoffs_dir))
+
+    service = RuntimeHandoffService()
+    created = service.create_handoff(
+        RuntimeHandoffCreateRequest(
+            source_runtime="terminal-a",
+            source_snapshot="source",
+            trigger_reason=RuntimeHandoffTriggerReason.QUOTA_EXHAUSTED,
+            expected_target_runtime="terminal-b",
+            expected_target_snapshot="target",
+            checkpoint=RuntimeHandoffCheckpoint(
+                goal="Continue debugging",
+                completed_work=["Captured logs"],
+            ),
+        )
+    )
+
+    entry_path = handoffs_dir / f"{created.id}.json"
+    payload = json.loads(entry_path.read_text(encoding="utf-8"))
+    payload["checkpoint"]["completedWork"].append("Tampered change")
+    entry_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(DashboardBadRequestError, match="integrity checks"):
+        service.resume_handoff(
+            created.id,
+            RuntimeHandoffResumeRequest(
+                target_runtime="terminal-b",
+                target_snapshot="target",
+                override_mismatch=False,
+            ),
+        )

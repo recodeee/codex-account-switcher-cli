@@ -6,9 +6,9 @@
 
 ## 2. Backend and runtime contract
 
-- [ ] 2.1 Add a durable checkpoint artifact schema and storage/index contract.
+- [x] 2.1 Add a durable checkpoint artifact schema and storage/index contract.
 - [ ] 2.2 Implement checkpoint creation flows for `quota_low`, `quota_exhausted`, and manual handoff triggers.
-- [ ] 2.3 Implement guarded resume validation and status transitions.
+- [x] 2.3 Implement guarded resume validation and status transitions.
 - [ ] 2.4 Add expiration/cleanup rules and audit metadata.
 
 ## 3. CLI / OMX integration

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 
 from app.modules.shared.schemas import DashboardModel
 
@@ -15,11 +15,25 @@ class RuntimeHandoffStatus(StrEnum):
     EXPIRED = "expired"
 
 
+class RuntimeHandoffTriggerReason(StrEnum):
+    QUOTA_LOW = "quota_low"
+    QUOTA_EXHAUSTED = "quota_exhausted"
+    MANUAL_HANDOFF = "manual_handoff"
+
+
 class RuntimeHandoffCheckpoint(DashboardModel):
     title: str | None = None
     goal: str = Field(min_length=1, max_length=5000)
-    done: list[str] = Field(default_factory=list, max_length=200)
-    next: list[str] = Field(default_factory=list, max_length=200)
+    completed_work: list[str] = Field(
+        default_factory=list,
+        max_length=200,
+        validation_alias=AliasChoices("completedWork", "completed_work", "done"),
+    )
+    next_steps: list[str] = Field(
+        default_factory=list,
+        max_length=200,
+        validation_alias=AliasChoices("nextSteps", "next_steps", "next"),
+    )
     blockers: list[str] = Field(default_factory=list, max_length=200)
     files_touched: list[str] = Field(default_factory=list, max_length=500)
     commands_run: list[str] = Field(default_factory=list, max_length=500)
@@ -33,12 +47,14 @@ class RuntimeHandoffEntry(DashboardModel):
     source_runtime: str = Field(min_length=1, max_length=120)
     source_snapshot: str = Field(min_length=1, max_length=120)
     source_session_id: str | None = None
+    trigger_reason: RuntimeHandoffTriggerReason
+    expected_target_runtime: str | None = None
     expected_target_snapshot: str | None = None
     target_runtime: str | None = None
     target_snapshot: str | None = None
     created_at: datetime
     expires_at: datetime
-    resumed_at: datetime | None = None
+    last_resumed_at: datetime | None = None
     aborted_at: datetime | None = None
     resume_count: int = 0
     checksum: str = Field(min_length=32, max_length=64)
@@ -54,6 +70,8 @@ class RuntimeHandoffCreateRequest(DashboardModel):
     source_runtime: str = Field(min_length=1, max_length=120)
     source_snapshot: str = Field(min_length=1, max_length=120)
     source_session_id: str | None = None
+    trigger_reason: RuntimeHandoffTriggerReason
+    expected_target_runtime: str | None = None
     expected_target_snapshot: str | None = None
     checkpoint: RuntimeHandoffCheckpoint
     ttl_hours: int | None = Field(default=None, ge=1, le=24 * 14)
@@ -72,4 +90,3 @@ class RuntimeHandoffAbortRequest(DashboardModel):
 class RuntimeHandoffResumeResponse(DashboardModel):
     handoff: RuntimeHandoffEntry
     resume_prompt: str
-

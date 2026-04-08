@@ -13,7 +13,6 @@ from pydantic import ValidationError
 from app.core.exceptions import DashboardBadRequestError, DashboardConflictError, DashboardNotFoundError
 from app.core.utils.time import to_utc_naive, utcnow
 from app.modules.handoffs.schemas import (
-    RuntimeHandoffCheckpoint,
     RuntimeHandoffCreateRequest,
     RuntimeHandoffEntry,
     RuntimeHandoffResumeRequest,
@@ -58,7 +57,6 @@ class RuntimeHandoffService:
         ttl_hours = payload.ttl_hours if payload.ttl_hours is not None else _resolve_handoff_ttl_hours()
         expires_at = to_utc_naive(now + timedelta(hours=ttl_hours))
         checkpoint = payload.checkpoint
-        checksum = _checkpoint_checksum(checkpoint)
 
         entry = RuntimeHandoffEntry(
             id=str(uuid4()),
@@ -67,17 +65,22 @@ class RuntimeHandoffService:
             source_runtime=payload.source_runtime.strip(),
             source_snapshot=source_snapshot,
             source_session_id=payload.source_session_id,
+            trigger_reason=payload.trigger_reason,
+            expected_target_runtime=(
+                payload.expected_target_runtime.strip() if payload.expected_target_runtime else None
+            ),
             expected_target_snapshot=payload.expected_target_snapshot,
             target_runtime=None,
             target_snapshot=None,
             created_at=to_utc_naive(now),
             expires_at=expires_at,
-            resumed_at=None,
+            last_resumed_at=None,
             aborted_at=None,
             resume_count=0,
-            checksum=checksum,
+            checksum="0" * 64,
             checkpoint=checkpoint,
         )
+        entry = entry.model_copy(update={"checksum": _entry_checksum(entry)})
         self._write_entry(entry)
         return entry
 
@@ -104,23 +107,31 @@ class RuntimeHandoffService:
         if entry.status != RuntimeHandoffStatus.READY:
             raise DashboardConflictError("Handoff is not resumable.", code="runtime_handoff_not_resumable")
 
-        expected = (entry.expected_target_snapshot or "").strip()
-        actual = payload.target_snapshot.strip()
-        if expected and expected != actual and not payload.override_mismatch:
+        self._assert_entry_integrity(entry)
+
+        actual_runtime = payload.target_runtime.strip()
+        actual_snapshot = payload.target_snapshot.strip()
+
+        expected_snapshot = (entry.expected_target_snapshot or entry.source_snapshot).strip()
+        expected_runtime = (entry.expected_target_runtime or entry.source_runtime).strip()
+
+        has_snapshot_mismatch = expected_snapshot != actual_snapshot
+        has_runtime_mismatch = expected_runtime != actual_runtime
+        if (has_snapshot_mismatch or has_runtime_mismatch) and not payload.override_mismatch:
             raise DashboardBadRequestError(
-                "Target snapshot does not match expected handoff snapshot.",
-                code="runtime_handoff_snapshot_mismatch",
+                "Target runtime/snapshot does not match expected handoff compatibility.",
+                code="runtime_handoff_compatibility_mismatch",
             )
 
-        self._ensure_snapshot_exists(snapshot_name=actual)
-        build_runtime_paths(payload.target_runtime.strip())
+        self._ensure_snapshot_exists(snapshot_name=actual_snapshot)
+        build_runtime_paths(actual_runtime)
 
         updated = entry.model_copy(
             update={
                 "status": RuntimeHandoffStatus.RESUMED,
-                "target_runtime": payload.target_runtime.strip(),
-                "target_snapshot": actual,
-                "resumed_at": to_utc_naive(utcnow()),
+                "target_runtime": actual_runtime,
+                "target_snapshot": actual_snapshot,
+                "last_resumed_at": to_utc_naive(utcnow()),
                 "resume_count": entry.resume_count + 1,
             }
         )
@@ -143,8 +154,12 @@ class RuntimeHandoffService:
         for path in sorted(self._handoffs_dir.glob("*.json"), key=_safe_mtime, reverse=True):
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
-                entries.append(RuntimeHandoffEntry.model_validate(payload))
+                entry = RuntimeHandoffEntry.model_validate(payload)
+                self._assert_entry_integrity(entry)
+                entries.append(entry)
             except (OSError, json.JSONDecodeError, ValidationError):
+                continue
+            except DashboardConflictError:
                 continue
         return entries
 
@@ -160,11 +175,18 @@ class RuntimeHandoffService:
                 code="runtime_handoff_unreadable",
             ) from exc
         try:
-            return RuntimeHandoffEntry.model_validate(payload)
+            entry = RuntimeHandoffEntry.model_validate(payload)
+            self._assert_entry_integrity(entry)
+            return entry
         except ValidationError as exc:
             raise DashboardBadRequestError(
                 "Runtime handoff payload is invalid.",
                 code="runtime_handoff_invalid_payload",
+            ) from exc
+        except DashboardConflictError as exc:
+            raise DashboardBadRequestError(
+                "Runtime handoff payload failed integrity checks.",
+                code="runtime_handoff_integrity_failed",
             ) from exc
 
     def _write_entry(self, entry: RuntimeHandoffEntry) -> None:
@@ -179,6 +201,15 @@ class RuntimeHandoffService:
 
     def _path_for_id(self, handoff_id: str) -> Path:
         return self._handoffs_dir / f"{handoff_id}.json"
+
+    def _assert_entry_integrity(self, entry: RuntimeHandoffEntry) -> None:
+        expected_checksum = _entry_checksum(entry)
+        if entry.checksum == expected_checksum:
+            return
+        raise DashboardConflictError(
+            "Runtime handoff checksum mismatch.",
+            code="runtime_handoff_checksum_mismatch",
+        )
 
     def _ensure_snapshot_exists(self, *, snapshot_name: str) -> None:
         normalized = snapshot_name.strip().replace(".json", "")
@@ -217,8 +248,17 @@ def _resolve_handoff_ttl_hours() -> int:
     return min(value, 24 * 14)
 
 
-def _checkpoint_checksum(checkpoint: RuntimeHandoffCheckpoint) -> str:
-    payload: dict[str, Any] = checkpoint.model_dump(mode="json", by_alias=True)
+def _entry_checksum(entry: RuntimeHandoffEntry) -> str:
+    payload: dict[str, Any] = {
+        "schemaVersion": entry.schema_version,
+        "sourceRuntime": entry.source_runtime,
+        "sourceSnapshot": entry.source_snapshot,
+        "sourceSessionId": entry.source_session_id,
+        "triggerReason": entry.trigger_reason.value,
+        "expectedTargetRuntime": entry.expected_target_runtime,
+        "expectedTargetSnapshot": entry.expected_target_snapshot,
+        "checkpoint": entry.checkpoint.model_dump(mode="json", by_alias=True),
+    }
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -233,12 +273,13 @@ def _build_resume_prompt(entry: RuntimeHandoffEntry) -> str:
         "",
         f"Goal: {checkpoint.goal}",
     ]
-    if checkpoint.done:
+    lines.append(f"Trigger reason: {entry.trigger_reason.value}")
+    if checkpoint.completed_work:
         lines.append("Done:")
-        lines.extend(f"- {item}" for item in checkpoint.done)
-    if checkpoint.next:
+        lines.extend(f"- {item}" for item in checkpoint.completed_work)
+    if checkpoint.next_steps:
         lines.append("Next:")
-        lines.extend(f"- {item}" for item in checkpoint.next)
+        lines.extend(f"- {item}" for item in checkpoint.next_steps)
     if checkpoint.blockers:
         lines.append("Blockers:")
         lines.extend(f"- {item}" for item in checkpoint.blockers)
@@ -265,4 +306,3 @@ def _safe_mtime(path: Path) -> float:
         return path.stat().st_mtime
     except OSError:
         return 0.0
-
