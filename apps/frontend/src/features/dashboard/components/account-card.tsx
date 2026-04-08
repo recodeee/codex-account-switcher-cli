@@ -280,6 +280,14 @@ function hasNextTaskHint(taskPreview: string | null | undefined): boolean {
   return NEXT_TASK_PREVIEW_PATTERN.test(normalized);
 }
 
+function hasRalplanTaskMarker(taskPreview: string | null | undefined): boolean {
+  const normalized = taskPreview?.trim();
+  if (!normalized || isWaitingTaskPreview(normalized)) {
+    return false;
+  }
+  return RALPLAN_TASK_MARKER_PATTERN.test(normalized);
+}
+
 function isUsageLimitTaskPreview(taskPreview: string | null | undefined): boolean {
   const normalized = taskPreview?.trim();
   if (!normalized) {
@@ -355,6 +363,9 @@ function OmxPlanningPromptGraph({
   activeNodeKey: OmxPlanningNodeKey;
   cliRuntimeState: OmxCliRuntimeState;
 }) {
+  const activeConnectorNode =
+    OMX_PLANNING_NODES.find((node) => node.key === activeNodeKey) ??
+    OMX_PLANNING_NODES[0];
   const cliStateStyle =
     OMX_CLI_STATE_STYLES[cliRuntimeState] ?? OMX_CLI_STATE_STYLES.finished;
   const activeNodeClasses =
@@ -405,24 +416,17 @@ function OmxPlanningPromptGraph({
         viewBox="0 0 100 100"
         aria-hidden
       >
-        {OMX_PLANNING_NODES.map((node) => {
-          const nodeActive = node.key === activeNodeKey;
-          return (
-            <line
-              key={`${node.key}-connector`}
-              x1="50"
-              y1="50"
-              x2={String(node.x)}
-              y2={String(node.y)}
-              className={cn(
-                connectorStrokeClass,
-                nodeActive ? "stroke-[0.9]" : "stroke-[0.65]",
-              )}
-              strokeDasharray="3 2"
-              strokeLinecap="round"
-            />
-          );
-        })}
+        <line
+          data-testid="omx-planning-active-connector"
+          x1="50"
+          y1="50"
+          x2={String(activeConnectorNode.x)}
+          y2={String(activeConnectorNode.y)}
+          className={connectorStrokeClass}
+          strokeWidth="0.55"
+          strokeDasharray="3 2"
+          strokeLinecap="round"
+        />
       </svg>
 
       {OMX_PLANNING_NODES.map((node) => {
@@ -496,10 +500,8 @@ function OmxPlanningPromptGraph({
 }
 
 function CodexActiveAgentCard({
-  prompt,
   cliRuntimeState,
 }: {
-  prompt: string;
   cliRuntimeState: OmxCliRuntimeState;
 }) {
   const cliStateStyle =
@@ -544,9 +546,6 @@ function CodexActiveAgentCard({
           {cliStateStyle.label}
         </span>
       </div>
-      <p className="relative mt-2 break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/92">
-        {prompt}
-      </p>
     </div>
   );
 }
@@ -1679,9 +1678,13 @@ export function AccountCard(props: AccountCardProps) {
     (codexLastTaskPreview && !isWaitingTaskPreview(codexLastTaskPreview)
       ? codexLastTaskPreview
       : null);
+  const hasRalplanSessionTaskContext = sessionTaskPreviews.some((preview) =>
+    hasRalplanTaskMarker(preview.taskPreview),
+  );
   const isRalplanTaskContext =
-    selectedTaskContextPreview != null &&
-    RALPLAN_TASK_MARKER_PATTERN.test(selectedTaskContextPreview);
+    hasRalplanTaskMarker(currentNonWaitingTaskPreview) ||
+    hasRalplanSessionTaskContext ||
+    (!currentNonWaitingTaskPreview && hasRalplanTaskMarker(codexLastTaskPreview));
   const newestPromptForAgentPanel =
     selectedTaskContextPreview ??
     codexCurrentTaskPreview ??
@@ -1690,9 +1693,12 @@ export function AccountCard(props: AccountCardProps) {
       ? WAITING_FOR_NEW_TASK_LABEL
       : "No prompt reported yet");
   const showRalplanPlanningGraph =
-    !hideCurrentTaskPreview && isWorkingNow && isRalplanTaskContext;
+    !hideCurrentTaskPreview &&
+    isWorkingNow &&
+    codexLiveSessionCount > 0 &&
+    isRalplanTaskContext;
   const showCodexActiveAgentCard =
-    !hideCurrentTaskPreview && isWorkingNow && !isRalplanTaskContext;
+    !hideCurrentTaskPreview && isWorkingNow && !showRalplanPlanningGraph;
   const promptDrivenOmxPlanningActiveNodeKey = resolveOmxPlanningActiveNodeKey(
     newestPromptForAgentPanel,
   );
@@ -2115,7 +2121,6 @@ export function AccountCard(props: AccountCardProps) {
                           />
                         ) : showCodexActiveAgentCard ? (
                           <CodexActiveAgentCard
-                            prompt={newestPromptForAgentPanel}
                             cliRuntimeState={omxPlanningCliRuntimeState}
                           />
                         ) : null

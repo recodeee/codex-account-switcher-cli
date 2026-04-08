@@ -1,4 +1,5 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 
@@ -8,6 +9,7 @@ import { renderWithProviders } from "@/test/utils";
 
 describe("plans flow integration", () => {
   it("renders plan progress percent, checkpoint resume card, and designer role", async () => {
+    const user = userEvent.setup();
     window.history.pushState({}, "", "/projects/plans");
     renderWithProviders(<App />);
 
@@ -17,7 +19,9 @@ describe("plans flow integration", () => {
     const currentCheckpoint = await screen.findByTestId("plan-current-checkpoint");
     expect(currentCheckpoint).toHaveTextContent(/executor/i);
     expect(currentCheckpoint).toHaveTextContent(/E1/);
-    expect(screen.getByText("Designer")).toBeInTheDocument();
+    expect(screen.getAllByText("Designer").length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByTestId("plan-step-timeline")).toHaveTextContent("Plan steps");
+    expect(screen.getByTestId("plan-step-timeline")).toHaveTextContent("Planner");
     expect(await screen.findByTestId("plan-summary-content")).toHaveTextContent("Mode");
     expect(screen.getByTestId("plan-summary-content")).toHaveTextContent("ralplan");
     expect(await screen.findByTestId("plan-checkpoints-content")).toHaveTextContent("Executor");
@@ -28,6 +32,14 @@ describe("plans flow integration", () => {
     expect(screen.getByTestId("plan-runtime-agents")).toHaveTextContent("gpt-5.3-codex");
     expect(await screen.findByTestId("plan-runtime-events")).toHaveTextContent("Executor spawned");
     expect(await screen.findByTestId("plan-runtime-resume")).toHaveTextContent("Can resume: Yes");
+
+    const plannerToggle = within(screen.getByTestId("plan-step-timeline")).getByRole("button", {
+      name: /planner/i,
+    });
+    expect(screen.getByText(/draft completed/i)).toHaveClass("line-through");
+    expect(plannerToggle).toHaveAttribute("aria-expanded", "true");
+    await user.click(plannerToggle);
+    expect(plannerToggle).toHaveAttribute("aria-expanded", "false");
   });
 
   it("shows fallback when no current checkpoint exists", async () => {

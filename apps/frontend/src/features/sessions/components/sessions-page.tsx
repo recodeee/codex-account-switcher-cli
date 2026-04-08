@@ -1147,7 +1147,7 @@ export function SessionsPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Send prompt to CLI</DialogTitle>
             <DialogDescription>

@@ -1571,7 +1571,7 @@ describe("AccountCard", () => {
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Thinking")).toBeInTheDocument();
     expect(
-      within(codexActiveCard).queryAllByText(
+      screen.queryAllByText(
         "Trace session-affinity fallback for codex websocket flow",
       ).length,
     ).toBeGreaterThanOrEqual(1);
@@ -1627,6 +1627,38 @@ describe("AccountCard", () => {
     expect(thinkingBadge).not.toHaveClass(
       "shadow-[0_0_14px_rgba(129,140,248,0.45)]",
     );
+  });
+
+  it("renders only the active planning connector line", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan architect review runtime-ready account handoff",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
+    const connectorLines = planningGraph.querySelectorAll("line");
+    expect(connectorLines).toHaveLength(1);
+
+    const connector = within(planningGraph).getByTestId("omx-planning-active-connector");
+    expect(connector).toHaveAttribute("x1", "50");
+    expect(connector).toHaveAttribute("y1", "50");
+    expect(connector).toHaveAttribute("x2", "16");
+    expect(connector).toHaveAttribute("y2", "26");
+    expect(connector).toHaveAttribute("stroke-width", "0.55");
   });
 
   it("shows waiting CLI runtime state inside the OMX planning graph when sessions are idle", () => {
@@ -1759,11 +1791,7 @@ describe("AccountCard", () => {
 
     expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
     const codexActiveCard = screen.getByTestId("codex-active-agent-card");
-    expect(
-      within(codexActiveCard).queryByText(
-        "Architect and critic review the runtime ready fail-closed field",
-      ),
-    ).toBeInTheDocument();
+    expect(codexActiveCard).toBeInTheDocument();
     expect(screen.getByText("Last codex response:")).toBeInTheDocument();
     expect(
       screen.getAllByText(
@@ -1796,8 +1824,8 @@ describe("AccountCard", () => {
     const codexActiveCard = screen.getByTestId("codex-active-agent-card");
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
     expect(
-      within(codexActiveCard).getByText("Investigate sticky routing for sessions page"),
-    ).toBeInTheDocument();
+      screen.getAllByText("Investigate sticky routing for sessions page").length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("treats role-keyword prompts without ralplan marker as codex-active mode", () => {
@@ -1909,7 +1937,7 @@ describe("AccountCard", () => {
     ).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Waiting")).toBeInTheDocument();
-    expect(within(codexActiveCard).getByText("Waiting for new task")).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows waiting for new task without the thinking indicator when a live session has no task preview", () => {
@@ -2230,7 +2258,7 @@ describe("AccountCard", () => {
     });
   });
 
-  it("shows full current task previews in the codex-active panel without expand controls", () => {
+  it("keeps codex-active panel CPU-only while task text stays in session rows", () => {
     const longTaskPreview = `Task trace ${"x".repeat(130)}`;
     const account = createAccountSummary({
       codexCurrentTaskPreview: longTaskPreview,
@@ -2254,13 +2282,10 @@ describe("AccountCard", () => {
 
     expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
     const codexActiveCard = screen.getByTestId("codex-active-agent-card");
-    expect(within(codexActiveCard).getByText(longTaskPreview)).toBeInTheDocument();
+    expect(within(codexActiveCard).queryByText(longTaskPreview)).not.toBeInTheDocument();
     expect(
-      within(codexActiveCard).queryByRole("button", { name: "View Full" }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(codexActiveCard).queryByRole("button", { name: "Show Less" }),
-    ).not.toBeInTheDocument();
+      screen.getByText(truncateTaskPreviewForExpectation(longTaskPreview)),
+    ).toBeInTheDocument();
   });
 
   it("truncates long per-session task previews and allows expanding them", async () => {
@@ -2575,7 +2600,7 @@ describe("AccountCard", () => {
     const codexActiveCard = screen.getByTestId("codex-active-agent-card");
     expect(
       within(codexActiveCard).queryByText("Investigate Zeus quota overlay mapping"),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Last codex response:")).toBeInTheDocument();
     expect(
       screen.getAllByText("Investigate Zeus quota overlay mapping").length,
