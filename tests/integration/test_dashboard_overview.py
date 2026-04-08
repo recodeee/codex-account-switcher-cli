@@ -57,6 +57,28 @@ def _write_auth_snapshot(path: Path, *, email: str, account_id: str) -> None:
     path.write_text(json.dumps(auth_json))
 
 
+def _write_auth_snapshot_with_plan(
+    path: Path,
+    *,
+    email: str,
+    account_id: str,
+    plan_type: str,
+) -> None:
+    payload = {
+        "email": email,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": plan_type},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": account_id,
+        },
+    }
+    path.write_text(json.dumps(auth_json))
+
+
 def _write_rollout_snapshot(
     path: Path,
     *,
@@ -258,6 +280,56 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
     # At least one trend point should have non-zero request count
     request_values = [p["v"] for p in trends["requests"]]
     assert any(v > 0 for v in request_values)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_overview_silently_recovers_workspace_account_after_team_rejoin(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, db_setup
+):
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot_with_plan(
+        accounts_dir / "denver@example.com.json",
+        email="denver@example.com",
+        account_id="workspace_denver",
+        plan_type="team",
+    )
+    (tmp_path / "current").write_text("denver@example.com")
+
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    account_id = generate_unique_account_id("workspace_denver", "denver@example.com")
+    encryptor = TokenEncryptor()
+    async with SessionLocal() as session:
+        session.add(
+            Account(
+                id=account_id,
+                chatgpt_account_id="workspace_denver",
+                email="denver@example.com",
+                plan_type="free",
+                access_token_encrypted=encryptor.encrypt("old-access"),
+                refresh_token_encrypted=encryptor.encrypt("old-refresh"),
+                id_token_encrypted=encryptor.encrypt("old-id"),
+                last_refresh=utcnow(),
+                status=AccountStatus.DEACTIVATED,
+                deactivation_reason="Usage API error: HTTP 403 - Workspace membership removed (plan downgraded to free)",
+            )
+        )
+        await session.commit()
+
+    response = await async_client.get("/api/dashboard/overview")
+    assert response.status_code == 200
+    accounts = {item["accountId"]: item for item in response.json()["accounts"]}
+    assert accounts[account_id]["status"] == "active"
+    assert accounts[account_id]["planType"] == "team"
+    assert accounts[account_id]["codexAuth"]["runtimeReady"] is True
+    assert accounts[account_id]["codexAuth"]["snapshotName"] == "denver@example.com"
 
 
 @pytest.mark.asyncio

@@ -42,6 +42,8 @@ export const AccountCodexAuthSchema = z.object({
   liveUsageConfidence: z.enum(["high", "low"]).nullable().optional(),
   expectedSnapshotName: z.string().nullable().optional(),
   snapshotNameMatchesEmail: z.boolean().optional(),
+  runtimeReady: z.boolean().optional(),
+  runtimeReadySource: z.enum(["validated_snapshot_email_match"]).nullable().optional(),
   isOmxBoosted: z.boolean().optional(),
 });
 

@@ -1,0 +1,7 @@
+- [ ] 1. Add OpenSpec delta for runtime handoff artifact lifecycle and fail-closed resume behavior.
+- [ ] 2. Implement backend runtime handoff service with durable file-backed storage and lifecycle normalization.
+- [ ] 3. Add dashboard-protected runtime handoff API routes for list/create/resume/abort.
+- [ ] 4. Integrate router into app startup.
+- [ ] 5. Add CLI utility for create/list/resume/abort and optional runtime activation.
+- [ ] 6. Add unit + integration tests for create/list/resume flow and snapshot mismatch rejection.
+- [ ] 7. Run targeted verification and `openspec validate --specs`.

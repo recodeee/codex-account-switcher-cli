@@ -50,6 +50,8 @@ class AccountCodexAuthStatus(DashboardModel):
     live_usage_confidence: Literal["high", "low"] | None = None
     expected_snapshot_name: str | None = None
     snapshot_name_matches_email: bool = False
+    runtime_ready: bool = False
+    runtime_ready_source: Literal["validated_snapshot_email_match"] | None = None
     is_omx_boosted: bool = False
 
 

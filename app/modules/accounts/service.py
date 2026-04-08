@@ -18,6 +18,7 @@ from app.core.plan_types import coerce_account_plan_type
 from app.core.utils.time import naive_utc_to_epoch, to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus
 from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
+from app.modules.accounts.codex_auth_status import build_codex_auth_status
 from app.modules.accounts.codex_auth_auto_import_ignore import (
     add_auto_import_ignored_account_id,
     remove_auto_import_ignored_account_id,
@@ -25,7 +26,6 @@ from app.modules.accounts.codex_auth_auto_import_ignore import (
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     CodexAuthSnapshotNotFoundError,
-    build_email_snapshot_name,
     build_snapshot_index,
     repair_snapshot_for_account,
     resolve_snapshot_name_candidates_for_account,
@@ -440,29 +440,7 @@ class AccountsService:
         account: Account,
         snapshot_index: CodexAuthSnapshotIndex,
     ) -> AccountCodexAuthStatus:
-        snapshot_names = resolve_snapshot_names_for_account(
-            snapshot_index=snapshot_index,
-            account_id=account.id,
-            chatgpt_account_id=account.chatgpt_account_id,
-            email=account.email,
-        )
-        selected_snapshot_name = select_snapshot_name(
-            snapshot_names,
-            snapshot_index.active_snapshot_name,
-            email=account.email,
-        )
-        active_snapshot_name = snapshot_index.active_snapshot_name
-        expected_snapshot_name = build_email_snapshot_name(account.email)
-        return AccountCodexAuthStatus(
-            has_snapshot=bool(snapshot_names),
-            snapshot_name=selected_snapshot_name,
-            active_snapshot_name=active_snapshot_name,
-            is_active_snapshot=bool(active_snapshot_name and active_snapshot_name in snapshot_names),
-            expected_snapshot_name=expected_snapshot_name,
-            snapshot_name_matches_email=bool(
-                selected_snapshot_name and selected_snapshot_name == expected_snapshot_name
-            ),
-        )
+        return build_codex_auth_status(account=account, snapshot_index=snapshot_index)
 
     def _account_from_auth_bytes(self, raw: bytes) -> Account:
         try:

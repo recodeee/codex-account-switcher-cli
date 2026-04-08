@@ -16,7 +16,7 @@ from app.core.auth import (
 )
 from app.core.config.settings import get_settings
 from app.core.crypto import TokenEncryptor
-from app.core.plan_types import coerce_account_plan_type
+from app.core.plan_types import coerce_account_plan_type, normalize_account_plan_type
 from app.core.utils.time import to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus
 from app.modules.accounts.codex_auth_auto_import_ignore import list_auto_import_ignored_account_ids
@@ -70,6 +70,12 @@ async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor
             )
             if existing.status == AccountStatus.DEACTIVATED:
                 if _should_reactivate_deactivated_account(existing):
+                    try:
+                        await repo.upsert(account)
+                    except AccountIdentityConflictError:
+                        continue
+                    changed_any = True
+                elif _should_reactivate_workspace_rejoined_account(existing, account):
                     try:
                         await repo.upsert(account)
                     except AccountIdentityConflictError:
@@ -415,3 +421,18 @@ def _should_reactivate_deactivated_account(account: Account) -> bool:
     if reason.startswith("usage api error: http "):
         return False
     return True
+
+
+def _should_reactivate_workspace_rejoined_account(
+    existing: Account,
+    incoming: Account,
+) -> bool:
+    reason = (existing.deactivation_reason or "").strip().lower()
+    if "workspace membership removed" not in reason and "plan downgraded to free" not in reason:
+        return False
+
+    normalized_incoming_plan = normalize_account_plan_type(incoming.plan_type)
+    if normalized_incoming_plan is None:
+        return False
+
+    return normalized_incoming_plan not in {"free", "self_serve_business_usage_based"}

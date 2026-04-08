@@ -155,6 +155,27 @@ Use the reconcile tool to keep one known-good session and restart only non-match
 uv run python -m app.tools.codex_session_reconcile \
   --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211
 
+### Runtime handoff artifacts (continue on another account/runtime)
+
+Use runtime handoff artifacts when one account/runtime hits quota and you want to continue the same larger task from another runtime without losing checkpoint context.
+
+```bash
+# create a handoff artifact from runtime/source snapshot
+uv run python -m app.tools.codex_runtime_handoff create terminal-a work \
+  --goal "Continue migration task after quota cap" \
+  --done "Added schema + service skeleton" \
+  --next "Implement dashboard endpoint wiring"
+
+# list available handoffs
+uv run python -m app.tools.codex_runtime_handoff list
+
+# resume from another runtime/snapshot and activate runtime pointers
+uv run python -m app.tools.codex_runtime_handoff resume <handoff-id> terminal-b backup \
+  --activate-runtime
+```
+
+The resume command returns a deterministic checkpoint prompt you can feed into the next Codex session.
+
 # apply restarts for mismatched sessions in this repo scope
 uv run python -m app.tools.codex_session_reconcile \
   --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211 \

@@ -36,12 +36,13 @@ def _write_auth_snapshot(
     account_id: str,
     access_token: str = "access",
     refresh_token: str = "refresh",
+    plan_type: str = "plus",
     id_token: str | None = None,
 ) -> None:
     payload = {
         "email": email,
         "chatgpt_account_id": account_id,
-        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+        "https://api.openai.com/auth": {"chatgpt_plan_type": plan_type},
     }
     resolved_id_token = id_token or _encode_jwt(payload)
     auth_json = {
@@ -801,6 +802,79 @@ async def test_accounts_list_keeps_usage_api_disconnected_account_deactivated_wh
         persisted = await session.get(Account, expected_account_id)
         assert persisted is not None
         assert encryptor.decrypt(persisted.refresh_token_encrypted) == "fresh_refresh"
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_silently_reactivates_workspace_account_after_team_rejoin(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(
+        accounts_dir / "tokio@example.com.json",
+        email="tokio@example.com",
+        account_id="workspace_tokio",
+        access_token="fresh_access",
+        refresh_token="fresh_refresh",
+        plan_type="team",
+    )
+    (tmp_path / "current").write_text("tokio@example.com")
+
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    payload = {
+        "email": "tokio@example.com",
+        "chatgpt_account_id": "workspace_tokio",
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "free"},
+    }
+    stale_auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "stale_access",
+            "refreshToken": "stale_refresh",
+            "accountId": "workspace_tokio",
+        },
+    }
+    files = {"auth_json": ("auth.json", json.dumps(stale_auth_json), "application/json")}
+    imported = await async_client.post("/api/accounts/import", files=files)
+    assert imported.status_code == 200
+
+    expected_account_id = generate_unique_account_id("workspace_tokio", "tokio@example.com")
+    disconnected_reason = (
+        "Usage API error: HTTP 403 - Workspace membership removed (plan downgraded to free)"
+    )
+    async with SessionLocal() as session:
+        await session.execute(
+            text(
+                """
+                UPDATE accounts
+                SET status = 'deactivated',
+                    deactivation_reason = :reason,
+                    plan_type = 'free'
+                WHERE id = :account_id
+                """
+            ),
+            {"account_id": expected_account_id, "reason": disconnected_reason},
+        )
+        await session.commit()
+
+    listed = await async_client.get("/api/accounts")
+    assert listed.status_code == 200
+    accounts = {item["accountId"]: item for item in listed.json()["accounts"]}
+    assert accounts[expected_account_id]["status"] == "active"
+    assert accounts[expected_account_id]["deactivationReason"] is None
+    assert accounts[expected_account_id]["planType"] == "team"
+    assert accounts[expected_account_id]["codexAuth"]["runtimeReady"] is True
+    assert (
+        accounts[expected_account_id]["codexAuth"]["runtimeReadySource"]
+        == "validated_snapshot_email_match"
+    )
 
 
 @pytest.mark.asyncio

@@ -8,11 +8,11 @@ from app.core.usage.types import UsageWindowRow
 from app.core.utils.time import utcnow
 from app.db.models import Account, UsageHistory
 from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
+from app.modules.accounts.codex_auth_status import build_codex_auth_status
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     build_snapshot_index,
     resolve_snapshot_names_for_account,
-    select_snapshot_name,
 )
 from app.modules.accounts.live_usage_overrides import apply_local_live_usage_overrides
 from app.modules.accounts.live_usage_persistence import persist_live_usage_overrides
@@ -112,7 +112,7 @@ class DashboardService:
             for account in accounts
         }
         codex_auth_by_account = {
-            account.id: _build_codex_auth_status(account=account, snapshot_index=snapshot_index)
+            account.id: build_codex_auth_status(account=account, snapshot_index=snapshot_index)
             for account in accounts
         }
         live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug] = {}
@@ -392,24 +392,3 @@ def _latest_recorded_at(
     if additional_ts is not None:
         timestamps.append(additional_ts)
     return max(timestamps) if timestamps else None
-
-
-def _build_codex_auth_status(*, account: Account, snapshot_index: CodexAuthSnapshotIndex) -> AccountCodexAuthStatus:
-    snapshot_names = resolve_snapshot_names_for_account(
-        snapshot_index=snapshot_index,
-        account_id=account.id,
-        chatgpt_account_id=account.chatgpt_account_id,
-        email=account.email,
-    )
-    selected_snapshot_name = select_snapshot_name(
-        snapshot_names,
-        snapshot_index.active_snapshot_name,
-        email=account.email,
-    )
-    active_snapshot_name = snapshot_index.active_snapshot_name
-    return AccountCodexAuthStatus(
-        has_snapshot=bool(snapshot_names),
-        snapshot_name=selected_snapshot_name,
-        active_snapshot_name=active_snapshot_name,
-        is_active_snapshot=bool(active_snapshot_name and active_snapshot_name in snapshot_names),
-    )
