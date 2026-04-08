@@ -57,12 +57,15 @@ is_pid_alive() {
 
 spawn_pid_watcher() {
   local target_pid="$1"
+  local output_var="$2"
+  local watcher_pid=""
   (
     while kill -0 "$target_pid" 2>/dev/null; do
       sleep 1
     done
   ) &
-  echo "$!"
+  watcher_pid="$!"
+  printf -v "$output_var" '%s' "$watcher_pid"
 }
 
 ensure_log_file() {
@@ -104,6 +107,51 @@ wait_for_port() {
     attempts=$((attempts - 1))
     sleep 0.2
   done
+
+  tail_log_on_failure "$label" "$log_file"
+  exit 1
+}
+
+wait_for_backend_port() {
+  local preferred_port="$1"
+  local timeout_seconds="$2"
+  local label="$3"
+  local watched_pid="$4"
+  local log_file="$5"
+  local attempts=$((timeout_seconds * 5))
+
+  while (( attempts > 0 )); do
+    local registry_port
+    registry_port="$(read_port_registry_value backend || true)"
+    if [[ -n "$registry_port" ]] && port_in_use "$registry_port"; then
+      printf '%s\n' "$registry_port"
+      return 0
+    fi
+
+    local backend_url
+    backend_url="$(extract_latest_url "$log_file" "Admin URL" || true)"
+    if [[ -n "$backend_url" ]]; then
+      local backend_port
+      backend_port="$(port_from_url "$backend_url" || true)"
+      if [[ -n "$backend_port" ]] && port_in_use "$backend_port"; then
+        printf '%s\n' "$backend_port"
+        return 0
+      fi
+    fi
+
+    if [[ -n "$watched_pid" ]] && ! is_pid_alive "$watched_pid"; then
+      tail_log_on_failure "$label" "$log_file"
+      exit 1
+    fi
+
+    attempts=$((attempts - 1))
+    sleep 0.2
+  done
+
+  if port_in_use "$preferred_port"; then
+    printf '%s\n' "$preferred_port"
+    return 0
+  fi
 
   tail_log_on_failure "$label" "$log_file"
   exit 1
@@ -198,6 +246,42 @@ if parsed.port:
 PY
 }
 
+app_port_serves_codex_lb_health() {
+  local port="$1"
+  local attempts="${2:-10}"
+
+  while (( attempts > 0 )); do
+    if python3 - "$port" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+port = sys.argv[1]
+url = f"http://127.0.0.1:{port}/health"
+
+try:
+    with urllib.request.urlopen(url, timeout=0.5) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+except (OSError, ValueError, urllib.error.URLError, urllib.error.HTTPError):
+    raise SystemExit(1)
+
+if payload.get("status") == "ok":
+    raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+    then
+      return 0
+    fi
+
+    attempts=$((attempts - 1))
+    sleep 0.2
+  done
+
+  return 1
+}
+
 wait_for_url_from_log() {
   local log_file="$1"
   local marker="$2"
@@ -260,9 +344,14 @@ echo "[dev] Quiet mode enabled. Service logs are written to $LOG_DIR"
 mark_log_session "app" "$APP_LOG_FILE"
 if port_in_use "$APP_PORT"; then
   existing_app_pid="$(find_pid_on_port "$APP_PORT" || true)"
+  if ! app_port_serves_codex_lb_health "$APP_PORT" 10; then
+    echo "[dev] App API port ${APP_PORT} is already in use by a non-codex-lb service. Stop it or set APP_BACKEND_PORT to a free port." >&2
+    exit 1
+  fi
+
   echo "[dev] Reusing app API on http://localhost:${APP_PORT}"
   if [[ -n "$existing_app_pid" ]] && is_pid_alive "$existing_app_pid"; then
-    app_pid="$(spawn_pid_watcher "$existing_app_pid")"
+    spawn_pid_watcher "$existing_app_pid" app_pid
   fi
 else
   echo "[dev] Starting app API on http://localhost:${APP_PORT}"
@@ -281,15 +370,15 @@ if [[ -n "$existing_medusa_pid" ]] && is_pid_alive "$existing_medusa_pid"; then
   medusa_port="$(read_port_registry_value backend || true)"
   medusa_port="${medusa_port:-$DEFAULT_MEDUSA_PORT}"
   echo "[dev] Reusing commerce backend on http://localhost:${medusa_port}/app"
-  backend_pid="$(spawn_pid_watcher "$existing_medusa_pid")"
+  spawn_pid_watcher "$existing_medusa_pid" backend_pid
 else
-  echo "[dev] Starting commerce backend on http://localhost:${medusa_port}/app"
+  echo "[dev] Starting commerce backend"
   (
     cd "$MEDUSA_BACKEND_DIR"
     MEDUSA_PORT="$medusa_port" PORT="$medusa_port" bun run dev
   ) >>"$BACKEND_LOG_FILE" 2>&1 &
   backend_pid="$!"
-  wait_for_port "$medusa_port" 35 "commerce backend" "$backend_pid" "$BACKEND_LOG_FILE"
+  medusa_port="$(wait_for_backend_port "$medusa_port" 35 "commerce backend" "$backend_pid" "$BACKEND_LOG_FILE")"
 fi
 
 mark_log_session "frontend" "$FRONTEND_LOG_FILE"
@@ -327,9 +416,20 @@ echo "  bun run logs -watch server"
 echo "  bun run logs -watch backend"
 echo "  bun run logs -watch frontend"
 
+wait_pids=()
+for pid in "$app_pid" "$backend_pid" "$frontend_pid"; do
+  if [[ -n "$pid" ]]; then
+    wait_pids+=("$pid")
+  fi
+done
+
 set +e
-wait -n "$app_pid" "$backend_pid" "$frontend_pid"
-exit_code=$?
+if ((${#wait_pids[@]} > 0)); then
+  wait -n "${wait_pids[@]}"
+  exit_code=$?
+else
+  exit_code=0
+fi
 set -e
 
 echo "[dev] One dev process exited. Shutting down helper processes..."

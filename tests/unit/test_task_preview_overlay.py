@@ -280,6 +280,57 @@ def test_overlay_reattributes_fallback_mapped_session_to_matching_snapshot_previ
     assert new_session_previews[1].task_preview is None
 
 
+def test_overlay_uses_expected_live_snapshot_when_snapshot_index_is_missing(monkeypatch) -> None:
+    account = _make_account("acc-odin", "odin@megkapja.hu")
+    codex_auth_by_account = {
+        account.id: AccountCodexAuthStatus(
+            has_snapshot=False,
+            snapshot_name=None,
+            active_snapshot_name="grepolis@megkapja.hu",
+            is_active_snapshot=False,
+            has_live_session=True,
+            expected_snapshot_name="odin@megkapja.hu",
+        )
+    }
+    codex_current_task_preview_by_account: dict[str, str] = {}
+    codex_last_task_preview_by_account: dict[str, str] = {}
+
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_snapshot",
+        lambda *, now: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_session_id",
+        lambda *, now: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay.read_live_codex_process_session_attribution",
+        lambda: LocalCodexProcessSessionAttribution(
+            counts_by_snapshot={"odin@megkapja.hu": 1},
+            unattributed_session_pids=[],
+            mapped_session_pids_by_snapshot={"odin@megkapja.hu": [70001]},
+            task_preview_by_pid={70001: "fix megkapja account task mapping"},
+            task_previews_by_pid={70001: ["fix megkapja account task mapping"]},
+        ),
+    )
+
+    overlay_live_codex_task_previews(
+        accounts=[account],
+        codex_auth_by_account=codex_auth_by_account,
+        snapshot_names_by_account={},
+        codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+        codex_last_task_preview_by_account=codex_last_task_preview_by_account,
+        codex_session_task_previews_by_account={},
+        live_quota_debug_by_account={},
+        now=datetime(2026, 4, 8, tzinfo=timezone.utc),
+    )
+
+    assert (
+        codex_current_task_preview_by_account[account.id]
+        == "fix megkapja account task mapping"
+    )
+
+
 def test_overlay_keeps_waiting_state_and_adds_last_task_preview(monkeypatch) -> None:
     now = datetime(2026, 4, 5, tzinfo=timezone.utc)
     account = _make_account("acc-zeus", "zeus@example.com")

@@ -256,6 +256,17 @@ describe("BillingPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not duplicate plan label when plan name and code are the same", () => {
+    mockBillingQuery();
+
+    renderWithProviders(<BillingPage />);
+
+    const row = screen.getByText("edixai.com").closest("tr");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLTableRowElement).getAllByText("Business")).toHaveLength(1);
+    expect(within(row as HTMLTableRowElement).queryByText("BUSINESS")).not.toBeInTheDocument();
+  });
+
   it("shows loading state while the live billing summary is pending", () => {
     mockBillingQuery({
       data: undefined,
@@ -367,6 +378,37 @@ describe("BillingPage", () => {
             expect.objectContaining({ email: "helper@edixai.com" }),
             expect.objectContaining({ email: "personal@gmail.com" }),
             expect.objectContaining({ email: "new.user@edixai.com" }),
+          ]),
+        }),
+        billingSummary.accounts[1],
+      ],
+    });
+  });
+
+  it("shows currently active accounts in add-member form and quick-adds them", async () => {
+    const user = userEvent.setup();
+    const { updateMutateAsync } = mockBillingQuery();
+
+    renderWithProviders(<BillingPage />);
+
+    await user.click(screen.getByRole("button", { name: "Watch edixai.com accounts list" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "edixai.com · Accounts list" });
+    await user.click(within(dialog).getByRole("button", { name: "Add account" }));
+
+    expect(within(dialog).getByText("Current active accounts")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Add admin@kozpontihusbolt.hu" }));
+    expect(within(dialog).getByText("admin@kozpontihusbolt.hu")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Save account list" }));
+
+    expect(updateMutateAsync).toHaveBeenCalledWith({
+      accounts: [
+        expect.objectContaining({
+          id: "business-plan-edixai",
+          members: expect.arrayContaining([
+            expect.objectContaining({ email: "admin@kozpontihusbolt.hu" }),
           ]),
         }),
         billingSummary.accounts[1],

@@ -90,6 +90,18 @@ function formatStatusLabel(value: BillingAccount["subscriptionStatus"] | Billing
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
+function shouldShowPlanCode(planName: string, planCode: string): boolean {
+  const normalizedPlanName = planName.trim().toLowerCase();
+  const normalizedPlanCode = planCode.trim().toLowerCase();
+  if (!normalizedPlanCode) {
+    return false;
+  }
+  if (!normalizedPlanName) {
+    return true;
+  }
+  return normalizedPlanName !== normalizedPlanCode;
+}
+
 function formatDisplayDate(value: Date | string | null | undefined): string {
   if (!value) {
     return "—";
@@ -221,6 +233,23 @@ export function BillingPage() {
     }
     return accountListMembers;
   }, [accountListMembers, selectedBusinessAccount]);
+  const activeDashboardAccounts = useMemo(
+    () =>
+      (dashboardQuery.data?.accounts ?? []).filter(
+        (account) => account.status.trim().toLowerCase() === "active",
+      ),
+    [dashboardQuery.data?.accounts],
+  );
+  const availableActiveDashboardAccounts = useMemo(() => {
+    const assignedEmails = new Set(
+      selectedBusinessAccountMembers.map((member) => member.email.trim().toLowerCase()),
+    );
+    return activeDashboardAccounts
+      .filter((account) => !assignedEmails.has(account.email.trim().toLowerCase()))
+      .sort((left, right) =>
+        (left.displayName || left.email).localeCompare(right.displayName || right.email),
+      );
+  }, [activeDashboardAccounts, selectedBusinessAccountMembers]);
   const selectedBusinessAccountSeatUsage = useMemo(
     () => getSeatUsageFromMembers(selectedBusinessAccountMembers),
     [selectedBusinessAccountMembers],
@@ -428,6 +457,12 @@ export function BillingPage() {
       return;
     }
 
+    addAccountListMember({ name, email });
+    setAccountListForm(DEFAULT_ACCOUNT_LIST_FORM);
+    setAccountListFormOpen(false);
+  }
+
+  function addAccountListMember({ name, email }: { name: string; email: string }) {
     setAccountListMembers((current) => [
       ...current,
       {
@@ -439,9 +474,23 @@ export function BillingPage() {
         dateAdded: new Date().toISOString(),
       },
     ]);
-    setAccountListForm(DEFAULT_ACCOUNT_LIST_FORM);
-    setAccountListFormOpen(false);
     setAccountListError(null);
+  }
+
+  function handleQuickAddActiveDashboardAccount(name: string, email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !normalizedEmail.includes("@")) {
+      setAccountListError("Account email must be valid.");
+      return;
+    }
+    if (accountListMembers.some((member) => member.email.trim().toLowerCase() === normalizedEmail)) {
+      setAccountListError("This account email is already assigned.");
+      return;
+    }
+    addAccountListMember({
+      name: name.trim() || normalizedEmail,
+      email: normalizedEmail,
+    });
   }
 
   function handleRemoveAccountListMember(email: string) {
@@ -649,9 +698,11 @@ export function BillingPage() {
                         <TableCell>
                           <div className="space-y-1">
                             <p className="font-medium">{account.planName}</p>
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                              {account.planCode}
-                            </p>
+                            {shouldShowPlanCode(account.planName, account.planCode) ? (
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                                {account.planCode}
+                              </p>
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -1034,6 +1085,47 @@ export function BillingPage() {
                         <Button type="submit" className="w-full md:w-auto">
                           Add member
                         </Button>
+                      </div>
+                      <div className="space-y-2 md:col-span-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Current active accounts
+                        </p>
+                        {availableActiveDashboardAccounts.length > 0 ? (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {availableActiveDashboardAccounts.map((account) => (
+                              <div
+                                key={account.accountId}
+                                className="flex items-center justify-between gap-2 rounded-lg border border-border/70 bg-background/80 px-3 py-2"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-foreground">
+                                    {account.displayName || account.email}
+                                  </p>
+                                  <p className="truncate text-xs text-muted-foreground">{account.email}</p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() =>
+                                    handleQuickAddActiveDashboardAccount(
+                                      account.displayName,
+                                      account.email,
+                                    )
+                                  }
+                                  aria-label={`Add ${account.email}`}
+                                >
+                                  Add
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            All active accounts are already in this billing account.
+                          </p>
+                        )}
                       </div>
                     </form>
                   ) : null}

@@ -460,6 +460,7 @@ async def live_usage_mapping(
     task_previews = await repository.list_codex_current_task_preview_by_account(
         account_ids=account_ids,
     )
+    live_snapshot_names = set(process_counts_by_snapshot) | set(runtime_counts_by_snapshot)
 
     mapped_snapshot_names: set[str] = set()
     working_now_count = 0
@@ -472,12 +473,15 @@ async def live_usage_mapping(
             chatgpt_account_id=account.chatgpt_account_id,
             email=account.email,
         )
-        selected_snapshot_name = select_snapshot_name(
-            snapshot_candidates,
-            snapshot_index.active_snapshot_name,
-            email=account.email,
+        selected_snapshot_name = _select_effective_live_snapshot_name(
+            snapshot_candidates=snapshot_candidates,
+            active_snapshot_name=snapshot_index.active_snapshot_name,
+            account_email=account.email,
+            live_snapshot_names=live_snapshot_names,
         )
         mapped_snapshot_names.update(snapshot_candidates)
+        if selected_snapshot_name:
+            mapped_snapshot_names.add(selected_snapshot_name)
 
         process_session_count = (
             max(0, process_counts_by_snapshot.get(selected_snapshot_name, 0))
@@ -599,6 +603,39 @@ class _LiveUsageTaskPreview:
     def __init__(self, account_id: str, preview: str) -> None:
         self.account_id = account_id
         self.preview = preview
+
+
+def _select_effective_live_snapshot_name(
+    *,
+    snapshot_candidates: list[str],
+    active_snapshot_name: str | None,
+    account_email: str | None,
+    live_snapshot_names: set[str],
+) -> str | None:
+    selected_snapshot_name = select_snapshot_name(
+        snapshot_candidates,
+        active_snapshot_name,
+        email=account_email,
+    )
+    if selected_snapshot_name:
+        return selected_snapshot_name
+
+    expected_snapshot_name = build_email_snapshot_name(account_email or "")
+    normalized_expected_snapshot_name = _normalize_task_preview(expected_snapshot_name)
+    if not normalized_expected_snapshot_name:
+        return None
+
+    normalized_live_snapshot_names = {
+        normalized_snapshot_name
+        for normalized_snapshot_name in (
+            _normalize_task_preview(snapshot_name) for snapshot_name in live_snapshot_names
+        )
+        if normalized_snapshot_name
+    }
+    if normalized_expected_snapshot_name in normalized_live_snapshot_names:
+        return expected_snapshot_name
+
+    return None
 
 
 def _build_snapshot_names_by_task_preview(
@@ -731,6 +768,9 @@ def _strip_omx_explore_wrapper(value: str) -> str:
 async def _read_live_usage_task_previews_by_snapshot() -> dict[str, list[_LiveUsageTaskPreview]]:
     try:
         snapshot_index = build_snapshot_index()
+        live_snapshot_names = set(read_live_codex_process_session_counts_by_snapshot()) | set(
+            read_runtime_live_session_counts_by_snapshot()
+        )
         async for session in get_session():
             repository = AccountsRepository(session)
             accounts = await repository.list_accounts()
@@ -751,10 +791,11 @@ async def _read_live_usage_task_previews_by_snapshot() -> dict[str, list[_LiveUs
                     chatgpt_account_id=account.chatgpt_account_id,
                     email=account.email,
                 )
-                selected_snapshot_name = select_snapshot_name(
-                    snapshot_candidates,
-                    snapshot_index.active_snapshot_name,
-                    email=account.email,
+                selected_snapshot_name = _select_effective_live_snapshot_name(
+                    snapshot_candidates=snapshot_candidates,
+                    active_snapshot_name=snapshot_index.active_snapshot_name,
+                    account_email=account.email,
+                    live_snapshot_names=live_snapshot_names,
                 )
                 if not selected_snapshot_name:
                     continue
@@ -802,6 +843,9 @@ async def _read_live_usage_task_previews_by_snapshot() -> dict[str, list[_LiveUs
 async def _read_live_usage_account_emails_by_snapshot() -> dict[str, list[str]]:
     try:
         snapshot_index = build_snapshot_index()
+        live_snapshot_names = set(read_live_codex_process_session_counts_by_snapshot()) | set(
+            read_runtime_live_session_counts_by_snapshot()
+        )
         async for session in get_session():
             repository = AccountsRepository(session)
             accounts = await repository.list_accounts()
@@ -820,10 +864,11 @@ async def _read_live_usage_account_emails_by_snapshot() -> dict[str, list[str]]:
                     chatgpt_account_id=account.chatgpt_account_id,
                     email=account.email,
                 )
-                selected_snapshot_name = select_snapshot_name(
-                    snapshot_candidates,
-                    snapshot_index.active_snapshot_name,
-                    email=account.email,
+                selected_snapshot_name = _select_effective_live_snapshot_name(
+                    snapshot_candidates=snapshot_candidates,
+                    active_snapshot_name=snapshot_index.active_snapshot_name,
+                    account_email=account.email,
+                    live_snapshot_names=live_snapshot_names,
                 )
                 if not selected_snapshot_name:
                     continue
@@ -849,6 +894,18 @@ async def _read_live_usage_snapshot_alias_map() -> dict[str, str]:
             if not accounts:
                 return {}
 
+            expected_snapshot_owner_ids: dict[str, set[str]] = {}
+            for account in accounts:
+                expected_snapshot_name = build_email_snapshot_name(account.email)
+                normalized_expected_snapshot_name = _normalize_task_preview(
+                    expected_snapshot_name
+                )
+                if not normalized_expected_snapshot_name:
+                    continue
+                expected_snapshot_owner_ids.setdefault(
+                    normalized_expected_snapshot_name, set()
+                ).add(account.id)
+
             alias_to_selected: dict[str, str] = {}
             ambiguous_aliases: set[str] = set()
             for account in accounts:
@@ -870,6 +927,19 @@ async def _read_live_usage_snapshot_alias_map() -> dict[str, str]:
                     continue
 
                 for snapshot_name in snapshot_candidates:
+                    normalized_snapshot_name = _normalize_task_preview(snapshot_name)
+                    if (
+                        normalized_snapshot_name
+                        and snapshot_name != selected_snapshot_name
+                        and any(
+                            owner_account_id != account.id
+                            for owner_account_id in expected_snapshot_owner_ids.get(
+                                normalized_snapshot_name, set()
+                            )
+                        )
+                    ):
+                        continue
+
                     if snapshot_name in ambiguous_aliases:
                         continue
 

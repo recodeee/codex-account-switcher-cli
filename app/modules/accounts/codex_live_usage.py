@@ -2230,7 +2230,10 @@ def _resolve_or_materialize_snapshot_name_from_auth_json(auth_path: Path) -> str
 
     account_id, normalized_email = parsed
     snapshot_index = build_snapshot_index()
-    existing_snapshot_names = snapshot_index.snapshots_by_account_id.get(account_id, [])
+    snapshots_by_account_id = getattr(snapshot_index, "snapshots_by_account_id", {})
+    if not isinstance(snapshots_by_account_id, dict):
+        snapshots_by_account_id = {}
+    existing_snapshot_names = snapshots_by_account_id.get(account_id, [])
     selected_existing_snapshot_name = select_snapshot_name(
         existing_snapshot_names,
         snapshot_index.active_snapshot_name,

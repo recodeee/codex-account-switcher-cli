@@ -66,6 +66,16 @@ def overlay_live_codex_task_previews(
             if snapshot_names_by_account is not None
             else None,
         )
+        snapshot_names = _augment_snapshot_names_with_expected_live_snapshot(
+            snapshot_names=snapshot_names,
+            codex_auth_status=codex_auth_status,
+            available_snapshot_names=(
+                set(process_preview_by_snapshot)
+                | set(waiting_process_snapshots)
+                | set(process_session_task_previews_by_snapshot)
+                | set(previews_by_snapshot)
+            ),
+        )
         if snapshot_names:
             live_session_task_previews = _resolve_session_task_previews_for_snapshot_names(
                 process_session_task_previews_by_snapshot=process_session_task_previews_by_snapshot,
@@ -167,6 +177,41 @@ def _resolve_account_snapshot_names(
         seen_snapshot_names.add(normalized)
 
     return deduped_snapshot_names
+
+
+def _augment_snapshot_names_with_expected_live_snapshot(
+    *,
+    snapshot_names: list[str],
+    codex_auth_status: AccountCodexAuthStatus | None,
+    available_snapshot_names: set[str],
+) -> list[str]:
+    expected_snapshot_name = (
+        codex_auth_status.expected_snapshot_name
+        if codex_auth_status is not None
+        else None
+    )
+    normalized_expected_snapshot_name = _normalize_snapshot_name(expected_snapshot_name)
+    if normalized_expected_snapshot_name is None:
+        return snapshot_names
+
+    normalized_available_snapshot_names = {
+        normalized_snapshot_name
+        for normalized_snapshot_name in (
+            _normalize_snapshot_name(snapshot_name)
+            for snapshot_name in available_snapshot_names
+        )
+        if normalized_snapshot_name is not None
+    }
+    if normalized_expected_snapshot_name not in normalized_available_snapshot_names:
+        return snapshot_names
+
+    if any(
+        _normalize_snapshot_name(snapshot_name) == normalized_expected_snapshot_name
+        for snapshot_name in snapshot_names
+    ):
+        return snapshot_names
+
+    return [*snapshot_names, expected_snapshot_name.strip()]
 
 
 def _resolve_first_matching_snapshot_name(

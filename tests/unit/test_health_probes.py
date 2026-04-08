@@ -1155,6 +1155,62 @@ async def test_read_live_usage_snapshot_alias_map_drops_ambiguous_alias_conflict
 
 
 @pytest.mark.asyncio
+async def test_read_live_usage_snapshot_alias_map_does_not_claim_another_accounts_email_snapshot():
+    from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
+    from app.modules.health.api import _read_live_usage_snapshot_alias_map
+
+    grepolis = SimpleNamespace(
+        id="acc-grepolis",
+        chatgpt_account_id="chatgpt-megkapja",
+        email="grepolis@megkapja.hu",
+    )
+    odin = SimpleNamespace(
+        id="acc-odin",
+        chatgpt_account_id="chatgpt-megkapja",
+        email="odin@megkapja.hu",
+    )
+
+    repo = AsyncMock()
+    repo.list_accounts = AsyncMock(return_value=[grepolis, odin])
+
+    async def _fake_session():
+        yield AsyncMock()
+
+    def _resolve_candidates(*, account_id: str, **_kwargs):
+        if account_id == "acc-grepolis":
+            return ["grepolis@megkapja.hu", "odin@megkapja.hu"]
+        if account_id == "acc-odin":
+            return []
+        return []
+
+    with (
+        patch("app.modules.health.api.AccountsRepository", return_value=repo),
+        patch("app.modules.health.api.get_session", return_value=_fake_session()),
+        patch(
+            "app.modules.health.api.build_snapshot_index",
+            return_value=CodexAuthSnapshotIndex(
+                snapshots_by_account_id={},
+                active_snapshot_name="grepolis@megkapja.hu",
+            ),
+        ),
+        patch(
+            "app.modules.health.api.resolve_snapshot_name_candidates_for_account",
+            side_effect=_resolve_candidates,
+        ),
+        patch(
+            "app.modules.health.api.select_snapshot_name",
+            side_effect=lambda snapshot_candidates, *_args, **_kwargs: snapshot_candidates[0]
+            if snapshot_candidates
+            else None,
+        ),
+    ):
+        alias_map = await _read_live_usage_snapshot_alias_map()
+
+    assert alias_map == {"grepolis@megkapja.hu": "grepolis@megkapja.hu"}
+    assert "odin@megkapja.hu" not in alias_map
+
+
+@pytest.mark.asyncio
 async def test_live_usage_mapping_returns_xml_payload():
     from app.db.models import AccountStatus
     from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
@@ -1227,6 +1283,56 @@ async def test_live_usage_mapping_returns_xml_payload():
     assert (
         '<snapshot name="orphan-snapshot" process_session_count="3" runtime_session_count="0" total_session_count="3" />'
     ) in body
+
+
+@pytest.mark.asyncio
+async def test_live_usage_mapping_uses_expected_email_snapshot_when_live_snapshot_is_unindexed():
+    from app.db.models import AccountStatus
+    from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
+    from app.modules.health.api import live_usage_mapping
+
+    now = datetime(2026, 4, 8, 0, 0, 0)
+    account = SimpleNamespace(
+        id="acc-odin",
+        email="odin@megkapja.hu",
+        chatgpt_account_id="chatgpt-odin",
+        status=AccountStatus.ACTIVE,
+    )
+    repo = AsyncMock()
+    repo.list_accounts = AsyncMock(return_value=[account])
+    repo.list_codex_session_counts_by_account = AsyncMock(return_value={"acc-odin": 0})
+    repo.list_codex_current_task_preview_by_account = AsyncMock(return_value={})
+
+    with (
+        patch("app.modules.health.api.AccountsRepository", return_value=repo),
+        patch(
+            "app.modules.health.api.build_snapshot_index",
+            return_value=CodexAuthSnapshotIndex(
+                snapshots_by_account_id={},
+                active_snapshot_name="grepolis@megkapja.hu",
+            ),
+        ),
+        patch(
+            "app.modules.health.api.resolve_snapshot_names_for_account",
+            return_value=[],
+        ),
+        patch(
+            "app.modules.health.api.read_live_codex_process_session_counts_by_snapshot",
+            return_value={"odin@megkapja.hu": 2, "grepolis@megkapja.hu": 1},
+        ),
+        patch(
+            "app.modules.health.api.read_runtime_live_session_counts_by_snapshot",
+            return_value={},
+        ),
+        patch("app.modules.health.api.utcnow", return_value=now),
+    ):
+        response = await live_usage_mapping(session=AsyncMock())
+
+    body = response.body.decode("utf-8")
+    assert 'mapped_snapshot="odin@megkapja.hu"' in body
+    assert 'process_session_count="2"' in body
+    assert 'working_now="true"' in body
+    assert '<snapshot name="odin@megkapja.hu"' not in body
 
 
 @pytest.mark.asyncio

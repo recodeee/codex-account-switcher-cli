@@ -14,6 +14,7 @@
     "outDir": "./.medusa/server",
     "rootDir": "./",
     "jsx": "react-jsx",
+    "types": ["node", "jest"],
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "checkJs": false,
