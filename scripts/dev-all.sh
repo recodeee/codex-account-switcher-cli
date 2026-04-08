@@ -17,6 +17,11 @@ DEFAULT_FRONTEND_PORT="${FRONTEND_PORT:-5174}"
 app_pid=""
 backend_pid=""
 frontend_pid=""
+ready_label="[dev] Ready"
+
+if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
+  ready_label=$'\033[1;32m[dev] Ready\033[0m'
+fi
 
 require_cmd() {
   local cmd="$1"
@@ -323,6 +328,23 @@ wait_for_url_from_log() {
   exit 1
 }
 
+start_frontend_dev_server() {
+  local medusa_port="$1"
+
+  mark_log_session "frontend" "$FRONTEND_LOG_FILE"
+  echo "[dev] Starting frontend on http://localhost:${DEFAULT_FRONTEND_PORT}"
+  (
+    cd "$FRONTEND_DIR"
+    START_APP_BACKEND=false \
+    START_MEDUSA_BACKEND=false \
+    API_PROXY_TARGET="http://localhost:${APP_PORT}" \
+    NEXT_PUBLIC_MEDUSA_BACKEND_URL="http://localhost:${medusa_port}" \
+    NEXT_DEV_PORT="$DEFAULT_FRONTEND_PORT" \
+    sh ./scripts/run-frontend-dev.sh
+  ) >>"$FRONTEND_LOG_FILE" 2>&1 &
+  frontend_pid="$!"
+}
+
 cleanup() {
   set +e
   for pid in "$frontend_pid" "$backend_pid" "$app_pid"; do
@@ -341,6 +363,7 @@ mkdir -p "$LOG_DIR"
 
 echo "[dev] Quiet mode enabled. Service logs are written to $LOG_DIR"
 
+app_needs_wait=false
 mark_log_session "app" "$APP_LOG_FILE"
 if port_in_use "$APP_PORT"; then
   existing_app_pid="$(find_pid_on_port "$APP_PORT" || true)"
@@ -360,10 +383,12 @@ else
     LOGGING_TO_FILE=false APP_BACKEND_PORT="$APP_PORT" sh ./scripts/run-server-dev.sh
   ) >>"$APP_LOG_FILE" 2>&1 &
   app_pid="$!"
-  wait_for_port "$APP_PORT" 20 "app API" "$app_pid" "$APP_LOG_FILE"
+  app_needs_wait=true
 fi
 
 medusa_port="$DEFAULT_MEDUSA_PORT"
+frontend_medusa_port="$medusa_port"
+backend_needs_wait=false
 mark_log_session "backend" "$BACKEND_LOG_FILE"
 existing_medusa_pid="$(read_medusa_launcher_pid || true)"
 if [[ -n "$existing_medusa_pid" ]] && is_pid_alive "$existing_medusa_pid"; then
@@ -378,21 +403,27 @@ else
     MEDUSA_PORT="$medusa_port" PORT="$medusa_port" bun run dev
   ) >>"$BACKEND_LOG_FILE" 2>&1 &
   backend_pid="$!"
-  medusa_port="$(wait_for_backend_port "$medusa_port" 35 "commerce backend" "$backend_pid" "$BACKEND_LOG_FILE")"
+  backend_needs_wait=true
 fi
 
-mark_log_session "frontend" "$FRONTEND_LOG_FILE"
-echo "[dev] Starting frontend on http://localhost:${DEFAULT_FRONTEND_PORT}"
-(
-  cd "$FRONTEND_DIR"
-  START_APP_BACKEND=false \
-  START_MEDUSA_BACKEND=false \
-  API_PROXY_TARGET="http://localhost:${APP_PORT}" \
-  NEXT_PUBLIC_MEDUSA_BACKEND_URL="http://localhost:${medusa_port}" \
-  NEXT_DEV_PORT="$DEFAULT_FRONTEND_PORT" \
-  sh ./scripts/run-frontend-dev.sh
-) >>"$FRONTEND_LOG_FILE" 2>&1 &
-frontend_pid="$!"
+if [[ "$app_needs_wait" == "true" ]]; then
+  wait_for_port "$APP_PORT" 20 "app API" "$app_pid" "$APP_LOG_FILE"
+fi
+
+start_frontend_dev_server "$frontend_medusa_port"
+
+if [[ "$backend_needs_wait" == "true" ]]; then
+  medusa_port="$(wait_for_backend_port "$medusa_port" 35 "commerce backend" "$backend_pid" "$BACKEND_LOG_FILE")"
+  if [[ "$medusa_port" != "$frontend_medusa_port" ]]; then
+    echo "[dev] Backend port resolved to ${medusa_port}. Restarting frontend with updated backend URL."
+    if is_pid_alive "$frontend_pid"; then
+      kill "$frontend_pid" >/dev/null 2>&1 || true
+      wait "$frontend_pid" >/dev/null 2>&1 || true
+    fi
+    start_frontend_dev_server "$medusa_port"
+  fi
+fi
+
 frontend_url="$(wait_for_url_from_log \
   "$FRONTEND_LOG_FILE" \
   "Frontend dev server:" \
@@ -405,7 +436,7 @@ backend_url="$(extract_latest_url "$BACKEND_LOG_FILE" "Admin URL" || true)"
 backend_url="${backend_url:-http://localhost:${medusa_port}/app}"
 
 echo
-echo "[dev] Ready"
+echo "$ready_label"
 echo "  app      ${app_url}"
 echo "  backend  ${backend_url}"
 echo "  frontend ${frontend_url}"

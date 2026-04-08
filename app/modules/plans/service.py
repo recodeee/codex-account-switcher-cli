@@ -13,6 +13,7 @@ CHECKPOINT_LOG_RE = re.compile(
 )
 ROLE_ORDER = ("planner", "architect", "critic", "executor", "writer", "verifier", "designer")
 DONE_CHECKPOINT_STATES = {"DONE", "COMPLETED"}
+PLAN_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 class OpenSpecPlansError(RuntimeError):
@@ -98,7 +99,9 @@ class OpenSpecPlansService:
         return entries
 
     def get_plan(self, slug: str) -> PlanDetailData | None:
-        plan_dir = self._plans_root / slug
+        plan_dir = self._resolve_plan_dir(slug)
+        if plan_dir is None:
+            return None
         if not plan_dir.exists() or not plan_dir.is_dir():
             return None
 
@@ -159,6 +162,20 @@ class OpenSpecPlansService:
             ),
             current_checkpoint=_resolve_current_checkpoint(checkpoints_markdown),
         )
+
+    def _resolve_plan_dir(self, slug: str) -> Path | None:
+        if not PLAN_SLUG_RE.fullmatch(slug):
+            return None
+        if ".." in slug:
+            return None
+
+        try:
+            plan_dir = (self._plans_root / slug).resolve()
+            plan_dir.relative_to(self._plans_root.resolve())
+        except ValueError:
+            return None
+
+        return plan_dir
 
     def _read_plan_summary(self, plan_dir: Path, summary_path: Path) -> PlanSummaryData:
         summary_markdown = self._read_markdown(summary_path)

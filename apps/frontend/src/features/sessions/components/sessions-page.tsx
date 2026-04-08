@@ -883,21 +883,24 @@ export function SessionsPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border bg-card">
-            <div className="border-b px-4 py-3">
-              <p className="text-sm font-semibold">Session logs</p>
+          <div className="rounded-xl border border-cyan-500/20 bg-[#030915] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div className="border-b border-cyan-500/20 px-4 py-3">
+              <p className="text-sm font-semibold text-zinc-100">Session logs</p>
+              <p className="mt-1 text-[11px] text-cyan-100/65">
+                Ordered runtime lines with improved contrast for easier scanning.
+              </p>
             </div>
-            <div className="p-2">
-              <ol className="max-h-72 overflow-y-auto rounded-lg border bg-[#020812] p-2 font-mono text-[11px] leading-5 text-cyan-100">
+            <div className="p-2.5">
+              <ol className="max-h-72 overflow-y-auto rounded-lg border border-cyan-500/20 bg-[#010611] p-2.5 font-mono text-[11px] leading-[1.45rem] text-cyan-100/95">
                 {watchLogLines.map((line, lineIndex) => (
                   <li
                     key={`${selectedSessionKey}-watch-log-${lineIndex}`}
-                    className="grid grid-cols-[2.2rem_minmax(0,1fr)] gap-2 rounded-sm px-1.5 even:bg-cyan-500/[0.06]"
+                    className="grid grid-cols-[2.2rem_minmax(0,1fr)] gap-2.5 rounded-sm px-2 py-0.5 odd:bg-cyan-500/[0.02] even:bg-cyan-500/[0.07] hover:bg-cyan-500/[0.11]"
                   >
-                    <span className="select-none text-right text-cyan-400/55">
+                    <span className="select-none text-right text-cyan-300/70">
                       {String(lineIndex + 1).padStart(2, "0")}
                     </span>
-                    <span className="break-all">{line}</span>
+                    <span className="break-words whitespace-pre-wrap text-cyan-50/95">{line}</span>
                   </li>
                 ))}
               </ol>

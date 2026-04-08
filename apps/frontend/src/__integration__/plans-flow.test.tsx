@@ -14,7 +14,9 @@ describe("plans flow integration", () => {
     expect(await screen.findByRole("heading", { name: "Plans" })).toBeInTheDocument();
 
     expect(await screen.findByTestId("plan-progress-percent")).toHaveTextContent("43%");
-    expect(await screen.findByTestId("plan-current-checkpoint")).toHaveTextContent("Executor · E1");
+    const currentCheckpoint = await screen.findByTestId("plan-current-checkpoint");
+    expect(currentCheckpoint).toHaveTextContent(/executor/i);
+    expect(currentCheckpoint).toHaveTextContent(/E1/);
     expect(screen.getByText("Designer")).toBeInTheDocument();
     expect(await screen.findByTestId("plan-summary-content")).toHaveTextContent("Mode");
     expect(screen.getByTestId("plan-summary-content")).toHaveTextContent("ralplan");

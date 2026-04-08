@@ -118,7 +118,7 @@ export function AccountMenu({
     [overviewQuery.data?.accounts],
   );
   const medusaAdminEmail = medusaUser?.email ?? null;
-  const dashboardLoginEmail = medusaAdminEmail ?? null;
+  const dashboardLoginEmail = medusaAdminEmail ?? medusaLastAuthenticatedEmail ?? null;
   const displayedLoginEmail = dashboardLoginEmail ?? loggedInEmail;
   const normalizedLoggedInEmail = loggedInEmail?.trim().toLowerCase() ?? null;
   const normalizedDisplayedLoginEmail =

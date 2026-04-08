@@ -1170,14 +1170,6 @@ export function AccountCard(props: AccountCardProps) {
       ? `Last known: ${STATUS_LABELS[status] ?? status}`
       : null;
   const showPrimaryQuotaBar = !weeklyOnly && !codexOnlyQuotaStatusUnknown;
-  const deactivatedLastSeenDisplay =
-    isDeactivated &&
-    (primaryLastSeenDisplay.label || secondaryLastSeenDisplay.label)
-      ? primaryLastSeenDisplay.label
-        ? primaryLastSeenDisplay
-        : secondaryLastSeenDisplay
-      : null;
-
   const title = account.displayName || account.email;
   const compactId = formatCompactAccountId(account.accountId);
   const planWithSnapshot = formatPlanWithSnapshot(
@@ -1503,21 +1495,6 @@ export function AccountCard(props: AccountCardProps) {
                         aria-hidden
                       />
                       OMX
-                    </Badge>
-                  ) : null}
-                  {deactivatedLastSeenDisplay ? (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "gap-1",
-                        deactivatedLastSeenDisplay.upToDate
-                          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
-                          : "border-zinc-500/25 bg-zinc-500/10 text-zinc-600 dark:text-zinc-300",
-                      )}
-                      title={deactivatedLastSeenDisplay.label ?? undefined}
-                    >
-                      <Clock className="h-3 w-3" />
-                      {deactivatedLastSeenDisplay.label}
                     </Badge>
                   ) : null}
                   {showUsageLimitHitBadge ? (

@@ -33,7 +33,7 @@ describe("AccountMenu component", () => {
     expect(screen.queryByText("No Medusa admin login recorded yet")).not.toBeInTheDocument();
   });
 
-  it("does not show Medusa last-login rows when no active Medusa session exists", async () => {
+  it("uses the last Medusa login as the displayed login when no active Medusa session exists", async () => {
     const user = userEvent.setup({ delay: null });
 
     useMedusaAdminAuthStore.setState({
@@ -49,7 +49,7 @@ describe("AccountMenu component", () => {
     expect(screen.queryByRole("menuitem", { name: "Sign in Medusa admin" })).not.toBeInTheDocument();
     expect(screen.queryByText("Medusa admin")).not.toBeInTheDocument();
     expect(screen.queryByText("Last Medusa admin login")).not.toBeInTheDocument();
-    expect(screen.queryByText("nagy.viktordp@gmail.com")).not.toBeInTheDocument();
+    expect(screen.getAllByText("nagy.viktordp@gmail.com").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows the backend-authenticated Medusa admin account instead of local credentials", async () => {

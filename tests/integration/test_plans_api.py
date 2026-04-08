@@ -5,6 +5,9 @@ from uuid import uuid4
 
 import pytest
 
+from app.modules.plans.api import get_plans_service
+from app.modules.plans.service import OpenSpecPlansService
+
 pytestmark = pytest.mark.integration
 
 
@@ -133,6 +136,28 @@ async def test_plans_api_returns_not_found_for_missing_plan(async_client):
     response = await async_client.get("/api/projects/plans/missing-plan")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "plan_not_found"
+
+
+@pytest.mark.asyncio
+async def test_plans_api_rejects_path_traversal_slug(async_client, app_instance, tmp_path):
+    plans_root_parent = tmp_path / "plans-root"
+    plans_root = plans_root_parent / "plan"
+    plans_root.mkdir(parents=True, exist_ok=False)
+    escaped_summary_path = plans_root_parent / "summary.md"
+    escaped_checkpoints_path = plans_root_parent / "checkpoints.md"
+    escaped_summary_path.write_text(
+        "# Plan Summary: escaped-parent\n\n- **Status:** approved\n",
+        encoding="utf-8",
+    )
+    escaped_checkpoints_path.write_text("# Plan Checkpoints: escaped-parent\n", encoding="utf-8")
+    app_instance.dependency_overrides[get_plans_service] = lambda: OpenSpecPlansService(plans_root=plans_root)
+
+    try:
+        response = await async_client.get("/api/projects/plans/%2E%2E")
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "plan_not_found"
+    finally:
+        app_instance.dependency_overrides.pop(get_plans_service, None)
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { FolderTree } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardList,
+  Compass,
+  FolderTree,
+  Palette,
+  PenLine,
+  ShieldCheck,
+  TriangleAlert,
+  Wrench,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { AlertMessage } from "@/components/alert-message";
 import { CopyButton } from "@/components/copy-button";
@@ -56,6 +67,122 @@ function statusBadgeClass(status: string): string {
 
   if (normalizedStatus === "unknown") {
     return "border-red-500/30 bg-red-500/15 text-red-300";
+  }
+
+  return "border-slate-500/30 bg-slate-500/15 text-slate-300";
+}
+
+type RoleVisual = {
+  icon: LucideIcon;
+  badgeClass: string;
+  progressClass: string;
+  cardClass: string;
+  iconClass: string;
+  metaClass: string;
+};
+
+const ROLE_VISUALS: Record<string, RoleVisual> = {
+  planner: {
+    icon: ClipboardList,
+    badgeClass: "border-sky-500/35 bg-sky-500/15 text-sky-200",
+    progressClass: "bg-sky-400/80",
+    cardClass:
+      "border-sky-500/25 bg-gradient-to-br from-sky-500/12 via-[#040d1b] to-[#040a14] hover:border-sky-400/45",
+    iconClass: "border-sky-400/35 bg-sky-500/20 text-sky-100",
+    metaClass: "text-sky-100/70",
+  },
+  architect: {
+    icon: Compass,
+    badgeClass: "border-violet-500/35 bg-violet-500/15 text-violet-200",
+    progressClass: "bg-violet-400/80",
+    cardClass:
+      "border-violet-500/25 bg-gradient-to-br from-violet-500/12 via-[#0a0818] to-[#060611] hover:border-violet-400/45",
+    iconClass: "border-violet-400/35 bg-violet-500/20 text-violet-100",
+    metaClass: "text-violet-100/70",
+  },
+  critic: {
+    icon: TriangleAlert,
+    badgeClass: "border-amber-500/35 bg-amber-500/15 text-amber-200",
+    progressClass: "bg-amber-400/80",
+    cardClass:
+      "border-amber-500/25 bg-gradient-to-br from-amber-500/12 via-[#140d05] to-[#0b0703] hover:border-amber-400/45",
+    iconClass: "border-amber-400/35 bg-amber-500/20 text-amber-100",
+    metaClass: "text-amber-100/70",
+  },
+  executor: {
+    icon: Wrench,
+    badgeClass: "border-cyan-500/35 bg-cyan-500/15 text-cyan-200",
+    progressClass: "bg-cyan-400/80",
+    cardClass:
+      "border-cyan-500/25 bg-gradient-to-br from-cyan-500/12 via-[#04121a] to-[#040a12] hover:border-cyan-400/45",
+    iconClass: "border-cyan-400/35 bg-cyan-500/20 text-cyan-100",
+    metaClass: "text-cyan-100/70",
+  },
+  writer: {
+    icon: PenLine,
+    badgeClass: "border-pink-500/35 bg-pink-500/15 text-pink-200",
+    progressClass: "bg-pink-400/80",
+    cardClass:
+      "border-pink-500/25 bg-gradient-to-br from-pink-500/12 via-[#170615] to-[#0f040e] hover:border-pink-400/45",
+    iconClass: "border-pink-400/35 bg-pink-500/20 text-pink-100",
+    metaClass: "text-pink-100/70",
+  },
+  verifier: {
+    icon: ShieldCheck,
+    badgeClass: "border-emerald-500/35 bg-emerald-500/15 text-emerald-200",
+    progressClass: "bg-emerald-400/80",
+    cardClass:
+      "border-emerald-500/25 bg-gradient-to-br from-emerald-500/12 via-[#05130c] to-[#040c0a] hover:border-emerald-400/45",
+    iconClass: "border-emerald-400/35 bg-emerald-500/20 text-emerald-100",
+    metaClass: "text-emerald-100/70",
+  },
+  designer: {
+    icon: Palette,
+    badgeClass: "border-indigo-500/35 bg-indigo-500/15 text-indigo-200",
+    progressClass: "bg-indigo-400/80",
+    cardClass:
+      "border-indigo-500/25 bg-gradient-to-br from-indigo-500/12 via-[#0a0b1b] to-[#050711] hover:border-indigo-400/45",
+    iconClass: "border-indigo-400/35 bg-indigo-500/20 text-indigo-100",
+    metaClass: "text-indigo-100/70",
+  },
+};
+
+function getRoleVisual(role: string): RoleVisual {
+  return ROLE_VISUALS[role.trim().toLowerCase()] ?? {
+    icon: CheckCircle2,
+    badgeClass: "border-slate-500/35 bg-slate-500/15 text-slate-200",
+    progressClass: "bg-slate-300/80",
+    cardClass:
+      "border-slate-500/25 bg-gradient-to-br from-slate-500/10 via-[#070b14] to-[#05080f] hover:border-slate-400/45",
+    iconClass: "border-slate-400/35 bg-slate-500/20 text-slate-100",
+    metaClass: "text-slate-200/70",
+  };
+}
+
+function roleProgressPercent(done: number, total: number): number {
+  if (total <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+}
+
+function checkpointStateBadgeClass(state: string): string {
+  const normalizedState = state.trim().toLowerCase().replace(/\s+/g, "_");
+
+  if (["done", "approved", "finished", "completed", "success", "passed"].includes(normalizedState)) {
+    return "border-emerald-500/40 bg-emerald-500/20 text-emerald-200";
+  }
+
+  if (["in_progress", "running", "active"].includes(normalizedState)) {
+    return "border-sky-500/40 bg-sky-500/20 text-sky-200";
+  }
+
+  if (["failed", "error", "blocked", "rejected", "cancelled", "canceled"].includes(normalizedState)) {
+    return "border-red-500/40 bg-red-500/20 text-red-200";
+  }
+
+  if (["pending", "queued", "todo", "draft"].includes(normalizedState)) {
+    return "border-amber-500/40 bg-amber-500/20 text-amber-200";
   }
 
   return "border-slate-500/30 bg-slate-500/15 text-slate-300";
@@ -430,11 +557,30 @@ export function PlansPage() {
                       {planDetail.currentCheckpoint ? (
                         <div className="space-y-2" data-testid="plan-current-checkpoint">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-medium">
-                              {formatRoleLabel(planDetail.currentCheckpoint.role)} ·{" "}
+                            {(() => {
+                              const roleVisual = getRoleVisual(planDetail.currentCheckpoint.role);
+                              const RoleIcon = roleVisual.icon;
+
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className={cn("inline-flex items-center gap-1 text-[10px]", roleVisual.badgeClass)}
+                                >
+                                  <RoleIcon className="size-3" />
+                                  {formatRoleLabel(planDetail.currentCheckpoint.role)}
+                                </Badge>
+                              );
+                            })()}
+                            <Badge variant="outline" className="text-[10px]">
                               {planDetail.currentCheckpoint.checkpointId}
-                            </p>
-                            <Badge variant="outline" className="capitalize">
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] capitalize",
+                                checkpointStateBadgeClass(planDetail.currentCheckpoint.state),
+                              )}
+                            >
                               {formatCheckpointState(planDetail.currentCheckpoint.state)}
                             </Badge>
                           </div>
@@ -453,26 +599,91 @@ export function PlansPage() {
                     <div className="space-y-2">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Role checkpoints</p>
                       <div className="grid gap-2 sm:grid-cols-2">
-                        {planDetail.roles.map((role) => (
-                          <div
-                            key={role.role}
-                            className="rounded-lg border border-border/60 bg-background/40 px-3 py-2"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">{formatRoleLabel(role.role)}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {roleCompletionLabel(role.doneCheckpoints, role.totalCheckpoints)}
-                              </span>
+                        {planDetail.roles.map((role) => {
+                          const roleVisual = getRoleVisual(role.role);
+                          const RoleIcon = roleVisual.icon;
+                          const percentComplete = roleProgressPercent(
+                            role.doneCheckpoints,
+                            role.totalCheckpoints,
+                          );
+                          const hasCheckpoints = role.totalCheckpoints > 0;
+                          const isComplete = hasCheckpoints && role.doneCheckpoints >= role.totalCheckpoints;
+
+                          return (
+                            <div
+                              key={role.role}
+                              className={cn(
+                                "group relative overflow-hidden rounded-xl border px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-200",
+                                roleVisual.cardClass,
+                                isComplete ? "ring-1 ring-emerald-400/25" : undefined,
+                              )}
+                            >
+                              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/20 opacity-50" />
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  <span
+                                    className={cn(
+                                      "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border backdrop-blur-sm",
+                                      roleVisual.iconClass,
+                                    )}
+                                  >
+                                    <RoleIcon className="size-4" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-foreground">
+                                      {formatRoleLabel(role.role)}
+                                    </p>
+                                    <p className={cn("text-[10px] uppercase tracking-[0.11em]", roleVisual.metaClass)}>
+                                      {hasCheckpoints ? `${role.totalCheckpoints} checkpoints` : "No checkpoints"}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-semibold tabular-nums text-foreground">
+                                    {percentComplete}%
+                                  </p>
+                                  <span
+                                    className={cn(
+                                      "inline-flex rounded-md border px-1.5 py-0.5 text-[11px] tabular-nums",
+                                      isComplete
+                                        ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-100"
+                                        : "border-white/15 bg-white/[0.05] text-zinc-200/90",
+                                    )}
+                                  >
+                                    {roleCompletionLabel(role.doneCheckpoints, role.totalCheckpoints)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-black/30">
+                                <div
+                                  className={cn("h-full rounded-full transition-[width] duration-300", roleVisual.progressClass)}
+                                  style={{ width: `${percentComplete}%` }}
+                                />
+                              </div>
+                              <div className="mt-2 flex items-center justify-between gap-2">
+                                <p className={cn("text-[10px] uppercase tracking-[0.11em]", roleVisual.metaClass)}>
+                                  {hasCheckpoints ? `${percentComplete}% complete` : "No checkpoints yet"}
+                                </p>
+                                <span
+                                  className={cn(
+                                    "text-[10px] font-medium uppercase tracking-[0.11em]",
+                                    isComplete ? "text-emerald-200" : "text-zinc-300/80",
+                                  )}
+                                >
+                                  {isComplete ? "Complete" : hasCheckpoints ? "In progress" : "Pending"}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Summary</p>
                       <div
-                        className="max-h-56 space-y-2 overflow-auto rounded-lg border border-border/60 bg-background/30 p-3"
+                        className="max-h-56 space-y-2 overflow-auto rounded-lg border border-cyan-500/15 bg-[#030915] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
                         data-testid="plan-summary-content"
                       >
                         {summaryLines.length > 0 ? (
@@ -489,12 +700,12 @@ export function PlansPage() {
                             return (
                               <div
                                 key={`${index}-${line}`}
-                                className="rounded-md border border-border/50 bg-background/50 px-2.5 py-1.5"
+                                className="rounded-md border border-cyan-500/15 bg-[#020714] px-2.5 py-1.5"
                               >
-                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                <p className="text-[11px] uppercase tracking-wide text-cyan-100/70">
                                   {keyValueMatch[1]}
                                 </p>
-                                <p className="text-xs leading-relaxed text-foreground">{keyValueMatch[2]}</p>
+                                <p className="text-xs leading-relaxed text-zinc-100">{keyValueMatch[2]}</p>
                               </div>
                             );
                           })
@@ -530,18 +741,37 @@ export function PlansPage() {
                                   <p className="text-[11px] font-medium text-muted-foreground">
                                     {formatCheckpointTimestamp(line.entry.timestamp)}
                                   </p>
-                                  {line.entry.role ? (
-                                    <Badge variant="outline" className="text-[10px]">
-                                      {formatRoleLabel(line.entry.role)}
-                                    </Badge>
-                                  ) : null}
+                                  {line.entry.role
+                                    ? (() => {
+                                        const roleVisual = getRoleVisual(line.entry.role);
+                                        const RoleIcon = roleVisual.icon;
+                                        return (
+                                          <Badge
+                                            variant="outline"
+                                            className={cn(
+                                              "inline-flex items-center gap-1 text-[10px]",
+                                              roleVisual.badgeClass,
+                                            )}
+                                          >
+                                            <RoleIcon className="size-3" />
+                                            {formatRoleLabel(line.entry.role)}
+                                          </Badge>
+                                        );
+                                      })()
+                                    : null}
                                   {line.entry.checkpointId ? (
                                     <Badge variant="outline" className="text-[10px]">
                                       {line.entry.checkpointId}
                                     </Badge>
                                   ) : null}
                                   {line.entry.state ? (
-                                    <Badge variant="outline" className="text-[10px] capitalize">
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "text-[10px] capitalize",
+                                        checkpointStateBadgeClass(line.entry.state),
+                                      )}
+                                    >
                                       {formatCheckpointState(line.entry.state)}
                                     </Badge>
                                   ) : null}
