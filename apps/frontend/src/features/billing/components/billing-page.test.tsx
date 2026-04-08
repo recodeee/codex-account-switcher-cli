@@ -71,7 +71,11 @@ const billingSummary: BillingAccountsResponse = {
   ],
 };
 
-function mockBillingQuery(overrides?: Record<string, unknown>) {
+function mockBillingQuery(
+  overrides?: Record<string, unknown>,
+  createMutationOverrides?: Record<string, unknown>,
+) {
+  const mutateAsync = vi.fn().mockResolvedValue(undefined);
   useBillingMock.mockReturnValue({
     billingQuery: {
       data: billingSummary,
@@ -81,7 +85,17 @@ function mockBillingQuery(overrides?: Record<string, unknown>) {
       error: null,
       ...overrides,
     },
+    createAccountMutation: {
+      mutateAsync,
+      isPending: false,
+      error: null,
+      ...createMutationOverrides,
+    },
   } as never);
+
+  return {
+    mutateAsync,
+  };
 }
 
 describe("BillingPage", () => {
@@ -159,5 +173,24 @@ describe("BillingPage", () => {
     expect(within(dialog).getByText("ChatGPT")).toBeInTheDocument();
     expect(within(dialog).getByText("Mar 23, 2026")).toBeInTheDocument();
     expect(within(dialog).getByText("admin@edixai.com")).toBeInTheDocument();
+  });
+
+  it("submits the add subscription account dialog", async () => {
+    const user = userEvent.setup();
+    const { mutateAsync } = mockBillingQuery();
+
+    renderWithProviders(<BillingPage />);
+
+    await user.click(screen.getByRole("button", { name: "Add subscription account" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Add subscription account" });
+    await user.type(within(dialog).getByLabelText("Business domain"), "newshop.example");
+    await user.click(within(dialog).getByRole("button", { name: "Add account" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      domain: "newshop.example",
+      planCode: "business",
+      planName: "Business",
+    });
   });
 });

@@ -10,6 +10,8 @@ import pytest
 from app.dependencies import BillingContext, get_billing_context
 from app.modules.billing.service import (
     BillingAccountData,
+    BillingAccountConflictError,
+    BillingAccountValidationError,
     BillingAccountsData,
     BillingCycleData,
     BillingMemberData,
@@ -46,10 +48,10 @@ def _billing_account(*, entitled: bool = True, subscription_status: str = "activ
     )
 
 
-def _context(*, get_accounts: AsyncMock | None = None, replace_accounts: AsyncMock | None = None) -> BillingContext:
+def _context(*, get_accounts: AsyncMock | None = None, add_account: AsyncMock | None = None) -> BillingContext:
     service = SimpleNamespace(
         get_accounts=get_accounts or AsyncMock(),
-        replace_accounts=replace_accounts or AsyncMock(),
+        add_account=add_account or AsyncMock(),
     )
     return cast(
         BillingContext,
@@ -143,3 +145,87 @@ async def test_update_billing_accounts_rejects_python_bulk_replace(async_client)
             "message": "Billing mutations must be applied through Medusa workflows",
         }
     }
+
+
+@pytest.mark.asyncio
+async def test_create_billing_account_returns_created_account(async_client, app_instance) -> None:
+    created_account = _billing_account()
+    context = _context(
+        add_account=AsyncMock(return_value=created_account),
+    )
+    app_instance.dependency_overrides[get_billing_context] = lambda: context
+
+    try:
+        response = await async_client.post(
+            "/api/billing/accounts",
+            json={
+                "domain": "newshop.example",
+                "planCode": "business",
+                "planName": "Business",
+                "subscriptionStatus": "active",
+                "paymentStatus": "paid",
+                "entitled": True,
+                "renewalAt": "2026-04-23T00:00:00Z",
+                "chatgptSeatsInUse": 0,
+                "codexSeatsInUse": 0,
+            },
+        )
+    finally:
+        app_instance.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == "business-plan-edixai"
+    assert payload["domain"] == "edixai.com"
+    context.service.add_account.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_billing_account_returns_conflict_for_duplicate_domain(async_client, app_instance) -> None:
+    context = _context(
+        add_account=AsyncMock(
+            side_effect=BillingAccountConflictError("Subscription account already exists for edixai.com")
+        ),
+    )
+    app_instance.dependency_overrides[get_billing_context] = lambda: context
+
+    try:
+        response = await async_client.post("/api/billing/accounts", json={"domain": "edixai.com"})
+    finally:
+        app_instance.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "billing_account_exists",
+            "message": "Subscription account already exists for edixai.com",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_billing_account_returns_bad_request_for_invalid_payload(async_client, app_instance) -> None:
+    context = _context(
+        add_account=AsyncMock(side_effect=BillingAccountValidationError("Domain is required")),
+    )
+    app_instance.dependency_overrides[get_billing_context] = lambda: context
+
+    try:
+        response = await async_client.post("/api/billing/accounts", json={"domain": "newshop.example"})
+    finally:
+        app_instance.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "invalid_billing_account_payload",
+            "message": "Domain is required",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_billing_account_returns_422_when_domain_is_missing(async_client) -> None:
+    response = await async_client.post("/api/billing/accounts", json={})
+
+    assert response.status_code == 422

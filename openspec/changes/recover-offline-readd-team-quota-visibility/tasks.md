@@ -1,4 +1,4 @@
 - [x] 1. Add an OpenSpec delta describing silent recovery for workspace accounts that rejoin a paid/team Codex plan.
-- [ ] 2. Implement backend codex-auth readiness + silent reactivation from validated local snapshots.
-- [ ] 3. Add integration/unit coverage for account-list/dashboard recovery and readiness mapping.
-- [ ] 4. Run focused verification (pytest + openspec validate).
+- [x] 2. Implement backend codex-auth readiness + silent reactivation from validated local snapshots.
+- [x] 3. Add integration/unit coverage for account-list/dashboard recovery and readiness mapping.
+- [x] 4. Run focused verification (pytest + openspec validate).

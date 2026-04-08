@@ -11,6 +11,14 @@ Fast-forward through artifact creation - generate everything needed to start imp
 
 **Steps**
 
+0. **Create/refresh plan workspace**
+
+   Before creating artifacts, initialize the durable planning workspace:
+   ```bash
+   scripts/openspec/init-plan-workspace.sh "<name>"
+   ```
+   This ensures `openspec/plan/<name>/` exists with role folders and role `tasks.md` checklists.
+
 1. **If no input provided, ask what they want to build**
 
    Use the **AskUserQuestion tool** (open-ended, no preset options) to ask:

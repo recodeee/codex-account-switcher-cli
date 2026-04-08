@@ -6,11 +6,10 @@ from app.core import usage as usage_core
 from app.core.crypto import TokenEncryptor
 from app.core.usage.types import UsageWindowRow
 from app.core.utils.time import utcnow
-from app.db.models import Account, UsageHistory
+from app.db.models import UsageHistory
 from app.modules.accounts.codex_auth_auto_import import sync_local_codex_auth_snapshots
 from app.modules.accounts.codex_auth_status import build_codex_auth_status
 from app.modules.accounts.codex_auth_switcher import (
-    CodexAuthSnapshotIndex,
     build_snapshot_index,
     resolve_snapshot_names_for_account,
 )
@@ -18,7 +17,6 @@ from app.modules.accounts.live_usage_overrides import apply_local_live_usage_ove
 from app.modules.accounts.live_usage_persistence import persist_live_usage_overrides
 from app.modules.accounts.mappers import build_account_summaries
 from app.modules.accounts.schemas import (
-    AccountCodexAuthStatus,
     AccountLiveQuotaDebug,
     AccountRequestUsage,
     AccountSessionTaskPreview,

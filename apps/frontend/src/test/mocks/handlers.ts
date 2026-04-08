@@ -2,7 +2,10 @@ import { HttpResponse, http } from "msw";
 import { z } from "zod";
 
 import { LIMIT_TYPES, LIMIT_WINDOWS } from "@/features/api-keys/schemas";
-import { BillingAccountSchema } from "@/features/billing/schemas";
+import {
+	BillingAccountCreateRequestSchema,
+	BillingAccountSchema,
+} from "@/features/billing/schemas";
 import {
 	type AccountSummary,
 	type ApiKey,
@@ -134,6 +137,8 @@ const BillingPayloadSchema = z
 		accounts: z.array(BillingAccountSchema),
 	})
 	.passthrough();
+
+const BillingAccountCreatePayloadSchema = BillingAccountCreateRequestSchema.passthrough();
 
 const MedusaCredentialsPayloadSchema = z
 	.object({
@@ -886,6 +891,72 @@ export const handlers = [
 		}
 		state.billingAccounts = payload.accounts;
 		return HttpResponse.json({ accounts: state.billingAccounts });
+	}),
+
+	http.post("/api/billing/accounts", async ({ request }) => {
+		const payload = await parseJsonBody(request, BillingAccountCreatePayloadSchema);
+		if (!payload) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_billing_account_payload",
+						message: "Invalid billing account payload",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+
+		const normalizedDomain = payload.domain.trim().toLowerCase();
+		if (!normalizedDomain) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_billing_account_payload",
+						message: "Domain is required",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+
+		if (state.billingAccounts.some((account) => account.domain.toLowerCase() === normalizedDomain)) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "billing_account_exists",
+						message: `Subscription account already exists for ${normalizedDomain}`,
+					},
+				},
+				{ status: 409 },
+			);
+		}
+
+		const now = new Date();
+		const renewalAt =
+			payload.renewalAt instanceof Date ? payload.renewalAt : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+		const idSuffix = normalizedDomain.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "account";
+		const created = {
+			id: `business-plan-${idSuffix}`,
+			domain: normalizedDomain,
+			planCode: payload.planCode,
+			planName: payload.planName,
+			subscriptionStatus: payload.subscriptionStatus,
+			entitled: payload.entitled,
+			paymentStatus: payload.paymentStatus,
+			billingCycle: {
+				start: now,
+				end: renewalAt,
+			},
+			renewalAt,
+			chatgptSeatsInUse: payload.chatgptSeatsInUse,
+			codexSeatsInUse: payload.codexSeatsInUse,
+			members: [],
+		};
+
+		state.billingAccounts = [...state.billingAccounts, created];
+
+		return HttpResponse.json(created, { status: 200 });
 	}),
 
 	http.get("/api/firewall/ips", () => {

@@ -43,3 +43,15 @@ class BillingAccountsResponse(DashboardModel):
 
 class BillingAccountsUpdateRequest(DashboardModel):
     accounts: list[BillingAccount]
+
+
+class BillingAccountCreateRequest(DashboardModel):
+    domain: str = Field(min_length=1, max_length=255)
+    plan_code: str = Field(default="business", min_length=1, max_length=64)
+    plan_name: str = Field(default="Business", min_length=1, max_length=128)
+    subscription_status: Literal["trialing", "active", "past_due", "canceled", "expired"] = "active"
+    payment_status: Literal["paid", "requires_action", "past_due", "unpaid"] = "paid"
+    entitled: bool = True
+    renewal_at: datetime | None = None
+    chatgpt_seats_in_use: int = Field(default=0, ge=0)
+    codex_seats_in_use: int = Field(default=0, ge=0)

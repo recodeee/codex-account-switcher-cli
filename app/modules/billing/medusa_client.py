@@ -13,6 +13,9 @@ from app.core.types import JsonObject
 from app.core.utils.request_id import get_request_id
 from app.modules.billing.service import (
     BillingAccountData,
+    BillingAccountCreateData,
+    BillingAccountConflictError,
+    BillingAccountValidationError,
     BillingCycleData,
     BillingMemberData,
     BillingSummaryUnavailableError,
@@ -58,6 +61,15 @@ class MedusaBillingSummaryPayload(_MedusaBillingModel):
     accounts: list[MedusaBillingAccountPayload]
 
 
+class MedusaErrorEnvelope(_MedusaBillingModel):
+    message: str | None = None
+    code: str | None = None
+
+
+class MedusaErrorPayload(_MedusaBillingModel):
+    error: MedusaErrorEnvelope | None = None
+
+
 class MedusaBillingSummaryClient:
     def __init__(
         self,
@@ -92,6 +104,52 @@ class MedusaBillingSummaryClient:
             raise BillingSummaryUnavailableError(BILLING_SUMMARY_UNAVAILABLE_MESSAGE) from exc
 
         return [_to_account(account) for account in summary.accounts]
+
+    async def add_account(self, account: BillingAccountCreateData) -> BillingAccountData:
+        settings = get_settings()
+        client_session = self._session or get_http_client().session
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        request_id = get_request_id()
+        if request_id:
+            headers["x-request-id"] = request_id
+        timeout = aiohttp.ClientTimeout(total=settings.billing_summary_timeout_seconds)
+        url = f"{self._base_url}/billing/accounts"
+
+        payload = {
+            "domain": account.domain,
+            "plan_code": account.plan_code,
+            "plan_name": account.plan_name,
+            "subscription_status": account.subscription_status,
+            "payment_status": account.payment_status,
+            "entitled": account.entitled,
+            "renewal_at": account.renewal_at.isoformat().replace("+00:00", "Z")
+            if account.renewal_at is not None
+            else None,
+            "chatgpt_seats_in_use": account.chatgpt_seats_in_use,
+            "codex_seats_in_use": account.codex_seats_in_use,
+        }
+
+        try:
+            async with client_session.post(url, headers=headers, json=payload, timeout=timeout) as response:
+                raw_payload = await _safe_json(response)
+                if response.status == 409:
+                    raise BillingAccountConflictError(_extract_error_message(raw_payload, "Billing account already exists"))
+                if response.status >= 400:
+                    raise BillingAccountValidationError(
+                        _extract_error_message(raw_payload, "Billing account payload is invalid")
+                    )
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            raise BillingSummaryUnavailableError(BILLING_SUMMARY_UNAVAILABLE_MESSAGE) from exc
+
+        try:
+            created = MedusaBillingAccountPayload.model_validate(raw_payload)
+        except ValidationError as exc:
+            raise BillingSummaryUnavailableError(BILLING_SUMMARY_UNAVAILABLE_MESSAGE) from exc
+
+        return _to_account(created)
 
 
 async def _safe_json(response: aiohttp.ClientResponse) -> JsonObject:
@@ -135,3 +193,13 @@ def _to_account(payload: MedusaBillingAccountPayload) -> BillingAccountData:
 
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _extract_error_message(payload: JsonObject, fallback: str) -> str:
+    try:
+        parsed = MedusaErrorPayload.model_validate(payload)
+    except ValidationError:
+        return fallback
+    if parsed.error is None or not parsed.error.message:
+        return fallback
+    return parsed.error.message

@@ -81,9 +81,45 @@ Prompting cue (use when writing docs):
 ### Commands (recommended)
 
 - Start a change: `/opsx:new <kebab-case>`
+- Create/refresh plan workspace: `/opsx:plan <plan-slug>`
 - Create artifacts (step): `/opsx:continue <change>`
 - Create artifacts (fast): `/opsx:ff <change>`
 - Implement tasks: `/opsx:apply <change>`
 - Verify before archive: `/opsx:verify <change>`
 - Sync delta specs → main specs: `/opsx:sync <change>`
 - Archive: `/opsx:archive <change>`
+
+## Plan Workspace Contract (`openspec/plan`)
+
+Use `openspec/plan/` as the durable pre-implementation planning layer.
+
+Required shape for each plan:
+
+```text
+openspec/plan/<plan-slug>/
+  summary.md
+  planner/tasks.md
+  architect/tasks.md
+  critic/tasks.md
+  executor/tasks.md
+  writer/tasks.md
+  verifier/tasks.md
+```
+
+Role folders may additionally include `README.md`, notes, and evidence artifacts.
+
+When operating in ralplan/team-style planning flows:
+
+1. Create/maintain the plan workspace at `openspec/plan/<plan-slug>/`.
+2. Ensure every participating role has a `tasks.md`.
+3. Keep checklist sections visible in each `tasks.md`:
+   - `## 1. Spec`
+   - `## 2. Tests`
+   - `## 3. Implementation`
+4. Update checkboxes during execution so status remains human-readable in OpenSpec style.
+
+Scaffold command:
+
+```bash
+scripts/openspec/init-plan-workspace.sh <plan-slug>
+```

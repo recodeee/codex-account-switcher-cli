@@ -11,6 +11,14 @@ Start a new change using the experimental artifact-driven approach.
 
 **Steps**
 
+0. **Create/refresh plan workspace**
+
+   Before creating the OpenSpec change, initialize a durable planning workspace:
+   ```bash
+   scripts/openspec/init-plan-workspace.sh "<name>"
+   ```
+   This ensures `openspec/plan/<name>/` exists with role folders and per-role `tasks.md` checklists.
+
 1. **If no input provided, ask what they want to build**
 
    Use the **AskUserQuestion tool** (open-ended, no preset options) to ask:

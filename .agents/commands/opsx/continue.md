@@ -11,6 +11,14 @@ Continue working on a change by creating the next artifact.
 
 **Steps**
 
+0. **Ensure plan workspace exists**
+
+   If `openspec/plan/<change>/` is missing, initialize it:
+   ```bash
+   scripts/openspec/init-plan-workspace.sh "<change>"
+   ```
+   Keep role `tasks.md` updated as artifacts progress.
+
 1. **If no change name provided, prompt for selection**
 
    Run `openspec list --json` to get available changes sorted by most recently modified. Then use the **AskUserQuestion tool** to let the user select which change to work on.

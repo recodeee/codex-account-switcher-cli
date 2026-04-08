@@ -5,11 +5,12 @@ import {
   CalendarClock,
   CreditCard,
   Eye,
+  Plus,
   ShieldCheck,
   Sparkles,
   Users2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -19,9 +20,12 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { SpinnerBlock } from "@/components/ui/spinner";
 import {
@@ -33,7 +37,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useBilling } from "@/features/billing/hooks/use-billing";
-import type { BillingAccount } from "@/features/billing/schemas";
+import type { BillingAccount, BillingAccountCreateRequest } from "@/features/billing/schemas";
 import { getErrorMessageOrNull } from "@/utils/errors";
 
 function formatStatusLabel(value: BillingAccount["subscriptionStatus"] | BillingAccount["paymentStatus"]) {
@@ -69,9 +73,18 @@ function getInitials(value: string): string {
   return `${words[0][0]}${words[1][0]}`.toUpperCase();
 }
 
+const DEFAULT_CREATE_ACCOUNT_FORM: Pick<BillingAccountCreateRequest, "domain" | "planCode" | "planName"> = {
+  domain: "",
+  planCode: "business",
+  planName: "Business",
+};
+
 export function BillingPage() {
-  const { billingQuery } = useBilling();
+  const { billingQuery, createAccountMutation } = useBilling();
   const [selectedBusinessAccountId, setSelectedBusinessAccountId] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createForm, setCreateForm] = useState(DEFAULT_CREATE_ACCOUNT_FORM);
+  const [createFormError, setCreateFormError] = useState<string | null>(null);
 
   const accounts = useMemo(() => billingQuery.data?.accounts ?? [], [billingQuery.data]);
   const selectedBusinessAccount = useMemo(
@@ -99,6 +112,30 @@ export function BillingPage() {
     billingQuery.error,
     "Failed to load live billing summary.",
   );
+  const createPending = createAccountMutation.isPending;
+
+  async function handleCreateSubscriptionAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const domain = createForm.domain.trim();
+    if (!domain) {
+      setCreateFormError("Domain is required.");
+      return;
+    }
+
+    setCreateFormError(null);
+
+    try {
+      await createAccountMutation.mutateAsync({
+        domain,
+        planCode: createForm.planCode.trim() || "business",
+        planName: createForm.planName.trim() || "Business",
+      });
+      setCreateForm(DEFAULT_CREATE_ACCOUNT_FORM);
+      setCreateDialogOpen(false);
+    } catch (error) {
+      setCreateFormError(getErrorMessageOrNull(error, "Failed to add subscription account."));
+    }
+  }
 
   return (
     <div className="animate-fade-in-up space-y-6">
@@ -203,6 +240,16 @@ export function BillingPage() {
                     Renewals and entitlement state are read directly from Medusa.
                   </p>
                 </div>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setCreateFormError(null);
+                    setCreateDialogOpen(true);
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Add subscription account
+                </Button>
               </div>
             </CardHeader>
 
@@ -286,6 +333,87 @@ export function BillingPage() {
               </div>
             </CardContent>
           </Card>
+
+          <Dialog
+            open={createDialogOpen}
+            onOpenChange={(open) => {
+              setCreateDialogOpen(open);
+              if (!open) {
+                setCreateForm(DEFAULT_CREATE_ACCOUNT_FORM);
+                setCreateFormError(null);
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add subscription account</DialogTitle>
+                <DialogDescription>
+                  Create a new billed account entry in the live subscription summary.
+                </DialogDescription>
+              </DialogHeader>
+
+              <form className="space-y-4" onSubmit={handleCreateSubscriptionAccount}>
+                <div className="space-y-2">
+                  <Label htmlFor="billing-create-domain">Business domain</Label>
+                  <Input
+                    id="billing-create-domain"
+                    autoFocus
+                    placeholder="example.com"
+                    value={createForm.domain}
+                    onChange={(event) =>
+                      setCreateForm((current) => ({ ...current, domain: event.target.value }))
+                    }
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="billing-create-plan-name">Plan name</Label>
+                    <Input
+                      id="billing-create-plan-name"
+                      placeholder="Business"
+                      value={createForm.planName}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, planName: event.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="billing-create-plan-code">Plan code</Label>
+                    <Input
+                      id="billing-create-plan-code"
+                      placeholder="business"
+                      value={createForm.planCode}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, planCode: event.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                {createFormError ? (
+                  <p className="text-sm text-destructive">{createFormError}</p>
+                ) : null}
+
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setCreateDialogOpen(false);
+                    }}
+                    disabled={createPending}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={createPending}>
+                    {createPending ? "Adding..." : "Add account"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
 
           <Dialog
             open={selectedBusinessAccountId !== null}

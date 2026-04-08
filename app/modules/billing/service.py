@@ -17,6 +17,14 @@ class BillingSummaryUnavailableError(RuntimeError):
     """Raised when the live Medusa billing summary cannot be trusted."""
 
 
+class BillingAccountConflictError(RuntimeError):
+    """Raised when a billing account cannot be created because it already exists."""
+
+
+class BillingAccountValidationError(RuntimeError):
+    """Raised when billing account creation input is invalid."""
+
+
 @dataclass(frozen=True, slots=True)
 class BillingMemberData:
     id: str
@@ -54,8 +62,22 @@ class BillingAccountsData:
     accounts: list[BillingAccountData]
 
 
+@dataclass(frozen=True, slots=True)
+class BillingAccountCreateData:
+    domain: str
+    plan_code: str
+    plan_name: str
+    subscription_status: SubscriptionStatus
+    payment_status: PaymentStatus
+    entitled: bool
+    renewal_at: datetime | None
+    chatgpt_seats_in_use: int
+    codex_seats_in_use: int
+
+
 class BillingSummaryProvider(Protocol):
     async def fetch_accounts(self) -> list[BillingAccountData]: ...
+    async def add_account(self, account: BillingAccountCreateData) -> BillingAccountData: ...
 
 
 class BillingService:
@@ -76,3 +98,8 @@ class BillingService:
 
         set_normal()
         return BillingAccountsData(accounts=accounts)
+
+    async def add_account(self, account: BillingAccountCreateData) -> BillingAccountData:
+        created_account = await self._summary_provider.add_account(account)
+        set_normal()
+        return created_account
