@@ -75,6 +75,9 @@ function parseCreateBillingAccountPayload(raw: unknown): CreateBillingAccountPay
     if (payload.renewal_at !== null && typeof payload.renewal_at !== "string") {
       return null
     }
+    if (typeof payload.renewal_at === "string" && Number.isNaN(new Date(payload.renewal_at).getTime())) {
+      return null
+    }
     parsed.renewal_at = payload.renewal_at
   }
 

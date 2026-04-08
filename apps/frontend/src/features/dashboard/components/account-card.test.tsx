@@ -1724,6 +1724,34 @@ describe("AccountCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders usage-limit session previews in red", () => {
+    const usageLimitPreview = "You've hit your usage limit. Try again at 2:36 PM.";
+    const account = createAccountSummary({
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-limit-usage",
+          taskPreview: usageLimitPreview,
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const previewTextNode = screen.getByText(usageLimitPreview);
+    expect(previewTextNode.parentElement).toHaveClass("text-red-300");
+  });
+
   it("shows per-session logs inline when watch logs is clicked", async () => {
     const user = userEvent.setup();
     const account = createAccountSummary({

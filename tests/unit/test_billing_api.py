@@ -229,3 +229,26 @@ async def test_create_billing_account_returns_422_when_domain_is_missing(async_c
     response = await async_client.post("/api/billing/accounts", json={})
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_billing_account_returns_503_when_medusa_is_unavailable(async_client, app_instance) -> None:
+    context = _context(
+        add_account=AsyncMock(
+            side_effect=BillingSummaryUnavailableError("Medusa billing summary is unavailable")
+        ),
+    )
+    app_instance.dependency_overrides[get_billing_context] = lambda: context
+
+    try:
+        response = await async_client.post("/api/billing/accounts", json={"domain": "newshop.example"})
+    finally:
+        app_instance.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": {
+            "code": "billing_summary_unavailable",
+            "message": "Medusa billing summary is unavailable",
+        }
+    }

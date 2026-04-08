@@ -116,9 +116,7 @@ export function AccountMenu({
   const medusaAdminEmail = medusaUser?.email ?? null;
   const dashboardLoginEmail =
     medusaLastAuthenticatedEmail ?? medusaAdminEmail ?? loggedInEmail;
-  const showCodexAccountDetails =
-    Boolean(loggedInEmail) && loggedInEmail !== dashboardLoginEmail;
-  const triggerEmail = dashboardLoginEmail;
+  const triggerEmail = loggedInEmail ?? dashboardLoginEmail;
   const triggerLetter = (triggerEmail?.trim()?.[0] ?? "C").toUpperCase();
 
   return (
@@ -128,14 +126,22 @@ export function AccountMenu({
           type="button"
           size="sm"
           variant="ghost"
-          className={cn("h-8 gap-1.5 rounded-lg px-2 text-xs", className)}
+          className={cn("h-10 gap-1.5 rounded-lg px-2 text-xs", className)}
           aria-label="Open account menu"
         >
           <span className="flex h-5 w-5 items-center justify-center rounded-md border border-border/70 bg-muted/40 font-medium">
             {triggerLetter}
           </span>
-          <span className="hidden max-w-[9rem] truncate text-muted-foreground lg:inline">
-            {triggerEmail ?? "Profile"}
+          <span className="hidden min-w-0 lg:flex lg:max-w-[13rem] lg:flex-col lg:items-start lg:leading-tight">
+            <span className="text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80">
+              Active Codex account
+            </span>
+            <span
+              className="max-w-[13rem] truncate text-xs text-muted-foreground"
+              title={triggerEmail ?? "No active Codex account"}
+            >
+              {triggerEmail ?? "No active Codex account"}
+            </span>
           </span>
         </Button>
       </DropdownMenuTrigger>
@@ -235,10 +241,10 @@ export function AccountMenu({
             {dashboardLoginEmail ?? "No dashboard login recorded yet"}
           </p>
 
-          {showCodexAccountDetails ? (
+          {loggedInEmail ? (
             <>
               <p className="mt-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                Current Codex account
+                Active Codex account
               </p>
               <p
                 className={cn(

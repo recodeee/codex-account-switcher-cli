@@ -83,6 +83,7 @@ describe("AccountMenu component", () => {
     });
 
     const trigger = screen.getByRole("button", { name: "Open account menu" });
+    expect(trigger).toHaveTextContent("Active Codex account");
     expect(trigger).toHaveTextContent("nagy.viktordp@gmail.com");
 
     await user.click(trigger);
@@ -90,7 +91,7 @@ describe("AccountMenu component", () => {
     expect(screen.getByRole("menuitem", { name: "Sign out Medusa admin" })).toBeInTheDocument();
     expect(screen.getByText("Logged in account")).toBeInTheDocument();
     expect(screen.getAllByText("nagy.viktordp@gmail.com").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Current Codex account")).toBeInTheDocument();
+    expect(screen.getByText("Active Codex account")).toBeInTheDocument();
     expect(screen.getByText("admin@recodee.com")).toBeInTheDocument();
     expect(screen.queryByText("odin@recodee.com")).not.toBeInTheDocument();
     expect(screen.queryByText("medusa-secret")).not.toBeInTheDocument();

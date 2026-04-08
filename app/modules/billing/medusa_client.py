@@ -137,6 +137,8 @@ class MedusaBillingSummaryClient:
                 raw_payload = await _safe_json(response)
                 if response.status == 409:
                     raise BillingAccountConflictError(_extract_error_message(raw_payload, "Billing account already exists"))
+                if response.status >= 500:
+                    raise BillingSummaryUnavailableError(BILLING_SUMMARY_UNAVAILABLE_MESSAGE)
                 if response.status >= 400:
                     raise BillingAccountValidationError(
                         _extract_error_message(raw_payload, "Billing account payload is invalid")

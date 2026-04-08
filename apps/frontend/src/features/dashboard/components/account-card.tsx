@@ -146,6 +146,8 @@ const TASK_FINISHED_PREVIEW_RE =
   /^(?:task\s+)?(?:is\s+)?(?:already\s+)?(?:done|complete(?:d)?|finished)(?:\s+already)?[.!]?$/i;
 const UNKNOWN_TOKENS_SYNC_LABEL = "syncing…";
 const NEXT_TASK_PREVIEW_PATTERN = /\bnext(?:\.?js)?\b|\bturbopack\b/i;
+const USAGE_LIMIT_TASK_PREVIEW_PATTERN =
+  /\byou(?:'|’)ve hit your usage limit\b|\busage limit\b|\btry again at\b/i;
 const CURRENT_TASK_PREVIEW_EXPANSION_KEY = "__current_task_preview__";
 const LAST_TASK_PREVIEW_EXPANSION_KEY = "__last_task_preview__";
 const STALE_SESSION_TASK_MS = 90_000;
@@ -156,6 +158,14 @@ function hasNextTaskHint(taskPreview: string | null | undefined): boolean {
     return false;
   }
   return NEXT_TASK_PREVIEW_PATTERN.test(normalized);
+}
+
+function isUsageLimitTaskPreview(taskPreview: string | null | undefined): boolean {
+  const normalized = taskPreview?.trim();
+  if (!normalized) {
+    return false;
+  }
+  return USAGE_LIMIT_TASK_PREVIEW_PATTERN.test(normalized);
 }
 
 function NextTaskBadge() {
@@ -1820,7 +1830,13 @@ export function AccountCard(props: AccountCardProps) {
                                       Prompt
                                     </div>
                                   ) : null}
-                                  <span className="inline-flex items-center gap-1.5 break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/95">
+                                  <span
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 break-words whitespace-pre-wrap text-xs leading-relaxed text-zinc-100/95",
+                                      isUsageLimitTaskPreview(preview.taskPreview) &&
+                                        "text-red-300",
+                                    )}
+                                  >
                                     {hasNextTaskHint(preview.taskPreview) ? (
                                       <NextTaskBadge />
                                     ) : null}
