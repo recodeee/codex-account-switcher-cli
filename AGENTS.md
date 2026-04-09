@@ -94,6 +94,7 @@ Use this contract whenever multiple agents are active in parallel.
 - If ownership is unclear or overlaps, stop that edit, post a blocker comment, and let the leader/integrator reassign scope.
 - For git isolation, each agent must start on a dedicated branch via `scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"`.
 - Agent completion must use `scripts/agent-branch-finish.sh` (merge into `dev`, push, delete agent branch).
+- `agent-branch-start.sh` and `agent-branch-finish.sh` must fast-forward local `dev` from `origin/dev` before create/merge steps.
 
 1) Explicit ownership before edits
 - Assign each agent clear file/module ownership.
