@@ -2301,17 +2301,33 @@ export function AccountCard(props: AccountCardProps) {
                   ) : null}
 
                   {hasSessionTaskRows ? (
-                    <div className="mt-1.5 pt-1">
-                      <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                    <div className="relative isolate mt-1.5 overflow-hidden rounded-xl border border-cyan-500/20 bg-[linear-gradient(180deg,rgba(2,8,24,0.92),rgba(2,10,28,0.78))] p-2 pt-1.5 shadow-[inset_0_1px_0_rgba(148,163,184,0.1),0_10px_28px_rgba(2,6,23,0.45)]">
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[radial-gradient(120%_100%_at_100%_0%,rgba(34,211,238,0.18),transparent_60%)]"
+                      />
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 top-9 h-px bg-gradient-to-r from-transparent via-cyan-300/25 to-transparent"
+                      />
+                      <div className="relative mb-1 flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
-                          className="inline-flex min-w-[13rem] flex-1 items-center justify-between gap-2 rounded-lg border border-white/25 bg-transparent px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300 transition-colors hover:border-cyan-300/45"
+                          className="inline-flex min-w-[13rem] flex-1 items-center justify-between gap-2 rounded-lg border border-cyan-300/35 bg-cyan-500/[0.06] px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100/95 transition-all duration-200 hover:border-cyan-200/60 hover:bg-cyan-500/[0.1]"
                           aria-expanded={!sessionTasksCollapsed}
                           onClick={() =>
                             setSessionTasksCollapsed((current) => !current)
                           }
                         >
-                          <span>CLI session tasks</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <span
+                              aria-hidden
+                              className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-200"
+                            >
+                              <span className="absolute inset-0 rounded-full bg-cyan-200/60 motion-safe:animate-ping [animation-duration:1.5s]" />
+                            </span>
+                            <span>CLI session tasks</span>
+                          </span>
                           <span className="inline-flex items-center gap-1 text-zinc-300">
                             <span className="font-mono text-[10px]">
                               {sessionTaskRows.length}
@@ -2324,20 +2340,20 @@ export function AccountCard(props: AccountCardProps) {
                             />
                           </span>
                         </button>
-                        <span className="inline-flex h-5 items-center rounded-md border border-emerald-400/35 bg-emerald-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-100">
+                        <span className="inline-flex h-5 items-center rounded-md border border-emerald-300/40 bg-emerald-500/12 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
                           {sessionTaskSummary.assignedCount} assigned
                         </span>
-                        <span className="inline-flex h-5 items-center rounded-md border border-cyan-400/35 bg-cyan-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-cyan-100">
+                        <span className="inline-flex h-5 items-center rounded-md border border-cyan-300/40 bg-cyan-500/12 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
                           {sessionTaskSummary.waitingCount} waiting
                         </span>
                         {sessionTaskSummary.finishedCount > 0 ? (
-                          <span className="inline-flex h-5 items-center rounded-md border border-emerald-400/35 bg-emerald-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-100">
+                          <span className="inline-flex h-5 items-center rounded-md border border-violet-300/40 bg-violet-500/12 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-violet-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
                             {sessionTaskSummary.finishedCount} finished
                           </span>
                         ) : null}
                       </div>
                       {!sessionTasksCollapsed ? (
-                        <ul className="space-y-1.5">
+                        <ul className="relative space-y-2">
                           {sessionTaskRows.map((preview, index) => {
                             const sessionTaskState =
                               sessionTaskStates[index] ?? "waiting";
@@ -2357,15 +2373,27 @@ export function AccountCard(props: AccountCardProps) {
                               <li
                                 key={sessionTaskRowKey}
                                 className={cn(
-                                  "relative overflow-hidden space-y-1 rounded-xl bg-white/[0.02] pl-3 pr-2 py-1.5 transition-colors duration-200",
+                                  "group relative overflow-hidden space-y-1.5 rounded-xl border border-white/10 bg-[#020a19]/85 pl-3 pr-2.5 py-2 shadow-[inset_0_1px_0_rgba(148,163,184,0.08)] transition-all duration-200",
                                   sessionTaskState === "waiting" &&
-                                    "hover:bg-cyan-500/[0.05]",
+                                    "hover:border-cyan-300/45 hover:bg-cyan-500/[0.08]",
                                   sessionTaskState === "thinking" &&
-                                    "bg-indigo-500/[0.08] hover:bg-indigo-500/[0.11]",
+                                    "border-indigo-300/30 bg-indigo-500/[0.1] hover:border-indigo-200/45 hover:bg-indigo-500/[0.14]",
                                   sessionTaskState === "finished" &&
-                                    "bg-emerald-500/[0.06] hover:bg-emerald-500/[0.09]",
+                                    "border-emerald-300/28 bg-emerald-500/[0.08] hover:border-emerald-200/45 hover:bg-emerald-500/[0.12]",
                                 )}
                               >
+                                <span
+                                  className="pointer-events-none absolute -right-8 top-0 h-20 w-20 rounded-full bg-cyan-300/10 opacity-0 blur-2xl transition-opacity duration-200 group-hover:opacity-100"
+                                  aria-hidden
+                                />
+                                <span
+                                  className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/40 to-transparent"
+                                  aria-hidden
+                                />
+                                <span
+                                  className="pointer-events-none absolute inset-x-3 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-200/20 to-transparent"
+                                  aria-hidden
+                                />
                                 <span
                                   className={cn(
                                     "pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-r-full bg-gradient-to-b opacity-95",
@@ -2373,12 +2401,12 @@ export function AccountCard(props: AccountCardProps) {
                                   )}
                                   aria-hidden
                                 />
-                                <div className="flex items-start justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                                <div className="flex items-start justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-300">
                                   <span>Session {preview.ordinal}</span>
                                   <div className="flex min-w-0 flex-col items-end gap-1">
                                     {!preview.synthetic ? (
                                       <span
-                                        className="max-w-[11rem] truncate font-mono text-zinc-500"
+                                        className="max-w-[11rem] truncate font-mono text-zinc-400"
                                         title={preview.sessionKey}
                                       >
                                         {formatSessionKeyLabel(
@@ -2394,9 +2422,9 @@ export function AccountCard(props: AccountCardProps) {
                                   </div>
                                 </div>
                                 <div title={preview.taskPreview}>
-                                  <div className="rounded-md px-1.5 py-0.5">
+                                  <div className="rounded-lg border border-white/8 bg-[#040d22]/70 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]">
                                     {sessionTaskState === "thinking" ? (
-                                      <div className="mb-1 inline-flex h-4 items-center gap-1 rounded-full border border-indigo-200/35 bg-transparent px-1.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-indigo-100">
+                                      <div className="mb-1 inline-flex h-4 items-center gap-1 rounded-full border border-indigo-200/40 bg-indigo-500/18 px-1.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-indigo-100">
                                         Prompt
                                       </div>
                                     ) : null}
@@ -2420,7 +2448,7 @@ export function AccountCard(props: AccountCardProps) {
                                   {sessionTaskPreviewExcerpt.truncated ? (
                                     <button
                                       type="button"
-                                      className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-200 transition-colors hover:text-cyan-100"
+                                      className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-200/95 transition-colors hover:text-cyan-100"
                                       aria-expanded={sessionTaskPreviewExpanded}
                                       onClick={() =>
                                         toggleTaskPreviewExpanded(
@@ -2437,7 +2465,7 @@ export function AccountCard(props: AccountCardProps) {
                                   resolveWaitingTaskHelperText(
                                     preview.taskPreview,
                                   ) ? (
-                                    <p className="mt-1 text-[10px] leading-relaxed text-cyan-200/85">
+                                    <p className="mt-1 text-[10px] leading-relaxed text-cyan-100/90">
                                       {resolveWaitingTaskHelperText(
                                         preview.taskPreview,
                                       )}
@@ -2446,7 +2474,7 @@ export function AccountCard(props: AccountCardProps) {
                                   <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
                                     <button
                                       type="button"
-                                      className="inline-flex h-5 items-center gap-1 rounded-md border border-cyan-400/45 bg-transparent px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-50 transition-colors hover:border-cyan-300/60 hover:bg-cyan-500/12"
+                                      className="inline-flex h-6 items-center gap-1 rounded-md border border-cyan-300/50 bg-cyan-500/12 px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-50 transition-all duration-200 hover:border-cyan-200/70 hover:bg-cyan-500/20"
                                       aria-expanded={
                                         expandedSessionLogRowKey ===
                                         sessionTaskRowKey
@@ -2473,7 +2501,7 @@ export function AccountCard(props: AccountCardProps) {
                                     {!preview.synthetic ? (
                                       <button
                                         type="button"
-                                        className="inline-flex h-5 items-center rounded-md border border-white/25 bg-transparent px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-200 transition-colors hover:border-cyan-300/40 hover:text-zinc-50"
+                                        className="inline-flex h-6 items-center rounded-md border border-white/25 bg-white/[0.02] px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-200 transition-all duration-200 hover:border-cyan-300/45 hover:bg-cyan-500/[0.08] hover:text-zinc-50"
                                         onClick={() =>
                                           onAction?.(account, "sessions", {
                                             focusSessionKey: preview.sessionKey,
@@ -2487,7 +2515,16 @@ export function AccountCard(props: AccountCardProps) {
                                   </div>
                                   {expandedSessionLogRowKey ===
                                   sessionTaskRowKey ? (
-                                    <div className="mt-1.5 rounded-lg border border-cyan-500/30 bg-[#020812]/92 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                                    <div className="mt-1.5 rounded-lg border border-cyan-400/35 bg-[#010714]/95 p-1.5 shadow-[inset_0_1px_0_rgba(148,163,184,0.1),0_10px_24px_rgba(2,6,23,0.35)]">
+                                      <div className="mb-1 flex items-center gap-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-200/80">
+                                        <span
+                                          aria-hidden
+                                          className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-200"
+                                        >
+                                          <span className="absolute inset-0 rounded-full bg-cyan-200/65 motion-safe:animate-ping [animation-duration:1.6s]" />
+                                        </span>
+                                        Live stream
+                                      </div>
                                       <ol className="max-h-40 overflow-y-auto font-mono text-[10px] leading-5 text-cyan-100">
                                         {buildSessionTaskLogLines({
                                           accountId: account.accountId,
@@ -2497,7 +2534,7 @@ export function AccountCard(props: AccountCardProps) {
                                         }).map((line, lineIndex) => (
                                           <li
                                             key={`${sessionTaskRowKey}-log-${lineIndex}`}
-                                            className="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 rounded-sm px-1.5 even:bg-cyan-500/[0.05]"
+                                            className="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 rounded-sm px-1.5 even:bg-cyan-500/[0.07]"
                                           >
                                             <span className="select-none text-right text-cyan-400/55">
                                               {String(lineIndex + 1).padStart(
