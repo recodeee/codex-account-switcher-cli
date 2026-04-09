@@ -1,12 +1,14 @@
 use axum::{
     Json, Router,
-    extract::State,
+    body::Body,
+    extract::{RawQuery, State},
     http::{StatusCode, header},
-    response::{Html, IntoResponse},
+    response::{Html, Response},
     routing::get,
 };
 use reqwest::Client;
 use serde::Serialize;
+use serde_json::Value;
 use std::{
     collections::BTreeMap,
     env,
@@ -63,6 +65,15 @@ struct PythonEndpointCheck {
     detail: String,
 }
 
+#[derive(Debug, Serialize)]
+struct PythonLayerApisResponse {
+    status: &'static str,
+    python_base_url: String,
+    source: &'static str,
+    paths: Vec<String>,
+    detail: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeFlags {
     profile: String,
@@ -96,6 +107,7 @@ fn app_with_state(state: RuntimeState) -> Router {
         .route("/live_usage/mapping", get(live_usage_mapping))
         .route("/_rust_layer/info", get(runtime_info))
         .route("/_python_layer/health", get(python_layer_health))
+        .route("/_python_layer/apis", get(python_layer_apis))
         .with_state(state)
 }
 
@@ -204,44 +216,25 @@ async fn runtime_info(State(state): State<RuntimeState>) -> Json<RuntimeInfoResp
     })
 }
 
-async fn live_usage() -> impl IntoResponse {
-    let generated_at = generated_at_epoch_seconds();
-    let xml = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<live_usage generated_at="{generated_at}" total_sessions="0" mapped_sessions="0" unattributed_sessions="0" total_task_previews="0" account_task_previews="0" session_task_previews="0">
-</live_usage>
-"#
-    );
-
-    (
-        [
-            (header::CACHE_CONTROL, "no-store"),
-            (header::CONTENT_TYPE, "application/xml"),
-        ],
-        xml,
+async fn live_usage(State(state): State<RuntimeState>, raw_query: RawQuery) -> Response {
+    proxy_python_live_usage_xml(
+        &state,
+        "/live_usage",
+        raw_query.0.as_deref(),
+        fallback_live_usage_xml(),
     )
+    .await
 }
 
-async fn live_usage_mapping() -> impl IntoResponse {
-    let generated_at = generated_at_epoch_seconds();
-    let xml = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<live_usage_mapping generated_at="{generated_at}" active_snapshot="" total_process_sessions="0" total_runtime_sessions="0" account_count="0" working_now_count="0" minimal="false">
-  <accounts count="0">
-  </accounts>
-  <unmapped_cli_snapshots count="0">
-  </unmapped_cli_snapshots>
-</live_usage_mapping>
-"#
-    );
-
-    (
-        [
-            (header::CACHE_CONTROL, "no-store"),
-            (header::CONTENT_TYPE, "application/xml"),
-        ],
-        xml,
+async fn live_usage_mapping(State(state): State<RuntimeState>, raw_query: RawQuery) -> Response {
+    let minimal = query_param_true(raw_query.0.as_deref(), "minimal");
+    proxy_python_live_usage_xml(
+        &state,
+        "/live_usage/mapping",
+        raw_query.0.as_deref(),
+        fallback_live_usage_mapping_xml(minimal),
     )
+    .await
 }
 
 async fn python_layer_health(
@@ -275,6 +268,62 @@ async fn python_layer_health(
         },
         Json(response),
     )
+}
+
+async fn python_layer_apis(
+    State(state): State<RuntimeState>,
+) -> (StatusCode, Json<PythonLayerApisResponse>) {
+    match fetch_python_openapi_paths(&state.python_client, &state.python_base_url).await {
+        Ok(paths) => (
+            StatusCode::OK,
+            Json(PythonLayerApisResponse {
+                status: "ok",
+                python_base_url: state.python_base_url,
+                source: "openapi",
+                paths,
+                detail: None,
+            }),
+        ),
+        Err(detail) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(PythonLayerApisResponse {
+                status: "degraded",
+                python_base_url: state.python_base_url,
+                source: "openapi",
+                paths: Vec::new(),
+                detail: Some(detail),
+            }),
+        ),
+    }
+}
+
+async fn fetch_python_openapi_paths(
+    client: &Client,
+    base_url: &str,
+) -> Result<Vec<String>, String> {
+    let url = format!("{}{}", base_url.trim_end_matches('/'), "/openapi.json");
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|error| format!("openapi request failed: {error}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("openapi returned {}", response.status().as_u16()));
+    }
+
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|error| format!("openapi json parse failed: {error}"))?;
+    let paths_obj = payload
+        .get("paths")
+        .and_then(|paths| paths.as_object())
+        .ok_or_else(|| "openapi missing paths object".to_string())?;
+
+    let mut paths: Vec<String> = paths_obj.keys().cloned().collect();
+    paths.sort();
+    Ok(paths)
 }
 
 async fn probe_python_endpoint(
@@ -363,6 +412,32 @@ async fn root_panel(State(state): State<RuntimeState>) -> Html<String> {
       }}
       .meta {{ color: var(--muted); margin-bottom: 16px; }}
       .links {{ display: grid; gap: 8px; }}
+      .section-title {{
+        margin: 18px 0 8px;
+        font-size: 0.86rem;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+      }}
+      .python-api-status {{
+        margin: 0 0 8px;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }}
+      .python-api-status.error {{
+        color: #fda4af;
+      }}
+      .python-api-links {{
+        max-height: 260px;
+        overflow: auto;
+        padding-right: 4px;
+      }}
+      .python-api-links::-webkit-scrollbar {{
+        width: 8px;
+      }}
+      .python-api-links::-webkit-scrollbar-thumb {{
+        background: #334155;
+        border-radius: 999px;
+      }}
       a {{
         color: #93c5fd;
         text-decoration: none;
@@ -386,12 +461,48 @@ async fn root_panel(State(state): State<RuntimeState>) -> Html<String> {
         <a href="/health/startup">/health/startup</a>
         <a href="/_rust_layer/info">/_rust_layer/info</a>
         <a href="/_python_layer/health">/_python_layer/health</a>
+        <a href="/_python_layer/apis">/_python_layer/apis</a>
       </div>
+
+      <h2 class="section-title">Python APIs (live from OpenAPI)</h2>
+      <p id="python-api-status" class="python-api-status">Loading from {python_base_url}...</p>
+      <div id="python-api-links" class="links python-api-links"></div>
     </main>
+    <script>
+      (async () => {{
+        const statusEl = document.getElementById("python-api-status");
+        const linksEl = document.getElementById("python-api-links");
+        try {{
+          const response = await fetch("/_python_layer/apis", {{ cache: "no-store" }});
+          const payload = await response.json();
+          if (!response.ok || payload.status !== "ok") {{
+            const detail = payload && payload.detail ? payload.detail : "python apis unavailable";
+            statusEl.textContent = "Python API sync failed: " + detail;
+            statusEl.classList.add("error");
+            return;
+          }}
+
+          statusEl.textContent = "Loaded " + payload.paths.length + " APIs from " + payload.python_base_url;
+          const baseUrl = String(payload.python_base_url || "").replace(/\/+$/, "");
+          for (const path of payload.paths) {{
+            const link = document.createElement("a");
+            link.textContent = path;
+            link.href = baseUrl + path;
+            link.target = "_blank";
+            link.rel = "noreferrer";
+            linksEl.appendChild(link);
+          }}
+        }} catch (error) {{
+          statusEl.textContent = "Python API sync failed: " + error;
+          statusEl.classList.add("error");
+        }}
+      }})();
+    </script>
   </body>
 </html>
 "#,
-        profile = state.flags.profile
+        profile = state.flags.profile,
+        python_base_url = state.python_base_url
     ))
 }
 
@@ -445,6 +556,118 @@ fn generated_at_epoch_seconds() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs().to_string())
         .unwrap_or_else(|_| "0".to_string())
+}
+
+async fn proxy_python_live_usage_xml(
+    state: &RuntimeState,
+    endpoint: &str,
+    raw_query: Option<&str>,
+    fallback_xml: String,
+) -> Response {
+    let url = build_python_url(&state.python_base_url, endpoint, raw_query);
+    match state.python_client.get(url).send().await {
+        Ok(upstream_response) => {
+            let status = upstream_response.status();
+            let content_type = upstream_response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("application/xml")
+                .to_string();
+            let cache_control = upstream_response
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("no-store")
+                .to_string();
+
+            match upstream_response.text().await {
+                Ok(body) => xml_response(status, &content_type, &cache_control, body),
+                Err(_) => xml_fallback_response(fallback_xml),
+            }
+        }
+        Err(_) => xml_fallback_response(fallback_xml),
+    }
+}
+
+fn build_python_url(base_url: &str, endpoint: &str, raw_query: Option<&str>) -> String {
+    let mut url = format!("{}{}", base_url.trim_end_matches('/'), endpoint);
+    if let Some(query) = raw_query.filter(|query| !query.trim().is_empty()) {
+        url.push('?');
+        url.push_str(query);
+    }
+    url
+}
+
+fn query_param_true(raw_query: Option<&str>, param_name: &str) -> bool {
+    raw_query
+        .map(|query| {
+            query.split('&').any(|pair| {
+                let mut parts = pair.splitn(2, '=');
+                let key = parts.next().unwrap_or("").trim();
+                let value = parts.next().unwrap_or("").trim();
+                key == param_name
+                    && matches!(
+                        value.to_ascii_lowercase().as_str(),
+                        "1" | "true" | "yes" | "on"
+                    )
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn fallback_live_usage_xml() -> String {
+    let generated_at = generated_at_epoch_seconds();
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<live_usage generated_at="{generated_at}" total_sessions="0" mapped_sessions="0" unattributed_sessions="0" total_task_previews="0" account_task_previews="0" session_task_previews="0">
+</live_usage>
+"#
+    )
+}
+
+fn fallback_live_usage_mapping_xml(minimal: bool) -> String {
+    let generated_at = generated_at_epoch_seconds();
+    let minimal = if minimal { "true" } else { "false" };
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<live_usage_mapping generated_at="{generated_at}" active_snapshot="" total_process_sessions="0" total_runtime_sessions="0" account_count="0" working_now_count="0" minimal="{minimal}">
+  <accounts count="0">
+  </accounts>
+  <unmapped_cli_snapshots count="0">
+  </unmapped_cli_snapshots>
+</live_usage_mapping>
+"#
+    )
+}
+
+fn xml_fallback_response(body: String) -> Response {
+    xml_response(StatusCode::OK, "application/xml", "no-store", body)
+}
+
+fn xml_response(
+    status: StatusCode,
+    content_type: &str,
+    cache_control: &str,
+    body: String,
+) -> Response {
+    Response::builder()
+        .status(status)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CACHE_CONTROL, cache_control)
+        .body(Body::from(body))
+        .unwrap_or_else(|_| {
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header(header::CONTENT_TYPE, "application/xml")
+                .header(header::CACHE_CONTROL, "no-store")
+                .body(Body::from(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<error detail="invalid response build state" />
+"#,
+                ))
+                .expect("build static XML error response")
+        })
 }
 
 #[cfg(test)]
@@ -630,6 +853,86 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn live_usage_proxies_python_payload_when_upstream_is_available() {
+        let (python_base_url, server_handle) = spawn_python_live_usage_stub().await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/live_usage")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("cache-control").unwrap(), "no-store");
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let body_text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_text.contains("total_sessions=\"4\""));
+        assert!(body_text.contains("<snapshot name=\"snapshot-a\""));
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn live_usage_mapping_forwards_minimal_query_to_upstream() {
+        let (python_base_url, server_handle) = spawn_python_live_usage_stub().await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/live_usage/mapping?minimal=true")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("cache-control").unwrap(), "no-store");
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let body_text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_text.contains("minimal=\"true\""));
+        assert!(body_text.contains("mapped_snapshot=\"minimal\""));
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn live_usage_mapping_fallback_honors_minimal_query_param() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/live_usage/mapping?minimal=true")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let body_text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_text.contains("minimal=\"true\""));
+    }
+
+    #[tokio::test]
     async fn runtime_info_includes_rust_identity() {
         let response = app()
             .oneshot(
@@ -671,6 +974,8 @@ mod tests {
         assert!(body_text.contains("/health/startup"));
         assert!(body_text.contains("/_rust_layer/info"));
         assert!(body_text.contains("/_python_layer/health"));
+        assert!(body_text.contains("/_python_layer/apis"));
+        assert!(body_text.contains("Python APIs (live from OpenAPI)"));
     }
 
     #[tokio::test]
@@ -732,6 +1037,78 @@ mod tests {
         server_handle.abort();
     }
 
+    #[tokio::test]
+    async fn python_layer_apis_lists_openapi_paths() {
+        let (python_base_url, server_handle) = spawn_python_stub(StatusCode::OK).await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_python_layer/apis")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["status"], "ok");
+        assert_eq!(payload["source"], "openapi");
+        assert!(
+            payload["paths"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|path| path == "/health")
+        );
+        assert!(
+            payload["paths"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|path| path == "/api/new")
+        );
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn python_layer_apis_fails_closed_when_unreachable() {
+        let app = app_with_state(state_for_python_base_url("http://127.0.0.1:9".to_string()));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_python_layer/apis")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["status"], "degraded");
+        assert!(
+            payload["detail"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("openapi request failed")
+        );
+    }
+
     fn state_for_python_base_url(python_base_url: String) -> RuntimeState {
         RuntimeState {
             flags: RuntimeFlags {
@@ -776,6 +1153,76 @@ mod tests {
                         } else {
                             json!({ "detail": "Service is starting" })
                         }),
+                    )
+                }),
+            )
+            .route(
+                "/openapi.json",
+                get(|| async {
+                    Json(json!({
+                        "openapi": "3.1.0",
+                        "paths": {
+                          "/health": {},
+                          "/health/live": {},
+                          "/health/ready": {},
+                          "/health/startup": {},
+                          "/api/new": {}
+                        }
+                    }))
+                }),
+            );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move { axum::serve(listener, router).await });
+
+        (format!("http://{addr}"), handle)
+    }
+
+    async fn spawn_python_live_usage_stub()
+    -> (String, tokio::task::JoinHandle<Result<(), std::io::Error>>) {
+        let router = Router::new()
+            .route(
+                "/live_usage",
+                get(|| async {
+                    (
+                        [
+                            ("cache-control", "no-store"),
+                            ("content-type", "application/xml"),
+                        ],
+                        r#"<?xml version="1.0" encoding="UTF-8"?>
+<live_usage generated_at="2026-04-09T00:00:00Z" total_sessions="4" mapped_sessions="4" unattributed_sessions="0" total_task_previews="1" account_task_previews="1" session_task_previews="1">
+  <snapshot name="snapshot-a" session_count="4" />
+</live_usage>
+"#,
+                    )
+                }),
+            )
+            .route(
+                "/live_usage/mapping",
+                get(|axum::extract::RawQuery(raw_query): axum::extract::RawQuery| async move {
+                    let minimal = raw_query
+                        .as_deref()
+                        .map(|query| query.contains("minimal=true"))
+                        .unwrap_or(false);
+                    let minimal_str = if minimal { "true" } else { "false" };
+                    let mapped_snapshot = if minimal { "minimal" } else { "full" };
+                    (
+                        [
+                            ("cache-control", "no-store"),
+                            ("content-type", "application/xml"),
+                        ],
+                        format!(
+                            r#"<?xml version="1.0" encoding="UTF-8"?>
+<live_usage_mapping generated_at="2026-04-09T00:00:00Z" active_snapshot="snapshot-a" total_process_sessions="4" total_runtime_sessions="4" account_count="1" working_now_count="1" minimal="{minimal_str}">
+  <accounts count="1">
+    <account account_id="acc-1" mapped_snapshot="{mapped_snapshot}" />
+  </accounts>
+  <unmapped_cli_snapshots count="0">
+  </unmapped_cli_snapshots>
+</live_usage_mapping>
+"#
+                        ),
                     )
                 }),
             );

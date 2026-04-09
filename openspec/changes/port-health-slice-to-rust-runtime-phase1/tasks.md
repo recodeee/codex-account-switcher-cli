@@ -7,8 +7,10 @@
 
 - [x] 2.1 Add Rust endpoint `GET /_python_layer/health` with per-endpoint probe details.
 - [x] 2.2 Add runtime configuration support for `PYTHON_RUNTIME_BASE_URL` and `RUST_RUNTIME_PYTHON_TIMEOUT_MS`.
-- [x] 2.3 Extend Rust unit tests for healthy and degraded bridge outcomes.
-- [x] 2.4 Update rust runtime README usage notes for the Python bridge probe endpoint.
+- [x] 2.3 Add Rust endpoint `GET /_python_layer/apis` with OpenAPI-derived Python route listing.
+- [x] 2.4 Extend root runtime panel to always display live Python API links from `/_python_layer/apis`.
+- [x] 2.5 Extend Rust unit tests for healthy and degraded bridge + API-catalog outcomes.
+- [x] 2.6 Update rust runtime README usage notes for Python bridge endpoints.
 
 ## 3. Verification
 

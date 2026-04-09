@@ -27,3 +27,23 @@ The Rust runtime SHALL support environment-based configuration for Python bridge
 #### Scenario: Probe timeout is configurable
 - **WHEN** `RUST_RUNTIME_PYTHON_TIMEOUT_MS` is set to a positive integer
 - **THEN** Rust uses that value as the per-request Python probe timeout.
+
+### Requirement: Rust runtime exposes live Python API catalog for panel visibility
+The Rust runtime SHALL expose discovered Python API paths and render them in the runtime panel.
+
+#### Scenario: Python API catalog endpoint returns OpenAPI-derived paths
+- **WHEN** `GET /_python_layer/apis` is called
+- **AND** Python `openapi.json` is reachable and valid
+- **THEN** Rust returns HTTP 200
+- **AND** payload includes `status: "ok"` with sorted `paths` values discovered from OpenAPI.
+
+#### Scenario: Python API catalog fails closed on OpenAPI failure
+- **WHEN** `GET /_python_layer/apis` is called
+- **AND** Python `openapi.json` is unreachable, invalid, or returns non-success
+- **THEN** Rust returns HTTP 503
+- **AND** payload includes `status: "degraded"` and a non-empty `detail` field.
+
+#### Scenario: Root panel always shows current Python API links
+- **WHEN** `GET /` is opened
+- **THEN** the page includes a “Python APIs (live from OpenAPI)” section
+- **AND** the section fetches `/_python_layer/apis` and renders link rows for each returned Python path.
