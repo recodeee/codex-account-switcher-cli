@@ -7,6 +7,8 @@ from app.core.exceptions import DashboardNotFoundError, DashboardServiceUnavaila
 from app.modules.plans.schemas import (
     OpenSpecPlanDetail,
     OpenSpecPlanRuntime,
+    PlanPromptBundle,
+    PlanPromptItem,
     OpenSpecPlansResponse,
     OpenSpecPlanRoleDetail,
     OpenSpecPlanSummary,
@@ -131,6 +133,23 @@ async def get_open_spec_plan(
             if detail.current_checkpoint is not None
             else None
         ),
+        prompt_bundles=[
+            PlanPromptBundle(
+                id=bundle.id,
+                title=bundle.title,
+                source_path=bundle.source_path,
+                prompts=[
+                    PlanPromptItem(
+                        id=prompt.id,
+                        title=prompt.title,
+                        content=prompt.content,
+                        source_path=prompt.source_path,
+                    )
+                    for prompt in bundle.prompts
+                ],
+            )
+            for bundle in detail.prompt_bundles
+        ],
     )
 
 

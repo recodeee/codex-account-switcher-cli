@@ -67,6 +67,7 @@ const planDetail: OpenSpecPlanDetail = {
     state: "IN_PROGRESS",
     message: "Initial RALPLAN-DR draft captured; requesting architect review",
   },
+  promptBundles: [],
 };
 
 describe("buildPlanStarterPrompt", () => {

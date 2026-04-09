@@ -217,15 +217,26 @@ type MockState = {
 			doneCheckpoints: number;
 			percentComplete: number;
 		};
-		currentCheckpoint: {
-			timestamp: string;
-			role: string;
-			checkpointId: string;
-			state: string;
-			message: string;
-		} | null;
-		summaryMarkdown: string;
-		checkpointsMarkdown: string;
+			currentCheckpoint: {
+				timestamp: string;
+				role: string;
+				checkpointId: string;
+				state: string;
+				message: string;
+			} | null;
+			promptBundles: Array<{
+				id: string;
+				title: string;
+				sourcePath: string;
+				prompts: Array<{
+					id: string;
+					title: string;
+					content: string;
+					sourcePath: string;
+				}>;
+			}>;
+			summaryMarkdown: string;
+			checkpointsMarkdown: string;
 		runtime: {
 			available: boolean;
 			sessionId: string | null;
@@ -390,6 +401,57 @@ function createDefaultOpenSpecPlans(): MockState["openSpecPlans"] {
 				state: "IN_PROGRESS",
 				message: "Implementing plans progress UI",
 			},
+			promptBundles: [
+				{
+					id: "kickoff-prompts",
+					title: "Kickoff Prompts (Copy/Paste)",
+					sourcePath: "kickoff-prompts.md",
+					prompts: [
+						{
+							id: "prompt-a-wave-7a-schedulers-jobs",
+							title: "Prompt A — Wave-7A (Schedulers / Jobs)",
+							content:
+								'You own Wave-7A for full Python->Rust replacement in /home/deadpool/Documents/codex-lb.',
+							sourcePath: "kickoff-prompts.md",
+						},
+						{
+							id: "prompt-b-wave-7b-cache-invalidation-poller",
+							title: "Prompt B — Wave-7B (Cache Invalidation Poller)",
+							content:
+								'You own Wave-7B for full Python->Rust replacement in /home/deadpool/Documents/codex-lb.',
+							sourcePath: "kickoff-prompts.md",
+						},
+						{
+							id: "prompt-c-wave-7c-ring-heartbeat-membership-lifecycle",
+							title: "Prompt C — Wave-7C (Ring Heartbeat / Membership Lifecycle)",
+							content:
+								'You own Wave-7C for full Python->Rust replacement in /home/deadpool/Documents/codex-lb.',
+							sourcePath: "kickoff-prompts.md",
+						},
+						{
+							id: "prompt-d-integrator-wave-8-cutover-python-deprecation",
+							title: "Prompt D — Integrator (Wave-8 Cutover + Python Deprecation)",
+							content:
+								'You are the integrator for Wave-8 in /home/deadpool/Documents/codex-lb.',
+							sourcePath: "kickoff-prompts.md",
+						},
+					],
+				},
+				{
+					id: "coordinator-prompt",
+					title: "Master Coordinator Prompt",
+					sourcePath: "coordinator-prompt.md",
+					prompts: [
+						{
+							id: "master-coordinator-prompt",
+							title: "Master Coordinator Prompt",
+							content:
+								"You are the coordinator for full Python->Rust replacement in /home/deadpool/Documents/codex-lb.",
+							sourcePath: "coordinator-prompt.md",
+						},
+					],
+				},
+			],
 			summaryMarkdown:
 				"# Plan Summary: projects-plans-page\\n\\n- **Mode:** ralplan\\n- **Status:** approved\\n- **Task:** Create a Projects -> Plans page (`/projects/plans`) with visualized OpenSpec plan data. ![Plans Header](https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=96&h=96&fit=crop) [Image #1]\\n",
 			checkpointsMarkdown:
@@ -516,6 +578,7 @@ function createDefaultOpenSpecPlans(): MockState["openSpecPlans"] {
 				percentComplete: 0,
 			},
 			currentCheckpoint: null,
+			promptBundles: [],
 			summaryMarkdown:
 				"# Plan Summary: ralplan-openspec-plan-export\\n\\n- **Mode:** ralplan\\n- **Status:** proposed\\n",
 			checkpointsMarkdown:
@@ -1571,10 +1634,11 @@ export const handlers = [
 				tasksMarkdown: role.tasksMarkdown,
 				checkpointsMarkdown: role.checkpointsMarkdown,
 			})),
-			overallProgress: plan.overallProgress,
-			currentCheckpoint: plan.currentCheckpoint,
-		});
-	}),
+				overallProgress: plan.overallProgress,
+				currentCheckpoint: plan.currentCheckpoint,
+				promptBundles: plan.promptBundles,
+			});
+		}),
 
 	http.get("/api/projects/plans/:planSlug/runtime", ({ params }) => {
 		const planSlug = String(params.planSlug);

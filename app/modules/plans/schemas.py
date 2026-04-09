@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from pydantic import Field
+
 from app.modules.shared.schemas import DashboardModel
 
 
@@ -49,6 +51,20 @@ class OpenSpecPlanRoleDetail(DashboardModel):
     checkpoints_markdown: str | None
 
 
+class PlanPromptItem(DashboardModel):
+    id: str
+    title: str
+    content: str
+    source_path: str
+
+
+class PlanPromptBundle(DashboardModel):
+    id: str
+    title: str
+    source_path: str
+    prompts: list[PlanPromptItem] = Field(default_factory=list)
+
+
 class OpenSpecPlanDetail(DashboardModel):
     slug: str
     title: str
@@ -60,6 +76,7 @@ class OpenSpecPlanDetail(DashboardModel):
     roles: list[OpenSpecPlanRoleDetail]
     overall_progress: PlanOverallProgress
     current_checkpoint: PlanCheckpoint | None
+    prompt_bundles: list[PlanPromptBundle] = Field(default_factory=list)
 
 
 class PlanRuntimeAgent(DashboardModel):

@@ -383,6 +383,15 @@ type PlanStepTimelineRow = {
   items: ParsedRoleTaskItem[];
 };
 
+type IncludedPromptCard = {
+  key: string;
+  id: string;
+  title: string;
+  content: string;
+  bundleTitle: string;
+  sourcePath: string;
+};
+
 function normalizePlanMarkdown(markdown: string): string {
   return markdown.replace(/\\n/g, "\n");
 }
@@ -626,6 +635,18 @@ export function PlansPage() {
     planDetail && selectedEntryDisplayStatus
       ? buildPlanStarterPrompt(planDetail, selectedEntryDisplayStatus, summaryLines)
       : "";
+  const includedPromptCards: IncludedPromptCard[] = planDetail
+    ? planDetail.promptBundles.flatMap((bundle) =>
+        bundle.prompts.map((prompt, promptIndex) => ({
+          key: `${bundle.id}-${prompt.id}-${promptIndex}`,
+          id: prompt.id,
+          title: prompt.title,
+          content: prompt.content,
+          bundleTitle: bundle.title,
+          sourcePath: prompt.sourcePath || bundle.sourcePath,
+        })),
+      )
+    : [];
 
   return (
     <section className="space-y-6">
@@ -834,6 +855,50 @@ export function PlansPage() {
                         )}{" "}
                         checkpoints complete
                       </p>
+                    </div>
+
+                    <div
+                      className="space-y-3 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3"
+                      data-testid="plan-included-prompts"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-wide text-cyan-100/90">Included AI prompts</p>
+                        <Badge variant="outline" className="text-[10px]">
+                          {includedPromptCards.length} prompt{includedPromptCards.length === 1 ? "" : "s"}
+                        </Badge>
+                      </div>
+
+                      {includedPromptCards.length > 0 ? (
+                        <div className="grid gap-2 lg:grid-cols-2">
+                          {includedPromptCards.map((prompt) => (
+                            <div
+                              key={prompt.key}
+                              className="space-y-2 rounded-md border border-cyan-500/20 bg-background/70 p-2.5"
+                              data-testid={`plan-included-prompt-card-${prompt.id}`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 space-y-1">
+                                  <p className="truncate text-sm font-medium text-foreground/90">{prompt.title}</p>
+                                  <p className="truncate text-[11px] text-muted-foreground">
+                                    {prompt.bundleTitle} · {prompt.sourcePath}
+                                  </p>
+                                </div>
+                                <CopyButton
+                                  value={prompt.content}
+                                  label={`Copy ${prompt.title}`}
+                                />
+                              </div>
+                              <pre className="max-h-36 overflow-auto rounded-md border border-white/10 bg-background/55 px-2 py-1.5 text-[11px] leading-relaxed text-cyan-100/85 whitespace-pre-wrap">
+                                {prompt.content}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          No bundled prompts found for this plan yet.
+                        </p>
+                      )}
                     </div>
 
                     <div

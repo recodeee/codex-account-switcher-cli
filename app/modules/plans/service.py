@@ -13,11 +13,14 @@ TITLE_RE = re.compile(r"^#\s+Plan Summary:\s*(.+?)\s*$", flags=re.IGNORECASE | r
 CHECKPOINT_LOG_RE = re.compile(
     r"^- (?P<timestamp>[^|]+?) \| role=(?P<role>[A-Za-z0-9._-]+) \| id=(?P<checkpoint_id>[A-Za-z0-9._-]+) \| state=(?P<state>[A-Z_]+) \| (?P<message>.*)$"
 )
+MARKDOWN_HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*$")
+FENCE_RE = re.compile(r"^\s*```[\w-]*\s*$")
 ROLE_ORDER = ("planner", "architect", "critic", "executor", "writer", "verifier", "designer")
 DONE_CHECKPOINT_STATES = {"DONE", "COMPLETED"}
 PLAN_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 MAX_RUNTIME_EVENTS = 200
 MAX_CORRELATION_WINDOW_SECONDS = 60 * 60 * 24 * 2
+PROMPT_BUNDLE_FILENAMES = ("kickoff-prompts.md", "coordinator-prompt.md")
 
 
 class OpenSpecPlansError(RuntimeError):
@@ -81,6 +84,23 @@ class PlanDetailData:
     roles: list[PlanRoleDetailData]
     overall_progress: PlanOverallProgressData
     current_checkpoint: PlanCheckpointData | None
+    prompt_bundles: list["PlanPromptBundleData"]
+
+
+@dataclass(frozen=True, slots=True)
+class PlanPromptItemData:
+    id: str
+    title: str
+    content: str
+    source_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class PlanPromptBundleData:
+    id: str
+    title: str
+    source_path: str
+    prompts: list[PlanPromptItemData]
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +253,7 @@ class OpenSpecPlansService:
                 ]
             ),
             current_checkpoint=_resolve_current_checkpoint(checkpoints_markdown),
+            prompt_bundles=self._read_plan_prompt_bundles(plan_dir),
         )
 
     def get_plan_runtime(self, slug: str) -> PlanRuntimeData | None:
@@ -560,6 +581,27 @@ class OpenSpecPlansService:
         except OSError as exc:
             raise OpenSpecPlansError(f"Failed to read {path}") from exc
 
+    def _read_plan_prompt_bundles(self, plan_dir: Path) -> list[PlanPromptBundleData]:
+        bundles: list[PlanPromptBundleData] = []
+        for filename in PROMPT_BUNDLE_FILENAMES:
+            bundle_path = plan_dir / filename
+            if not bundle_path.exists() or not bundle_path.is_file():
+                continue
+            markdown = self._read_markdown(bundle_path)
+            prompts = _parse_prompt_items_from_markdown(markdown, source_path=filename)
+            if not prompts:
+                continue
+            bundle_title = _extract_first_heading(markdown) or _humanize_slug(bundle_path.stem)
+            bundles.append(
+                PlanPromptBundleData(
+                    id=bundle_path.stem.lower(),
+                    title=bundle_title,
+                    source_path=filename,
+                    prompts=prompts,
+                )
+            )
+        return bundles
+
     @staticmethod
     def _last_updated(path: Path) -> datetime:
         _, newest = OpenSpecPlansService._mtime_bounds(path)
@@ -831,3 +873,82 @@ def _unique_strings(values: list[str]) -> list[str]:
         seen.add(normalized)
         ordered.append(normalized)
     return ordered
+
+
+def _extract_first_heading(markdown: str) -> str | None:
+    for raw_line in markdown.splitlines():
+        heading_match = MARKDOWN_HEADING_RE.match(raw_line.strip())
+        if heading_match:
+            title = heading_match.group(1).strip()
+            return title or None
+    return None
+
+
+def _humanize_slug(value: str) -> str:
+    cleaned = value.replace("_", " ").replace("-", " ").strip()
+    if not cleaned:
+        return "Prompt bundle"
+    return " ".join(segment.capitalize() for segment in cleaned.split())
+
+
+def _normalize_prompt_id(value: str, fallback_index: int, seen: set[str]) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    if not normalized:
+        normalized = f"prompt-{fallback_index}"
+    if normalized not in seen:
+        seen.add(normalized)
+        return normalized
+
+    suffix = 2
+    while f"{normalized}-{suffix}" in seen:
+        suffix += 1
+    deduped = f"{normalized}-{suffix}"
+    seen.add(deduped)
+    return deduped
+
+
+def _parse_prompt_items_from_markdown(markdown: str, *, source_path: str) -> list[PlanPromptItemData]:
+    lines = markdown.splitlines()
+    prompts: list[PlanPromptItemData] = []
+    seen_prompt_ids: set[str] = set()
+    current_heading: str | None = None
+    line_index = 0
+
+    while line_index < len(lines):
+        stripped = lines[line_index].strip()
+        heading_match = MARKDOWN_HEADING_RE.match(stripped)
+        if heading_match:
+            heading_value = heading_match.group(1).strip()
+            current_heading = heading_value or current_heading
+            line_index += 1
+            continue
+
+        if not FENCE_RE.match(stripped):
+            line_index += 1
+            continue
+
+        line_index += 1
+        block_lines: list[str] = []
+        while line_index < len(lines):
+            if FENCE_RE.match(lines[line_index].strip()):
+                break
+            block_lines.append(lines[line_index])
+            line_index += 1
+
+        content = "\n".join(block_lines).strip()
+        if content:
+            title = current_heading or f"Prompt {len(prompts) + 1}"
+            prompt_id = _normalize_prompt_id(title, len(prompts) + 1, seen_prompt_ids)
+            prompts.append(
+                PlanPromptItemData(
+                    id=prompt_id,
+                    title=title,
+                    content=content,
+                    source_path=source_path,
+                )
+            )
+
+        if line_index < len(lines):
+            line_index += 1
+
+    return prompts

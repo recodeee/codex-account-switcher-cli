@@ -79,6 +79,40 @@ async def test_plans_api_lists_and_returns_detail(async_client):
         ),
         encoding="utf-8",
     )
+    (plan_dir / "kickoff-prompts.md").write_text(
+        "\n".join(
+            [
+                "# Kickoff Prompts (Copy/Paste)",
+                "",
+                "## Prompt A — Wave-7A (Schedulers / Jobs)",
+                "",
+                "```text",
+                "You own Wave-7A for full Python->Rust replacement.",
+                "```",
+                "",
+                "## Prompt B — Wave-7B (Cache Invalidation Poller)",
+                "",
+                "```text",
+                "You own Wave-7B for full Python->Rust replacement.",
+                "```",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plan_dir / "coordinator-prompt.md").write_text(
+        "\n".join(
+            [
+                "# Master Coordinator Prompt",
+                "",
+                "```text",
+                "You are the coordinator for full Python->Rust replacement.",
+                "```",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     try:
         listed = await async_client.get("/api/projects/plans")
@@ -125,6 +159,16 @@ async def test_plans_api_lists_and_returns_detail(async_client):
             detail_payload["currentCheckpoint"]["message"]
             == "implementing role progress"
         )
+        assert len(detail_payload["promptBundles"]) == 2
+        kickoff_bundle = next(
+            bundle
+            for bundle in detail_payload["promptBundles"]
+            if bundle["id"] == "kickoff-prompts"
+        )
+        assert kickoff_bundle["title"] == "Kickoff Prompts (Copy/Paste)"
+        assert len(kickoff_bundle["prompts"]) == 2
+        assert kickoff_bundle["prompts"][0]["title"] == "Prompt A — Wave-7A (Schedulers / Jobs)"
+        assert "Wave-7A" in kickoff_bundle["prompts"][0]["content"]
     finally:
         if plan_dir.exists():
             for candidate in sorted(plan_dir.rglob("*"), reverse=True):

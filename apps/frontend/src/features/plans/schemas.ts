@@ -44,6 +44,20 @@ export const OpenSpecPlanRoleDetailSchema = z.object({
   checkpointsMarkdown: z.string().nullable(),
 });
 
+export const PlanPromptItemSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  content: z.string().min(1),
+  sourcePath: z.string().min(1),
+});
+
+export const PlanPromptBundleSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  sourcePath: z.string().min(1),
+  prompts: z.array(PlanPromptItemSchema).default([]),
+});
+
 export const OpenSpecPlanDetailSchema = z.object({
   slug: z.string().min(1),
   title: z.string().min(1),
@@ -55,6 +69,7 @@ export const OpenSpecPlanDetailSchema = z.object({
   roles: z.array(OpenSpecPlanRoleDetailSchema).default([]),
   overallProgress: PlanOverallProgressSchema,
   currentCheckpoint: PlanCheckpointSchema.nullable(),
+  promptBundles: z.array(PlanPromptBundleSchema).default([]),
 });
 
 export const PlanRuntimeAgentSchema = z.object({
