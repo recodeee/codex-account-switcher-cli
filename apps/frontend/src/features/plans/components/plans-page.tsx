@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Maximize2,
   Circle,
   CircleDotDashed,
   CheckCircle2,
@@ -21,6 +22,14 @@ import { AlertMessage } from "@/components/alert-message";
 import { CopyButton } from "@/components/copy-button";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { SpinnerBlock } from "@/components/ui/spinner";
 import {
@@ -390,40 +399,13 @@ type IncludedPromptCard = {
   content: string;
   bundleTitle: string;
   sourcePath: string;
+  checkpointIds: string[];
+  status: PlanStepStatus;
+  goal: string | null;
 };
-
-function buildPromptPreview(content: string): string {
-  const lines = content
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .slice(0, 3);
-  return lines.join(" · ");
-}
 
 function normalizePlanMarkdown(markdown: string): string {
   return markdown.replace(/\\n/g, "\n");
-}
-
-const PARALLEL_AGENT_NOTICE = [
-  "Parallel execution context:",
-  "- You are working alongside other Codex agents in parallel right now.",
-  "- Expect concurrent edits; do not revert others' work and stay strictly in your owned scope.",
-  "",
-].join("\n");
-
-function ensureParallelExecutionNotice(promptContent: string): string {
-  const normalizedPrompt = normalizePlanMarkdown(promptContent).trim();
-  if (!normalizedPrompt) {
-    return promptContent;
-  }
-
-  if (/working alongside other codex agents in parallel/i.test(normalizedPrompt)) {
-    return normalizedPrompt;
-  }
-
-  return `${PARALLEL_AGENT_NOTICE}\n${normalizedPrompt}`;
 }
 
 function parseRoleTaskItems(tasksMarkdown: string): ParsedRoleTaskItem[] {
@@ -480,6 +462,114 @@ function resolvePlanStepStatus(
     return "completed";
   }
   if (doneCheckpoints > 0 || isCurrentCheckpointRole) {
+    return "in-progress";
+  }
+  return "pending";
+}
+
+const PROMPT_WAVE_CHECKPOINT_MAP: Array<{ pattern: RegExp; checkpointIds: string[] }> = [
+  { pattern: /\bwave[-\s]?7a\b/i, checkpointIds: ["E1"] },
+  { pattern: /\bwave[-\s]?7b\b/i, checkpointIds: ["E2"] },
+  { pattern: /\bwave[-\s]?7c\b/i, checkpointIds: ["E3"] },
+  { pattern: /\bwave[-\s]?8\b/i, checkpointIds: ["E4", "E5"] },
+];
+
+function extractPromptGoal(promptContent: string): string | null {
+  const lines = normalizePlanMarkdown(promptContent).split("\n");
+  const goalLineIndex = lines.findIndex((line) => /^goal\s*:/i.test(line.trim()));
+  if (goalLineIndex === -1) {
+    return null;
+  }
+
+  const inlineGoal = lines[goalLineIndex].replace(/^goal\s*:\s*/i, "").trim();
+  if (inlineGoal) {
+    return inlineGoal;
+  }
+
+  const goalLines: string[] = [];
+  for (const rawLine of lines.slice(goalLineIndex + 1)) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      if (goalLines.length > 0) {
+        break;
+      }
+      continue;
+    }
+    if (
+      /^(hard constraints|owned scope|execution steps|required lock flow|final report|global rules|wave execution order|required per-wave|mandatory verification commands|checkpoint gating|coordinator procedure|blocking rules)\s*:/i.test(
+        trimmed,
+      )
+    ) {
+      break;
+    }
+    goalLines.push(trimmed.replace(/^[-*]\s+/, ""));
+  }
+
+  if (goalLines.length === 0) {
+    return null;
+  }
+  return goalLines.join(" ");
+}
+
+function parseCheckpointStatusMap(tasksMarkdown: string): Record<string, PlanStepStatus> {
+  const statuses: Record<string, PlanStepStatus> = {};
+  for (const line of normalizePlanMarkdown(tasksMarkdown).split("\n")) {
+    const match = line.trim().match(/^[-*]\s*\[(x|X| )\]\s*\[([A-Za-z]\d+)\]\s+/);
+    if (!match) {
+      continue;
+    }
+    statuses[match[2].toUpperCase()] = match[1].toLowerCase() === "x" ? "completed" : "pending";
+  }
+  return statuses;
+}
+
+function resolvePromptCheckpointIds(promptTitle: string, promptContent: string): string[] {
+  const source = `${promptTitle}\n${promptContent}`;
+  const explicitIds = [...source.matchAll(/\b(E\d+)\b/gi)].map((match) => match[1].toUpperCase());
+  if (explicitIds.length > 0) {
+    return [...new Set(explicitIds)];
+  }
+
+  const inferredIds: string[] = [];
+  for (const rule of PROMPT_WAVE_CHECKPOINT_MAP) {
+    if (rule.pattern.test(source)) {
+      inferredIds.push(...rule.checkpointIds);
+    }
+  }
+
+  if (/master coordinator prompt/i.test(promptTitle) && inferredIds.length === 0) {
+    inferredIds.push("E1", "E2", "E3", "E4", "E5");
+  }
+
+  return [...new Set(inferredIds)];
+}
+
+function resolvePromptStatus(
+  checkpointIds: string[],
+  checkpointStatusMap: Record<string, PlanStepStatus>,
+): PlanStepStatus {
+  if (checkpointIds.length === 0) {
+    return "pending";
+  }
+
+  let completedCount = 0;
+  let hasInProgress = false;
+
+  for (const checkpointId of checkpointIds) {
+    const status = checkpointStatusMap[checkpointId];
+    if (status === "completed") {
+      completedCount += 1;
+      continue;
+    }
+    if (status === "in-progress") {
+      hasInProgress = true;
+    }
+  }
+
+  if (completedCount === checkpointIds.length) {
+    return "completed";
+  }
+  if (hasInProgress || completedCount > 0) {
     return "in-progress";
   }
   return "pending";
@@ -595,7 +685,8 @@ export function buildPlanStarterPrompt(
 export function PlansPage() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [collapsedStepRows, setCollapsedStepRows] = useState<Record<string, boolean>>({});
-  const [startedPromptKeysByPlan, setStartedPromptKeysByPlan] = useState<Record<string, Record<string, boolean>>>({});
+  const [collapsedPromptCards, setCollapsedPromptCards] = useState<Record<string, boolean>>({});
+  const [zoomedPromptKey, setZoomedPromptKey] = useState<string | null>(null);
   const { plansQuery, planDetailQuery, effectiveSelectedSlug } = useOpenSpecPlans(selectedSlug);
 
   const entries = plansQuery.data?.entries ?? [];
@@ -662,26 +753,47 @@ export function PlansPage() {
       [role]: !(prev[role] ?? false),
     }));
   };
+  const togglePromptCard = (key: string) => {
+    setCollapsedPromptCards((prev) => ({
+      ...prev,
+      [key]: !(prev[key] ?? false),
+    }));
+  };
   const starterPrompt =
     planDetail && selectedEntryDisplayStatus
       ? buildPlanStarterPrompt(planDetail, selectedEntryDisplayStatus, summaryLines)
       : "";
+  const executorRole = planDetail?.roles.find((role) => role.role.trim().toLowerCase() === "executor") ?? null;
+  const executorCheckpointStatusMap = parseCheckpointStatusMap(executorRole?.tasksMarkdown ?? "");
+  if (
+    planDetail?.currentCheckpoint &&
+    planDetail.currentCheckpoint.role.trim().toLowerCase() === "executor" &&
+    planDetail.currentCheckpoint.state.trim().toUpperCase() !== "DONE"
+  ) {
+    const currentExecutorCheckpointId = planDetail.currentCheckpoint.checkpointId.trim().toUpperCase();
+    if (executorCheckpointStatusMap[currentExecutorCheckpointId] !== "completed") {
+      executorCheckpointStatusMap[currentExecutorCheckpointId] = "in-progress";
+    }
+  }
   const includedPromptCards: IncludedPromptCard[] = planDetail
     ? planDetail.promptBundles.flatMap((bundle) =>
-        bundle.prompts.map((prompt, promptIndex) => ({
-          key: `${bundle.id}-${prompt.id}-${promptIndex}`,
-          id: prompt.id,
-          title: prompt.title,
-          content: ensureParallelExecutionNotice(prompt.content),
-          bundleTitle: bundle.title,
-          sourcePath: prompt.sourcePath || bundle.sourcePath,
-        })),
+        bundle.prompts.map((prompt, promptIndex) => {
+          const checkpointIds = resolvePromptCheckpointIds(prompt.title, prompt.content);
+          return {
+            key: `${bundle.id}-${prompt.id}-${promptIndex}`,
+            id: prompt.id,
+            title: prompt.title,
+            content: prompt.content,
+            bundleTitle: bundle.title,
+            sourcePath: prompt.sourcePath || bundle.sourcePath,
+            checkpointIds,
+            status: resolvePromptStatus(checkpointIds, executorCheckpointStatusMap),
+            goal: extractPromptGoal(prompt.content),
+          };
+        }),
       )
     : [];
-  const currentPlanPromptState = effectiveSelectedSlug
-    ? (startedPromptKeysByPlan[effectiveSelectedSlug] ?? {})
-    : {};
-  const startedPromptCount = includedPromptCards.filter((prompt) => currentPlanPromptState[prompt.key]).length;
+  const zoomedPrompt = includedPromptCards.find((prompt) => prompt.key === zoomedPromptKey) ?? null;
 
   return (
     <section className="space-y-6">
@@ -899,83 +1011,84 @@ export function PlansPage() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs uppercase tracking-wide text-cyan-100/90">Included AI prompts</p>
                         <Badge variant="outline" className="text-[10px]">
-                          {startedPromptCount}/{includedPromptCards.length} started
+                          {includedPromptCards.length} prompt{includedPromptCards.length === 1 ? "" : "s"}
                         </Badge>
                       </div>
 
                       {includedPromptCards.length > 0 ? (
-                        <ul className="space-y-2">
-                          {includedPromptCards.map((prompt) => (
-                            <li
-                              key={prompt.key}
-                              className="relative overflow-hidden rounded-md border border-border/50 bg-background/55"
-                              data-testid={`plan-included-prompt-card-${prompt.id}`}
-                            >
-                              <span
-                                className={cn(
-                                  "absolute inset-y-0 left-0 w-1 transition-all",
-                                  currentPlanPromptState[prompt.key]
-                                    ? "bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.6)]"
-                                    : "bg-cyan-500/35",
-                                )}
-                              />
-                              <div className="space-y-2 px-3 py-2.5">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0 space-y-1">
-                                    <div className="flex min-w-0 items-center gap-2">
-                                      <StepStatusIcon
-                                        status={currentPlanPromptState[prompt.key] ? "completed" : "pending"}
-                                        className="h-3.5 w-3.5 shrink-0"
-                                      />
+                        <ul className="grid gap-2 lg:grid-cols-2">
+                          {includedPromptCards.map((prompt) => {
+                            const isCollapsed = collapsedPromptCards[prompt.key] ?? false;
+
+                            return (
+                              <li
+                                key={prompt.key}
+                                className="overflow-hidden rounded-md border border-border/50 bg-background/45"
+                                data-testid={`plan-included-prompt-card-${prompt.id}`}
+                              >
+                                <div className="flex items-start border-b border-transparent px-2.5 py-2 transition-colors hover:bg-background/80">
+                                  <button
+                                    type="button"
+                                    className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                                    aria-expanded={!isCollapsed}
+                                    onClick={() => togglePromptCard(prompt.key)}
+                                  >
+                                    <StepStatusIcon status={prompt.status} className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    <div className="min-w-0 space-y-1">
                                       <p className="truncate text-sm font-medium text-foreground/90">{prompt.title}</p>
+                                      <p className="truncate text-[11px] text-muted-foreground">
+                                        {prompt.bundleTitle} · {prompt.sourcePath}
+                                      </p>
+                                      {prompt.goal ? (
+                                        <p className="line-clamp-2 text-[11px] text-cyan-100/80">
+                                          <span className="font-semibold text-cyan-100/95">Goal:</span> {prompt.goal}
+                                        </p>
+                                      ) : null}
                                     </div>
-                                    <p className="truncate text-[11px] text-muted-foreground">
-                                      {prompt.bundleTitle} · {prompt.sourcePath}
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
+                                  </button>
+                                  <div className="ml-2 flex shrink-0 items-center gap-1.5">
                                     <Badge
                                       variant="outline"
-                                      className={cn(
-                                        "text-[10px]",
-                                        currentPlanPromptState[prompt.key]
-                                          ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-200"
-                                          : "border-slate-500/35 bg-slate-500/15 text-slate-300",
-                                      )}
+                                      className={cn("text-[10px] capitalize", stepStatusBadgeClass(prompt.status))}
                                       data-testid={`plan-included-prompt-status-${prompt.id}`}
                                     >
-                                      {currentPlanPromptState[prompt.key] ? "Started" : "Ready"}
+                                      {statusLabel(prompt.status)}
                                     </Badge>
-                                    <CopyButton
-                                      value={prompt.content}
-                                      label={`Copy ${prompt.title}`}
-                                      onCopied={() =>
-                                        setStartedPromptKeysByPlan((prev) => {
-                                          if (!effectiveSelectedSlug) {
-                                            return prev;
-                                          }
-                                          const nextPlanState = {
-                                            ...(prev[effectiveSelectedSlug] ?? {}),
-                                            [prompt.key]: true,
-                                          };
-                                          return {
-                                            ...prev,
-                                            [effectiveSelectedSlug]: nextPlanState,
-                                          };
-                                        })
-                                      }
+                                    {prompt.checkpointIds.length > 0 ? (
+                                      <Badge variant="outline" className="text-[10px]">
+                                        {prompt.checkpointIds.join(" · ")}
+                                      </Badge>
+                                    ) : null}
+                                    <CopyButton value={prompt.content} label={`Copy ${prompt.title}`} />
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="xs"
+                                      onClick={() => setZoomedPromptKey(prompt.key)}
+                                      aria-label={`Zoom ${prompt.title}`}
+                                    >
+                                      <Maximize2 className="size-3" />
+                                      Zoom
+                                    </Button>
+                                    <ChevronDown
+                                      className={cn(
+                                        "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                                        isCollapsed ? "-rotate-90" : "rotate-0",
+                                      )}
+                                      aria-hidden
                                     />
                                   </div>
                                 </div>
-                                <p className="rounded-md border border-white/10 bg-background/45 px-2 py-1 text-[11px] text-cyan-100/85">
-                                  {buildPromptPreview(prompt.content)}
-                                </p>
-                              </div>
-                              <pre className="max-h-32 overflow-auto border-t border-white/10 bg-background/35 px-3 py-2 text-[11px] leading-relaxed text-cyan-100/75 whitespace-pre-wrap">
-                                {prompt.content}
-                              </pre>
-                            </li>
-                          ))}
+                                {!isCollapsed ? (
+                                  <div className="border-t border-border/40 px-3 py-2">
+                                    <pre className="max-h-64 overflow-auto rounded-md border border-white/10 bg-[#020714]/90 px-2 py-1.5 text-[11px] leading-relaxed whitespace-pre-wrap text-cyan-100/90">
+                                      {prompt.content}
+                                    </pre>
+                                  </div>
+                                ) : null}
+                              </li>
+                            );
+                          })}
                         </ul>
                       ) : (
                         <p className="text-xs text-muted-foreground">
@@ -983,6 +1096,42 @@ export function PlansPage() {
                         </p>
                       )}
                     </div>
+                    <Dialog open={Boolean(zoomedPrompt)} onOpenChange={(open) => (open ? undefined : setZoomedPromptKey(null))}>
+                      {zoomedPrompt ? (
+                        <DialogContent className="max-h-[88vh] overflow-hidden p-0 sm:max-w-5xl">
+                          <DialogHeader className="border-b border-border/60 bg-[#020714] px-5 py-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 space-y-1">
+                                <DialogTitle className="truncate text-base">{zoomedPrompt.title}</DialogTitle>
+                                <DialogDescription className="truncate text-xs">
+                                  {zoomedPrompt.bundleTitle} · {zoomedPrompt.sourcePath}
+                                </DialogDescription>
+                                {zoomedPrompt.goal ? (
+                                  <p className="text-xs text-cyan-100/80">
+                                    <span className="font-semibold text-cyan-100/95">Goal:</span> {zoomedPrompt.goal}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="flex items-center gap-1.5 pr-8">
+                                <StepStatusIcon status={zoomedPrompt.status} className="h-4 w-4" />
+                                <Badge
+                                  variant="outline"
+                                  className={cn("text-[10px] capitalize", stepStatusBadgeClass(zoomedPrompt.status))}
+                                >
+                                  {statusLabel(zoomedPrompt.status)}
+                                </Badge>
+                                <CopyButton value={zoomedPrompt.content} label={`Copy ${zoomedPrompt.title}`} />
+                              </div>
+                            </div>
+                          </DialogHeader>
+                          <div className="overflow-auto p-5">
+                            <pre className="max-h-[68vh] overflow-auto rounded-md border border-white/10 bg-[#020714]/90 px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap text-cyan-100/90">
+                              {zoomedPrompt.content}
+                            </pre>
+                          </div>
+                        </DialogContent>
+                      ) : null}
+                    </Dialog>
 
                     <div
                       className="space-y-2 rounded-lg border border-border/60 bg-background/30 p-3"
