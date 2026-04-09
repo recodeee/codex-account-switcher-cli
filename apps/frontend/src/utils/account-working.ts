@@ -2,6 +2,7 @@ import type { AccountSummary } from "@/features/accounts/schemas";
 
 const LIVE_TELEMETRY_STALE_AFTER_MS = 5 * 60 * 1000;
 const LIVE_TELEMETRY_WORKING_GRACE_AFTER_MS = 20 * 60 * 1000;
+const SESSION_TASK_PREVIEW_WORKING_GRACE_AFTER_MS = 2 * 60 * 60 * 1000;
 const WORKING_NOW_TRANSIENT_SIGNAL_GRACE_MS = 90 * 1000;
 const WORKING_NOW_LIMIT_HIT_GRACE_MS = 60 * 1000;
 const WORKING_NOW_DEPLETED_QUOTA_THRESHOLD_PERCENT = 5;
@@ -69,6 +70,18 @@ function hasFreshSessionTaskPreviewSignal(
   account: Pick<AccountSummary, "codexSessionTaskPreviews">,
   nowMs: number,
 ): boolean {
+  return hasRecentSessionTaskPreviewSignal(
+    account,
+    nowMs,
+    LIVE_TELEMETRY_STALE_AFTER_MS,
+  );
+}
+
+function hasRecentSessionTaskPreviewSignal(
+  account: Pick<AccountSummary, "codexSessionTaskPreviews">,
+  nowMs: number,
+  staleAfterMs: number = SESSION_TASK_PREVIEW_WORKING_GRACE_AFTER_MS,
+): boolean {
   const sessionTaskPreviews = account.codexSessionTaskPreviews ?? [];
   for (const preview of sessionTaskPreviews) {
     if (!isMeaningfulTaskPreview(preview.taskPreview, { sessionScoped: true })) {
@@ -78,7 +91,7 @@ function hasFreshSessionTaskPreviewSignal(
     if (taskUpdatedAtMs == null) {
       continue;
     }
-    if (nowMs - taskUpdatedAtMs <= LIVE_TELEMETRY_STALE_AFTER_MS) {
+    if (nowMs - taskUpdatedAtMs <= staleAfterMs) {
       return true;
     }
   }
@@ -168,6 +181,10 @@ function shouldSuppressNoCliSampleSessionSignal(
   }
 
   if (hasFreshLiveTelemetry(account, nowMs)) {
+    return false;
+  }
+
+  if (hasRecentSessionTaskPreviewSignal(account, nowMs)) {
     return false;
   }
 
@@ -912,6 +929,10 @@ export function isAccountWorkingNow(
       0,
     ) > 0;
   const hasTaskPreviewSignal = hasFreshTaskPreviewSignal(account);
+  const hasRecentSessionTaskPreview = hasRecentSessionTaskPreviewSignal(
+    account,
+    nowMs,
+  );
   const hasLiveProcessSessionSignal =
     Math.max(account.codexLiveSessionCount ?? 0, 0) > 0;
   const hasActiveCliSessionSignal =
@@ -989,6 +1010,10 @@ export function isAccountWorkingNow(
     (account.codexAuth?.isActiveSnapshot ?? false) &&
     hasFreshSessionTaskPreviewSignal(account, nowMs);
   if (hasFreshActiveSnapshotSessionPreviewSignal) {
+    return true;
+  }
+
+  if (hasRecentSessionTaskPreview && hasActiveCliSessionSignal) {
     return true;
   }
 
