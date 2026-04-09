@@ -456,6 +456,60 @@ def test_resolve_snapshot_names_for_account_ignores_fallback_id_snapshot_with_mi
     assert resolved == []
 
 
+def test_resolve_snapshot_names_for_account_drops_unreadable_foreign_email_snapshot_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    (tmp_path / "current").write_text("denver@eddiia.com")
+    (accounts_dir / "denver@eddiia.com.json").write_text("{invalid")
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={"pia-account-id": ["denver@eddiia.com"]},
+        active_snapshot_name="denver@eddiia.com",
+    )
+
+    resolved = resolve_snapshot_names_for_account(
+        snapshot_index=index,
+        account_id="pia-account-id",
+        chatgpt_account_id=None,
+        email="pia@eddiia.com",
+    )
+
+    assert resolved == []
+
+
+def test_resolve_snapshot_names_for_account_keeps_unreadable_email_snapshot_name_when_it_matches_account(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    (tmp_path / "current").write_text("pia@eddiia.com")
+    (accounts_dir / "pia@eddiia.com.json").write_text("{invalid")
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    index = CodexAuthSnapshotIndex(
+        snapshots_by_account_id={"pia-account-id": ["pia@eddiia.com"]},
+        active_snapshot_name="pia@eddiia.com",
+    )
+
+    resolved = resolve_snapshot_names_for_account(
+        snapshot_index=index,
+        account_id="pia-account-id",
+        chatgpt_account_id=None,
+        email="pia@eddiia.com",
+    )
+
+    assert resolved == ["pia@eddiia.com"]
+
+
 def test_switch_snapshot_falls_back_without_codex_auth(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -247,6 +247,12 @@ def _filter_snapshot_names_by_email_identity(
     for snapshot_name in snapshot_names:
         snapshot_email = _read_snapshot_email(snapshot_name, accounts_dir=accounts_dir)
         if snapshot_email is None:
+            normalized_snapshot_email_name = _normalize_email_snapshot_name(snapshot_name)
+            if (
+                normalized_snapshot_email_name is not None
+                and normalized_snapshot_email_name != normalized_email
+            ):
+                continue
             unknown.append(snapshot_name)
             continue
         if snapshot_email == normalized_email:
@@ -274,6 +280,13 @@ def _read_snapshot_email(snapshot_name: str, *, accounts_dir: Path) -> str | Non
     if not email or email == DEFAULT_EMAIL.lower():
         return None
     return email
+
+
+def _normalize_email_snapshot_name(snapshot_name: str) -> str | None:
+    candidate = snapshot_name.strip().lower()
+    if not candidate or not _EMAIL_SNAPSHOT_NAME_PATTERN.match(candidate):
+        return None
+    return candidate
 
 
 def _email_owned_snapshot_name_candidates(email: str | None) -> list[str]:

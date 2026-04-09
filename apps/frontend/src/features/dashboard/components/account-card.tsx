@@ -164,6 +164,7 @@ const OMX_PLANNING_NODES = [
 ] as const;
 const LAST_TASK_PREVIEW_EXPANSION_KEY = "__last_task_preview__";
 const STALE_SESSION_TASK_MS = 90_000;
+const LAST_SEEN_UP_TO_DATE_GRACE_MS = 20 * 60 * 1000;
 type OmxPlanningNodeKey = (typeof OMX_PLANNING_NODES)[number]["key"];
 type OmxCliRuntimeState = "finished" | "waiting" | "thinking";
 
@@ -1059,7 +1060,29 @@ function formatQuotaPercent(value: number | null): string {
   return `${clamped.toFixed(1)}%`;
 }
 
-function resolveLastSeenDisplay(label: string | null | undefined): {
+function parseTimestampMs(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isLastSeenWithinUpToDateGrace(
+  recordedAt: string | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  const recordedAtMs = parseTimestampMs(recordedAt);
+  if (recordedAtMs == null) {
+    return false;
+  }
+  return nowMs - recordedAtMs <= LAST_SEEN_UP_TO_DATE_GRACE_MS;
+}
+
+function resolveLastSeenDisplayWithRecordedAt(
+  label: string | null | undefined,
+  recordedAt: string | null | undefined,
+): {
   label: string | null;
   upToDate: boolean;
 } {
@@ -1068,7 +1091,9 @@ function resolveLastSeenDisplay(label: string | null | undefined): {
   }
   const normalized = label.trim().toLowerCase();
   const upToDate =
-    normalized === "last seen now" || /\b0m ago$/.test(normalized);
+    normalized === "last seen now" ||
+    /\b0m ago$/.test(normalized) ||
+    isLastSeenWithinUpToDateGrace(recordedAt);
   if (upToDate) {
     return { label: "Up to date", upToDate: true };
   }
@@ -1563,8 +1588,14 @@ export function AccountCard(props: AccountCardProps) {
   const isDeactivated = status === "deactivated";
   const primaryLastSeen = formatLastUsageLabel(primaryLastRecordedAt);
   const secondaryLastSeen = formatLastUsageLabel(secondaryLastRecordedAt);
-  const primaryLastSeenDisplay = resolveLastSeenDisplay(primaryLastSeen);
-  const secondaryLastSeenDisplay = resolveLastSeenDisplay(secondaryLastSeen);
+  const primaryLastSeenDisplay = resolveLastSeenDisplayWithRecordedAt(
+    primaryLastSeen,
+    primaryLastRecordedAt,
+  );
+  const secondaryLastSeenDisplay = resolveLastSeenDisplayWithRecordedAt(
+    secondaryLastSeen,
+    secondaryLastRecordedAt,
+  );
   const stalePrimaryLastSeen = !hasLiveSession
     ? primaryLastSeenDisplay
     : { label: null, upToDate: false };
@@ -2733,7 +2764,7 @@ export function AccountCard(props: AccountCardProps) {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="h-7 gap-1.5 rounded-lg border border-white/20 bg-black/35 px-2.5 text-xs text-zinc-200 hover:border-cyan-300/40 hover:bg-black/55 hover:text-cyan-100 dark:text-zinc-100"
+                  className="h-7 gap-1.5 rounded-lg px-2 text-xs text-zinc-200 hover:bg-transparent hover:text-cyan-100 dark:text-zinc-100 dark:hover:bg-transparent"
                   disabled={disableSecondaryActions}
                   onClick={openCodexLogsView}
                 >

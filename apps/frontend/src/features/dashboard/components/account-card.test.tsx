@@ -3092,10 +3092,33 @@ describe("AccountCard", () => {
 
     const { container } = render(<AccountCard account={account} />);
 
-    const upToDate = screen.getByText("Up to date");
-    expect(upToDate).toBeInTheDocument();
-    expect(upToDate).toHaveClass("text-emerald-600");
+    const upToDate = screen.getAllByText("Up to date");
+    expect(upToDate.length).toBeGreaterThanOrEqual(1);
+    expect(upToDate[0]).toHaveClass("text-emerald-600");
     expect(container.textContent).not.toContain("last seen 0m ago");
+    vi.useRealTimers();
+  });
+
+  it("shows up-to-date for recently refreshed usage timestamps to avoid stale minute labels", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: "2025-12-31T23:47:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-31T23:45:00.000Z",
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getAllByText("Up to date").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("last seen 13m ago")).not.toBeInTheDocument();
+    expect(screen.queryByText("last seen 15m ago")).not.toBeInTheDocument();
     vi.useRealTimers();
   });
 

@@ -330,7 +330,9 @@ def test_overlay_uses_expected_live_snapshot_when_snapshot_index_is_missing(monk
     )
 
 
-def test_overlay_keeps_waiting_state_and_adds_last_task_preview(monkeypatch) -> None:
+def test_overlay_keeps_waiting_state_without_snapshot_fallback_last_task_preview(
+    monkeypatch,
+) -> None:
     now = datetime(2026, 4, 5, tzinfo=timezone.utc)
     account = _make_account("acc-zeus", "zeus@example.com")
     codex_auth_by_account = {
@@ -381,10 +383,7 @@ def test_overlay_keeps_waiting_state_and_adds_last_task_preview(monkeypatch) -> 
     )
 
     assert codex_current_task_preview_by_account[account.id] == "Waiting for new task"
-    assert (
-        codex_last_task_preview_by_account[account.id]
-        == "Investigate Zeus quota overlay mapping"
-    )
+    assert account.id not in codex_last_task_preview_by_account
 
 
 def test_overlay_waiting_multi_session_does_not_copy_last_task_from_debug_sample(

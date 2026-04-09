@@ -125,7 +125,6 @@ def overlay_live_codex_task_previews(
                     debug=live_quota_debug_by_account.get(account.id)
                     if live_quota_debug_by_account is not None
                     else None,
-                    previews_by_snapshot=previews_by_snapshot,
                     previews_by_session_id=previews_by_session_id,
                 )
                 if waiting_last_preview is not None:
@@ -414,7 +413,6 @@ def _resolve_waiting_snapshot_last_preview(
     snapshot_name: str,
     has_single_waiting_live_session: bool,
     debug: AccountLiveQuotaDebug | None,
-    previews_by_snapshot: dict[str, LocalCodexTaskPreview],
     previews_by_session_id: dict[str, LocalCodexTaskPreview],
 ) -> LocalCodexTaskPreview | None:
     if not has_single_waiting_live_session:
@@ -425,15 +423,7 @@ def _resolve_waiting_snapshot_last_preview(
         previews_by_session_id=previews_by_session_id,
         snapshot_name=snapshot_name,
     )
-    if preview_from_source is not None:
-        return preview_from_source
-
-    preview_from_snapshot = previews_by_snapshot.get(snapshot_name)
-    if preview_from_snapshot is None:
-        return None
-    if preview_from_snapshot.text.strip() == _WAITING_FOR_NEW_TASK_PREVIEW:
-        return None
-    return preview_from_snapshot
+    return preview_from_source
 
 
 def _resolve_preview_from_debug_sources(
