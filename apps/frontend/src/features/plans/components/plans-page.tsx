@@ -45,36 +45,83 @@ function isFinishedProgress(progress: { doneCheckpoints: number; totalCheckpoint
   return progress.totalCheckpoints > 0 && progress.doneCheckpoints >= progress.totalCheckpoints;
 }
 
+function parseTimestampMs(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toStatusLabel(status: string): string {
+  return status
+    .split(/[\s_-]+/g)
+    .map((segment) => (segment ? `${segment[0].toUpperCase()}${segment.slice(1)}` : ""))
+    .join(" ");
+}
+
+type PlanStatusBadge = {
+  label: string;
+  className: string;
+};
+
+function resolvePlanStatusBadge(
+  status: string,
+  progress: { doneCheckpoints: number; totalCheckpoints: number },
+): PlanStatusBadge {
+  if (isFinishedProgress(progress)) {
+    return {
+      label: "Completed",
+      className: "border-emerald-500/40 bg-emerald-500/20 text-emerald-200",
+    };
+  }
+
+  const normalizedStatus = status.trim().toLowerCase().replace(/\s+/g, "-");
+  const compactStatus = normalizedStatus.replace(/-/g, "_");
+
+  if (["in_progress", "running", "active", "draft", "proposed", "planning", "pending", "todo"].includes(compactStatus)) {
+    return {
+      label: "In progress",
+      className: "border-sky-500/35 bg-sky-500/15 text-sky-200",
+    };
+  }
+
+  if (["on_hold", "blocked", "paused", "stalled", "waiting"].includes(compactStatus)) {
+    return {
+      label: "On hold",
+      className: "border-amber-500/40 bg-amber-500/20 text-amber-200",
+    };
+  }
+
+  if (["inactive", "cancelled", "canceled", "archived", "abandoned"].includes(compactStatus)) {
+    return {
+      label: "Inactive",
+      className: "border-zinc-500/45 bg-zinc-500/20 text-zinc-200",
+    };
+  }
+
+  if (["approved", "ready"].includes(compactStatus)) {
+    return {
+      label: "Approved",
+      className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+    };
+  }
+
+  if (compactStatus === "unknown") {
+    return {
+      label: "Unknown",
+      className: "border-red-500/30 bg-red-500/15 text-red-300",
+    };
+  }
+
+  return {
+    label: toStatusLabel(normalizedStatus || "unknown"),
+    className: "border-slate-500/30 bg-slate-500/15 text-slate-300",
+  };
+}
+
 function getDisplayStatus(
   status: string,
   progress: { doneCheckpoints: number; totalCheckpoints: number },
 ): string {
-  if (isFinishedProgress(progress)) {
-    return "Finished";
-  }
-  return status;
-}
-
-function statusBadgeClass(status: string): string {
-  const normalizedStatus = status.trim().toLowerCase();
-
-  if (normalizedStatus === "finished") {
-    return "border-emerald-500/40 bg-emerald-500/20 text-emerald-200";
-  }
-
-  if (normalizedStatus === "approved") {
-    return "border-emerald-500/30 bg-emerald-500/15 text-emerald-300";
-  }
-
-  if (normalizedStatus === "draft") {
-    return "border-border/70 bg-secondary/60 text-secondary-foreground";
-  }
-
-  if (normalizedStatus === "unknown") {
-    return "border-red-500/30 bg-red-500/15 text-red-300";
-  }
-
-  return "border-slate-500/30 bg-slate-500/15 text-slate-300";
+  return resolvePlanStatusBadge(status, progress).label;
 }
 
 type RoleVisual = {
@@ -518,14 +565,17 @@ export function PlansPage() {
 
   const selectedEntry = entries.find((entry) => entry.slug === effectiveSelectedSlug) ?? null;
   const sortedEntries = [...entries].sort((left, right) => {
-    const leftFinished = isFinishedProgress(left.overallProgress);
-    const rightFinished = isFinishedProgress(right.overallProgress);
-
-    if (leftFinished === rightFinished) {
-      return 0;
+    const createdDelta = parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt);
+    if (createdDelta !== 0) {
+      return createdDelta;
     }
 
-    return leftFinished ? 1 : -1;
+    const updatedDelta = parseTimestampMs(right.updatedAt) - parseTimestampMs(left.updatedAt);
+    if (updatedDelta !== 0) {
+      return updatedDelta;
+    }
+
+    return left.slug.localeCompare(right.slug);
   });
 
   const selectedEntryDisplayStatus = selectedEntry
@@ -604,16 +654,17 @@ export function PlansPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[56%]">Plan</TableHead>
+                  <TableHead className="w-[52%]">Plan</TableHead>
                   <TableHead className="w-[18%]">Status</TableHead>
-                  <TableHead className="w-[26%] text-right">Updated</TableHead>
+                  <TableHead className="w-[30%] text-right">Created / Updated</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sortedEntries.map((entry) => {
+                  const createdAt = formatTimeLong(entry.createdAt);
                   const updatedAt = formatTimeLong(entry.updatedAt);
                   const isFinished = isFinishedProgress(entry.overallProgress);
-                  const displayStatus = getDisplayStatus(entry.status, entry.overallProgress);
+                  const statusBadge = resolvePlanStatusBadge(entry.status, entry.overallProgress);
                   const rowInitialPrompt = parseInitialPrompt(entry.summaryMarkdown);
                   const rowAttachmentCount =
                     rowInitialPrompt.imageUrls.length + rowInitialPrompt.imageReferences.length;
@@ -666,14 +717,22 @@ export function PlansPage() {
                         </div>
                       </TableCell>
                       <TableCell className="align-top">
-                        <Badge variant="outline" className={cn("capitalize", statusBadgeClass(displayStatus))}>
-                          {displayStatus}
+                        <Badge variant="outline" className={cn(statusBadge.className)}>
+                          {statusBadge.label}
                         </Badge>
                       </TableCell>
                       <TableCell className="align-top text-right text-xs text-muted-foreground">
-                        <div className="space-y-0.5 whitespace-nowrap">
-                          <p>{updatedAt.date}</p>
-                          <p>{updatedAt.time}</p>
+                        <div className="space-y-1 whitespace-nowrap">
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Created</p>
+                            <p>{createdAt.date}</p>
+                            <p>{createdAt.time}</p>
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Updated</p>
+                            <p>{updatedAt.date}</p>
+                            <p>{updatedAt.time}</p>
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -693,9 +752,11 @@ export function PlansPage() {
                         <h2 className="truncate text-lg font-semibold">{selectedEntry.title}</h2>
                         <Badge
                           variant="outline"
-                          className={cn("capitalize", statusBadgeClass(selectedEntryDisplayStatus ?? selectedEntry.status))}
+                          className={cn(
+                            resolvePlanStatusBadge(selectedEntry.status, selectedEntry.overallProgress).className,
+                          )}
                         >
-                          {selectedEntryDisplayStatus ?? selectedEntry.status}
+                          {resolvePlanStatusBadge(selectedEntry.status, selectedEntry.overallProgress).label}
                         </Badge>
                       </div>
                       {initialPrompt.text ? (

@@ -56,6 +56,7 @@ describe("plans flow integration", () => {
               slug: "plan-no-checkpoint",
               title: "plan-no-checkpoint",
               status: "draft",
+              createdAt: new Date("2026-04-08T09:20:00Z").toISOString(),
               updatedAt: new Date("2026-04-08T10:20:00Z").toISOString(),
               summaryMarkdown: "# Plan Summary: plan-no-checkpoint",
               roles: [
@@ -82,6 +83,7 @@ describe("plans flow integration", () => {
           slug: "plan-no-checkpoint",
           title: "plan-no-checkpoint",
           status: "draft",
+          createdAt: new Date("2026-04-08T09:20:00Z").toISOString(),
           updatedAt: new Date("2026-04-08T10:20:00Z").toISOString(),
           summaryMarkdown: "# Plan Summary: plan-no-checkpoint",
           checkpointsMarkdown: "# Plan Checkpoints: plan-no-checkpoint",

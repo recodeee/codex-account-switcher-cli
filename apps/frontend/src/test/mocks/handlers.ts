@@ -203,6 +203,7 @@ type MockState = {
 		slug: string;
 		title: string;
 		status: string;
+		createdAt: string;
 		updatedAt: string;
 		roles: Array<{
 			role: string;
@@ -324,6 +325,7 @@ function createDefaultOpenSpecPlans(): MockState["openSpecPlans"] {
 			slug: "projects-plans-page",
 			title: "projects-plans-page",
 			status: "approved",
+			createdAt: new Date("2026-04-08T07:41:12Z").toISOString(),
 			updatedAt: new Date("2026-04-08T09:51:46Z").toISOString(),
 			roles: [
 				{
@@ -455,6 +457,7 @@ function createDefaultOpenSpecPlans(): MockState["openSpecPlans"] {
 			slug: "ralplan-openspec-plan-export",
 			title: "ralplan-openspec-plan-export",
 			status: "proposed",
+			createdAt: new Date("2026-04-08T06:58:03Z").toISOString(),
 			updatedAt: new Date("2026-04-08T09:46:52Z").toISOString(),
 			roles: [
 				{
@@ -1524,6 +1527,7 @@ export const handlers = [
 				slug: plan.slug,
 				title: plan.title,
 				status: plan.status,
+				createdAt: plan.createdAt,
 				updatedAt: plan.updatedAt,
 				summaryMarkdown: plan.summaryMarkdown,
 				roles: plan.roles.map((role) => ({
@@ -1556,6 +1560,7 @@ export const handlers = [
 			slug: plan.slug,
 			title: plan.title,
 			status: plan.status,
+			createdAt: plan.createdAt,
 			updatedAt: plan.updatedAt,
 			summaryMarkdown: plan.summaryMarkdown,
 			checkpointsMarkdown: plan.checkpointsMarkdown,

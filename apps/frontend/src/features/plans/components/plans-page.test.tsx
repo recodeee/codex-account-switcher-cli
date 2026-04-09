@@ -7,6 +7,7 @@ const planDetail: OpenSpecPlanDetail = {
   slug: "plans-live-execution-observer",
   title: "plans-live-execution-observer",
   status: "approved",
+  createdAt: "2026-04-08T10:11:00.000Z",
   updatedAt: "2026-04-08T12:44:08.000Z",
   summaryMarkdown: "# Plan Summary: plans-live-execution-observer",
   checkpointsMarkdown: "# Plan Checkpoints: plans-live-execution-observer",

@@ -48,6 +48,7 @@ async def list_open_spec_plans(
                 slug=entry.slug,
                 title=entry.title,
                 status=entry.status,
+                created_at=entry.created_at,
                 updated_at=entry.updated_at,
                 summary_markdown=entry.summary_markdown,
                 roles=[
@@ -100,6 +101,7 @@ async def get_open_spec_plan(
         slug=detail.slug,
         title=detail.title,
         status=detail.status,
+        created_at=detail.created_at,
         updated_at=detail.updated_at,
         summary_markdown=detail.summary_markdown,
         checkpoints_markdown=detail.checkpoints_markdown,
