@@ -12,6 +12,11 @@ The repository SHALL provide a Rust runtime scaffold under `rust/codex-lb-runtim
 - **WHEN** `GET /_rust_layer/info` is called
 - **THEN** the endpoint returns HTTP 200 with runtime identity fields including implementation language and service name
 
+#### Scenario: Rust runtime root health panel
+- **WHEN** `GET /` is opened in a browser
+- **THEN** the endpoint returns HTTP 200 HTML showing a visible runtime health panel
+- **AND** the panel includes a healthy/running status message with links to `/health`, `/health/live`, and `/_rust_layer/info`
+
 ### Requirement: Phase-0 runtime comparison tool
 The repository SHALL provide a comparison utility to benchmark and compare response parity between Python and Rust runtime endpoints before any traffic cutover.
 

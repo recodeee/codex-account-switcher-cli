@@ -8,6 +8,7 @@
 - [x] 2.1 Scaffold `rust/codex-lb-runtime` with `/health`, `/health/live`, and `/_rust_layer/info` endpoints.
 - [x] 2.2 Add a benchmark/parity utility under `scripts/rust_runtime/compare_runtime.py`.
 - [x] 2.3 Add usage notes under `scripts/rust_runtime/README.md`.
+- [x] 2.4 Add `GET /` runtime health panel for quick browser verification.
 
 ## 3. Verification
 

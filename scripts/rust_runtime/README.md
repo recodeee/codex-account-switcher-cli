@@ -16,6 +16,8 @@ cargo run
 
 Default bind address is `127.0.0.1:8099`.
 
+Open `http://localhost:8099/` to view the runtime health panel.
+
 ## 3) Compare parity and latency
 
 ```bash
