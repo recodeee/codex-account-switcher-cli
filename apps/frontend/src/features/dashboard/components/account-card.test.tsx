@@ -1570,7 +1570,7 @@ describe("AccountCard", () => {
     ).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
     expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
-      "Status: Thinking",
+      "Thinking",
     );
     expect(
       within(codexActiveCard).getByTestId("codex-inline-status-activity"),
@@ -1979,7 +1979,7 @@ describe("AccountCard", () => {
     const codexActiveCard = screen.getByTestId("codex-active-agent-card");
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
     expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
-      "Status: Waiting",
+      "Waiting",
     );
     expect(
       screen.queryByTestId("cpu-architecture-backdrop-planning"),
@@ -2018,7 +2018,7 @@ describe("AccountCard", () => {
     ).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
     expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
-      "Status: Waiting",
+      "Waiting",
     );
     expect(
       within(codexActiveCard).getByTestId("codex-inline-status-activity"),

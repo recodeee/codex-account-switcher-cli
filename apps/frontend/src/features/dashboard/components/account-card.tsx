@@ -252,6 +252,7 @@ const OMX_CLI_STATE_STYLES: Record<
   {
     label: string;
     badgeClassName: string;
+    inlineTextClassName: string;
     glowClassName: string;
     pulseClassName: string;
   }
@@ -259,12 +260,16 @@ const OMX_CLI_STATE_STYLES: Record<
   thinking: {
     label: "Thinking",
     badgeClassName: "border-indigo-300/60 bg-indigo-500/26 text-indigo-50",
+    inlineTextClassName:
+      "text-indigo-100/95 drop-shadow-[0_0_10px_rgba(99,102,241,0.34)]",
     glowClassName: "from-indigo-500/12 via-cyan-500/14 to-sky-500/12",
     pulseClassName: "bg-cyan-200 motion-safe:animate-pulse",
   },
   waiting: {
     label: "Waiting",
     badgeClassName: "border-cyan-300/55 bg-cyan-500/24 text-cyan-50",
+    inlineTextClassName:
+      "text-cyan-100/95 drop-shadow-[0_0_10px_rgba(34,211,238,0.32)]",
     glowClassName: "from-cyan-500/10 via-sky-500/12 to-cyan-500/10",
     pulseClassName:
       "bg-cyan-200 motion-safe:animate-ping motion-safe:[animation-duration:1.4s]",
@@ -272,6 +277,8 @@ const OMX_CLI_STATE_STYLES: Record<
   finished: {
     label: "Finished",
     badgeClassName: "border-emerald-300/55 bg-emerald-500/24 text-emerald-50",
+    inlineTextClassName:
+      "text-emerald-100/95 drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]",
     glowClassName: "from-emerald-500/12 via-teal-500/12 to-emerald-500/12",
     pulseClassName: "bg-emerald-200",
   },
@@ -560,11 +567,10 @@ function CodexActiveAgentCard({
             <span
               data-testid="codex-inline-status"
               className={cn(
-                "inline-flex h-6 w-fit items-center gap-1.5 rounded-full border px-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] shadow-[0_6px_16px_rgba(2,6,23,0.35)] backdrop-blur-sm",
-                cliStateStyle.badgeClassName,
+                "inline-flex w-fit items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
+                cliStateStyle.inlineTextClassName,
               )}
             >
-              <span className="opacity-90">Status: </span>
               <span>{cliStateStyle.label}</span>
               {showThinkingActivity ? (
                 <span
