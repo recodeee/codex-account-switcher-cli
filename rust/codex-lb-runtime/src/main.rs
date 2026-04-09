@@ -2,7 +2,7 @@ use axum::{
     Json, Router,
     body::Body,
     extract::{RawQuery, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{Html, Response},
     routing::get,
 };
@@ -106,6 +106,15 @@ fn app_with_state(state: RuntimeState) -> Router {
         .route("/health/startup", get(health_startup))
         .route("/live_usage", get(live_usage))
         .route("/live_usage/mapping", get(live_usage_mapping))
+        .route("/api/request-logs", get(request_logs))
+        .route("/api/request-logs/options", get(request_logs_options))
+        .route(
+            "/api/request-logs/usage-summary",
+            get(request_logs_usage_summary),
+        )
+        .route("/api/usage/summary", get(usage_summary))
+        .route("/api/usage/history", get(usage_history))
+        .route("/api/usage/window", get(usage_window))
         .route("/_rust_layer/info", get(runtime_info))
         .route("/_python_layer/health", get(python_layer_health))
         .route("/_python_layer/apis", get(python_layer_apis))
@@ -234,6 +243,90 @@ async fn live_usage_mapping(State(state): State<RuntimeState>, raw_query: RawQue
         "/live_usage/mapping",
         raw_query.0.as_deref(),
         fallback_live_usage_mapping_xml(minimal),
+    )
+    .await
+}
+
+async fn request_logs(
+    State(state): State<RuntimeState>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    proxy_python_json_endpoint(
+        &state,
+        "/api/request-logs",
+        raw_query.0.as_deref(),
+        &headers,
+    )
+    .await
+}
+
+async fn request_logs_options(
+    State(state): State<RuntimeState>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    proxy_python_json_endpoint(
+        &state,
+        "/api/request-logs/options",
+        raw_query.0.as_deref(),
+        &headers,
+    )
+    .await
+}
+
+async fn request_logs_usage_summary(
+    State(state): State<RuntimeState>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    proxy_python_json_endpoint(
+        &state,
+        "/api/request-logs/usage-summary",
+        raw_query.0.as_deref(),
+        &headers,
+    )
+    .await
+}
+
+async fn usage_summary(
+    State(state): State<RuntimeState>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    proxy_python_json_endpoint(
+        &state,
+        "/api/usage/summary",
+        raw_query.0.as_deref(),
+        &headers,
+    )
+    .await
+}
+
+async fn usage_history(
+    State(state): State<RuntimeState>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    proxy_python_json_endpoint(
+        &state,
+        "/api/usage/history",
+        raw_query.0.as_deref(),
+        &headers,
+    )
+    .await
+}
+
+async fn usage_window(
+    State(state): State<RuntimeState>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    proxy_python_json_endpoint(
+        &state,
+        "/api/usage/window",
+        raw_query.0.as_deref(),
+        &headers,
     )
     .await
 }
@@ -671,6 +764,90 @@ fn xml_response(
         })
 }
 
+async fn proxy_python_json_endpoint(
+    state: &RuntimeState,
+    endpoint: &str,
+    raw_query: Option<&str>,
+    incoming_headers: &HeaderMap,
+) -> Response {
+    let url = build_python_url(&state.python_base_url, endpoint, raw_query);
+    let request = forward_proxy_headers(state.python_client.get(url), incoming_headers);
+    match request.send().await {
+        Ok(upstream_response) => {
+            let status = upstream_response.status();
+            let content_type = upstream_response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("application/json")
+                .to_string();
+            let cache_control = upstream_response
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("no-store")
+                .to_string();
+
+            match upstream_response.bytes().await {
+                Ok(body) => raw_response(status, &content_type, &cache_control, Body::from(body)),
+                Err(error) => json_fallback_response(format!(
+                    r#"{{"detail":"upstream body read failed: {error}"}}"#
+                )),
+            }
+        }
+        Err(error) => json_fallback_response(format!(
+            r#"{{"detail":"upstream request failed: {error}"}}"#
+        )),
+    }
+}
+
+fn forward_proxy_headers(
+    mut request: reqwest::RequestBuilder,
+    incoming_headers: &HeaderMap,
+) -> reqwest::RequestBuilder {
+    for header_name in [
+        header::COOKIE,
+        header::AUTHORIZATION,
+        header::USER_AGENT,
+        header::ACCEPT,
+    ] {
+        if let Some(value) = incoming_headers.get(&header_name) {
+            request = request.header(header_name.as_str(), value.clone());
+        }
+    }
+    request
+}
+
+fn raw_response(
+    status: StatusCode,
+    content_type: &str,
+    cache_control: &str,
+    body: Body,
+) -> Response {
+    Response::builder()
+        .status(status)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CACHE_CONTROL, cache_control)
+        .body(body)
+        .unwrap_or_else(|_| {
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::CACHE_CONTROL, "no-store")
+                .body(Body::from(r#"{"detail":"invalid response build state"}"#))
+                .expect("build static JSON error response")
+        })
+}
+
+fn json_fallback_response(body: String) -> Response {
+    raw_response(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "application/json",
+        "no-store",
+        Body::from(body),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{RuntimeFlags, RuntimeState, app, app_with_flags, app_with_state};
@@ -931,6 +1108,94 @@ mod tests {
             .to_bytes();
         let body_text = String::from_utf8(body.to_vec()).unwrap();
         assert!(body_text.contains("minimal=\"true\""));
+    }
+
+    #[tokio::test]
+    async fn request_logs_usage_summary_proxies_with_forwarded_cookie() {
+        let (python_base_url, server_handle) = spawn_python_dashboard_api_stub().await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/request-logs/usage-summary")
+                    .header("cookie", "dashboard_session=test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["last_5h"]["total_tokens"], 42);
+        assert_eq!(payload["last_7d"]["total_tokens"], 420);
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn usage_history_forwards_query_parameters() {
+        let (python_base_url, server_handle) = spawn_python_dashboard_api_stub().await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/usage/history?hours=48")
+                    .header("cookie", "dashboard_session=test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["hours"], 48);
+        assert_eq!(payload["status"], "ok");
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn usage_summary_fails_closed_when_python_unreachable() {
+        let app = app_with_state(state_for_python_base_url("http://127.0.0.1:9".to_string()));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/usage/summary")
+                    .header("cookie", "dashboard_session=test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert!(
+            payload["detail"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("upstream request failed")
+        );
     }
 
     #[tokio::test]
@@ -1224,6 +1489,96 @@ mod tests {
 </live_usage_mapping>
 "#
                         ),
+                    )
+                }),
+            );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move { axum::serve(listener, router).await });
+
+        (format!("http://{addr}"), handle)
+    }
+
+    async fn spawn_python_dashboard_api_stub()
+    -> (String, tokio::task::JoinHandle<Result<(), std::io::Error>>) {
+        let router = Router::new()
+            .route(
+                "/api/request-logs/usage-summary",
+                get(|headers: axum::http::HeaderMap| async move {
+                    let has_dashboard_cookie = headers
+                        .get("cookie")
+                        .and_then(|value| value.to_str().ok())
+                        .map(|value| value.contains("dashboard_session=test"))
+                        .unwrap_or(false);
+                    if !has_dashboard_cookie {
+                        return (
+                            StatusCode::UNAUTHORIZED,
+                            Json(json!({ "detail": "missing dashboard session" })),
+                        );
+                    }
+
+                    (
+                        StatusCode::OK,
+                        Json(json!({
+                            "last_5h": { "total_tokens": 42, "total_cost_usd": 0.42, "total_cost_eur": 0.39, "accounts": [] },
+                            "last_7d": { "total_tokens": 420, "total_cost_usd": 4.2, "total_cost_eur": 3.9, "accounts": [] },
+                            "fx_rate_usd_to_eur": 0.93
+                        })),
+                    )
+                }),
+            )
+            .route(
+                "/api/usage/history",
+                get(
+                    |axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
+                     headers: axum::http::HeaderMap| async move {
+                        let has_dashboard_cookie = headers
+                            .get("cookie")
+                            .and_then(|value| value.to_str().ok())
+                            .map(|value| value.contains("dashboard_session=test"))
+                            .unwrap_or(false);
+                        if !has_dashboard_cookie {
+                            return (
+                                StatusCode::UNAUTHORIZED,
+                                Json(json!({ "detail": "missing dashboard session" })),
+                            );
+                        }
+
+                        let hours = raw_query
+                            .as_deref()
+                            .and_then(|query| query.split('&').find_map(|pair| pair.split_once('=')))
+                            .and_then(|(key, value)| {
+                                if key == "hours" {
+                                    value.parse::<u64>().ok()
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or(24);
+
+                        (
+                            StatusCode::OK,
+                            Json(json!({
+                                "status": "ok",
+                                "hours": hours,
+                                "points": []
+                            })),
+                        )
+                    },
+                ),
+            )
+            .route(
+                "/api/usage/summary",
+                get(|| async {
+                    (
+                        StatusCode::OK,
+                        Json(json!({
+                            "total_tokens": 100,
+                            "total_cost_usd": 1.0,
+                            "total_cost_eur": 0.93,
+                            "request_count": 5
+                        })),
                     )
                 }),
             );

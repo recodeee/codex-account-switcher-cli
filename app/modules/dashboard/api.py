@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from fastapi import APIRouter, Depends, WebSocket
 
@@ -11,12 +12,14 @@ from app.core.auth.dependencies import (
     validate_dashboard_websocket_session,
 )
 from app.core.openai.model_registry import get_model_registry, is_public_model
-from app.dependencies import DashboardContext, get_dashboard_context
+from app.db.session import SessionLocal
+from app.modules.dashboard.repository import DashboardRepository
 from app.modules.dashboard.live_updates import stream_dashboard_overview_updates
 from app.modules.dashboard.schemas import (
     DashboardOverviewResponse,
     DashboardSystemMonitorResponse,
 )
+from app.modules.dashboard.service import DashboardService
 from app.modules.dashboard.system_monitor import collect_dashboard_system_monitor_sample
 
 router = APIRouter(
@@ -34,7 +37,7 @@ class _DashboardOverviewSingleFlight:
 
     async def run(
         self,
-        loader: Callable[[], Awaitable[DashboardOverviewResponse]],
+        loader: Callable[[], Coroutine[Any, Any, DashboardOverviewResponse]],
     ) -> DashboardOverviewResponse:
         async with self._lock:
             task = self._inflight
@@ -60,11 +63,15 @@ class _DashboardOverviewSingleFlight:
 _overview_singleflight = _DashboardOverviewSingleFlight()
 
 
+async def _load_dashboard_overview() -> DashboardOverviewResponse:
+    async with SessionLocal() as session:
+        service = DashboardService(DashboardRepository(session))
+        return await service.get_overview()
+
+
 @router.get("/dashboard/overview", response_model=DashboardOverviewResponse)
-async def get_overview(
-    context: DashboardContext = Depends(get_dashboard_context),
-) -> DashboardOverviewResponse:
-    return await _overview_singleflight.run(context.service.get_overview)
+async def get_overview() -> DashboardOverviewResponse:
+    return await _overview_singleflight.run(_load_dashboard_overview)
 
 
 @ws_router.websocket("/overview/ws")

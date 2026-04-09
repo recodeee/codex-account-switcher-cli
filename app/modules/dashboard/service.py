@@ -300,7 +300,7 @@ class DashboardService:
 
         additional_ts = await self._repo.latest_additional_recorded_at()
         return DashboardOverviewResponse(
-            last_sync_at=_latest_recorded_at(primary_usage, secondary_usage, additional_ts),
+            last_sync_at=now,
             accounts=account_summaries,
             summary=summary,
             windows=windows,
@@ -325,6 +325,8 @@ def _should_overlay_live_task_previews(
     if codex_current_task_preview_by_account:
         return True
     if any(previews for previews in codex_session_task_previews_by_account.values()):
+        return True
+    if any(debug.raw_samples for debug in live_quota_debug_by_account.values()):
         return True
     return False
 
