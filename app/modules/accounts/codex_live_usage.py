@@ -1467,7 +1467,11 @@ def _read_local_codex_live_usage_for_rollout_paths(
 
     if latest is None:
         return LocalCodexLiveUsage(
-            recorded_at=now,
+            recorded_at=datetime.fromtimestamp(
+                max((_safe_mtime(path) for path in active_files), default=now.timestamp())
+                or now.timestamp(),
+                tz=timezone.utc,
+            ),
             active_session_count=len(active_files),
             primary=None,
             secondary=None,

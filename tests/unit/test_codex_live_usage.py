@@ -251,9 +251,10 @@ def test_read_local_codex_live_usage_reports_live_session_even_without_rate_limi
 
     day_dir = _sessions_day_dir(sessions_root, now)
     new_active_without_usage = day_dir / "rollout-new-active.jsonl"
+    rollout_timestamp = now - timedelta(seconds=10)
     _write_rollout_without_usage(
         new_active_without_usage,
-        timestamp=now - timedelta(seconds=10),
+        timestamp=rollout_timestamp,
     )
 
     usage = read_local_codex_live_usage(now=now)
@@ -261,6 +262,7 @@ def test_read_local_codex_live_usage_reports_live_session_even_without_rate_limi
     assert usage.active_session_count == 1
     assert usage.primary is None
     assert usage.secondary is None
+    assert usage.recorded_at == rollout_timestamp
 
 
 def test_read_local_codex_live_usage_recovers_rate_limit_outside_tail_window(
