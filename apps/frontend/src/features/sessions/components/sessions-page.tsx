@@ -55,6 +55,12 @@ const WAITING_FOR_NEW_TASK_LABEL = "Waiting for new task";
 
 type ProgressTone = "upToDate" | "muted" | "pending";
 
+type ActivitySessionTaskPreview = {
+  sessionKey: string;
+  taskPreview: string;
+  taskUpdatedAt: string | null;
+};
+
 type ActivityRow = {
   rowKey: string;
   accountId: string;
@@ -64,6 +70,7 @@ type ActivityRow = {
   status: "live" | "idle";
   currentTask: string | null;
   lastTask: string | null;
+  sessionTaskPreviews: ActivitySessionTaskPreview[];
   progressLabel: string;
   progressTone: ProgressTone;
   codexSessionCount: number;
@@ -241,6 +248,65 @@ function buildFallbackSourceLabel({
   return "Session telemetry pending";
 }
 
+function normalizeAccountSessionTaskPreviews(
+  previews: AccountSummary["codexSessionTaskPreviews"] | null | undefined,
+): ActivitySessionTaskPreview[] {
+  if (!previews || previews.length === 0) {
+    return [];
+  }
+  const seenSessionKeys = new Set<string>();
+  const normalized: ActivitySessionTaskPreview[] = [];
+  for (const preview of previews) {
+    const sessionKey = preview.sessionKey?.trim();
+    if (!sessionKey || seenSessionKeys.has(sessionKey)) {
+      continue;
+    }
+    seenSessionKeys.add(sessionKey);
+    const taskPreview = preview.taskPreview?.trim() || WAITING_FOR_NEW_TASK_LABEL;
+    normalized.push({
+      sessionKey,
+      taskPreview,
+      taskUpdatedAt: preview.taskUpdatedAt ?? null,
+    });
+  }
+  return normalized;
+}
+
+function ensureLiveSessionTaskPreviewCoverage({
+  sessionTaskPreviews,
+  liveSessionCount,
+  fallbackTaskPreview,
+  fallbackTaskUpdatedAt,
+}: {
+  sessionTaskPreviews: ActivitySessionTaskPreview[];
+  liveSessionCount: number;
+  fallbackTaskPreview: string | null;
+  fallbackTaskUpdatedAt: string | null;
+}): ActivitySessionTaskPreview[] {
+  if (liveSessionCount <= 0) {
+    return sessionTaskPreviews;
+  }
+
+  const normalizedPreviews = [...sessionTaskPreviews];
+  if (normalizedPreviews.length === 0 && fallbackTaskPreview) {
+    normalizedPreviews.push({
+      sessionKey: "live-session-1",
+      taskPreview: fallbackTaskPreview,
+      taskUpdatedAt: fallbackTaskUpdatedAt,
+    });
+  }
+
+  for (let index = normalizedPreviews.length; index < liveSessionCount; index += 1) {
+    normalizedPreviews.push({
+      sessionKey: `live-session-${index + 1}`,
+      taskPreview: WAITING_FOR_NEW_TASK_LABEL,
+      taskUpdatedAt: null,
+    });
+  }
+
+  return normalizedPreviews;
+}
+
 function formatQuotaPercent(value: number | null | undefined): string {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return "--";
@@ -392,6 +458,15 @@ export function SessionsPage() {
         status: entry.isActive ? ("live" as const) : ("idle" as const),
         currentTask: entry.taskPreview?.trim() || null,
         lastTask: null,
+        sessionTaskPreviews: entry.taskPreview?.trim()
+          ? [
+              {
+                sessionKey: entry.key,
+                taskPreview: entry.taskPreview.trim(),
+                taskUpdatedAt: entry.taskUpdatedAt ?? entry.updatedAt ?? null,
+              },
+            ]
+          : [],
         progressLabel: progress.label,
         progressTone: progress.tone,
         codexSessionCount: 1,
@@ -413,6 +488,11 @@ export function SessionsPage() {
           account.codexSessionCount ?? 0,
           0,
         );
+        const liveSessionCount = Math.max(
+          account.codexLiveSessionCount ?? 0,
+          account.codexSessionCount ?? 0,
+          0,
+        );
         const freshSampleCount = getFreshDebugRawSampleCount(account);
         const hasLiveSession = Boolean(
           account.codexAuth?.hasLiveSession
@@ -422,12 +502,23 @@ export function SessionsPage() {
           account.lastUsageRecordedAtPrimary,
           account.lastUsageRecordedAtSecondary,
         );
-        const detectedSessionCount =
-          trackedSessionCount > 0
-            ? trackedSessionCount
-            : hasLiveSession || freshSampleCount > 0
-              ? 1
-              : 0;
+        const fallbackTaskPreview = account.codexCurrentTaskPreview?.trim() || null;
+        const fallbackLastTaskPreview = account.codexLastTaskPreview?.trim() || null;
+        const normalizedSessionTaskPreviews = normalizeAccountSessionTaskPreviews(
+          account.codexSessionTaskPreviews,
+        );
+        const sessionTaskPreviews = ensureLiveSessionTaskPreviewCoverage({
+          sessionTaskPreviews: normalizedSessionTaskPreviews,
+          liveSessionCount,
+          fallbackTaskPreview,
+          fallbackTaskUpdatedAt: latestUsageTimestamp,
+        });
+        const detectedSessionCount = Math.max(
+          trackedSessionCount,
+          liveSessionCount,
+          sessionTaskPreviews.length,
+          hasLiveSession || freshSampleCount > 0 ? 1 : 0,
+        );
         const progress = resolveProgressDisplay(
           hasLiveSession,
           latestUsageTimestamp,
@@ -443,8 +534,9 @@ export function SessionsPage() {
             hasLiveSession,
           }),
           status: hasLiveSession ? ("live" as const) : ("idle" as const),
-          currentTask: account.codexCurrentTaskPreview?.trim() || null,
-          lastTask: account.codexLastTaskPreview?.trim() || null,
+          currentTask: fallbackTaskPreview,
+          lastTask: fallbackLastTaskPreview,
+          sessionTaskPreviews,
           progressLabel: progress.label,
           progressTone: progress.tone,
           codexSessionCount: detectedSessionCount,
@@ -470,8 +562,11 @@ export function SessionsPage() {
     : stickyActivityRows.length;
   const accountCount = shouldUseFallbackOverview ? fallbackActivityRows.length : stickyAccountCount;
   const hasSessionRows = total > 0;
-  const waitingForOverviewFallback = (sessionsQuery.data?.total ?? 0) === 0 && overviewQuery.isLoading && !overviewQuery.data;
-  const isLoading = (sessionsQuery.isLoading && !sessionsQuery.data) || waitingForOverviewFallback;
+  const waitingForOverviewFallback =
+    (sessionsQuery.data?.total ?? 0) === 0
+    && overviewQuery.isLoading
+    && !overviewQuery.data;
+  const isLoading = sessionsQuery.isLoading && !sessionsQuery.data;
   const hasFocusedSessionRow = selectedSessionKey
     ? activityRows.some((row) => row.identity === selectedSessionKey)
     : false;
@@ -503,8 +598,12 @@ export function SessionsPage() {
     [overviewQuery.data?.accounts, selectedAccountId],
   );
   const emptyDescription = selectedAccountId
-    ? "No Codex sessions were found for the selected account."
-    : "Codex sessions will appear here once routed requests create sticky session mappings.";
+    ? waitingForOverviewFallback
+      ? "No sticky mappings yet. Checking dashboard telemetry for the selected account."
+      : "No Codex sessions were found for the selected account."
+    : waitingForOverviewFallback
+      ? "No sticky mappings yet. Checking dashboard telemetry for fallback session signals."
+      : "Codex sessions will appear here once routed requests create sticky session mappings.";
   const watchTaskPreview =
     selectedStickyEntry?.taskPreview?.trim() ||
     selectedActivityRow?.currentTask ||
@@ -989,6 +1088,18 @@ export function SessionsPage() {
                         const isFocusedSessionRow =
                           selectedSessionKey != null &&
                           row.identity === selectedSessionKey;
+                        const hasWaitingSessionTaskPreview = row.sessionTaskPreviews.some(
+                          (preview) => preview.taskPreview === WAITING_FOR_NEW_TASK_LABEL,
+                        );
+                        const shouldShowLastTaskHint =
+                          Boolean(row.lastTask) &&
+                          (row.currentTask === WAITING_FOR_NEW_TASK_LABEL || hasWaitingSessionTaskPreview);
+                        const taskCellTitle =
+                          row.sessionTaskPreviews.length > 0
+                            ? row.sessionTaskPreviews
+                                .map((preview) => `${preview.sessionKey}: ${preview.taskPreview}`)
+                                .join("\n")
+                            : row.currentTask ?? row.lastTask ?? undefined;
                         return (
                         <TableRow
                           key={row.rowKey}
@@ -1029,17 +1140,33 @@ export function SessionsPage() {
                           </TableCell>
                           <TableCell
                             className="max-w-[28rem] whitespace-normal break-words text-xs text-muted-foreground"
-                            title={row.currentTask ?? row.lastTask ?? undefined}
+                            title={taskCellTitle}
                           >
                             <div className="space-y-1">
-                              <p>{row.currentTask ?? "—"}</p>
-                              {row.currentTask === WAITING_FOR_NEW_TASK_LABEL && row.lastTask ? (
+                              {row.sessionTaskPreviews.length > 0 ? (
+                                <ul className="space-y-1">
+                                  {row.sessionTaskPreviews.map((preview) => (
+                                    <li
+                                      key={`${row.rowKey}:${preview.sessionKey}`}
+                                      className="break-words whitespace-pre-wrap text-[11px]"
+                                    >
+                                      <span className="font-mono text-[10px] text-muted-foreground/75">
+                                        {preview.sessionKey}:
+                                      </span>{" "}
+                                      <span className="text-muted-foreground">{preview.taskPreview}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p>{row.currentTask ?? "—"}</p>
+                              )}
+                              {shouldShowLastTaskHint ? (
                                 <p
                                   className="break-words whitespace-pre-wrap text-[11px] text-muted-foreground/80"
-                                  title={row.lastTask}
+                                  title={row.lastTask ?? undefined}
                                 >
                                   <span className="font-medium text-muted-foreground">Last task:</span>{" "}
-                                  {row.lastTask}
+                                  {row.lastTask ?? ""}
                                 </p>
                               ) : null}
                             </div>

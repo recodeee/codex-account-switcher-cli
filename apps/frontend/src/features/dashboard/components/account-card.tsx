@@ -8,7 +8,6 @@ import {
   Lock,
   Play,
   RotateCcw,
-  SquareTerminal,
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -167,14 +166,25 @@ const LAST_TASK_PREVIEW_EXPANSION_KEY = "__last_task_preview__";
 const STALE_SESSION_TASK_MS = 90_000;
 type OmxPlanningNodeKey = (typeof OMX_PLANNING_NODES)[number]["key"];
 type OmxCliRuntimeState = "finished" | "waiting" | "thinking";
+const OMX_PLANNING_NODE_LOG_LABELS: Record<OmxPlanningNodeKey, string> = {
+  planner: "Planner logs",
+  critic: "Critic logs",
+  engineer: "Engineer logs",
+  verifier: "Verifier logs",
+  writer: "Writer logs",
+  architect: "Architect logs",
+};
 
 function CpuArchitectureBackdrop({
   className,
   dataTestId,
+  variant = "default",
 }: {
   className?: string;
   dataTestId?: string;
+  variant?: "default" | "ralplan";
 }) {
+  const showRalplanSubLabel = variant === "ralplan";
   return (
     <svg
       data-testid={dataTestId}
@@ -226,15 +236,28 @@ function CpuArchitectureBackdrop({
       />
       <text
         x="100"
-        y="54"
+        y={showRalplanSubLabel ? "50" : "54"}
         textAnchor="middle"
-        fontSize="14"
+        fontSize={showRalplanSubLabel ? "12" : "14"}
         fontWeight="700"
         letterSpacing="0.12em"
         fill="#d6dae2"
       >
         OMX
       </text>
+      {showRalplanSubLabel ? (
+        <text
+          x="100"
+          y="60"
+          textAnchor="middle"
+          fontSize="5"
+          fontWeight="600"
+          letterSpacing="0.2em"
+          fill="#8bbdd0"
+        >
+          RALPLAN
+        </text>
+      ) : null}
 
       <defs>
         <linearGradient id="cpu-pin-grad" x1="0" y1="0" x2="0" y2="1">
@@ -350,7 +373,7 @@ function resolveOmxPlanningActiveNodeKey(
     return "critic";
   }
   if (
-    /\bengineer\b|\bexecutor\b|\bimplement\b|\bcoding?\b|\bfix\b|\brefactor\b|\bbuild\b/.test(
+    /\bengineer\b|\bexecutor\b|\bimplement\b|\bcoding?\b|\bfix\b|\brefactor\b|\bbuild\b|\bsub-?agent\b/.test(
       normalized,
     )
   ) {
@@ -425,7 +448,10 @@ function OmxPlanningPromptGraph({
       />
 
       <div className="pointer-events-none absolute inset-0">
-        <CpuArchitectureBackdrop dataTestId="cpu-architecture-backdrop-planning" />
+        <CpuArchitectureBackdrop
+          dataTestId="cpu-architecture-backdrop-planning"
+          variant="ralplan"
+        />
       </div>
 
       <svg
@@ -1633,7 +1659,9 @@ export function AccountCard(props: AccountCardProps) {
     : account.codexCurrentTaskPreview?.trim() || null;
   const codexLastTaskPreview = account.codexLastTaskPreview?.trim() || null;
   const sessionTaskPreviews = useMemo(() => {
-    const resolveTimestamp = (value: string | null | undefined): number | null => {
+    const resolveTimestamp = (
+      value: string | null | undefined,
+    ): number | null => {
       if (!value) {
         return null;
       }
@@ -1723,10 +1751,7 @@ export function AccountCard(props: AccountCardProps) {
         return left.sessionKey.localeCompare(right.sessionKey);
       })
       .slice(0, codexLiveSessionCount);
-  }, [
-    account.codexSessionTaskPreviews,
-    codexLiveSessionCount,
-  ]);
+  }, [account.codexSessionTaskPreviews, codexLiveSessionCount]);
   const codexCurrentTaskPreview = useMemo(() => {
     if (
       rawCodexCurrentTaskPreview == null ||
@@ -1985,6 +2010,9 @@ export function AccountCard(props: AccountCardProps) {
     }
     return promptDrivenOmxPlanningActiveNodeKey;
   }, [omxPlanningCliRuntimeState, promptDrivenOmxPlanningActiveNodeKey]);
+  const activeOmxPlanningLogLabel = showRalplanPlanningGraph
+    ? OMX_PLANNING_NODE_LOG_LABELS[omxPlanningActiveNodeKey]
+    : null;
   const quotaDebugLogText = liveQuotaDebug
     ? buildQuotaDebugLogLines(
         liveQuotaDebug,
@@ -2020,9 +2048,7 @@ export function AccountCard(props: AccountCardProps) {
   const idSuffix = showAccountId ? ` | ID ${compactId}` : "";
   const isOmxBoosted = Boolean(account.codexAuth?.isOmxBoosted);
   const primaryCliSessionKey = useMemo(
-    () =>
-      sessionTaskRows.find((row) => !row.synthetic)?.sessionKey ??
-      null,
+    () => sessionTaskRows.find((row) => !row.synthetic)?.sessionKey ?? null,
     [sessionTaskRows],
   );
   const openCodexLogsView = () => {
@@ -2692,20 +2718,6 @@ export function AccountCard(props: AccountCardProps) {
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="h-7 gap-1.5 rounded-lg text-xs text-cyan-700 hover:bg-cyan-500/10 hover:text-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200"
-                disabled={
-                  disableSecondaryActions || !canUseLocally || useLocalBusy
-                }
-                title={useLocalDisabledReason ?? undefined}
-                onClick={() => onAction?.(account, "terminal")}
-              >
-                <SquareTerminal className="h-3 w-3" />
-                Terminal
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
                 className="h-7 gap-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground"
                 disabled={disableSecondaryActions}
                 onClick={() => onAction?.(account, "details")}
@@ -2776,9 +2788,14 @@ export function AccountCard(props: AccountCardProps) {
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-200/85 shadow-[0_0_0_2px_rgba(34,211,238,0.12)]" />
                     Codex logs
                   </p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-cyan-100/70">
-                    Hidden on the card. Open the session page to view terminal commands and runtime logs.
-                  </p>
+                  {activeOmxPlanningLogLabel ? (
+                    <p
+                      data-testid="codex-logs-active-agent-label"
+                      className="mt-1 inline-flex items-center rounded-md border border-indigo-300/35 bg-indigo-500/14 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-indigo-100/95"
+                    >
+                      {activeOmxPlanningLogLabel}
+                    </p>
+                  ) : null}
                 </div>
                 <Button
                   type="button"

@@ -802,16 +802,13 @@ describe("AccountCard", () => {
     expect(onAction).toHaveBeenCalledWith(account, "useLocal");
   });
 
-  it("calls terminal action when terminal button is clicked", async () => {
-    const user = userEvent.setup({ delay: null });
+  it("does not render terminal action button on account cards", () => {
     const account = createAccountSummary();
     const onAction = vi.fn();
 
     render(<AccountCard account={account} onAction={onAction} />);
 
-    await user.click(screen.getByRole("button", { name: "Terminal" }));
-
-    expect(onAction).toHaveBeenCalledWith(account, "terminal");
+    expect(screen.queryByRole("button", { name: "Terminal" })).not.toBeInTheDocument();
   });
 
   it("calls sessions action when sessions button is clicked", async () => {
@@ -1624,6 +1621,7 @@ describe("AccountCard", () => {
     expect(within(planningGraph).getByText("Engineer")).toBeInTheDocument();
     expect(within(planningGraph).getByText("Writer")).toBeInTheDocument();
     expect(within(planningGraph).getByText("Verifier")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("RALPLAN")).toBeInTheDocument();
     expect(
       within(planningGraph).getByTestId("omx-planning-cli-state"),
     ).toHaveTextContent("Thinking");
@@ -3387,6 +3385,68 @@ describe("AccountCard", () => {
       focusSessionKey: "sess-alpha-123456",
       source: "watch-logs",
     });
+  });
+
+  it("shows critic logs label under codex logs when critic lane is active", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan critic review runtime-ready mapping and constraints",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-critic-001",
+          taskPreview:
+            "$ralplan critic review runtime-ready mapping and constraints",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "snap-a",
+        activeSnapshotName: "snap-a",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByTestId("codex-logs-active-agent-label")).toHaveTextContent(
+      "Critic logs",
+    );
+  });
+
+  it("maps ralplan subagent prompts to engineer logs label", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan subagent implementing quota fallback rendering updates",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-engineer-001",
+          taskPreview:
+            "$ralplan subagent implementing quota fallback rendering updates",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "snap-a",
+        activeSnapshotName: "snap-a",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByTestId("codex-logs-active-agent-label")).toHaveTextContent(
+      "Engineer logs",
+    );
   });
 
   it("routes codex logs open action without focus when only synthetic rows exist", async () => {
