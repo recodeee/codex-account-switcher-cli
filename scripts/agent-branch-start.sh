@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TASK_NAME="${1:-task}"
-AGENT_NAME="${2:-agent}"
-BASE_BRANCH="${3:-dev}"
+TASK_NAME="task"
+AGENT_NAME="agent"
+BASE_BRANCH=""
 WORKTREE_MODE=1
 WORKTREE_ROOT_REL=".omx/agent-worktrees"
 
@@ -44,6 +44,27 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ $# -gt 0 ]]; then
+  TASK_NAME="$1"
+  shift
+fi
+
+if [[ $# -gt 0 ]]; then
+  AGENT_NAME="$1"
+  shift
+fi
+
+if [[ $# -gt 0 ]]; then
+  BASE_BRANCH="$1"
+  shift
+fi
+
+if [[ $# -gt 0 ]]; then
+  echo "[agent-branch-start] Unexpected extra arguments: $*" >&2
+  echo "Usage: $0 [task] [agent] [base] [--in-place] [--worktree-root <path>]" >&2
+  exit 1
+fi
+
 sanitize_slug() {
   local raw="$1"
   local slug
@@ -60,6 +81,13 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 repo_root="$(git rev-parse --show-toplevel)"
+
+if [[ -z "$BASE_BRANCH" ]]; then
+  BASE_BRANCH="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
+fi
+if [[ -z "$BASE_BRANCH" ]]; then
+  BASE_BRANCH="dev"
+fi
 
 if git show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
   git fetch origin "${BASE_BRANCH}" --quiet

@@ -10,16 +10,21 @@ if [[ "${ALLOW_COMMIT_ON_PROTECTED_BRANCH:-0}" == "1" ]]; then
   exit 0
 fi
 
-is_vscode_source_control_commit=0
-if [[ -n "${VSCODE_GIT_IPC_HANDLE:-}" ]] || [[ -n "${VSCODE_GIT_ASKPASS_NODE:-}" ]] || [[ -n "${VSCODE_IPC_HOOK_CLI:-}" ]]; then
-  is_vscode_source_control_commit=1
+protected_branches_raw="$(git config --get multiagent.protectedBranches || true)"
+if [[ -z "$protected_branches_raw" ]]; then
+  protected_branches_raw="dev main master"
 fi
+read -r -a protected_branches <<< "$protected_branches_raw"
 
-if [[ "$branch" == "dev" || "$branch" == "main" || "$branch" == "master" ]]; then
-  if [[ "$is_vscode_source_control_commit" == "1" ]]; then
-    exit 0
+is_protected_branch=0
+for protected_branch in "${protected_branches[@]}"; do
+  if [[ "$branch" == "$protected_branch" ]]; then
+    is_protected_branch=1
+    break
   fi
+done
 
+if [[ "$is_protected_branch" == "1" ]]; then
   git_dir="$(git rev-parse --git-dir)"
   if [[ -f "$git_dir/MERGE_HEAD" ]]; then
     exit 0
@@ -39,6 +44,41 @@ MSG
 fi
 
 if [[ "$branch" == agent/* ]]; then
+  require_sync_before_commit="$(git config --bool --get multiagent.sync.requireBeforeCommit || echo "false")"
+  if [[ "$require_sync_before_commit" == "true" ]]; then
+    base_branch="$(git config --get multiagent.baseBranch || true)"
+    if [[ -z "$base_branch" ]]; then
+      base_branch="dev"
+    fi
+
+    max_behind="$(git config --int --get multiagent.sync.maxBehindCommits || echo "0")"
+    if [[ -z "$max_behind" ]]; then
+      max_behind="0"
+    fi
+
+    if git fetch origin "$base_branch" --quiet 2>/dev/null; then
+      behind_count="$(git rev-list --count "HEAD..origin/${base_branch}" 2>/dev/null || echo "0")"
+      if [[ "$behind_count" =~ ^[0-9]+$ ]] && [[ "$max_behind" =~ ^-?[0-9]+$ ]] && (( behind_count > max_behind )); then
+        cat >&2 <<MSG
+[agent-branch-guard] Agent branch is behind origin/${base_branch} by ${behind_count} commit(s),
+which exceeds the allowed threshold (${max_behind}).
+Sync your branch before committing:
+  musafety sync --base ${base_branch}
+or:
+  git merge --no-edit origin/${base_branch}
+MSG
+        exit 1
+      fi
+    else
+      cat >&2 <<MSG
+[agent-branch-guard] Could not fetch origin/${base_branch} for behind-check.
+Fix remote connectivity or temporarily disable with:
+  git config multiagent.sync.requireBeforeCommit false
+MSG
+      exit 1
+    fi
+  fi
+
   if [[ "${MUSAFETY_AUTOCLAIM_STAGED_LOCKS:-1}" == "1" ]]; then
     while IFS= read -r staged_file; do
       [[ -z "$staged_file" ]] && continue

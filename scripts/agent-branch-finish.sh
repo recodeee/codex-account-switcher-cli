@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_BRANCH="dev"
+BASE_BRANCH=""
 SOURCE_BRANCH=""
 PUSH_ENABLED=1
 DELETE_REMOTE_BRANCH=1
@@ -39,6 +39,13 @@ fi
 
 repo_root="$(git rev-parse --show-toplevel)"
 current_worktree="$(pwd -P)"
+
+if [[ -z "$BASE_BRANCH" ]]; then
+  BASE_BRANCH="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
+fi
+if [[ -z "$BASE_BRANCH" ]]; then
+  BASE_BRANCH="dev"
+fi
 
 if [[ -z "$SOURCE_BRANCH" ]]; then
   SOURCE_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -84,6 +91,19 @@ if ! is_clean_worktree "$source_worktree"; then
   echo "[agent-branch-finish] Source worktree is not clean for '${SOURCE_BRANCH}': ${source_worktree}" >&2
   echo "[agent-branch-finish] Commit/stash changes on the source branch before finishing." >&2
   exit 1
+fi
+
+require_sync_before_finish="$(git -C "$repo_root" config --bool --get multiagent.sync.requireBeforeFinish || echo "true")"
+if [[ "$require_sync_before_finish" == "true" ]] && git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
+  git -C "$repo_root" fetch origin "$BASE_BRANCH" --quiet
+  behind_count="$(git -C "$source_worktree" rev-list --count "HEAD..origin/${BASE_BRANCH}" 2>/dev/null || echo "0")"
+  if [[ "$behind_count" =~ ^[0-9]+$ ]] && (( behind_count > 0 )); then
+    echo "[agent-branch-finish] '${SOURCE_BRANCH}' is behind origin/${BASE_BRANCH} by ${behind_count} commit(s)." >&2
+    echo "[agent-branch-finish] Sync the agent branch first to keep '${BASE_BRANCH}' as source-of-truth." >&2
+    echo "[agent-branch-finish] Suggested: musafety sync --base ${BASE_BRANCH}" >&2
+    echo "[agent-branch-finish] Fallback: git -C \"${source_worktree}\" merge --no-edit origin/${BASE_BRANCH}" >&2
+    exit 1
+  fi
 fi
 
 start_ref="$BASE_BRANCH"
