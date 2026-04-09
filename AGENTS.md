@@ -79,9 +79,10 @@ Parallel-work safety:
 - Prefer compatibility-preserving proxy behavior over endpoint-specific Rust implementations that can break on concurrent backend changes.
 - `main.rs` is now lock-protected for parallel agent sessions. Before **any** edit to
   `rust/codex-lb-runtime/src/main.rs`, claim ownership:
-  - `python3 scripts/main_rs_lock.py claim --owner "<agent-name>"`
+  - `python3 scripts/main_rs_lock.py claim --owner "<agent-name>" --branch "<agent-branch>"`
   - Check owner/lease: `python3 scripts/main_rs_lock.py status`
-  - Release when done: `python3 scripts/main_rs_lock.py release --owner "<agent-name>"`
+  - Release when done: `python3 scripts/main_rs_lock.py release --branch "<agent-branch>"`
+- Lock ownership is **branch-scoped**; if lock branch and current branch differ, edits are blocked.
 - If the lock is held by another agent, do not edit `main.rs`; continue in owned module files or hand off to the integrator.
 
 Required verification before claiming Rust runtime changes are complete:
@@ -108,9 +109,12 @@ Use this contract whenever multiple agents are active in parallel.
 - For git isolation, each agent must start on a dedicated branch/worktree via `scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"`.
 - Each agent must claim file ownership before edits:
   - `python3 scripts/agent-file-locks.py claim --branch "<agent-branch>" <file...>`
+- If `main.rs` is in scope, claim branch lock first:
+  - `python3 scripts/main_rs_lock.py claim --owner "<agent-name>" --branch "<agent-branch>"`
 - Agent completion must use `scripts/agent-branch-finish.sh` (preflight conflict check, merge into `dev`, push, delete agent branch).
 - `agent-branch-start` and `agent-branch-finish` must fast-forward local `dev` from `origin/dev` before branch creation/merge, so `dev` always pulls latest remote changes first.
 - Pre-commit guard blocks `agent/*` commits when staged files are unclaimed or claimed by another branch.
+- Pre-commit guard blocks `agent/*` commits that stage `main.rs` without a valid main-rs lock for that same branch.
 
 1. Explicit ownership before edits
 

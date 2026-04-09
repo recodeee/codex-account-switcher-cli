@@ -4,6 +4,7 @@
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from fnmatch import fnmatch
@@ -19,6 +20,7 @@ except ImportError:
 
 MAIN_RS_REL_PATH = "rust/codex-lb-runtime/src/main.rs"
 MAIN_RS_LOCK_REL_PATH = ".omx/locks/rust-main-rs.lock.json"
+PROTECTED_BRANCHES = {"dev", "main", "master"}
 
 
 def load_skill_rules() -> dict:
@@ -92,17 +94,42 @@ def normalize_path(value: str) -> str:
     return value.replace("\\", "/")
 
 
+def current_branch(repo_root: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
 def ensure_main_rs_lock(file_path: str, session_id: str) -> str | None:
     """Return an error message when main.rs lock is missing/owned by another session."""
     if not normalize_path(file_path).endswith(MAIN_RS_REL_PATH):
         return None
 
     repo_root = find_repo_root(file_path)
+    branch = current_branch(repo_root)
+    if branch in PROTECTED_BRANCHES and os.environ.get("ALLOW_MAIN_RS_EDIT_ON_PROTECTED_BRANCH") != "1":
+        return (
+            f"BLOCKED: main.rs edits are not allowed on protected branch '{branch}'.\n"
+            "Use agent branch/worktree first:\n"
+            '  bash scripts/agent-branch-start.sh "<task>" "<agent-name>"'
+        )
+
     lock_path = repo_root / MAIN_RS_LOCK_REL_PATH
     if not lock_path.exists():
         return (
             "BLOCKED: rust/codex-lb-runtime/src/main.rs requires an ownership lock.\n"
-            "Run: python3 scripts/main_rs_lock.py claim --owner \"<agent-name>\""
+            "Run: python3 scripts/main_rs_lock.py claim --owner \"<agent-name>\" "
+            f'--branch "{branch or "<agent-branch>"}"'
         )
 
     try:
@@ -120,23 +147,30 @@ def ensure_main_rs_lock(file_path: str, session_id: str) -> str | None:
             "Run: python3 scripts/main_rs_lock.py claim --owner \"<agent-name>\""
         )
 
+    owner_branch = lock_data.get("owner_branch")
+    if owner_branch and branch and owner_branch != branch:
+        owner_label = lock_data.get("owner") or owner_branch
+        return (
+            f"BLOCKED: rust main.rs lock is owned by branch '{owner_branch}' ({owner_label}).\n"
+            f"Current branch: '{branch}'.\n"
+            "Status: python3 scripts/main_rs_lock.py status"
+        )
+
+    if not owner_branch:
+        return (
+            "BLOCKED: rust main.rs lock is legacy/missing owner_branch.\n"
+            "Re-claim with branch ownership:\n"
+            "  python3 scripts/main_rs_lock.py claim --owner \"<agent-name>\" "
+            f'--branch "{branch or "<agent-branch>"}" --force'
+        )
+
     owner_session_id = lock_data.get("owner_session_id")
-    owner_thread_id = lock_data.get("owner_thread_id")
-    owner_omx_session_id = lock_data.get("owner_omx_session_id")
-
-    current_thread_id = os.environ.get("CODEX_THREAD_ID")
-    current_omx_session_id = os.environ.get("OMX_SESSION_ID")
-
     if owner_session_id and owner_session_id == session_id:
         return None
-    if owner_thread_id and current_thread_id and owner_thread_id == current_thread_id:
-        return None
-    if owner_omx_session_id and current_omx_session_id and owner_omx_session_id == current_omx_session_id:
-        return None
 
-    owner_label = lock_data.get("owner") or owner_thread_id or owner_omx_session_id or "unknown owner"
+    owner_label = lock_data.get("owner") or owner_branch or "unknown owner"
     return (
-        f"BLOCKED: rust main.rs lock is currently owned by {owner_label}.\n"
+        f"BLOCKED: rust main.rs lock is currently owned by {owner_label} on branch '{owner_branch}'.\n"
         "Use a different file/module or wait for release.\n"
         "Status: python3 scripts/main_rs_lock.py status"
     )

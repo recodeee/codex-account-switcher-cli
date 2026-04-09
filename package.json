@@ -14,6 +14,10 @@
     "agent:hooks:install": "bash ./scripts/install-agent-git-hooks.sh",
     "agent:locks:claim": "python3 ./scripts/agent-file-locks.py claim",
     "agent:locks:release": "python3 ./scripts/agent-file-locks.py release",
-    "agent:locks:status": "python3 ./scripts/agent-file-locks.py status"
+    "agent:locks:status": "python3 ./scripts/agent-file-locks.py status",
+    "main-rs-lock:claim": "python3 ./scripts/main_rs_lock.py claim",
+    "main-rs-lock:release": "python3 ./scripts/main_rs_lock.py release",
+    "main-rs-lock:status": "python3 ./scripts/main_rs_lock.py status",
+    "main-rs-lock:validate": "python3 ./scripts/main_rs_lock.py validate --staged"
   }
 }

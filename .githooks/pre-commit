@@ -47,6 +47,15 @@ Claim files first:
 MSG
     exit 1
   fi
+
+  if ! python3 scripts/main_rs_lock.py validate --branch "$branch" --staged; then
+    cat >&2 <<'MSG'
+[agent-branch-guard] main.rs changes require an active main.rs lock owned by this branch.
+Claim lock first:
+  python3 scripts/main_rs_lock.py claim --owner "<agent-name>" --branch "$(git rev-parse --abbrev-ref HEAD)"
+MSG
+    exit 1
+  fi
 fi
 
 if command -v pre-commit >/dev/null 2>&1 && [[ -f .pre-commit-config.yaml ]]; then

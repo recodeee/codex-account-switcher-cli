@@ -143,6 +143,9 @@ fi
 if [[ -x "${repo_root}/scripts/agent-file-locks.py" ]]; then
   python3 "${repo_root}/scripts/agent-file-locks.py" release --branch "$SOURCE_BRANCH" >/dev/null 2>&1 || true
 fi
+if [[ -x "${repo_root}/scripts/main_rs_lock.py" ]]; then
+  python3 "${repo_root}/scripts/main_rs_lock.py" release --branch "$SOURCE_BRANCH" >/dev/null 2>&1 || true
+fi
 
 if [[ "$source_worktree" == "$repo_root" ]]; then
   if is_clean_worktree "$source_worktree"; then
