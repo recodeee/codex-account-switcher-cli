@@ -66,29 +66,26 @@ export function StatusBar() {
   });
   const lastSync = formatTimeLong(lastSyncAt);
   const [isLive, setIsLive] = useState(false);
-  const [showLastSyncTimeoutWarning, setShowLastSyncTimeoutWarning] = useState(false);
+  const [showSlowLastSyncWarning, setShowSlowLastSyncWarning] = useState(false);
 
   useEffect(() => {
-    if (isRequestTimeoutError(lastSyncError)) {
-      setShowLastSyncTimeoutWarning(true);
-      return;
+    let timeoutId: number;
+    if (isLastSyncFetching) {
+      timeoutId = window.setTimeout(() => {
+        setShowSlowLastSyncWarning(true);
+      }, LAST_SYNC_TIMEOUT_WARNING_MS);
+    } else {
+      timeoutId = window.setTimeout(() => {
+        setShowSlowLastSyncWarning(false);
+      }, 0);
     }
-    if (!isLastSyncFetching && hasLastSyncSuccess) {
-      setShowLastSyncTimeoutWarning(false);
-    }
-  }, [hasLastSyncSuccess, isLastSyncFetching, lastSyncError]);
-
-  useEffect(() => {
-    if (!isLastSyncFetching) {
-      return undefined;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setShowLastSyncTimeoutWarning(true);
-    }, LAST_SYNC_TIMEOUT_WARNING_MS);
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [isLastSyncFetching]);
+  }, [isLastSyncFetching, hasLastSyncSuccess]);
+
+  const showLastSyncTimeoutWarning =
+    showSlowLastSyncWarning || isRequestTimeoutError(lastSyncError);
 
   useEffect(() => {
     function check() {
