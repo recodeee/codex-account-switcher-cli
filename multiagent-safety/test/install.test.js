@@ -80,6 +80,19 @@ test('install provisions workflow files and repo config', () => {
   assert.equal(secondRun.status, 0, secondRun.stderr || secondRun.stdout);
 });
 
+test('doctor passes on an installed repo', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-safety-doctor-pass-'));
+  const repoDir = path.join(tempDir, 'repo');
+  initGitRepo(repoDir, true);
+
+  const installResult = run(['install', '--target', repoDir], repoDir);
+  assert.equal(installResult.status, 0, installResult.stderr || installResult.stdout);
+
+  const doctorResult = run(['doctor', '--target', repoDir], repoDir);
+  assert.equal(doctorResult.status, 0, doctorResult.stderr || doctorResult.stdout);
+  assert.match(doctorResult.stdout, /doctor passed/);
+});
+
 test('install-many applies guardrails across discovered workspace repos', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-safety-many-'));
   const workspaceDir = path.join(tempDir, 'workspace');
@@ -161,4 +174,15 @@ test('install-many reports failures for invalid targets while still installing v
   assert.match(result.stderr, /install-many completed with 1 failure/);
 
   assertRepoInstalled(repoDir);
+});
+
+test('doctor fails when core pieces are missing', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-safety-doctor-fail-'));
+  const repoDir = path.join(tempDir, 'repo');
+  initGitRepo(repoDir, true);
+
+  const doctorResult = run(['doctor', '--target', repoDir], repoDir);
+  assert.equal(doctorResult.status, 1, 'expected doctor failure on uninstalled repo');
+  assert.match(doctorResult.stdout, /missing .githooks\/pre-commit/);
+  assert.match(doctorResult.stderr, /doctor detected configuration issues/);
 });

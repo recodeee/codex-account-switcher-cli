@@ -48,12 +48,26 @@ multiagent-safety init-workspace --workspace ~/projects
 multiagent-safety install-many --targets-file ~/projects/.multiagent-safety-targets.txt
 ```
 
+## Verify setup health
+
+```bash
+# check current repo
+multiagent-safety doctor
+
+# check another repo
+multiagent-safety doctor --target ~/projects/repo-a
+
+# treat warnings as failures
+multiagent-safety doctor --strict
+```
+
 ## Command options
 
 ```bash
 multiagent-safety install [--target <path>] [--force] [--skip-agents] [--skip-package-json] [--dry-run]
 multiagent-safety install-many [--workspace <path>] [--max-depth <n>] [--target <path>] [--targets <a,b,c>] [--targets-file <file>] [--force] [--skip-agents] [--skip-package-json] [--dry-run] [--fail-fast]
 multiagent-safety init-workspace [--workspace <path>] [--max-depth <n>] [--output <file>] [--force]
+multiagent-safety doctor [--target <path>] [--strict]
 ```
 
 Shared install flags:
