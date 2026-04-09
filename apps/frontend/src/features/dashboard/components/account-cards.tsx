@@ -744,7 +744,9 @@ export function AccountCards({
       groupedAccounts.working.map((account) => account.accountId),
     );
     const liveSessions = groupedAccounts.working.reduce((sum, account) => {
-      if (!hasFreshLiveTelemetry(account, nowMs)) {
+      const hasLiveProcessSessionSignal =
+        Math.max(account.codexLiveSessionCount ?? 0, 0) > 0;
+      if (!hasFreshLiveTelemetry(account, nowMs) && !hasLiveProcessSessionSignal) {
         return sum;
       }
       return sum + Math.max(account.codexLiveSessionCount ?? 0, 1);

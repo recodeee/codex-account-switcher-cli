@@ -1805,6 +1805,7 @@ describe("AccountCards", () => {
 
     expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
     expect(screen.getByText("startup-live-process@example.com")).toBeInTheDocument();
+    expect(screen.getByText("1 live sessions")).toBeInTheDocument();
     expect(
       screen.queryByText("No account is working now currently."),
     ).not.toBeInTheDocument();

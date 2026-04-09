@@ -37,7 +37,6 @@ from app.modules.usage.depletion_service import (
     compute_aggregate_depletion,
     compute_depletion_for_account,
 )
-from app.modules.usage.updater import UsageUpdater
 
 class DashboardService:
     def __init__(self, repo: DashboardRepository) -> None:
@@ -49,14 +48,6 @@ class DashboardService:
         await sync_local_codex_auth_snapshots(repo=self._repo.accounts_repo, encryptor=self._encryptor)
         accounts = await self._repo.list_accounts()
         primary_usage = await self._repo.latest_usage_by_account("primary")
-        if accounts:
-            updater = UsageUpdater(
-                self._repo.usage_repo,
-                self._repo.accounts_repo,
-                self._repo.additional_usage_repo,
-            )
-            await updater.refresh_accounts(accounts, primary_usage)
-            primary_usage = await self._repo.latest_usage_by_account("primary")
         secondary_usage = await self._repo.latest_usage_by_account("secondary")
         account_ids = [account.id for account in accounts]
         request_usage_rows = await self._repo.list_request_usage_summary_by_account(account_ids)
@@ -124,16 +115,23 @@ class DashboardService:
                 usage_repo=self._repo.usage_repo,
                 candidates=persist_candidates,
             )
-        overlay_live_codex_task_previews(
-            accounts=accounts,
-            codex_auth_by_account=codex_auth_by_account,
-            snapshot_names_by_account=snapshot_names_by_account,
+        if _should_overlay_live_task_previews(
+            codex_live_session_counts_by_account=codex_live_session_counts_by_account,
+            codex_tracked_session_counts_by_account=codex_tracked_session_counts_by_account,
             codex_current_task_preview_by_account=codex_current_task_preview_by_account,
-            codex_last_task_preview_by_account=codex_last_task_preview_by_account,
             codex_session_task_previews_by_account=codex_session_task_previews_by_account,
             live_quota_debug_by_account=live_quota_debug_by_account,
-            now=now,
-        )
+        ):
+            overlay_live_codex_task_previews(
+                accounts=accounts,
+                codex_auth_by_account=codex_auth_by_account,
+                snapshot_names_by_account=snapshot_names_by_account,
+                codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+                codex_last_task_preview_by_account=codex_last_task_preview_by_account,
+                codex_session_task_previews_by_account=codex_session_task_previews_by_account,
+                live_quota_debug_by_account=live_quota_debug_by_account,
+                now=now,
+            )
 
         account_summaries = build_account_summaries(
             accounts=accounts,
@@ -306,6 +304,28 @@ class DashboardService:
             depletion_primary=pri_depletion,
             depletion_secondary=sec_depletion,
         )
+
+
+def _should_overlay_live_task_previews(
+    *,
+    codex_live_session_counts_by_account: dict[str, int],
+    codex_tracked_session_counts_by_account: dict[str, int],
+    codex_current_task_preview_by_account: dict[str, str],
+    codex_session_task_previews_by_account: dict[str, list[AccountSessionTaskPreview]],
+    live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug],
+) -> bool:
+    if any(count > 0 for count in codex_live_session_counts_by_account.values()):
+        return True
+    if any(count > 0 for count in codex_tracked_session_counts_by_account.values()):
+        return True
+    if codex_current_task_preview_by_account:
+        return True
+    if any(previews for previews in codex_session_task_previews_by_account.values()):
+        return True
+    if any(debug.raw_samples for debug in live_quota_debug_by_account.values()):
+        return True
+    return False
+
 
 def _build_depletion_by_window(
     primary_history: dict[str, list[UsageHistory]],

@@ -1082,6 +1082,7 @@ function isLastSeenWithinUpToDateGrace(
 function resolveLastSeenDisplayWithRecordedAt(
   label: string | null | undefined,
   recordedAt: string | null | undefined,
+  options: { allowGrace?: boolean } = {},
 ): {
   label: string | null;
   upToDate: boolean;
@@ -1090,10 +1091,11 @@ function resolveLastSeenDisplayWithRecordedAt(
     return { label: null, upToDate: false };
   }
   const normalized = label.trim().toLowerCase();
+  const allowGrace = options.allowGrace ?? false;
   const upToDate =
     normalized === "last seen now" ||
     /\b0m ago$/.test(normalized) ||
-    isLastSeenWithinUpToDateGrace(recordedAt);
+    (allowGrace && isLastSeenWithinUpToDateGrace(recordedAt));
   if (upToDate) {
     return { label: "Up to date", upToDate: true };
   }
@@ -1586,15 +1588,18 @@ export function AccountCard(props: AccountCardProps) {
   const secondaryReset = formatQuotaResetLabel(secondaryResetAt);
   const primaryWindowLabel = formatWindowLabel("primary", primaryWindowMinutes);
   const isDeactivated = status === "deactivated";
+  const shouldApplyLastSeenGrace = hasActiveCliSession;
   const primaryLastSeen = formatLastUsageLabel(primaryLastRecordedAt);
   const secondaryLastSeen = formatLastUsageLabel(secondaryLastRecordedAt);
   const primaryLastSeenDisplay = resolveLastSeenDisplayWithRecordedAt(
     primaryLastSeen,
     primaryLastRecordedAt,
+    { allowGrace: shouldApplyLastSeenGrace },
   );
   const secondaryLastSeenDisplay = resolveLastSeenDisplayWithRecordedAt(
     secondaryLastSeen,
     secondaryLastRecordedAt,
+    { allowGrace: shouldApplyLastSeenGrace },
   );
   const stalePrimaryLastSeen = !hasLiveSession
     ? primaryLastSeenDisplay

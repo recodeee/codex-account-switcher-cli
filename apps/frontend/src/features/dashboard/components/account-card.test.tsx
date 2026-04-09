@@ -3099,10 +3099,13 @@ describe("AccountCard", () => {
     vi.useRealTimers();
   });
 
-  it("shows up-to-date for recently refreshed usage timestamps to avoid stale minute labels", () => {
+  it("shows up-to-date for recently refreshed usage timestamps when active CLI signals still exist", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
       codexAuth: {
         hasSnapshot: true,
         snapshotName: "main",
@@ -3119,6 +3122,32 @@ describe("AccountCard", () => {
     expect(screen.getAllByText("Up to date").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText("last seen 13m ago")).not.toBeInTheDocument();
     expect(screen.queryByText("last seen 15m ago")).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("shows explicit last-seen labels when there is no active CLI signal", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: "2025-12-31T23:47:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-31T23:45:00.000Z",
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByText("Up to date")).not.toBeInTheDocument();
+    expect(screen.getByText("last seen 13m ago")).toBeInTheDocument();
+    expect(screen.getByText("last seen 15m ago")).toBeInTheDocument();
     vi.useRealTimers();
   });
 

@@ -7,7 +7,7 @@ import { getDashboardOverview } from "@/features/dashboard/api";
 import { getSettings } from "@/features/settings/api";
 import { formatTimeLong } from "@/utils/formatters";
 
-const LAST_SYNC_TIMEOUT_WARNING_MS = 1_000;
+const LAST_SYNC_STALE_WARNING_MS = 60_000;
 
 function isRequestTimeoutError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
@@ -42,8 +42,6 @@ function getRoutingLabel(strategy: "usage_weighted" | "round_robin" | "capacity_
 export function StatusBar() {
   const {
     data: lastSyncAt = null,
-    isFetching: isLastSyncFetching,
-    isSuccess: hasLastSyncSuccess,
     error: lastSyncError,
   } = useQuery({
     queryKey: ["dashboard", "overview"],
@@ -66,30 +64,29 @@ export function StatusBar() {
   });
   const lastSync = formatTimeLong(lastSyncAt);
   const [isLive, setIsLive] = useState(false);
-  const [showSlowLastSyncWarning, setShowSlowLastSyncWarning] = useState(false);
-
-  useEffect(() => {
-    let timeoutId: number;
-    if (isLastSyncFetching) {
-      timeoutId = window.setTimeout(() => {
-        setShowSlowLastSyncWarning(true);
-      }, LAST_SYNC_TIMEOUT_WARNING_MS);
-    } else {
-      timeoutId = window.setTimeout(() => {
-        setShowSlowLastSyncWarning(false);
-      }, 0);
-    }
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [isLastSyncFetching, hasLastSyncSuccess]);
-
-  const showLastSyncTimeoutWarning =
-    showSlowLastSyncWarning || isRequestTimeoutError(lastSyncError);
+  const [hasStaleLastSync, setHasStaleLastSync] = useState(false);
+  const hasRequestTimeoutError = isRequestTimeoutError(lastSyncError);
+  const showLastSyncTimeoutWarning = hasRequestTimeoutError || hasStaleLastSync;
+  const lastSyncTimeoutWarningLabel = hasRequestTimeoutError
+    ? "request timeout"
+    : "timeout > 1m";
 
   useEffect(() => {
     function check() {
-      setIsLive(lastSyncAt ? Date.now() - new Date(lastSyncAt).getTime() < 60_000 : false);
+      if (!lastSyncAt) {
+        setIsLive(false);
+        setHasStaleLastSync(false);
+        return;
+      }
+      const recordedAtMs = Date.parse(lastSyncAt);
+      if (!Number.isFinite(recordedAtMs)) {
+        setIsLive(false);
+        setHasStaleLastSync(false);
+        return;
+      }
+      const ageMs = Date.now() - recordedAtMs;
+      setIsLive(ageMs < LAST_SYNC_STALE_WARNING_MS);
+      setHasStaleLastSync(ageMs > LAST_SYNC_STALE_WARNING_MS);
     }
     check();
     const id = setInterval(check, 10_000);
@@ -121,7 +118,7 @@ export function StatusBar() {
               data-testid="status-bar-last-sync-timeout-warning"
               className="rounded-sm border border-red-500/35 bg-red-500/10 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-red-400"
             >
-              timeout &gt; 1s
+              {lastSyncTimeoutWarningLabel}
             </span>
           ) : null}
         </span>

@@ -48,7 +48,7 @@ describe("StatusBar", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows and then clears the red timeout warning for slow overview requests", async () => {
+  it("does not show timeout warning for slow overview requests that still resolve", async () => {
     vi.mocked(getDashboardOverview).mockImplementation(
       () =>
         new Promise<Awaited<ReturnType<typeof getDashboardOverview>>>((resolve) => {
@@ -64,14 +64,37 @@ describe("StatusBar", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByTestId("status-bar-last-sync-timeout-warning"),
-      ).toBeInTheDocument();
-    }, { timeout: 2_000 });
-
-    await waitFor(() => {
-      expect(
         screen.queryByTestId("status-bar-last-sync-timeout-warning"),
       ).not.toBeInTheDocument();
     }, { timeout: 3_000 });
+  });
+
+  it("shows timeout warning when overview request fails with request_timeout", async () => {
+    vi.mocked(getDashboardOverview).mockRejectedValue(
+      new Error("Request timed out after 15000ms"),
+    );
+
+    renderWithProviders(<StatusBar />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("status-bar-last-sync-timeout-warning"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows timeout warning when last sync is older than one minute", async () => {
+    vi.mocked(getDashboardOverview).mockResolvedValue({
+      lastSyncAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+    } as Awaited<ReturnType<typeof getDashboardOverview>>);
+
+    renderWithProviders(<StatusBar />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("status-bar-last-sync-timeout-warning"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByText("timeout > 1m")).toBeInTheDocument();
   });
 });

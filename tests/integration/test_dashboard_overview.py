@@ -1325,3 +1325,21 @@ async def test_dashboard_overview_weekly_only_depletion_uses_current_stream(asyn
     payload = response.json()
     assert payload["depletionSecondary"] is not None
     assert payload["depletionSecondary"]["risk"] == pytest.approx(0.37, abs=0.02)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_overview_does_not_run_inline_usage_refresh(async_client, db_setup, monkeypatch):
+    async def _unexpected_refresh(*_args, **_kwargs):
+        raise AssertionError("dashboard overview must not block on inline usage refresh")
+
+    monkeypatch.setattr(
+        "app.modules.usage.updater.UsageUpdater.refresh_accounts",
+        _unexpected_refresh,
+    )
+
+    async with SessionLocal() as session:
+        accounts_repo = AccountsRepository(session)
+        await accounts_repo.upsert(_make_account("acc_no_inline_refresh", "inline-refresh@example.com"))
+
+    response = await async_client.get("/api/dashboard/overview")
+    assert response.status_code == 200
