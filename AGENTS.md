@@ -66,6 +66,12 @@ Auth/session rule:
 Parallel-work safety:
 - When editing `main.rs`, assume other agents may be changing Python API surfaces at the same time.
 - Prefer compatibility-preserving proxy behavior over endpoint-specific Rust implementations that can break on concurrent backend changes.
+- `main.rs` is now lock-protected for parallel agent sessions. Before **any** edit to
+  `rust/codex-lb-runtime/src/main.rs`, claim ownership:
+  - `python3 scripts/main_rs_lock.py claim --owner "<agent-name>"`
+  - Check owner/lease: `python3 scripts/main_rs_lock.py status`
+  - Release when done: `python3 scripts/main_rs_lock.py release --owner "<agent-name>"`
+- If the lock is held by another agent, do not edit `main.rs`; continue in owned module files or hand off to the integrator.
 
 Required verification before claiming Rust runtime changes are complete:
 - Confirm wildcard proxy routes still exist in `app_with_state(...)`.
@@ -86,6 +92,8 @@ Use this contract whenever multiple agents are active in parallel.
   - intended action.
 - Before deleting/replacing code, each agent must read the latest session comments/handoffs first and confirm the target code is in their owned scope.
 - If ownership is unclear or overlaps, stop that edit, post a blocker comment, and let the leader/integrator reassign scope.
+- For git isolation, each agent must start on a dedicated branch via `scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"`.
+- Agent completion must use `scripts/agent-branch-finish.sh` (merge into `dev`, push, delete agent branch).
 
 1) Explicit ownership before edits
 - Assign each agent clear file/module ownership.

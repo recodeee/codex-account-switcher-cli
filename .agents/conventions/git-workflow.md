@@ -1,6 +1,6 @@
 # Git Workflow & Contribution
 
-1. **Important**: Create branches, commits, or PRs **only upon explicit user request**. Implicit actions are not allowed.
+1. **Important**: For multi-agent execution, always create an isolated per-agent branch first using `scripts/agent-branch-start.sh`.
 2. **Branch Naming**: Use prefixes like `feature/`, `fix/`, `chore/` (e.g., `feature/add-login`).
 3. **Commit Messages**: Follow [Conventional Commits](https://www.conventionalcommits.org/).
    - Format: `<type>(<scope>): <description>`
@@ -40,4 +40,16 @@
 
    Note: This requires "Allow edits from maintainers" to be enabled on the PR.
 
-7. **Best Practices**: Commit often in small units. Do not commit directly to `main`. Always check `git diff` before pushing.
+7. **Agent Branch Flow (Required in multi-agent runs)**:
+
+   ```bash
+   # start isolated work branch from dev
+   bash scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"
+
+   # ... implement, verify, commit on that branch ...
+
+   # finish flow: merge into dev, push, delete branch
+   bash scripts/agent-branch-finish.sh
+   ```
+
+8. **Best Practices**: Commit often in small units. Do not commit directly to `main`. Always check `git diff` before pushing.
