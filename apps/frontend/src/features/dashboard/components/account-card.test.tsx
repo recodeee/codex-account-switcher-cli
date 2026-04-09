@@ -1623,6 +1623,12 @@ describe("AccountCard", () => {
     expect(within(planningGraph).getByText("Verifier")).toBeInTheDocument();
     expect(within(planningGraph).getByText("RALPLAN")).toBeInTheDocument();
     expect(
+      planningGraph.querySelector('path[d="M 0 50 H 56"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      planningGraph.querySelector('path[d="M 200 50 H 144"]'),
+    ).not.toBeInTheDocument();
+    expect(
       within(planningGraph).getByTestId("omx-planning-cli-state"),
     ).toHaveTextContent("Thinking");
     const thinkingBadge = within(planningGraph).getByTestId("omx-planning-cli-state");
@@ -3388,6 +3394,7 @@ describe("AccountCard", () => {
   });
 
   it("shows critic logs label under codex logs when critic lane is active", () => {
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
@@ -3409,6 +3416,8 @@ describe("AccountCard", () => {
         isActiveSnapshot: true,
         hasLiveSession: true,
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} />);
@@ -3419,6 +3428,7 @@ describe("AccountCard", () => {
   });
 
   it("maps ralplan subagent prompts to engineer logs label", () => {
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
@@ -3440,6 +3450,8 @@ describe("AccountCard", () => {
         isActiveSnapshot: true,
         hasLiveSession: true,
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} />);

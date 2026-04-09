@@ -199,8 +199,8 @@ function CpuArchitectureBackdrop({
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M 0 50 H 56" />
-        <path d="M 200 50 H 144" />
+        {showRalplanSubLabel ? null : <path d="M 0 50 H 56" />}
+        {showRalplanSubLabel ? null : <path d="M 200 50 H 144" />}
         <path d="M 88 0 V 28" />
         <path d="M 112 0 V 28" />
         <path d="M 88 72 V 100" />
@@ -2788,10 +2788,13 @@ export function AccountCard(props: AccountCardProps) {
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-200/85 shadow-[0_0_0_2px_rgba(34,211,238,0.12)]" />
                     Codex logs
                   </p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-cyan-100/70">
+                    Hidden on the card. Open the session page to view terminal commands and runtime logs.
+                  </p>
                   {activeOmxPlanningLogLabel ? (
                     <p
                       data-testid="codex-logs-active-agent-label"
-                      className="mt-1 inline-flex items-center rounded-md border border-indigo-300/35 bg-indigo-500/14 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-indigo-100/95"
+                      className="mt-1.5 inline-flex items-center rounded-md border border-indigo-300/35 bg-indigo-500/14 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-indigo-100/95"
                     >
                       {activeOmxPlanningLogLabel}
                     </p>
