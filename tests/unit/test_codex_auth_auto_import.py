@@ -5,12 +5,14 @@ import json
 from pathlib import Path
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.core.crypto import TokenEncryptor
 from app.core.auth import generate_unique_account_id
 from app.modules.accounts.codex_auth_auto_import import (
     _materialize_active_auth_snapshot,
     _select_snapshot_name_for_account,
+    sync_local_codex_auth_snapshots,
 )
 from app.modules.accounts.codex_auth_switcher import build_email_snapshot_name
 
@@ -285,3 +287,40 @@ def test_materialize_active_auth_snapshot_does_not_refresh_foreign_email_shaped_
 
     assert canonical_snapshot_path.read_bytes() == active_auth_path.read_bytes()
     assert foreign_alias_path.read_bytes() == original_foreign_bytes
+
+
+class _LockedUpsertRepo:
+    def __init__(self) -> None:
+        self.upsert_calls = 0
+
+    async def get_by_id(self, account_id: str):  # noqa: ANN001
+        return None
+
+    async def upsert(self, account):  # noqa: ANN001
+        self.upsert_calls += 1
+        raise OperationalError("BEGIN IMMEDIATE", {}, Exception("database is locked"))
+
+
+@pytest.mark.asyncio
+async def test_sync_local_codex_auth_snapshots_skips_sqlite_lock_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    _write_auth_snapshot(
+        accounts_dir / "pia@edix.hu.json",
+        email="pia@edix.hu",
+        account_id="acc-pia",
+    )
+
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "missing-auth.json"))
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+    repo = _LockedUpsertRepo()
+
+    await sync_local_codex_auth_snapshots(repo=repo, encryptor=TokenEncryptor())
+
+    assert repo.upsert_calls == 1
