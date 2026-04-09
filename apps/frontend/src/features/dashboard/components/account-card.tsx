@@ -1514,11 +1514,13 @@ export function AccountCard(props: AccountCardProps) {
       normalizeNearZeroQuotaPercent(primaryRemaining) >= 1) ||
     (typeof secondaryRemaining === "number" &&
       normalizeNearZeroQuotaPercent(secondaryRemaining) >= 1);
+  const shouldSuppressTokenDepletionLimitBadge =
+    hasLiveSession && hasQuotaHeadroomSignal;
   const hasRemainingTokensExhausted =
     showTokensRemaining &&
     !hasExplicitUnknownTokensRemaining &&
     remainingTokensValue <= 0 &&
-    !hasQuotaHeadroomSignal;
+    !shouldSuppressTokenDepletionLimitBadge;
   const useLocalBlockedByWeeklyQuota =
     typeof secondaryRemaining === "number" &&
     normalizeNearZeroQuotaPercent(secondaryRemaining) < 1;
