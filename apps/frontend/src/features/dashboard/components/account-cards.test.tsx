@@ -204,7 +204,7 @@ describe("AccountCards", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("2 live sessions")).toBeInTheDocument();
     expect(screen.getByText("5h price spend")).toBeInTheDocument();
-    expect(screen.getByText("€0.00 · 1.2M")).toBeInTheDocument();
+    expect(screen.getByText("€0.00")).toBeInTheDocument();
     expect(screen.queryByText(/weekly avg \d+%/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Weekly price spend")).not.toBeInTheDocument();
 
@@ -247,7 +247,6 @@ describe("AccountCards", () => {
       },
       lastUsageRecordedAtPrimary: "2026-04-09T09:59:20.000Z",
       lastUsageRecordedAtSecondary: "2026-04-09T09:59:20.000Z",
-      codexLastTaskPreview: "Continue syncing Klara billing workflow",
     });
 
     const { rerender } = render(
@@ -268,7 +267,7 @@ describe("AccountCards", () => {
       codexLiveSessionCount: 0,
       codexTrackedSessionCount: 0,
       codexSessionCount: 0,
-      codexCurrentTaskPreview: "Waiting for new task",
+      codexCurrentTaskPreview: null,
       codexSessionTaskPreviews: [],
       codexAuth: {
         hasSnapshot: true,
@@ -291,10 +290,6 @@ describe("AccountCards", () => {
 
     expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
     expect(screen.getByText("working@example.com")).toBeInTheDocument();
-    const workingCard = screen.getByText("working@example.com").closest(".card-hover");
-    expect(workingCard).not.toBeNull();
-    expect(within(workingCard as HTMLElement).getByText(/working\.\.\./i)).toBeInTheDocument();
-    expect(within(workingCard as HTMLElement).queryByText(/waiting for new task/i)).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(95_000);

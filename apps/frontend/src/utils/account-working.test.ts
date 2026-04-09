@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createAccountSummary } from "@/test/mocks/factories";
 import {
+  getRecentWorkingNowSignalEntry,
   getWorkingNowUsageLimitHitCountdownMs,
   hasActiveCliSessionSignal,
+  hasRecentWorkingNowSignal,
   getMergedQuotaRemainingPercent,
+  noteWorkingNowSignal,
   getRawQuotaWindowFallback,
   resetWorkingNowLimitHitStateForTests,
   isAccountWorkingNow,
@@ -13,6 +16,59 @@ import {
 
 afterEach(() => {
   resetWorkingNowLimitHitStateForTests();
+});
+
+describe("working-now transient signal cache", () => {
+  it("reuses recent session counters and last non-waiting preview for short telemetry dips", () => {
+    const account = createAccountSummary({
+      accountId: "acc_working_cache",
+      codexLiveSessionCount: 2,
+      codexTrackedSessionCount: 2,
+      codexSessionCount: 2,
+      codexCurrentTaskPreview: "Waiting for new task",
+      codexLastTaskPreview: "Syncing Klara order attribution",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-cache",
+        activeSnapshotName: "working-cache",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+    const nowMs = new Date("2026-04-09T10:00:00.000Z").getTime();
+
+    noteWorkingNowSignal(account, nowMs);
+    const transientEntry = getRecentWorkingNowSignalEntry(account, nowMs + 30_000);
+
+    expect(transientEntry).not.toBeNull();
+    expect(transientEntry?.codexLiveSessionCount).toBe(2);
+    expect(transientEntry?.codexTrackedSessionCount).toBe(2);
+    expect(transientEntry?.codexSessionCount).toBe(2);
+    expect(transientEntry?.taskPreview).toBe("Syncing Klara order attribution");
+  });
+
+  it("expires the transient signal cache after the grace window", () => {
+    const account = createAccountSummary({
+      accountId: "acc_working_cache_expire",
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Refining Zeus task dispatch",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-cache-expire",
+        activeSnapshotName: "working-cache-expire",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+    const nowMs = new Date("2026-04-09T10:00:00.000Z").getTime();
+
+    noteWorkingNowSignal(account, nowMs);
+    expect(hasRecentWorkingNowSignal(account, nowMs + 60_000)).toBe(true);
+    expect(getRecentWorkingNowSignalEntry(account, nowMs + 95_000)).toBeNull();
+    expect(hasRecentWorkingNowSignal(account, nowMs + 95_000)).toBe(false);
+  });
 });
 
 describe("isAccountWorkingNow", () => {

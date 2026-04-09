@@ -19,7 +19,6 @@ import {
   buildQuotaDisplayAccountKey,
 } from "@/utils/account-identifiers";
 import {
-  getRecentWorkingNowSignalEntry,
   getMergedQuotaRemainingPercent,
   getRawQuotaWindowFallback,
   hasActiveCliSessionSignal,
@@ -31,7 +30,7 @@ import {
   selectStableRemainingPercent,
 } from "@/utils/account-working";
 import { resolveEffectiveAccountStatus } from "@/utils/account-status";
-import { formatCompactNumber, formatEuro, formatWindowLabel } from "@/utils/formatters";
+import { formatEuro, formatWindowLabel } from "@/utils/formatters";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 
 const RECENT_LAST_SEEN_SORT_WINDOW_MS = 30 * 60 * 1000;
@@ -516,13 +515,6 @@ function formatConsumedCostEur(value: number | null | undefined): string {
   return formatEuro(Math.max(0, value));
 }
 
-function formatConsumedTokens(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) {
-    return "--";
-  }
-  return formatCompactNumber(Math.max(0, value) * 1000);
-}
-
 function buildRemainingByAccount(
   window: UsageWindow | null,
 ): Map<string, number> {
@@ -649,44 +641,7 @@ export function AccountCards({
         account.status !== "deactivated" &&
         hasRecentWorkingNowSignal(account, nowMs)
       ) {
-        const recentSignalEntry = getRecentWorkingNowSignalEntry(account, nowMs);
-        const currentTaskPreview = account.codexCurrentTaskPreview?.trim() || null;
-        const currentTaskLooksWaiting =
-          currentTaskPreview != null &&
-          /^(?:waiting|awaiting)\b|waiting for|awaiting user/i.test(
-            currentTaskPreview,
-          );
-        const fallbackTaskPreview =
-          currentTaskPreview && !currentTaskLooksWaiting
-            ? currentTaskPreview
-            : recentSignalEntry?.taskPreview ?? currentTaskPreview ?? null;
-        const adjustedAccount: AccountSummary = {
-          ...account,
-          codexLiveSessionCount: Math.max(
-            account.codexLiveSessionCount ?? 0,
-            recentSignalEntry?.codexLiveSessionCount ?? 0,
-          ),
-          codexTrackedSessionCount: Math.max(
-            account.codexTrackedSessionCount ?? 0,
-            recentSignalEntry?.codexTrackedSessionCount ?? 0,
-          ),
-          codexSessionCount: Math.max(
-            account.codexSessionCount ?? 0,
-            recentSignalEntry?.codexSessionCount ?? 0,
-          ),
-          codexCurrentTaskPreview: fallbackTaskPreview,
-          codexAuth: account.codexAuth
-            ? {
-                ...account.codexAuth,
-                hasLiveSession:
-                  account.codexAuth.hasLiveSession ||
-                  (recentSignalEntry?.codexLiveSessionCount ?? 0) > 0 ||
-                  (recentSignalEntry?.codexTrackedSessionCount ?? 0) > 0 ||
-                  (recentSignalEntry?.codexSessionCount ?? 0) > 0,
-              }
-            : account.codexAuth,
-        };
-        working.push(adjustedAccount);
+        working.push(account);
         continue;
       }
 
@@ -910,9 +865,7 @@ export function AccountCards({
                     {primaryWindowLabel} price spend
                   </span>
                   <span className="text-base font-semibold text-zinc-100 tabular-nums">
-                    {`${formatConsumedCostEur(workingSummary.primaryConsumedCostEur)} · ${formatConsumedTokens(
-                      workingSummary.primaryConsumedTokens,
-                    )}`}
+                    {formatConsumedCostEur(workingSummary.primaryConsumedCostEur)}
                   </span>
                 </span>
               ) : null}

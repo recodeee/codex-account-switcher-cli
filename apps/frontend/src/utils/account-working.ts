@@ -18,8 +18,20 @@ type UsageLimitHitEntry = {
   startedAtMs: number;
 };
 
+type WorkingNowTransientSignalEntry = {
+  observedAtMs: number;
+  codexLiveSessionCount: number;
+  codexTrackedSessionCount: number;
+  codexSessionCount: number;
+  taskPreview: string | null;
+};
+
 const usageLimitHitByAccount = new Map<string, UsageLimitHitEntry>();
 const workingNowTransientSignalByAccount = new Map<string, number>();
+const workingNowTransientSignalEntryByAccount = new Map<
+  string,
+  WorkingNowTransientSignalEntry
+>();
 
 function parseRecordedAtMs(value: string | null | undefined): number | null {
   if (!value) return null;
@@ -31,6 +43,19 @@ function parseRecordedAtMs(value: string | null | undefined): number | null {
 function normalizeSnapshotName(value: string | null | undefined): string | null {
   const normalized = value?.trim().toLowerCase();
   return normalized ? normalized : null;
+}
+
+function isWaitingLikeTaskPreview(taskPreview: string | null | undefined): boolean {
+  const normalized = taskPreview?.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.startsWith("waiting") ||
+    normalized.startsWith("awaiting") ||
+    normalized.includes("waiting for") ||
+    normalized.includes("awaiting user")
+  );
 }
 
 function getScopedQuotaDebugSamples(
@@ -630,11 +655,38 @@ function buildWorkingNowTransientSignalCacheKey(
 }
 
 export function noteWorkingNowSignal(
-  account: Pick<AccountSummary, "accountId" | "codexAuth">,
+  account: Pick<
+    AccountSummary,
+    | "accountId"
+    | "codexAuth"
+    | "codexLiveSessionCount"
+    | "codexTrackedSessionCount"
+    | "codexSessionCount"
+    | "codexCurrentTaskPreview"
+    | "codexLastTaskPreview"
+  >,
   nowMs: number = Date.now(),
 ): void {
   const cacheKey = buildWorkingNowTransientSignalCacheKey(account);
   workingNowTransientSignalByAccount.set(cacheKey, nowMs);
+  const codexLiveSessionCount = Math.max(account.codexLiveSessionCount ?? 0, 0);
+  const codexTrackedSessionCount = Math.max(account.codexTrackedSessionCount ?? 0, 0);
+  const codexSessionCount = Math.max(account.codexSessionCount ?? 0, 0);
+  const currentTaskPreview = account.codexCurrentTaskPreview?.trim() || null;
+  const lastTaskPreview = account.codexLastTaskPreview?.trim() || null;
+  const taskPreviewCandidate =
+    currentTaskPreview && !isWaitingLikeTaskPreview(currentTaskPreview)
+      ? currentTaskPreview
+      : lastTaskPreview && !isWaitingLikeTaskPreview(lastTaskPreview)
+        ? lastTaskPreview
+        : null;
+  workingNowTransientSignalEntryByAccount.set(cacheKey, {
+    observedAtMs: nowMs,
+    codexLiveSessionCount,
+    codexTrackedSessionCount,
+    codexSessionCount,
+    taskPreview: taskPreviewCandidate,
+  });
 }
 
 export function hasRecentWorkingNowSignal(
@@ -648,9 +700,21 @@ export function hasRecentWorkingNowSignal(
   }
   if (nowMs - lastSignalAtMs > WORKING_NOW_TRANSIENT_SIGNAL_GRACE_MS) {
     workingNowTransientSignalByAccount.delete(cacheKey);
+    workingNowTransientSignalEntryByAccount.delete(cacheKey);
     return false;
   }
   return true;
+}
+
+export function getRecentWorkingNowSignalEntry(
+  account: Pick<AccountSummary, "accountId" | "codexAuth">,
+  nowMs: number = Date.now(),
+): WorkingNowTransientSignalEntry | null {
+  if (!hasRecentWorkingNowSignal(account, nowMs)) {
+    return null;
+  }
+  const cacheKey = buildWorkingNowTransientSignalCacheKey(account);
+  return workingNowTransientSignalEntryByAccount.get(cacheKey) ?? null;
 }
 
 function isDepletedPrimaryQuota(value: number | null | undefined): boolean {
@@ -919,4 +983,5 @@ export function isAccountWorkingNow(
 export function resetWorkingNowLimitHitStateForTests(): void {
   usageLimitHitByAccount.clear();
   workingNowTransientSignalByAccount.clear();
+  workingNowTransientSignalEntryByAccount.clear();
 }
