@@ -46,9 +46,9 @@ const QUOTA_SORT_BUCKET_PERCENT = 5;
 const ACCOUNT_CARDS_CLOCK_TICK_MS = 5_000;
 const EMAIL_AUTOCORRECT_MAX_DISTANCE = 3;
 const ACCOUNT_GRID_CLASSNAME =
-  "grid auto-rows-fr items-stretch gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,21.5rem),1fr))] [&_.card-hover]:h-full";
+  "grid auto-rows-fr items-stretch gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,21.5rem),1fr))] [&_.card-hover]:h-full";
 const WORKING_ACCOUNT_GRID_CLASSNAME =
-  "grid auto-rows-fr items-stretch gap-4 grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 [&_.card-hover]:h-full";
+  "grid auto-rows-fr items-stretch gap-3 grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 [&_.card-hover]:h-full";
 const WORKING_ACCOUNT_PLACEHOLDER_TARGET = 3;
 const WORKING_ACCOUNT_SUGGESTION_LIMIT = 3;
 
