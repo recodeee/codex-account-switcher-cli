@@ -1,11 +1,27 @@
 import { useEffect, useState } from "react";
-import { Activity, ArrowRightLeft, Tag } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRightLeft, Tag } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchRuntimeAppVersion } from "@/components/layout/app-version";
 import { getDashboardOverview } from "@/features/dashboard/api";
 import { getSettings } from "@/features/settings/api";
 import { formatTimeLong } from "@/utils/formatters";
+
+const LAST_SYNC_TIMEOUT_WARNING_MS = 1_000;
+
+function isRequestTimeoutError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const maybe = error as { code?: unknown; message?: unknown };
+  if (maybe.code === "request_timeout") {
+    return true;
+  }
+  if (typeof maybe.message === "string") {
+    return maybe.message.toLowerCase().includes("timed out");
+  }
+  return false;
+}
 
 function getRoutingLabel(strategy: "usage_weighted" | "round_robin" | "capacity_weighted", sticky: boolean, preferEarlier: boolean): string {
   if (strategy === "round_robin") {
@@ -24,7 +40,12 @@ function getRoutingLabel(strategy: "usage_weighted" | "round_robin" | "capacity_
 }
 
 export function StatusBar() {
-  const { data: lastSyncAt = null } = useQuery({
+  const {
+    data: lastSyncAt = null,
+    isFetching: isLastSyncFetching,
+    isSuccess: hasLastSyncSuccess,
+    error: lastSyncError,
+  } = useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: getDashboardOverview,
     refetchInterval: 60_000,
@@ -45,6 +66,30 @@ export function StatusBar() {
   });
   const lastSync = formatTimeLong(lastSyncAt);
   const [isLive, setIsLive] = useState(false);
+  const [showLastSyncTimeoutWarning, setShowLastSyncTimeoutWarning] = useState(false);
+
+  useEffect(() => {
+    if (isRequestTimeoutError(lastSyncError)) {
+      setShowLastSyncTimeoutWarning(true);
+      return;
+    }
+    if (!isLastSyncFetching && hasLastSyncSuccess) {
+      setShowLastSyncTimeoutWarning(false);
+    }
+  }, [hasLastSyncSuccess, isLastSyncFetching, lastSyncError]);
+
+  useEffect(() => {
+    if (!isLastSyncFetching) {
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setShowLastSyncTimeoutWarning(true);
+    }, LAST_SYNC_TIMEOUT_WARNING_MS);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isLastSyncFetching]);
+
   useEffect(() => {
     function check() {
       setIsLive(lastSyncAt ? Date.now() - new Date(lastSyncAt).getTime() < 60_000 : false);
@@ -66,12 +111,22 @@ export function StatusBar() {
     <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.08] bg-background/50 px-4 py-2 shadow-[0_-1px_12px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-[1.8] supports-[backdrop-filter]:bg-background/40 dark:shadow-[0_-1px_12px_rgba(0,0,0,0.25)]">
       <div className="mx-auto flex w-full max-w-[1500px] flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          {isLive ? (
+          {showLastSyncTimeoutWarning ? (
+            <AlertTriangle className="h-3 w-3 text-red-400" aria-hidden="true" />
+          ) : isLive ? (
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" title="Live" />
           ) : (
             <Activity className="h-3 w-3" aria-hidden="true" />
           )}
           <span className="font-medium">Last sync:</span> {lastSync.time}
+          {showLastSyncTimeoutWarning ? (
+            <span
+              data-testid="status-bar-last-sync-timeout-warning"
+              className="rounded-sm border border-red-500/35 bg-red-500/10 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-red-400"
+            >
+              timeout &gt; 1s
+            </span>
+          ) : null}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <ArrowRightLeft className="h-3 w-3" aria-hidden="true" />

@@ -563,6 +563,7 @@ export function hasActiveCliSessionSignal(
   const hasHardSignal =
     (account.codexAuth?.hasLiveSession ?? false) ||
     hasFreshLiveTelemetry(account, nowMs) ||
+    Math.max(account.codexLiveSessionCount ?? 0, 0) > 0 ||
     Math.max(account.codexTrackedSessionCount ?? 0, account.codexSessionCount ?? 0, 0) > 0 ||
     hasFreshTaskPreviewSignal(account) ||
     getFreshDebugRawSampleCount(account, nowMs) > 0;
@@ -911,10 +912,18 @@ export function isAccountWorkingNow(
       0,
     ) > 0;
   const hasTaskPreviewSignal = hasFreshTaskPreviewSignal(account);
+  const hasLiveProcessSessionSignal =
+    Math.max(account.codexLiveSessionCount ?? 0, 0) > 0;
   const hasActiveCliSessionSignal =
     hasActiveSessionCounterSignal ||
     (account.codexAuth?.hasLiveSession ?? false) ||
     hasTaskPreviewSignal;
+  const hasAnyUsageTelemetryTimestamp =
+    parseRecordedAtMs(account.lastUsageRecordedAtPrimary) != null ||
+    parseRecordedAtMs(account.lastUsageRecordedAtSecondary) != null;
+  const hasNoLiveTelemetryOverride =
+    (account.liveQuotaDebug?.overrideReason ?? "").trim().toLowerCase() ===
+    "no_live_telemetry";
   // Keep disconnected accounts out of "Working now" unless they still have a
   // verifiable live session signal.
   if (account.status === "deactivated" && !hasFreshLiveSession) {
@@ -957,6 +966,15 @@ export function isAccountWorkingNow(
         return false;
       }
     }
+  }
+
+  const hasFastStartupWorkingSignal =
+    !hasAnyUsageTelemetryTimestamp &&
+    (hasLiveProcessSessionSignal ||
+      ((account.codexAuth?.hasLiveSession ?? false) &&
+        !hasNoLiveTelemetryOverride));
+  if (hasFastStartupWorkingSignal) {
+    return true;
   }
 
   if (hasFreshLiveSession) {

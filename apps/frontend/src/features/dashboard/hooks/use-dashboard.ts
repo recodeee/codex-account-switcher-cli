@@ -13,7 +13,7 @@ import { hasActiveCliSessionSignal } from "@/utils/account-working";
 
 const DEFAULT_DASHBOARD_POLL_MS = 10_000;
 const ACTIVE_DASHBOARD_POLL_MS = 5_000;
-const WEBSOCKET_CONNECTED_SAFETY_POLL_MS = 60_000;
+const WEBSOCKET_CONNECTED_SAFETY_POLL_MS = 5_000;
 const MAX_DASHBOARD_METADATA_CHARS = 200_000;
 
 function hasWorkingAccounts(data: DashboardOverview | undefined): boolean {

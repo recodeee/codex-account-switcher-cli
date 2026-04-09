@@ -87,6 +87,24 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account, now.getTime())).toBe(true);
   });
 
+  it("returns true immediately when live-session startup signal arrives before telemetry timestamps", () => {
+    const now = new Date("2026-04-04T12:00:00.000Z");
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "secondary",
+        activeSnapshotName: "main",
+        isActiveSnapshot: false,
+        hasLiveSession: true,
+      },
+      codexLiveSessionCount: 1,
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
+    expect(isAccountWorkingNow(account, now.getTime())).toBe(true);
+  });
+
   it("returns true when a live process session count has fresh telemetry timestamps", () => {
     const now = new Date("2026-04-04T12:00:00.000Z");
     const account = createAccountSummary({
@@ -814,6 +832,34 @@ describe("isAccountWorkingNow", () => {
 
     expect(hasActiveCliSessionSignal(account, nowMs)).toBe(true);
     expect(isAccountWorkingNow(account, nowMs)).toBe(false);
+  });
+
+  it("returns true when live process session count is present during no-live-telemetry startup gaps", () => {
+    const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "planning",
+        activeSnapshotName: "other",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["planning"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    expect(hasActiveCliSessionSignal(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(true);
   });
 
   it("returns true when active snapshot has a fresh session task preview during no-live-telemetry gaps", () => {

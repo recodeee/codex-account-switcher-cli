@@ -936,7 +936,7 @@ describe("AccountCards", () => {
     expect(screen.getByText("depleted-idle@example.com")).toBeInTheDocument();
   });
 
-  it("keeps no-live-telemetry accounts in working-now when codex auth still reports live sessions", () => {
+  it("keeps no-live-telemetry accounts out of working-now when scoped samples do not confirm live ownership", () => {
     const account = createAccountSummary({
       accountId: "acc_itrexsale",
       email: "itrexsale@example.com",
@@ -980,7 +980,7 @@ describe("AccountCards", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Working now" })).not.toBeInTheDocument();
     expect(screen.getByText("itrexsale@example.com")).toBeInTheDocument();
   });
 
@@ -1767,6 +1767,47 @@ describe("AccountCards", () => {
     expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
     expect(screen.getByText("deactivated-live@example.com")).toBeInTheDocument();
     expect(screen.getByText("2 live sessions")).toBeInTheDocument();
+  });
+
+  it("keeps live process sessions in working-now during no-live-telemetry startup gaps", () => {
+    const startupLiveProcess = createAccountSummary({
+      accountId: "acc_startup_live_process",
+      email: "startup-live-process@example.com",
+      displayName: "startup-live-process@example.com",
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "startup-live-process",
+        activeSnapshotName: "different",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["startup-live-process"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    render(
+      <AccountCards
+        accounts={[startupLiveProcess]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.getByText("startup-live-process@example.com")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No account is working now currently."),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps tracked-session-only accounts out of the working-now section", () => {
