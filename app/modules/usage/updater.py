@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import logging
 import math
@@ -169,6 +170,12 @@ class _UsageRefreshSingleflight:
         current = self._inflight.get(account_id)
         if current is task:
             self._inflight.pop(account_id, None)
+        # `run()` shields shared work so caller cancellation does not cancel the
+        # underlying refresh. During reload/shutdown that can leave an orphaned
+        # task whose exception would otherwise surface as:
+        # "Task exception was never retrieved".
+        with contextlib.suppress(asyncio.CancelledError):
+            task.exception()
 
 
 _USAGE_REFRESH_SINGLEFLIGHT = _UsageRefreshSingleflight()
