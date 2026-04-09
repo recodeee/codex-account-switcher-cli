@@ -517,6 +517,7 @@ function CodexActiveAgentCard({
 }) {
   const cliStateStyle =
     OMX_CLI_STATE_STYLES[cliRuntimeState] ?? OMX_CLI_STATE_STYLES.finished;
+  const showWorkingBadge = cliRuntimeState === "thinking";
   return (
     <div
       data-testid="codex-active-agent-card"
@@ -554,15 +555,33 @@ function CodexActiveAgentCard({
           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100/95">
             Codex
           </span>
+          <span
+            data-testid="codex-inline-status"
+            className="inline-flex h-5 items-center rounded-full border border-white/20 bg-white/5 px-2 text-[8px] font-semibold uppercase tracking-[0.1em] text-cyan-100/85"
+          >
+            Status: {cliStateStyle.label}
+          </span>
         </div>
-        <span
-          className={cn(
-            "inline-flex h-6 items-center gap-1.5 rounded-full border bg-[#060A13] px-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] shadow-[0_6px_16px_rgba(2,6,23,0.35)] backdrop-blur-sm",
-            cliStateStyle.badgeClassName,
-          )}
-        >
-          {cliStateStyle.label}
-        </span>
+        {showWorkingBadge ? (
+          <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-cyan-300/55 bg-cyan-500/18 px-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-cyan-50 shadow-[0_6px_16px_rgba(2,6,23,0.35)] backdrop-blur-sm">
+            <span className="flex items-end gap-0.5" aria-hidden>
+              <span className="h-1.5 w-0.5 rounded-full bg-cyan-100/95 animate-pulse [animation-duration:900ms]" />
+              <span className="h-2.5 w-0.5 rounded-full bg-cyan-100/95 animate-pulse [animation-delay:120ms] [animation-duration:900ms]" />
+              <span className="h-3 w-0.5 rounded-full bg-cyan-100/95 animate-pulse [animation-delay:240ms] [animation-duration:900ms]" />
+              <span className="h-2 w-0.5 rounded-full bg-cyan-100/95 animate-pulse [animation-delay:360ms] [animation-duration:900ms]" />
+            </span>
+            Working...
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "inline-flex h-6 items-center gap-1.5 rounded-full border bg-[#060A13] px-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] shadow-[0_6px_16px_rgba(2,6,23,0.35)] backdrop-blur-sm",
+              cliStateStyle.badgeClassName,
+            )}
+          >
+            {cliStateStyle.label}
+          </span>
+        )}
       </div>
     </div>
   );

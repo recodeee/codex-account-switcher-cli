@@ -1569,7 +1569,7 @@ describe("AccountCard", () => {
       within(codexActiveCard).getByTestId("cpu-architecture-backdrop-codex-active"),
     ).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
-    expect(within(codexActiveCard).getByText("Thinking")).toBeInTheDocument();
+    expect(within(codexActiveCard).getByText("Working...")).toBeInTheDocument();
     expect(
       screen.queryAllByText(
         "Trace session-affinity fallback for codex websocket flow",
