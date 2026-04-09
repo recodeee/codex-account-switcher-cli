@@ -19,6 +19,7 @@ LOCK_PATH = ROOT_DIR / ".omx" / "locks" / "rust-main-rs.lock.json"
 TARGET_PATH = "rust/codex-lb-runtime/src/main.rs"
 DEFAULT_TTL_SECONDS = 45 * 60
 PROTECTED_BRANCHES = {"dev", "main", "master"}
+DEFAULT_MAIN_RS_INTEGRATOR_AGENT = os.environ.get("MAIN_RS_INTEGRATOR_AGENT", "integrator")
 
 
 def now_iso(ts: float | None = None) -> str:
@@ -56,6 +57,13 @@ def current_branch() -> str:
     if result.returncode != 0:
         return ""
     return result.stdout.strip()
+
+
+def branch_agent_name(branch: str) -> str:
+    parts = branch.split("/")
+    if len(parts) >= 3 and parts[0] == "agent":
+        return parts[1]
+    return ""
 
 
 def identity(owner_arg: str | None, branch_arg: str | None) -> dict[str, Any]:
@@ -146,6 +154,13 @@ def validate_lock_for_branch(branch: str) -> tuple[bool, str]:
             f"Current branch: '{branch}'."
         )
 
+    integrator_agent = lock_data.get("integrator_agent") or DEFAULT_MAIN_RS_INTEGRATOR_AGENT
+    if branch_agent_name(branch) != integrator_agent:
+        return False, (
+            f"main.rs lock branch '{branch}' is not the integrator agent branch.\n"
+            f"Required agent slug: '{integrator_agent}' (branch format: agent/{integrator_agent}/...)."
+        )
+
     return True, ""
 
 
@@ -163,6 +178,16 @@ def claim(args: argparse.Namespace) -> int:
         )
         return 1
 
+    integrator_agent = args.integrator_agent or DEFAULT_MAIN_RS_INTEGRATOR_AGENT
+    owner_agent = branch_agent_name(owner_branch)
+    if owner_agent != integrator_agent and not args.allow_non_integrator_branch:
+        print(
+            "[main-rs-lock] refusing to lock main.rs from non-integrator branch "
+            f"('{owner_branch}'). Required branch format: agent/{integrator_agent}/...",
+            file=sys.stderr,
+        )
+        return 1
+
     now_ts = time.time()
     expires_at_ts = now_ts + args.ttl_seconds
 
@@ -173,6 +198,7 @@ def claim(args: argparse.Namespace) -> int:
         "expires_at": now_iso(expires_at_ts),
         "expires_at_epoch": expires_at_ts,
         "lock_version": 2,
+        "integrator_agent": integrator_agent,
         "target_path": TARGET_PATH,
     }
 
@@ -269,6 +295,10 @@ def build_parser() -> argparse.ArgumentParser:
     claim_parser.add_argument("--owner", help="Human-readable owner label")
     claim_parser.add_argument("--branch", help="Branch that owns the lock (default: current branch)")
     claim_parser.add_argument(
+        "--integrator-agent",
+        help=f"Allowed agent slug for main.rs lock ownership (default: {DEFAULT_MAIN_RS_INTEGRATOR_AGENT})",
+    )
+    claim_parser.add_argument(
         "--ttl-seconds",
         type=int,
         default=DEFAULT_TTL_SECONDS,
@@ -278,6 +308,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-protected-branch",
         action="store_true",
         help="Allow claiming lock on dev/main/master (not recommended)",
+    )
+    claim_parser.add_argument(
+        "--allow-non-integrator-branch",
+        action="store_true",
+        help="Allow claiming lock from non-integrator branch (emergency only)",
     )
     claim_parser.add_argument(
         "--force",

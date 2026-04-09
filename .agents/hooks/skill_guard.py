@@ -21,6 +21,7 @@ except ImportError:
 MAIN_RS_REL_PATH = "rust/codex-lb-runtime/src/main.rs"
 MAIN_RS_LOCK_REL_PATH = ".omx/locks/rust-main-rs.lock.json"
 PROTECTED_BRANCHES = {"dev", "main", "master"}
+DEFAULT_MAIN_RS_INTEGRATOR_AGENT = os.environ.get("MAIN_RS_INTEGRATOR_AGENT", "integrator")
 
 
 def load_skill_rules() -> dict:
@@ -110,6 +111,13 @@ def current_branch(repo_root: Path) -> str:
     return result.stdout.strip()
 
 
+def branch_agent_name(branch: str) -> str:
+    parts = branch.split("/")
+    if len(parts) >= 3 and parts[0] == "agent":
+        return parts[1]
+    return ""
+
+
 def ensure_main_rs_lock(file_path: str, session_id: str) -> str | None:
     """Return an error message when main.rs lock is missing/owned by another session."""
     if not normalize_path(file_path).endswith(MAIN_RS_REL_PATH):
@@ -123,6 +131,14 @@ def ensure_main_rs_lock(file_path: str, session_id: str) -> str | None:
             "Use agent branch/worktree first:\n"
             '  bash scripts/agent-branch-start.sh "<task>" "<agent-name>"'
         )
+
+    required_agent = DEFAULT_MAIN_RS_INTEGRATOR_AGENT
+    if os.environ.get("ALLOW_MAIN_RS_NON_INTEGRATOR_BRANCH") != "1":
+        if branch_agent_name(branch) != required_agent:
+            return (
+                f"BLOCKED: main.rs can only be edited from integrator branch agent/{required_agent}/...\n"
+                f"Current branch: '{branch}'."
+            )
 
     lock_path = repo_root / MAIN_RS_LOCK_REL_PATH
     if not lock_path.exists():
@@ -154,6 +170,13 @@ def ensure_main_rs_lock(file_path: str, session_id: str) -> str | None:
             f"BLOCKED: rust main.rs lock is owned by branch '{owner_branch}' ({owner_label}).\n"
             f"Current branch: '{branch}'.\n"
             "Status: python3 scripts/main_rs_lock.py status"
+        )
+
+    integrator_agent = lock_data.get("integrator_agent") or required_agent
+    if branch_agent_name(branch) != integrator_agent:
+        return (
+            f"BLOCKED: main.rs lock requires integrator branch agent/{integrator_agent}/...\n"
+            f"Current branch: '{branch}'."
         )
 
     if not owner_branch:
