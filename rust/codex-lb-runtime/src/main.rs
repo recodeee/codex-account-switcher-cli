@@ -1,7 +1,18 @@
-use axum::{Json, Router, extract::State, http::StatusCode, response::Html, routing::get};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::{StatusCode, header},
+    response::{Html, IntoResponse},
+    routing::get,
+};
 use reqwest::Client;
 use serde::Serialize;
-use std::{collections::BTreeMap, env, net::SocketAddr, time::Duration};
+use std::{
+    collections::BTreeMap,
+    env,
+    net::SocketAddr,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tracing::info;
 
 #[derive(Debug, Serialize)]
@@ -81,6 +92,8 @@ fn app_with_state(state: RuntimeState) -> Router {
         .route("/health/live", get(health_live))
         .route("/health/ready", get(health_ready))
         .route("/health/startup", get(health_startup))
+        .route("/live_usage", get(live_usage))
+        .route("/live_usage/mapping", get(live_usage_mapping))
         .route("/_rust_layer/info", get(runtime_info))
         .route("/_python_layer/health", get(python_layer_health))
         .with_state(state)
@@ -189,6 +202,46 @@ async fn runtime_info(State(state): State<RuntimeState>) -> Json<RuntimeInfoResp
         version: env!("CARGO_PKG_VERSION"),
         profile: state.flags.profile,
     })
+}
+
+async fn live_usage() -> impl IntoResponse {
+    let generated_at = generated_at_epoch_seconds();
+    let xml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<live_usage generated_at="{generated_at}" total_sessions="0" mapped_sessions="0" unattributed_sessions="0" total_task_previews="0" account_task_previews="0" session_task_previews="0">
+</live_usage>
+"#
+    );
+
+    (
+        [
+            (header::CACHE_CONTROL, "no-store"),
+            (header::CONTENT_TYPE, "application/xml"),
+        ],
+        xml,
+    )
+}
+
+async fn live_usage_mapping() -> impl IntoResponse {
+    let generated_at = generated_at_epoch_seconds();
+    let xml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<live_usage_mapping generated_at="{generated_at}" active_snapshot="" total_process_sessions="0" total_runtime_sessions="0" account_count="0" working_now_count="0" minimal="false">
+  <accounts count="0">
+  </accounts>
+  <unmapped_cli_snapshots count="0">
+  </unmapped_cli_snapshots>
+</live_usage_mapping>
+"#
+    );
+
+    (
+        [
+            (header::CACHE_CONTROL, "no-store"),
+            (header::CONTENT_TYPE, "application/xml"),
+        ],
+        xml,
+    )
 }
 
 async fn python_layer_health(
@@ -387,6 +440,13 @@ fn env_flag_true(name: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn generated_at_epoch_seconds() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs().to_string())
+        .unwrap_or_else(|_| "0".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{RuntimeFlags, RuntimeState, app, app_with_flags, app_with_state};
@@ -501,6 +561,72 @@ mod tests {
             .to_bytes();
         let payload: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(payload["detail"], "Service is starting");
+    }
+
+    #[tokio::test]
+    async fn live_usage_returns_xml_with_no_store_cache() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/live_usage")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("cache-control").unwrap(), "no-store");
+        assert!(
+            response
+                .headers()
+                .get("content-type")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("application/xml")
+        );
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let body_text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_text.contains("<live_usage "));
+        assert!(body_text.contains("total_sessions=\"0\""));
+    }
+
+    #[tokio::test]
+    async fn live_usage_mapping_returns_xml_with_no_store_cache() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/live_usage/mapping")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("cache-control").unwrap(), "no-store");
+        assert!(
+            response
+                .headers()
+                .get("content-type")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("application/xml")
+        );
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let body_text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_text.contains("<live_usage_mapping "));
+        assert!(body_text.contains("account_count=\"0\""));
     }
 
     #[tokio::test]
@@ -626,8 +752,20 @@ mod tests {
     ) -> (String, tokio::task::JoinHandle<Result<(), std::io::Error>>) {
         let router = Router::new()
             .route("/health", get(|| async { Json(json!({ "status": "ok" })) }))
-            .route("/health/live", get(|| async { Json(json!({ "status": "ok", "checks": Value::Null, "bridge_ring": Value::Null })) }))
-            .route("/health/ready", get(|| async { Json(json!({ "status": "ok", "checks": { "database": "ok" } })) }))
+            .route(
+                "/health/live",
+                get(|| async {
+                    Json(json!({
+                        "status": "ok",
+                        "checks": Value::Null,
+                        "bridge_ring": Value::Null
+                    }))
+                }),
+            )
+            .route(
+                "/health/ready",
+                get(|| async { Json(json!({ "status": "ok", "checks": { "database": "ok" } })) }),
+            )
             .route(
                 "/health/startup",
                 get(move || async move {
