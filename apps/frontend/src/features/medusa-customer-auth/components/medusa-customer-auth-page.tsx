@@ -98,7 +98,7 @@ export function MedusaCustomerAuthPage({
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-black px-6 py-10">
+    <div className="flex min-h-screen items-center justify-center bg-[#020308] px-6 py-10">
       <div className="w-full max-w-md animate-fade-in-up">
         <div className="mb-10 flex flex-col items-center gap-4 text-center">
           <div

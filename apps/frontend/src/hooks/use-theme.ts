@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 const THEME_STORAGE_KEY = "codex-lb-theme";
 const LIGHT_BACKGROUND_COLOR = "#f8f9fb";
-const DARK_BACKGROUND_COLOR = "#000000";
+const DARK_BACKGROUND_COLOR = "#020308";
 const DARK_BACKGROUND_IMAGE = "none";
 
 export type ThemePreference = "light" | "dark" | "auto";

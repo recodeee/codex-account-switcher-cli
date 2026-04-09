@@ -5,7 +5,7 @@ import "../src/index.css";
 import { AppProviders } from "./providers";
 
 const LIGHT_BOOTSTRAP_BACKGROUND = "#f8f9fb";
-const DARK_BOOTSTRAP_BACKGROUND = "#000000";
+const DARK_BOOTSTRAP_BACKGROUND = "#020308";
 const DARK_BOOTSTRAP_BACKGROUND_IMAGE = "none";
 
 const THEME_BOOTSTRAP_STYLES = `
