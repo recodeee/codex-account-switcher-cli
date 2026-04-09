@@ -39,6 +39,7 @@ describe("plans flow integration", () => {
     expect(await screen.findByRole("button", { name: /copy prompt b/i })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /copy prompt c/i })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /copy prompt d/i })).toBeInTheDocument();
+    expect(await screen.findByText(/parallel execution context:/i)).toBeInTheDocument();
     expect(screen.queryByTestId("plan-summary-content")).not.toBeInTheDocument();
     expect(screen.queryByTestId("plan-checkpoints-content")).not.toBeInTheDocument();
     expect(screen.queryByTestId("plan-runtime-observer")).not.toBeInTheDocument();

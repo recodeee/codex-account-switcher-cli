@@ -396,6 +396,26 @@ function normalizePlanMarkdown(markdown: string): string {
   return markdown.replace(/\\n/g, "\n");
 }
 
+const PARALLEL_AGENT_NOTICE = [
+  "Parallel execution context:",
+  "- You are working alongside other Codex agents in parallel right now.",
+  "- Expect concurrent edits; do not revert others' work and stay strictly in your owned scope.",
+  "",
+].join("\n");
+
+function ensureParallelExecutionNotice(promptContent: string): string {
+  const normalizedPrompt = normalizePlanMarkdown(promptContent).trim();
+  if (!normalizedPrompt) {
+    return promptContent;
+  }
+
+  if (/working alongside other codex agents in parallel/i.test(normalizedPrompt)) {
+    return normalizedPrompt;
+  }
+
+  return `${PARALLEL_AGENT_NOTICE}\n${normalizedPrompt}`;
+}
+
 function parseRoleTaskItems(tasksMarkdown: string): ParsedRoleTaskItem[] {
   const lines = normalizePlanMarkdown(tasksMarkdown).split("\n");
   const items: ParsedRoleTaskItem[] = [];
@@ -641,7 +661,7 @@ export function PlansPage() {
           key: `${bundle.id}-${prompt.id}-${promptIndex}`,
           id: prompt.id,
           title: prompt.title,
-          content: prompt.content,
+          content: ensureParallelExecutionNotice(prompt.content),
           bundleTitle: bundle.title,
           sourcePath: prompt.sourcePath || bundle.sourcePath,
         })),
