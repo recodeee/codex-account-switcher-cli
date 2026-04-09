@@ -48,7 +48,7 @@
 
    # claim files before edits/commit
    python3 scripts/agent-file-locks.py claim --branch "<agent-branch>" path/to/file1 path/to/file2
-   # if main.rs is touched, claim main.rs lock too
+   # if main.rs is touched, claim main.rs lock too (integrator branch only by default)
    python3 scripts/main_rs_lock.py claim --owner "<agent-name>" --branch "<agent-branch>"
 
    # ... implement, verify, commit on that branch ...

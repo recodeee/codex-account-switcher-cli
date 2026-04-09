@@ -83,6 +83,7 @@ Parallel-work safety:
   - Check owner/lease: `python3 scripts/main_rs_lock.py status`
   - Release when done: `python3 scripts/main_rs_lock.py release --branch "<agent-branch>"`
 - Lock ownership is **branch-scoped**; if lock branch and current branch differ, edits are blocked.
+- `main.rs` is **integrator-only** by default: branch must match `agent/integrator/...` (configurable via `MAIN_RS_INTEGRATOR_AGENT`).
 - If the lock is held by another agent, do not edit `main.rs`; continue in owned module files or hand off to the integrator.
 
 Required verification before claiming Rust runtime changes are complete:
@@ -111,6 +112,7 @@ Use this contract whenever multiple agents are active in parallel.
   - `python3 scripts/agent-file-locks.py claim --branch "<agent-branch>" <file...>`
 - If `main.rs` is in scope, claim branch lock first:
   - `python3 scripts/main_rs_lock.py claim --owner "<agent-name>" --branch "<agent-branch>"`
+- Non-integrator branches must not edit `main.rs` unless explicit emergency override is approved.
 - Agent completion must use `scripts/agent-branch-finish.sh` (preflight conflict check, merge into `dev`, push, delete agent branch).
 - `agent-branch-start` and `agent-branch-finish` must fast-forward local `dev` from `origin/dev` before branch creation/merge, so `dev` always pulls latest remote changes first.
 - Pre-commit guard blocks `agent/*` commits when staged files are unclaimed or claimed by another branch.
