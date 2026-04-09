@@ -795,8 +795,8 @@ export function AccountCards({
               className="flex h-full min-h-[22rem] flex-col items-center justify-center rounded-3xl border border-dashed border-cyan-400/35 bg-[#050d18]/85 px-5 py-6 text-center"
             >
               <div className="space-y-3">
-                <span className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full border border-dashed border-cyan-300/45 bg-cyan-300/[0.05] text-cyan-100">
-                  <Plus className="h-5 w-5" aria-hidden="true" />
+                <span className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-cyan-300/[0.10] text-cyan-100">
+                  <Plus className="h-7 w-7" aria-hidden="true" />
                 </span>
                 <div className="space-y-1.5">
                   <p className="text-sm font-semibold text-zinc-100">
