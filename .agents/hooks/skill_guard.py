@@ -165,7 +165,9 @@ def ensure_main_rs_lock(file_path: str, session_id: str) -> str | None:
         )
 
     owner_session_id = lock_data.get("owner_session_id")
-    if owner_session_id and owner_session_id == session_id:
+    if not owner_session_id:
+        return None
+    if owner_session_id == session_id:
         return None
 
     owner_label = lock_data.get("owner") or owner_branch or "unknown owner"
