@@ -2169,6 +2169,44 @@ describe("AccountCard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("prefers waiting session rows when live sessions shrink after account switching", () => {
+    const stalePrompt =
+      "Investigate old account prompt that should not be reused";
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: null,
+      codexLastTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "old-session",
+          taskPreview: stalePrompt,
+          taskUpdatedAt: "2026-04-05T09:58:00.000Z",
+        },
+        {
+          sessionKey: "new-session",
+          taskPreview: "Waiting for new task",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByText(stalePrompt)).not.toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
+    expect(screen.getByText("1 waiting")).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
+  });
+
   it("renders usage-limit session previews in red", () => {
     const usageLimitPreview = "You've hit your usage limit. Try again at 2:36 PM.";
     const account = createAccountSummary({

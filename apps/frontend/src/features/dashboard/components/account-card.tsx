@@ -1666,8 +1666,59 @@ export function AccountCard(props: AccountCardProps) {
         taskPreview: resolveSessionTaskPreview(preview.taskPreview),
         taskUpdatedAt: preview.taskUpdatedAt ?? null,
       }));
-    return normalized;
-  }, [account.codexSessionTaskPreviews]);
+    if (
+      codexLiveSessionCount <= 0 ||
+      normalized.length <= codexLiveSessionCount
+    ) {
+      return normalized;
+    }
+
+    const activeCurrentTaskPreview = account.codexCurrentTaskPreview?.trim() ?? null;
+    const hasActiveCurrentTaskPreview =
+      activeCurrentTaskPreview != null &&
+      !isWaitingTaskPreview(activeCurrentTaskPreview);
+
+    const toTimestamp = (value: string | null): number => {
+      if (!value) {
+        return Number.NEGATIVE_INFINITY;
+      }
+      const timestamp = Date.parse(value);
+      return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+    };
+
+    return [...normalized]
+      .sort((left, right) => {
+        const leftMatchesCurrentTask =
+          hasActiveCurrentTaskPreview &&
+          left.taskPreview === activeCurrentTaskPreview;
+        const rightMatchesCurrentTask =
+          hasActiveCurrentTaskPreview &&
+          right.taskPreview === activeCurrentTaskPreview;
+        if (leftMatchesCurrentTask !== rightMatchesCurrentTask) {
+          return leftMatchesCurrentTask ? -1 : 1;
+        }
+
+        if (!hasActiveCurrentTaskPreview) {
+          const leftWaiting = isWaitingTaskPreview(left.taskPreview);
+          const rightWaiting = isWaitingTaskPreview(right.taskPreview);
+          if (leftWaiting !== rightWaiting) {
+            return leftWaiting ? -1 : 1;
+          }
+        }
+
+        const timestampDelta =
+          toTimestamp(right.taskUpdatedAt) - toTimestamp(left.taskUpdatedAt);
+        if (timestampDelta !== 0) {
+          return timestampDelta;
+        }
+        return left.sessionKey.localeCompare(right.sessionKey);
+      })
+      .slice(0, codexLiveSessionCount);
+  }, [
+    account.codexCurrentTaskPreview,
+    account.codexSessionTaskPreviews,
+    codexLiveSessionCount,
+  ]);
   const newestNonWaitingSessionTaskPreview = useMemo(() => {
     let fallbackPreview: string | null = null;
     let newestPreview: string | null = null;
