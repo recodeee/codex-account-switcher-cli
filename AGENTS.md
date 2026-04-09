@@ -105,9 +105,12 @@ Use this contract whenever multiple agents are active in parallel.
   - intended action.
 - Before deleting/replacing code, each agent must read the latest session comments/handoffs first and confirm the target code is in their owned scope.
 - If ownership is unclear or overlaps, stop that edit, post a blocker comment, and let the leader/integrator reassign scope.
-- For git isolation, each agent must start on a dedicated branch via `scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"`.
-- Agent completion must use `scripts/agent-branch-finish.sh` (merge into `dev`, push, delete agent branch).
+- For git isolation, each agent must start on a dedicated branch/worktree via `scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"`.
+- Each agent must claim file ownership before edits:
+  - `python3 scripts/agent-file-locks.py claim --branch "<agent-branch>" <file...>`
+- Agent completion must use `scripts/agent-branch-finish.sh` (preflight conflict check, merge into `dev`, push, delete agent branch).
 - `agent-branch-start` and `agent-branch-finish` must fast-forward local `dev` from `origin/dev` before branch creation/merge, so `dev` always pulls latest remote changes first.
+- Pre-commit guard blocks `agent/*` commits when staged files are unclaimed or claimed by another branch.
 
 1. Explicit ownership before edits
 

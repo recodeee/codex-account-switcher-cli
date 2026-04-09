@@ -43,15 +43,18 @@
 7. **Agent Branch Flow (Required in multi-agent runs)**:
 
    ```bash
-   # start isolated work branch from dev
+   # start isolated work branch + worktree from dev
    bash scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"
+
+   # claim files before edits/commit
+   python3 scripts/agent-file-locks.py claim --branch "<agent-branch>" path/to/file1 path/to/file2
 
    # ... implement, verify, commit on that branch ...
 
    # finish flow: merge into dev, push, delete branch
-   bash scripts/agent-branch-finish.sh
+   bash scripts/agent-branch-finish.sh --branch "<agent-branch>"
    ```
 
-   Both scripts refresh `dev` from `origin/dev` with fast-forward pulls before creating/merging branches.
+   Start/finish scripts refresh `dev` from `origin/dev`, and finish performs a conflict preflight against latest `origin/dev` before merge.
 
 8. **Best Practices**: Commit often in small units. Do not commit directly to `main`. Always check `git diff` before pushing.

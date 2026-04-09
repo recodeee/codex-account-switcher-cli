@@ -12,7 +12,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Iterable
 
 
@@ -46,6 +47,20 @@ class EndpointReport:
     rust_p50_ms: float
     python_p95_ms: float
     rust_p95_ms: float
+
+
+@dataclass(slots=True)
+class ProbeRequest:
+    endpoint: str
+    method: str = "GET"
+    headers: dict[str, str] = field(default_factory=dict)
+    body: str | None = None
+    label: str | None = None
+
+    def report_label(self) -> str:
+        if self.label:
+            return self.label
+        return f"{self.method} {self.endpoint}"
 
 
 @dataclass(slots=True)
@@ -87,9 +102,12 @@ def _canonical_xml(body: bytes) -> str | None:
     return normalized
 
 
-def _fetch_once(base_url: str, endpoint: str, timeout_seconds: float) -> ProbeSample:
-    url = f"{base_url.rstrip('/')}{endpoint}"
-    req = urllib.request.Request(url, method="GET")
+def _fetch_once(base_url: str, probe_request: ProbeRequest, timeout_seconds: float) -> ProbeSample:
+    url = f"{base_url.rstrip('/')}{probe_request.endpoint}"
+    request_body = probe_request.body.encode("utf-8") if probe_request.body is not None else None
+    req = urllib.request.Request(url, data=request_body, method=probe_request.method)
+    for header_name, header_value in probe_request.headers.items():
+        req.add_header(header_name, header_value)
     started = time.perf_counter()
     try:
         with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
@@ -100,6 +118,10 @@ def _fetch_once(base_url: str, endpoint: str, timeout_seconds: float) -> ProbeSa
         body = exc.read() if exc.fp else b""
         status = exc.code
         content_type = _normalize_content_type(exc.headers.get("Content-Type") if exc.headers else "")
+    except urllib.error.URLError as exc:
+        body = json.dumps({"detail": f"request failed: {exc.reason}"}).encode("utf-8")
+        status = 503
+        content_type = "application/json"
     elapsed_ms = (time.perf_counter() - started) * 1000
     return ProbeSample(
         status=status,
@@ -121,8 +143,111 @@ def _percentile(values: Iterable[float], pct: float) -> float:
     return sorted_values[idx]
 
 
-def _probe_runtime(base_url: str, endpoint: str, iterations: int, timeout_seconds: float) -> list[ProbeSample]:
-    return [_fetch_once(base_url, endpoint, timeout_seconds) for _ in range(iterations)]
+def _probe_runtime(
+    base_url: str,
+    probe_request: ProbeRequest,
+    iterations: int,
+    timeout_seconds: float,
+) -> list[ProbeSample]:
+    return [
+        _fetch_once(base_url, probe_request, timeout_seconds)
+        for _ in range(iterations)
+    ]
+
+
+def _parse_header_pairs(raw_headers: list[str]) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for raw_header in raw_headers:
+        if ":" not in raw_header:
+            raise ValueError(f"invalid --header value '{raw_header}' (expected 'Name: Value')")
+        header_name, header_value = raw_header.split(":", 1)
+        name = header_name.strip()
+        value = header_value.strip()
+        if not name:
+            raise ValueError(f"invalid --header value '{raw_header}' (empty name)")
+        parsed[name] = value
+    return parsed
+
+
+def _request_body_to_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+
+
+def _build_request_from_record(
+    record: dict[str, Any],
+    global_headers: dict[str, str],
+    *,
+    index: int,
+) -> ProbeRequest:
+    endpoint = str(record.get("endpoint", "")).strip()
+    if not endpoint.startswith("/"):
+        raise ValueError(f"fixture request #{index} missing absolute endpoint")
+
+    method = str(record.get("method", "GET")).strip().upper() or "GET"
+    request_headers = {
+        str(key): str(value)
+        for key, value in (record.get("headers") or {}).items()
+    }
+    merged_headers = {**global_headers, **request_headers}
+    body = _request_body_to_text(record.get("body"))
+    if (
+        body is not None
+        and "content-type" not in {key.lower() for key in merged_headers}
+        and not isinstance(record.get("body"), str)
+    ):
+        merged_headers["Content-Type"] = "application/json"
+    label = record.get("label")
+    label_text = str(label).strip() if label is not None else None
+    if label_text == "":
+        label_text = None
+
+    return ProbeRequest(
+        endpoint=endpoint,
+        method=method,
+        headers=merged_headers,
+        body=body,
+        label=label_text,
+    )
+
+
+def _load_requests_from_fixture(
+    fixture_path: str,
+    global_headers: dict[str, str],
+) -> list[ProbeRequest]:
+    payload = json.loads(Path(fixture_path).read_text(encoding="utf-8"))
+    records: list[dict[str, Any]]
+    if isinstance(payload, dict):
+        requests_payload = payload.get("requests")
+        if not isinstance(requests_payload, list):
+            raise ValueError("fixture object must include a 'requests' array")
+        records = requests_payload
+    elif isinstance(payload, list):
+        records = payload
+    else:
+        raise ValueError("fixture must be a JSON object or array")
+
+    requests: list[ProbeRequest] = []
+    for index, record in enumerate(records, start=1):
+        if not isinstance(record, dict):
+            raise ValueError(f"fixture request #{index} must be an object")
+        requests.append(_build_request_from_record(record, global_headers, index=index))
+    if not requests:
+        raise ValueError("fixture contains no requests")
+    return requests
+
+
+def _build_probe_requests(args: argparse.Namespace) -> list[ProbeRequest]:
+    global_headers = _parse_header_pairs(args.header)
+    if args.requests_fixture:
+        return _load_requests_from_fixture(args.requests_fixture, global_headers)
+    return [
+        ProbeRequest(endpoint=endpoint, headers=dict(global_headers))
+        for endpoint in args.endpoints
+    ]
 
 
 def _build_report(
@@ -192,11 +317,22 @@ def _build_report(
 
 
 def run(args: argparse.Namespace) -> RuntimeComparison:
+    probe_requests = _build_probe_requests(args)
     reports: list[EndpointReport] = []
-    for endpoint in args.endpoints:
-        py_samples = _probe_runtime(args.python_base_url, endpoint, args.iterations, args.timeout)
-        rs_samples = _probe_runtime(args.rust_base_url, endpoint, args.iterations, args.timeout)
-        reports.append(_build_report(endpoint, py_samples, rs_samples))
+    for probe_request in probe_requests:
+        py_samples = _probe_runtime(
+            args.python_base_url,
+            probe_request,
+            args.iterations,
+            args.timeout,
+        )
+        rs_samples = _probe_runtime(
+            args.rust_base_url,
+            probe_request,
+            args.iterations,
+            args.timeout,
+        )
+        reports.append(_build_report(probe_request.report_label(), py_samples, rs_samples))
 
     overall_match = all(report.contract_match for report in reports)
     return RuntimeComparison(
@@ -216,10 +352,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iterations", type=int, default=20)
     parser.add_argument("--timeout", type=float, default=5.0)
     parser.add_argument(
+        "--requests-fixture",
+        default="",
+        help="Path to JSON fixture with request entries (method/endpoint/headers/body).",
+    )
+    parser.add_argument(
         "--endpoints",
         nargs="+",
         default=["/health", "/health/live", "/health/ready", "/health/startup"],
         help="List of endpoint paths to compare.",
+    )
+    parser.add_argument(
+        "--header",
+        action="append",
+        default=[],
+        help="Global header in 'Name: Value' format. Can be repeated.",
     )
     parser.add_argument(
         "--strict",

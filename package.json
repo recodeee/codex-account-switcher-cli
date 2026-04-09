@@ -11,6 +11,9 @@
     "verify:rust-runtime-guardrails": "bash ./scripts/verify-rust-runtime-guardrails.sh",
     "agent:branch:start": "bash ./scripts/agent-branch-start.sh",
     "agent:branch:finish": "bash ./scripts/agent-branch-finish.sh",
-    "agent:hooks:install": "bash ./scripts/install-agent-git-hooks.sh"
+    "agent:hooks:install": "bash ./scripts/install-agent-git-hooks.sh",
+    "agent:locks:claim": "python3 ./scripts/agent-file-locks.py claim",
+    "agent:locks:release": "python3 ./scripts/agent-file-locks.py release",
+    "agent:locks:status": "python3 ./scripts/agent-file-locks.py status"
   }
 }

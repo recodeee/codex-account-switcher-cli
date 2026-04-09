@@ -2,91 +2,33 @@ use axum::{
     Json, Router,
     body::{Body, Bytes},
     extract::{Path, RawQuery, State},
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::{HeaderMap, StatusCode},
     response::{Html, Response},
     routing::{any, get},
 };
 use reqwest::Client;
-use serde::Serialize;
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
     env,
     net::SocketAddr,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 use tracing::info;
 
-#[derive(Debug, Serialize)]
-struct StatusResponse {
-    status: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-struct HealthCheckResponse {
-    status: &'static str,
-    checks: Option<BTreeMap<&'static str, &'static str>>,
-    bridge_ring: Option<BridgeRingResponse>,
-}
-
-#[derive(Debug, Serialize)]
-struct BridgeRingResponse {
-    ring_fingerprint: Option<String>,
-    ring_size: usize,
-    instance_id: Option<String>,
-    is_member: bool,
-    error: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct ErrorDetailResponse {
-    detail: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-struct RuntimeInfoResponse {
-    service: &'static str,
-    language: &'static str,
-    version: &'static str,
-    profile: String,
-}
-
-#[derive(Debug, Serialize)]
-struct PythonLayerHealthResponse {
-    status: &'static str,
-    python_base_url: String,
-    checks: BTreeMap<String, PythonEndpointCheck>,
-}
-
-#[derive(Debug, Serialize)]
-struct PythonEndpointCheck {
-    status_code: Option<u16>,
-    ok: bool,
-    detail: String,
-}
-
-#[derive(Debug, Serialize)]
-struct PythonLayerApisResponse {
-    status: &'static str,
-    python_base_url: String,
-    source: &'static str,
-    paths: Vec<String>,
-    detail: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeFlags {
-    profile: String,
-    draining: bool,
-    startup_pending: bool,
-}
-
-#[derive(Clone)]
-struct RuntimeState {
-    flags: RuntimeFlags,
-    python_base_url: String,
-    python_client: Client,
-}
+mod runtime;
+use runtime::{
+    contracts::{
+        ErrorDetailResponse, HealthCheckResponse, PythonEndpointCheck, PythonLayerApisResponse,
+        PythonLayerHealthResponse, RuntimeInfoResponse, StatusResponse,
+    },
+    proxy::{
+        fallback_live_usage_mapping_xml, fallback_live_usage_xml, proxy_python_json_endpoint,
+        proxy_python_live_usage_xml, proxy_python_raw_endpoint_with_method, query_param_true,
+        reqwest_method_from_axum,
+    },
+    state::{RuntimeFlags, RuntimeState, resolve_python_base_url, runtime_state_from_env, runtime_state_with_flags},
+};
 
 pub fn app() -> Router {
     app_with_state(runtime_state_from_env())

@@ -56,6 +56,34 @@ Default compared endpoints are:
 - `/health/ready`
 - `/health/startup`
 
+You can also run mixed method/header/body replays from a fixture file:
+
+```bash
+cd /home/deadpool/Documents/codex-lb
+python scripts/rust_runtime/compare_runtime.py \
+  --python-base-url http://127.0.0.1:8000 \
+  --rust-base-url http://127.0.0.1:8099 \
+  --iterations 10 \
+  --requests-fixture scripts/rust_runtime/fixtures/runtime_proxy_family_replay.json \
+  --strict
+```
+
+Fixture entries support:
+- `label` (optional report name)
+- `method` (`GET` default)
+- `endpoint` (required absolute path)
+- `headers` (optional request headers)
+- `body` (optional string or JSON value)
+
+Global headers can be injected for every request with repeated `--header`:
+
+```bash
+python scripts/rust_runtime/compare_runtime.py \
+  --requests-fixture scripts/rust_runtime/fixtures/runtime_proxy_family_replay.json \
+  --header "Authorization: Bearer <token>" \
+  --header "X-Debug-Run: parity"
+```
+
 This is phase-0 evidence only. No production traffic cutover is included.
 
 ## 4) Rust-only live usage observability endpoints (phase-2)

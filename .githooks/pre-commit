@@ -38,6 +38,17 @@ MSG
   exit 1
 fi
 
+if [[ "$branch" == agent/* ]]; then
+  if ! python3 scripts/agent-file-locks.py validate --branch "$branch" --staged; then
+    cat >&2 <<'MSG'
+[agent-branch-guard] Agent branch commits require file ownership locks.
+Claim files first:
+  python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
+MSG
+    exit 1
+  fi
+fi
+
 if command -v pre-commit >/dev/null 2>&1 && [[ -f .pre-commit-config.yaml ]]; then
   pre-commit run --hook-stage pre-commit
 fi
