@@ -159,7 +159,11 @@ if [[ "$source_worktree" != "$current_worktree" && "$source_worktree" == "${repo
   git -C "$repo_root" worktree remove "$source_worktree" --force >/dev/null 2>&1 || true
 fi
 
-git -C "$repo_root" branch -d "$SOURCE_BRANCH"
+if git -C "$repo_root" worktree list --porcelain | grep -Fq "branch refs/heads/${SOURCE_BRANCH}"; then
+  echo "[agent-branch-finish] Branch '${SOURCE_BRANCH}' is still attached to an active worktree; skipping local branch deletion." >&2
+else
+  git -C "$repo_root" branch -d "$SOURCE_BRANCH"
+fi
 
 if [[ "$PUSH_ENABLED" -eq 1 && "$DELETE_REMOTE_BRANCH" -eq 1 ]]; then
   if git -C "$repo_root" ls-remote --exit-code --heads origin "$SOURCE_BRANCH" >/dev/null 2>&1; then
