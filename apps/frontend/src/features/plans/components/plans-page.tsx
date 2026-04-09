@@ -532,8 +532,8 @@ export function PlansPage() {
     ? getDisplayStatus(selectedEntry.status, selectedEntry.overallProgress)
     : null;
   const summaryLines = planDetail ? parseSummaryLines(planDetail.summaryMarkdown) : [];
-  const initialPrompt = planDetail
-    ? parseInitialPrompt(planDetail.summaryMarkdown)
+  const initialPrompt = selectedEntry
+    ? parseInitialPrompt(selectedEntry.summaryMarkdown)
     : { text: null, imageUrls: [], imageReferences: [] };
   const stepTimelineRows: PlanStepTimelineRow[] = planDetail
     ? planDetail.roles.map((role) => {
@@ -614,6 +614,9 @@ export function PlansPage() {
                   const updatedAt = formatTimeLong(entry.updatedAt);
                   const isFinished = isFinishedProgress(entry.overallProgress);
                   const displayStatus = getDisplayStatus(entry.status, entry.overallProgress);
+                  const rowInitialPrompt = parseInitialPrompt(entry.summaryMarkdown);
+                  const rowAttachmentCount =
+                    rowInitialPrompt.imageUrls.length + rowInitialPrompt.imageReferences.length;
                   const progressLabel =
                     entry.overallProgress.totalCheckpoints > 0
                       ? `${roleCompletionLabel(entry.overallProgress.doneCheckpoints, entry.overallProgress.totalCheckpoints)} checkpoints • ${entry.overallProgress.percentComplete}%`
@@ -638,6 +641,24 @@ export function PlansPage() {
                         <div className="space-y-1.5">
                           <p className="truncate font-medium">{entry.title}</p>
                           <p className="truncate text-xs text-muted-foreground">{entry.slug}</p>
+                          {rowInitialPrompt.text ? (
+                            <p
+                              className="truncate text-[11px] text-muted-foreground"
+                              title={rowInitialPrompt.text}
+                              data-testid={`plan-row-initial-prompt-${entry.slug}`}
+                            >
+                              <span className="text-foreground/70">Initial prompt:</span> {rowInitialPrompt.text}
+                            </p>
+                          ) : null}
+                          {rowAttachmentCount > 0 ? (
+                            <p
+                              className="inline-flex w-fit items-center gap-1 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-100/85"
+                              data-testid={`plan-row-initial-prompt-attachments-${entry.slug}`}
+                            >
+                              <ImageIcon className="h-3 w-3" />
+                              {rowAttachmentCount} attachment{rowAttachmentCount > 1 ? "s" : ""}
+                            </p>
+                          ) : null}
                           <div className="space-y-1">
                             <Progress value={entry.overallProgress.percentComplete} className="h-1.5" />
                             <p className="text-[11px] text-muted-foreground">{progressLabel}</p>

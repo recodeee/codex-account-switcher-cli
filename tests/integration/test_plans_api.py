@@ -86,6 +86,7 @@ async def test_plans_api_lists_and_returns_detail(async_client):
         matching = [entry for entry in payload["entries"] if entry["slug"] == slug]
         assert len(matching) == 1
         assert matching[0]["status"] == "draft"
+        assert "Plan Summary" in matching[0]["summaryMarkdown"]
         assert matching[0]["roles"][0]["role"] == "planner"
         assert matching[0]["roles"][0]["totalCheckpoints"] == 2
         assert matching[0]["roles"][0]["doneCheckpoints"] == 1

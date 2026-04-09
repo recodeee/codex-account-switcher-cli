@@ -53,6 +53,7 @@ class PlanSummaryData:
     title: str
     status: str
     updated_at: datetime
+    summary_markdown: str
     roles: list[PlanRoleProgressData]
     overall_progress: PlanOverallProgressData
     current_checkpoint: PlanCheckpointData | None
@@ -537,6 +538,7 @@ class OpenSpecPlansService:
             title=_extract_title(summary_markdown, plan_dir.name),
             status=_extract_status(summary_markdown),
             updated_at=self._last_updated(plan_dir),
+            summary_markdown=summary_markdown,
             roles=roles,
             overall_progress=_overall_progress(roles),
             current_checkpoint=_resolve_current_checkpoint(checkpoints_markdown),

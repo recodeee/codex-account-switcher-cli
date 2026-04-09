@@ -49,6 +49,7 @@ async def list_open_spec_plans(
                 title=entry.title,
                 status=entry.status,
                 updated_at=entry.updated_at,
+                summary_markdown=entry.summary_markdown,
                 roles=[
                     PlanRoleProgress(
                         role=role.role,

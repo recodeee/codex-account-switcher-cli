@@ -1525,6 +1525,7 @@ export const handlers = [
 				title: plan.title,
 				status: plan.status,
 				updatedAt: plan.updatedAt,
+				summaryMarkdown: plan.summaryMarkdown,
 				roles: plan.roles.map((role) => ({
 					role: role.role,
 					totalCheckpoints: role.totalCheckpoints,

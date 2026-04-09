@@ -25,6 +25,7 @@ export const OpenSpecPlanSummarySchema = z.object({
   title: z.string().min(1),
   status: z.string().min(1),
   updatedAt: z.string().datetime({ offset: true }),
+  summaryMarkdown: z.string(),
   roles: z.array(PlanRoleProgressSchema).default([]),
   overallProgress: PlanOverallProgressSchema,
   currentCheckpoint: PlanCheckpointSchema.nullable(),

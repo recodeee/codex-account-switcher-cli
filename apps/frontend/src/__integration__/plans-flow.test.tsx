@@ -19,6 +19,12 @@ describe("plans flow integration", () => {
     );
     expect(await screen.findByTestId("plan-initial-prompt-images")).toHaveTextContent("[Image #1]");
     expect(await screen.findByRole("img", { name: "Initial prompt attachment 1" })).toBeInTheDocument();
+    expect(await screen.findByTestId("plan-row-initial-prompt-projects-plans-page")).toHaveTextContent(
+      "Initial prompt: Create a Projects -> Plans page (/projects/plans) with visualized OpenSpec plan data.",
+    );
+    expect(
+      await screen.findByTestId("plan-row-initial-prompt-attachments-projects-plans-page"),
+    ).toHaveTextContent("2 attachments");
 
     expect(await screen.findByTestId("plan-progress-percent")).toHaveTextContent("43%");
     const currentCheckpoint = await screen.findByTestId("plan-current-checkpoint");
@@ -51,6 +57,7 @@ describe("plans flow integration", () => {
               title: "plan-no-checkpoint",
               status: "draft",
               updatedAt: new Date("2026-04-08T10:20:00Z").toISOString(),
+              summaryMarkdown: "# Plan Summary: plan-no-checkpoint",
               roles: [
                 { role: "planner", totalCheckpoints: 1, doneCheckpoints: 0 },
                 { role: "architect", totalCheckpoints: 1, doneCheckpoints: 0 },

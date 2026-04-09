@@ -541,8 +541,8 @@ function CodexActiveAgentCard({
         aria-hidden
       />
       <div className="relative flex items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-2">
-          <span className="relative inline-flex h-2 w-2">
+        <div className="inline-flex items-start gap-2">
+          <span className="relative mt-1 inline-flex h-2 w-2">
             <span
               className={cn(
                 "absolute inset-0 rounded-full",
@@ -552,15 +552,17 @@ function CodexActiveAgentCard({
             />
             <span className="absolute inset-0 rounded-full bg-current/80 text-cyan-100" />
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100/95">
-            Codex
-          </span>
-          <span
-            data-testid="codex-inline-status"
-            className="inline-flex h-5 items-center rounded-full border border-white/20 bg-white/5 px-2 text-[8px] font-semibold uppercase tracking-[0.1em] text-cyan-100/85"
-          >
-            Status: {cliStateStyle.label}
-          </span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100/95">
+              Codex
+            </span>
+            <span
+              data-testid="codex-inline-status"
+              className="inline-flex w-fit h-5 items-center rounded-full border border-white/20 bg-white/5 px-2 text-[8px] font-semibold uppercase tracking-[0.1em] text-cyan-100/85"
+            >
+              Status: {cliStateStyle.label}
+            </span>
+          </div>
         </div>
         {showWorkingBadge ? (
           <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-cyan-300/55 bg-cyan-500/18 px-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-cyan-50 shadow-[0_6px_16px_rgba(2,6,23,0.35)] backdrop-blur-sm">

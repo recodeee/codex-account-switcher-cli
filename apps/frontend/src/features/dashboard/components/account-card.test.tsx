@@ -2010,6 +2010,9 @@ describe("AccountCard", () => {
       within(codexActiveCard).getByTestId("cpu-architecture-backdrop-codex-active"),
     ).toBeInTheDocument();
     expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
+    expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
+      "Status: Waiting",
+    );
     expect(within(codexActiveCard).getByText("Waiting")).toBeInTheDocument();
     expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
   });

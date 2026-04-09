@@ -30,6 +30,7 @@ class OpenSpecPlanSummary(DashboardModel):
     title: str
     status: str
     updated_at: datetime
+    summary_markdown: str
     roles: list[PlanRoleProgress]
     overall_progress: PlanOverallProgress
     current_checkpoint: PlanCheckpoint | None
