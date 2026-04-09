@@ -31,7 +31,7 @@ export function AuthGate({ children }: PropsWithChildren) {
 
   if (!initialized) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#020308]">
         <SpinnerBlock />
       </div>
     );
@@ -43,7 +43,7 @@ export function AuthGate({ children }: PropsWithChildren) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#020308]">
         <SpinnerBlock />
       </div>
     );

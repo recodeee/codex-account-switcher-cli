@@ -2,7 +2,9 @@ import { create } from "zustand";
 
 const THEME_STORAGE_KEY = "codex-lb-theme";
 const LIGHT_BACKGROUND_COLOR = "#f8f9fb";
-const DARK_BACKGROUND_COLOR = "#0f1118";
+const DARK_BACKGROUND_COLOR = "#030915";
+const DARK_BACKGROUND_IMAGE =
+  "radial-gradient(120% 140% at 50% -20%, rgba(34, 211, 238, 0.2) 0%, rgba(34, 211, 238, 0) 58%), radial-gradient(120% 160% at 100% 0%, rgba(59, 130, 246, 0.16) 0%, rgba(59, 130, 246, 0) 62%), linear-gradient(180deg, #020612 0%, #030915 52%, #020814 100%), url('/appbg.png')";
 
 export type ThemePreference = "light" | "dark" | "auto";
 export type ResolvedTheme = "light" | "dark";
@@ -29,8 +31,17 @@ function applyThemeToDocument(theme: ResolvedTheme): void {
     : LIGHT_BACKGROUND_COLOR;
 
   document.documentElement.classList.toggle("dark", isDark);
+  document.documentElement.classList.toggle("light", !isDark);
   document.documentElement.style.colorScheme = isDark ? "dark" : "light";
   document.documentElement.style.backgroundColor = backgroundColor;
+  document.documentElement.style.backgroundImage = isDark
+    ? DARK_BACKGROUND_IMAGE
+    : "none";
+  document.documentElement.style.backgroundPosition = isDark
+    ? "center top"
+    : "";
+  document.documentElement.style.backgroundRepeat = isDark ? "no-repeat" : "";
+  document.documentElement.style.backgroundSize = isDark ? "cover" : "";
 }
 
 function getSystemTheme(): ResolvedTheme {

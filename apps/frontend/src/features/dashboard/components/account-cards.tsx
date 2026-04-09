@@ -7,7 +7,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -1126,7 +1125,7 @@ export function AccountCards({
         </section>
       ) : null}
       <Dialog open={isSuggestionDialogOpen} onOpenChange={setIsSuggestionDialogOpen}>
-        <DialogContent className="max-h-[88vh] overflow-y-auto border-cyan-400/35 bg-[#050d18] p-4 sm:max-w-[72rem] sm:p-5">
+        <DialogContent className="max-h-[88vh] overflow-y-auto border-cyan-400/35 bg-[#020308] p-4 sm:max-w-[72rem] sm:p-5 [&>[data-slot=dialog-close]]:h-10 [&>[data-slot=dialog-close]]:w-10 [&>[data-slot=dialog-close]_svg]:size-6">
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
               Suggested cards for Working now
@@ -1171,7 +1170,6 @@ export function AccountCards({
               again.
             </div>
           )}
-          <DialogFooter showCloseButton />
         </DialogContent>
       </Dialog>
     </div>
