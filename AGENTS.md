@@ -79,6 +79,14 @@ Required verification before claiming Rust runtime changes are complete:
 
 Use this contract whenever multiple agents are active in parallel.
 
+0) Session plan comment + read gate (required)
+- Before editing, each agent must post a short session comment/handoff note that includes:
+  - plan/change name (or checkpoint id),
+  - owned files/scope,
+  - intended action.
+- Before deleting/replacing code, each agent must read the latest session comments/handoffs first and confirm the target code is in their owned scope.
+- If ownership is unclear or overlaps, stop that edit, post a blocker comment, and let the leader/integrator reassign scope.
+
 1) Explicit ownership before edits
 - Assign each agent clear file/module ownership.
 - Do not edit files outside your assigned scope unless the leader reassigns ownership.
@@ -111,6 +119,7 @@ Use this contract whenever multiple agents are active in parallel.
 - Use one integrator pass before final completion to confirm:
   - no critical behavior was removed unintentionally,
   - ownership boundaries were respected,
+  - session plan comments/handoffs were followed,
   - verification gates passed.
 
 ## Versioning Rule
