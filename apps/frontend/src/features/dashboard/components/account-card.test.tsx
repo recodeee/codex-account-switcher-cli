@@ -2021,8 +2021,8 @@ describe("AccountCard", () => {
       "Waiting",
     );
     expect(
-      within(codexActiveCard).getByTestId("codex-inline-status-activity"),
-    ).toBeInTheDocument();
+      within(codexActiveCard).queryByTestId("codex-inline-status-activity"),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
   });
 

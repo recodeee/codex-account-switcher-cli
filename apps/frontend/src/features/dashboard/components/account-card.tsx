@@ -525,7 +525,6 @@ function CodexActiveAgentCard({
   const cliStateStyle =
     OMX_CLI_STATE_STYLES[cliRuntimeState] ?? OMX_CLI_STATE_STYLES.finished;
   const showThinkingActivity = cliRuntimeState === "thinking";
-  const showWaitingActivity = cliRuntimeState === "waiting";
   return (
     <div
       data-testid="codex-active-agent-card"
@@ -571,7 +570,14 @@ function CodexActiveAgentCard({
                 cliStateStyle.inlineTextClassName,
               )}
             >
-              <span>{cliStateStyle.label}</span>
+              <span
+                className={cn(
+                  cliRuntimeState === "waiting" &&
+                    "motion-safe:animate-pulse [animation-duration:1.4s]",
+                )}
+              >
+                {cliStateStyle.label}
+              </span>
               {showThinkingActivity ? (
                 <span
                   data-testid="codex-inline-status-activity"
@@ -582,15 +588,6 @@ function CodexActiveAgentCard({
                   <span className="h-2.5 w-0.5 rounded-full bg-current animate-pulse [animation-delay:120ms] [animation-duration:900ms]" />
                   <span className="h-3 w-0.5 rounded-full bg-current animate-pulse [animation-delay:240ms] [animation-duration:900ms]" />
                   <span className="h-2 w-0.5 rounded-full bg-current animate-pulse [animation-delay:360ms] [animation-duration:900ms]" />
-                </span>
-              ) : showWaitingActivity ? (
-                <span
-                  data-testid="codex-inline-status-activity"
-                  className="relative ml-0.5 inline-flex h-1.5 w-1.5"
-                  aria-hidden
-                >
-                  <span className="absolute inset-0 rounded-full bg-current/80 motion-safe:animate-ping [animation-duration:1.4s]" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
                 </span>
               ) : null}
             </span>
