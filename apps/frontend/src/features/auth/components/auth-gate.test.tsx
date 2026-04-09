@@ -71,6 +71,32 @@ describe("AuthGate", () => {
     await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
   });
 
+  it("keeps children visible while authenticated auth state is loading", async () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
+    setAuthState({
+      initialize,
+      token: "test-medusa-token",
+      customer: {
+        id: "cus_123",
+        email: "customer@example.com",
+        first_name: "Test",
+        last_name: "Customer",
+        phone: null,
+      },
+      initialized: true,
+      loading: true,
+    });
+
+    render(
+      <AuthGate>
+        <div>Protected content</div>
+      </AuthGate>,
+    );
+
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+    await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
+  });
+
   it("does not crash when initial Medusa session restore fails", async () => {
     const initialize = vi.fn().mockRejectedValue(new Error("Request failed"));
     setAuthState({

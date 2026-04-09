@@ -1,9 +1,14 @@
 import { useState } from "react";
 import {
+  Circle,
+  CircleDotDashed,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   Compass,
+  ExternalLink,
   FolderTree,
+  Image as ImageIcon,
   Palette,
   PenLine,
   ShieldCheck,
@@ -40,36 +45,83 @@ function isFinishedProgress(progress: { doneCheckpoints: number; totalCheckpoint
   return progress.totalCheckpoints > 0 && progress.doneCheckpoints >= progress.totalCheckpoints;
 }
 
+function parseTimestampMs(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toStatusLabel(status: string): string {
+  return status
+    .split(/[\s_-]+/g)
+    .map((segment) => (segment ? `${segment[0].toUpperCase()}${segment.slice(1)}` : ""))
+    .join(" ");
+}
+
+type PlanStatusBadge = {
+  label: string;
+  className: string;
+};
+
+function resolvePlanStatusBadge(
+  status: string,
+  progress: { doneCheckpoints: number; totalCheckpoints: number },
+): PlanStatusBadge {
+  if (isFinishedProgress(progress)) {
+    return {
+      label: "Completed",
+      className: "border-emerald-500/40 bg-emerald-500/20 text-emerald-200",
+    };
+  }
+
+  const normalizedStatus = status.trim().toLowerCase().replace(/\s+/g, "-");
+  const compactStatus = normalizedStatus.replace(/-/g, "_");
+
+  if (["in_progress", "running", "active", "draft", "proposed", "planning", "pending", "todo"].includes(compactStatus)) {
+    return {
+      label: "In progress",
+      className: "border-sky-500/35 bg-sky-500/15 text-sky-200",
+    };
+  }
+
+  if (["on_hold", "blocked", "paused", "stalled", "waiting"].includes(compactStatus)) {
+    return {
+      label: "On hold",
+      className: "border-amber-500/40 bg-amber-500/20 text-amber-200",
+    };
+  }
+
+  if (["inactive", "cancelled", "canceled", "archived", "abandoned"].includes(compactStatus)) {
+    return {
+      label: "Inactive",
+      className: "border-zinc-500/45 bg-zinc-500/20 text-zinc-200",
+    };
+  }
+
+  if (["approved", "ready"].includes(compactStatus)) {
+    return {
+      label: "Approved",
+      className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+    };
+  }
+
+  if (compactStatus === "unknown") {
+    return {
+      label: "Unknown",
+      className: "border-red-500/30 bg-red-500/15 text-red-300",
+    };
+  }
+
+  return {
+    label: toStatusLabel(normalizedStatus || "unknown"),
+    className: "border-slate-500/30 bg-slate-500/15 text-slate-300",
+  };
+}
+
 function getDisplayStatus(
   status: string,
   progress: { doneCheckpoints: number; totalCheckpoints: number },
 ): string {
-  if (isFinishedProgress(progress)) {
-    return "Finished";
-  }
-  return status;
-}
-
-function statusBadgeClass(status: string): string {
-  const normalizedStatus = status.trim().toLowerCase();
-
-  if (normalizedStatus === "finished") {
-    return "border-emerald-500/40 bg-emerald-500/20 text-emerald-200";
-  }
-
-  if (normalizedStatus === "approved") {
-    return "border-emerald-500/30 bg-emerald-500/15 text-emerald-300";
-  }
-
-  if (normalizedStatus === "draft") {
-    return "border-border/70 bg-secondary/60 text-secondary-foreground";
-  }
-
-  if (normalizedStatus === "unknown") {
-    return "border-red-500/30 bg-red-500/15 text-red-300";
-  }
-
-  return "border-slate-500/30 bg-slate-500/15 text-slate-300";
+  return resolvePlanStatusBadge(status, progress).label;
 }
 
 type RoleVisual = {
@@ -159,13 +211,6 @@ function getRoleVisual(role: string): RoleVisual {
   };
 }
 
-function roleProgressPercent(done: number, total: number): number {
-  if (total <= 0) {
-    return 0;
-  }
-  return Math.max(0, Math.min(100, Math.round((done / total) * 100)));
-}
-
 function checkpointStateBadgeClass(state: string): string {
   const normalizedState = state.trim().toLowerCase().replace(/\s+/g, "_");
 
@@ -209,30 +254,6 @@ function formatCheckpointTimestamp(timestamp: string): string {
   return `${formatted.date} ${formatted.time}`;
 }
 
-function formatRuntimeTimestamp(timestamp: string | null): string {
-  if (!timestamp) {
-    return "Unknown";
-  }
-  return formatCheckpointTimestamp(timestamp);
-}
-
-function runtimeStatusBadgeClass(status: string | null): string {
-  const normalizedStatus = status?.trim().toLowerCase().replace(/\s+/g, "_");
-  if (!normalizedStatus) {
-    return "border-slate-500/30 bg-slate-500/15 text-slate-300";
-  }
-  if (["running", "active", "in_progress"].includes(normalizedStatus)) {
-    return "border-sky-500/40 bg-sky-500/20 text-sky-200";
-  }
-  if (["done", "completed", "finished", "idle", "waiting"].includes(normalizedStatus)) {
-    return "border-emerald-500/40 bg-emerald-500/20 text-emerald-200";
-  }
-  if (["failed", "error", "blocked", "rejected"].includes(normalizedStatus)) {
-    return "border-red-500/40 bg-red-500/20 text-red-200";
-  }
-  return "border-amber-500/40 bg-amber-500/20 text-amber-200";
-}
-
 function normalizeMarkdownLine(line: string): string {
   return line
     .trim()
@@ -252,96 +273,210 @@ function parseSummaryLines(summaryMarkdown: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-type ParsedCheckpointEntry = {
-  timestamp: string;
-  role: string | null;
-  checkpointId: string | null;
-  state: string | null;
-  message: string | null;
+type InitialPromptPreview = {
+  text: string | null;
+  imageUrls: string[];
+  imageReferences: string[];
 };
 
-type ParsedCheckpointLine =
-  | { type: "entry"; entry: ParsedCheckpointEntry }
-  | { type: "text"; text: string };
+function extractInitialPromptImageUrls(markdown: string): string[] {
+  const imageUrls = new Set<string>();
+  const markdownImageRegex = /!\[[^\]]*]\(([^)\s]+(?:\?[^)\s]*)?)\)/gi;
 
-function parseCheckpointEntry(line: string): ParsedCheckpointEntry | null {
-  const normalized = normalizeMarkdownLine(line);
-  if (!normalized || /^no checkpoints recorded yet\.?$/i.test(normalized)) {
-    return null;
+  for (const match of markdown.matchAll(markdownImageRegex)) {
+    const url = match[1]?.trim();
+    if (!url) {
+      continue;
+    }
+    if (/^(https?:\/\/|\/|data:image\/)/i.test(url)) {
+      imageUrls.add(url);
+    }
   }
 
-  const segments = normalized.split("|").map((segment) => segment.trim()).filter(Boolean);
-  if (segments.length < 2) {
-    return null;
+  const directImageUrlRegex = /(https?:\/\/[^\s)]+?\.(?:png|jpe?g|gif|webp|svg)(?:\?[^)\s]*)?)/gi;
+  for (const match of markdown.matchAll(directImageUrlRegex)) {
+    const url = match[1]?.trim();
+    if (url) {
+      imageUrls.add(url);
+    }
   }
 
-  const [timestamp, ...rest] = segments;
-  let role: string | null = null;
-  let checkpointId: string | null = null;
-  let state: string | null = null;
-  const messageSegments: string[] = [];
+  return [...imageUrls];
+}
 
-  for (const segment of rest) {
-    const separatorIndex = segment.indexOf("=");
-    if (separatorIndex < 0) {
-      messageSegments.push(segment);
-      continue;
+function extractInitialPromptImageReferences(markdown: string): string[] {
+  const references = new Set<string>();
+  for (const match of markdown.matchAll(/\[Image\s*#\d+\]/gi)) {
+    const value = match[0]?.trim();
+    if (value) {
+      references.add(value);
     }
-
-    const key = segment.slice(0, separatorIndex).trim().toLowerCase();
-    const value = segment.slice(separatorIndex + 1).trim();
-    if (!value) {
-      continue;
-    }
-
-    if (key === "role") {
-      role = value;
-      continue;
-    }
-    if (key === "id" || key === "checkpoint") {
-      checkpointId = value;
-      continue;
-    }
-    if (key === "state") {
-      state = value;
-      continue;
-    }
-
-    messageSegments.push(`${key}: ${value}`);
   }
+  return [...references];
+}
+
+function sanitizeInitialPromptText(rawPrompt: string): string | null {
+  const withoutImages = rawPrompt
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[Image\s*#\d+\]/gi, " ");
+  const normalized = normalizeMarkdownLine(withoutImages).replace(/\s+/g, " ").trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function parseInitialPrompt(summaryMarkdown: string): InitialPromptPreview {
+  const normalizedMarkdown = summaryMarkdown.replace(/\\n/g, "\n");
+  const taskMatch = normalizedMarkdown.match(/^\s*-\s*\*\*(?:Task|Initial Prompt|Prompt):\*\*\s*(.+)$/im);
+  if (taskMatch?.[1]) {
+    const rawPrompt = taskMatch[1];
+    return {
+      text: sanitizeInitialPromptText(rawPrompt),
+      imageUrls: extractInitialPromptImageUrls(rawPrompt),
+      imageReferences: extractInitialPromptImageReferences(rawPrompt),
+    };
+  }
+
+  const lines = normalizedMarkdown.split("\n");
+  const contextHeadingIndex = lines.findIndex((line) => /^##\s+context\b/i.test(line.trim()));
+  if (contextHeadingIndex === -1) {
+    return {
+      text: null,
+      imageUrls: [],
+      imageReferences: [],
+    };
+  }
+
+  const contextLines: string[] = [];
+  for (const rawLine of lines.slice(contextHeadingIndex + 1)) {
+    if (/^##\s+/i.test(rawLine.trim())) {
+      break;
+    }
+    if (!rawLine.trim()) {
+      continue;
+    }
+    contextLines.push(rawLine.trim());
+  }
+
+  const contextBlock = contextLines.join("\n");
+  const textLine = contextLines.length > 0 ? sanitizeInitialPromptText(contextLines[0]) : null;
 
   return {
-    timestamp,
-    role,
-    checkpointId,
-    state,
-    message: messageSegments.length > 0 ? messageSegments.join(" • ") : null,
+    text: textLine,
+    imageUrls: extractInitialPromptImageUrls(contextBlock),
+    imageReferences: extractInitialPromptImageReferences(contextBlock),
   };
 }
 
-function parseCheckpointLines(checkpointsMarkdown: string): ParsedCheckpointLine[] {
-  const normalizedMarkdown = checkpointsMarkdown.replace(/\\n/g, "\n");
-  const lines = normalizedMarkdown
-    .split("\n")
-    .map((line) => normalizeMarkdownLine(line))
-    .filter((line) => line.length > 0 && !/^plan checkpoints:/i.test(line));
+type PlanStepStatus = "completed" | "in-progress" | "pending";
 
-  if (lines.length === 0) {
-    return [];
+type ParsedRoleTaskItem = {
+  id: string;
+  title: string;
+  status: PlanStepStatus;
+  section: string | null;
+};
+
+type PlanStepTimelineRow = {
+  role: string;
+  status: PlanStepStatus;
+  doneCheckpoints: number;
+  totalCheckpoints: number;
+  items: ParsedRoleTaskItem[];
+};
+
+function normalizePlanMarkdown(markdown: string): string {
+  return markdown.replace(/\\n/g, "\n");
+}
+
+function parseRoleTaskItems(tasksMarkdown: string): ParsedRoleTaskItem[] {
+  const lines = normalizePlanMarkdown(tasksMarkdown).split("\n");
+  const items: ParsedRoleTaskItem[] = [];
+  let currentSection: string | null = null;
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^##\s+(.+)$/);
+    if (headingMatch) {
+      currentSection = normalizeMarkdownLine(headingMatch[1]);
+      continue;
+    }
+
+    const checkboxMatch = trimmed.match(/^[-*]\s*\[(x|X| )\]\s*(.+)$/);
+    if (!checkboxMatch) {
+      continue;
+    }
+
+    const status: PlanStepStatus =
+      checkboxMatch[1].toLowerCase() === "x" ? "completed" : "pending";
+    const normalizedTitle = normalizeMarkdownLine(checkboxMatch[2])
+      .replace(/^\d+(?:\.\d+)*\s+/, "")
+      .replace(/^\[[^\]]+\]\s*/, "")
+      .replace(/^(?:todo|ready|done|in[- ]?progress|pending)\s*-\s*/i, "")
+      .trim();
+
+    if (!normalizedTitle) {
+      continue;
+    }
+
+    items.push({
+      id: `${items.length + 1}`,
+      title: normalizedTitle,
+      status,
+      section: currentSection,
+    });
   }
 
-  return lines.map((line) => {
-    if (/^no checkpoints recorded yet\.?$/i.test(line)) {
-      return { type: "text", text: "No checkpoints recorded yet." } as const;
-    }
+  return items;
+}
 
-    const parsedEntry = parseCheckpointEntry(line);
-    if (!parsedEntry) {
-      return { type: "text", text: line } as const;
-    }
+function resolvePlanStepStatus(
+  doneCheckpoints: number,
+  totalCheckpoints: number,
+  isCurrentCheckpointRole: boolean,
+): PlanStepStatus {
+  if (totalCheckpoints > 0 && doneCheckpoints >= totalCheckpoints) {
+    return "completed";
+  }
+  if (doneCheckpoints > 0 || isCurrentCheckpointRole) {
+    return "in-progress";
+  }
+  return "pending";
+}
 
-    return { type: "entry", entry: parsedEntry } as const;
-  });
+function statusLabel(status: PlanStepStatus): string {
+  if (status === "in-progress") {
+    return "in progress";
+  }
+  return status;
+}
+
+function stepStatusBadgeClass(status: PlanStepStatus): string {
+  if (status === "completed") {
+    return "border-emerald-500/40 bg-emerald-500/20 text-emerald-200";
+  }
+  if (status === "in-progress") {
+    return "border-sky-500/40 bg-sky-500/20 text-sky-200";
+  }
+  return "border-slate-500/30 bg-slate-500/15 text-slate-300";
+}
+
+function StepStatusIcon({
+  status,
+  className,
+}: {
+  status: PlanStepStatus;
+  className?: string;
+}) {
+  if (status === "completed") {
+    return <CheckCircle2 className={cn("h-4 w-4 text-emerald-400", className)} aria-hidden />;
+  }
+  if (status === "in-progress") {
+    return <CircleDotDashed className={cn("h-4 w-4 text-sky-400", className)} aria-hidden />;
+  }
+  return <Circle className={cn("h-4 w-4 text-zinc-500", className)} aria-hidden />;
 }
 
 export function buildPlanStarterPrompt(
@@ -353,9 +488,11 @@ export function buildPlanStarterPrompt(
   const remainingRoles = planDetail.roles.filter((role) => role.doneCheckpoints < role.totalCheckpoints);
   const nextRole = remainingRoles[0] ?? null;
   const currentCheckpoint = planDetail.currentCheckpoint;
+  const starterCommand = `$ralph "Continue OpenSpec plan ${planDetail.slug} from the latest checkpoint in ${planPath} without restarting planning."`;
 
   const lines = [
-    "$ralph",
+    starterCommand,
+    "",
     "You are a new Codex session/account continuing an existing OpenSpec implementation plan.",
     `Repository: /home/deadpool/Documents/codex-lb`,
     `Plan workspace: ${planPath}`,
@@ -404,6 +541,7 @@ export function buildPlanStarterPrompt(
   lines.push(
     "",
     "Continue implementation from the current checkpoint or the next unfinished role.",
+    "Keep each role `tasks.md` checklist updated (`- [ ]` / `- [x]`) because the Plans timeline UI reads those lines as step-by-step progress.",
     "Update the OpenSpec plan tasks/checkpoints as you progress.",
     "Verify current repo state before editing, then run focused tests/lint/typecheck before marking the work complete.",
   );
@@ -417,32 +555,73 @@ export function buildPlanStarterPrompt(
 
 export function PlansPage() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
-  const { plansQuery, planDetailQuery, planRuntimeQuery, effectiveSelectedSlug } = useOpenSpecPlans(selectedSlug);
+  const [collapsedStepRows, setCollapsedStepRows] = useState<Record<string, boolean>>({});
+  const { plansQuery, planDetailQuery, effectiveSelectedSlug } = useOpenSpecPlans(selectedSlug);
 
   const entries = plansQuery.data?.entries ?? [];
   const listError = getErrorMessageOrNull(plansQuery.error);
   const detailError = getErrorMessageOrNull(planDetailQuery.error);
-  const runtimeError = getErrorMessageOrNull(planRuntimeQuery.error);
   const planDetail = planDetailQuery.data;
-  const planRuntime = planRuntimeQuery.data;
 
   const selectedEntry = entries.find((entry) => entry.slug === effectiveSelectedSlug) ?? null;
   const sortedEntries = [...entries].sort((left, right) => {
-    const leftFinished = isFinishedProgress(left.overallProgress);
-    const rightFinished = isFinishedProgress(right.overallProgress);
-
-    if (leftFinished === rightFinished) {
-      return 0;
+    const createdDelta = parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt);
+    if (createdDelta !== 0) {
+      return createdDelta;
     }
 
-    return leftFinished ? 1 : -1;
+    const updatedDelta = parseTimestampMs(right.updatedAt) - parseTimestampMs(left.updatedAt);
+    if (updatedDelta !== 0) {
+      return updatedDelta;
+    }
+
+    return left.slug.localeCompare(right.slug);
   });
 
   const selectedEntryDisplayStatus = selectedEntry
     ? getDisplayStatus(selectedEntry.status, selectedEntry.overallProgress)
     : null;
   const summaryLines = planDetail ? parseSummaryLines(planDetail.summaryMarkdown) : [];
-  const checkpointLines = planDetail ? parseCheckpointLines(planDetail.checkpointsMarkdown) : [];
+  const initialPrompt = selectedEntry
+    ? parseInitialPrompt(selectedEntry.summaryMarkdown)
+    : { text: null, imageUrls: [], imageReferences: [] };
+  const stepTimelineRows: PlanStepTimelineRow[] = planDetail
+    ? planDetail.roles.map((role) => {
+        const resolvedStatus = resolvePlanStepStatus(
+          role.doneCheckpoints,
+          role.totalCheckpoints,
+          planDetail.currentCheckpoint?.role === role.role,
+        );
+        const parsedItems = parseRoleTaskItems(role.tasksMarkdown);
+        const nonCheckpointItems = parsedItems.filter(
+          (item) => !(item.section && /checkpoints?/i.test(item.section)),
+        );
+        const visibleItems = (nonCheckpointItems.length > 0 ? nonCheckpointItems : parsedItems).slice(0, 4);
+        let promotedPending = false;
+        const displayItems = visibleItems.map((item) => {
+          if (resolvedStatus !== "in-progress" || item.status !== "pending" || promotedPending) {
+            return item;
+          }
+          promotedPending = true;
+          return { ...item, status: "in-progress" as const };
+        });
+
+        return {
+          role: role.role,
+          status: resolvedStatus,
+          doneCheckpoints: role.doneCheckpoints,
+          totalCheckpoints: role.totalCheckpoints,
+          items: displayItems,
+        };
+      })
+    : [];
+
+  const toggleStepRow = (role: string) => {
+    setCollapsedStepRows((prev) => ({
+      ...prev,
+      [role]: !(prev[role] ?? false),
+    }));
+  };
   const starterPrompt =
     planDetail && selectedEntryDisplayStatus
       ? buildPlanStarterPrompt(planDetail, selectedEntryDisplayStatus, summaryLines)
@@ -475,16 +654,20 @@ export function PlansPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[56%]">Plan</TableHead>
+                  <TableHead className="w-[52%]">Plan</TableHead>
                   <TableHead className="w-[18%]">Status</TableHead>
-                  <TableHead className="w-[26%] text-right">Updated</TableHead>
+                  <TableHead className="w-[30%] text-right">Created / Updated</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sortedEntries.map((entry) => {
+                  const createdAt = formatTimeLong(entry.createdAt);
                   const updatedAt = formatTimeLong(entry.updatedAt);
                   const isFinished = isFinishedProgress(entry.overallProgress);
-                  const displayStatus = getDisplayStatus(entry.status, entry.overallProgress);
+                  const statusBadge = resolvePlanStatusBadge(entry.status, entry.overallProgress);
+                  const rowInitialPrompt = parseInitialPrompt(entry.summaryMarkdown);
+                  const rowAttachmentCount =
+                    rowInitialPrompt.imageUrls.length + rowInitialPrompt.imageReferences.length;
                   const progressLabel =
                     entry.overallProgress.totalCheckpoints > 0
                       ? `${roleCompletionLabel(entry.overallProgress.doneCheckpoints, entry.overallProgress.totalCheckpoints)} checkpoints • ${entry.overallProgress.percentComplete}%`
@@ -509,6 +692,24 @@ export function PlansPage() {
                         <div className="space-y-1.5">
                           <p className="truncate font-medium">{entry.title}</p>
                           <p className="truncate text-xs text-muted-foreground">{entry.slug}</p>
+                          {rowInitialPrompt.text ? (
+                            <p
+                              className="truncate text-[11px] text-muted-foreground"
+                              title={rowInitialPrompt.text}
+                              data-testid={`plan-row-initial-prompt-${entry.slug}`}
+                            >
+                              <span className="text-foreground/70">Initial prompt:</span> {rowInitialPrompt.text}
+                            </p>
+                          ) : null}
+                          {rowAttachmentCount > 0 ? (
+                            <p
+                              className="inline-flex w-fit items-center gap-1 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-100/85"
+                              data-testid={`plan-row-initial-prompt-attachments-${entry.slug}`}
+                            >
+                              <ImageIcon className="h-3 w-3" />
+                              {rowAttachmentCount} attachment{rowAttachmentCount > 1 ? "s" : ""}
+                            </p>
+                          ) : null}
                           <div className="space-y-1">
                             <Progress value={entry.overallProgress.percentComplete} className="h-1.5" />
                             <p className="text-[11px] text-muted-foreground">{progressLabel}</p>
@@ -516,14 +717,22 @@ export function PlansPage() {
                         </div>
                       </TableCell>
                       <TableCell className="align-top">
-                        <Badge variant="outline" className={cn("capitalize", statusBadgeClass(displayStatus))}>
-                          {displayStatus}
+                        <Badge variant="outline" className={cn(statusBadge.className)}>
+                          {statusBadge.label}
                         </Badge>
                       </TableCell>
                       <TableCell className="align-top text-right text-xs text-muted-foreground">
-                        <div className="space-y-0.5 whitespace-nowrap">
-                          <p>{updatedAt.date}</p>
-                          <p>{updatedAt.time}</p>
+                        <div className="space-y-1 whitespace-nowrap">
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Created</p>
+                            <p>{createdAt.date}</p>
+                            <p>{createdAt.time}</p>
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Updated</p>
+                            <p>{updatedAt.date}</p>
+                            <p>{updatedAt.time}</p>
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -536,17 +745,66 @@ export function PlansPage() {
           <div className="rounded-xl border border-border/60 bg-card/60 p-4">
             {selectedEntry ? (
               <>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold">{selectedEntry.title}</h2>
-                    <Badge
-                      variant="outline"
-                      className={cn("capitalize", statusBadgeClass(selectedEntryDisplayStatus ?? selectedEntry.status))}
-                    >
-                      {selectedEntryDisplayStatus ?? selectedEntry.status}
-                    </Badge>
+                <div className="mb-3 rounded-lg border border-cyan-500/15 bg-gradient-to-r from-[#040c18]/95 via-[#050c16]/95 to-[#060913]/95 p-3 shadow-[0_10px_30px_-24px_rgba(34,211,238,0.75)]">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h2 className="truncate text-lg font-semibold">{selectedEntry.title}</h2>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            resolvePlanStatusBadge(selectedEntry.status, selectedEntry.overallProgress).className,
+                          )}
+                        >
+                          {resolvePlanStatusBadge(selectedEntry.status, selectedEntry.overallProgress).label}
+                        </Badge>
+                      </div>
+                      {initialPrompt.text ? (
+                        <p
+                          className="max-w-[44rem] truncate rounded-md border border-white/10 bg-background/35 px-2.5 py-1.5 text-xs text-muted-foreground"
+                          data-testid="plan-initial-prompt"
+                          title={initialPrompt.text}
+                        >
+                          <span className="font-medium text-foreground/80">Initial prompt:</span> {initialPrompt.text}
+                        </p>
+                      ) : null}
+                      {initialPrompt.imageUrls.length > 0 || initialPrompt.imageReferences.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-2" data-testid="plan-initial-prompt-images">
+                          {initialPrompt.imageUrls.map((imageUrl, index) => (
+                            <a
+                              key={`${imageUrl}-${index}`}
+                              href={imageUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="group relative block overflow-hidden rounded-md border border-white/15 bg-background/60"
+                            >
+                              <img
+                                src={imageUrl}
+                                alt={`Initial prompt attachment ${index + 1}`}
+                                className="h-12 w-12 object-cover transition-transform duration-200 group-hover:scale-105"
+                                loading="lazy"
+                              />
+                              <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/60 py-0.5 text-[10px] text-white/90 opacity-0 transition-opacity group-hover:opacity-100">
+                                Open <ExternalLink className="h-2.5 w-2.5" />
+                              </span>
+                            </a>
+                          ))}
+                          {initialPrompt.imageReferences.map((reference) => (
+                            <span
+                              key={reference}
+                              className="inline-flex items-center gap-1 rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100/90"
+                            >
+                              <ImageIcon className="h-3 w-3" />
+                              {reference}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0">
+                      {starterPrompt ? <CopyButton value={starterPrompt} label="Copy starter prompt" /> : null}
+                    </div>
                   </div>
-                  {starterPrompt ? <CopyButton value={starterPrompt} label="Copy starter prompt" /> : null}
                 </div>
 
                 {detailError ? (
@@ -578,8 +836,105 @@ export function PlansPage() {
                       </p>
                     </div>
 
-                    <div className="space-y-2 rounded-lg border border-border/60 bg-background/30 p-3">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Where plan left off</p>
+                    <div
+                      className="space-y-2 rounded-lg border border-border/60 bg-background/30 p-3"
+                      data-testid="plan-step-timeline"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Plan steps</p>
+                        <Badge variant="outline" className="text-[10px]">
+                          {stepTimelineRows.length} phases
+                        </Badge>
+                      </div>
+
+                      {stepTimelineRows.length > 0 ? (
+                        <ul className="space-y-2">
+                          {stepTimelineRows.map((row) => {
+                            const rowKey = row.role;
+                            const isCollapsed = collapsedStepRows[rowKey] ?? false;
+                            const roleVisual = getRoleVisual(row.role);
+                            const RoleIcon = roleVisual.icon;
+
+                            return (
+                              <li
+                                key={row.role}
+                                className="overflow-hidden rounded-md border border-border/50 bg-background/45"
+                              >
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left transition-colors hover:bg-background/80"
+                                  aria-expanded={!isCollapsed}
+                                  onClick={() => toggleStepRow(rowKey)}
+                                >
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <span
+                                      className={cn(
+                                        "inline-flex size-6 shrink-0 items-center justify-center rounded-full border",
+                                        roleVisual.iconClass,
+                                      )}
+                                    >
+                                      <RoleIcon className="size-3.5" />
+                                    </span>
+                                    <StepStatusIcon status={row.status} className="h-3.5 w-3.5 shrink-0" />
+                                    <span className="truncate text-sm font-medium">{formatRoleLabel(row.role)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge variant="outline" className={cn("text-[10px] capitalize", stepStatusBadgeClass(row.status))}>
+                                      {statusLabel(row.status)}
+                                    </Badge>
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {roleCompletionLabel(row.doneCheckpoints, row.totalCheckpoints)}
+                                    </Badge>
+                                    <ChevronDown
+                                      className={cn(
+                                        "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                                        isCollapsed ? "-rotate-90" : "rotate-0",
+                                      )}
+                                      aria-hidden
+                                    />
+                                  </div>
+                                </button>
+                                {!isCollapsed ? (
+                                  <div className="border-t border-border/40 px-3 py-2">
+                                    {row.items.length > 0 ? (
+                                      <ul className="space-y-1.5 pl-6">
+                                        {row.items.map((item) => (
+                                          <li
+                                            key={`${row.role}-${item.id}`}
+                                            className="group/item flex items-start gap-2"
+                                          >
+                                            <StepStatusIcon status={item.status} className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                            <p
+                                              className={cn(
+                                                "text-sm text-foreground/90",
+                                                item.status === "completed" &&
+                                                  "text-muted-foreground line-through transition-[text-decoration-line,color] group-hover/item:text-foreground/90 group-hover/item:[text-decoration-line:none]",
+                                              )}
+                                            >
+                                              {item.title}
+                                            </p>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground">No task checklist items yet.</p>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No phase data available.</p>
+                      )}
+                    </div>
+
+                    <div
+                      className="space-y-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3"
+                      data-testid="plan-left-off-card"
+                    >
+                      <p className="text-xs uppercase tracking-wide text-red-200/95">Where plan left off</p>
                       {planDetail.currentCheckpoint ? (
                         <div className="space-y-2" data-testid="plan-current-checkpoint">
                           <div className="flex flex-wrap items-center gap-2">
@@ -610,371 +965,18 @@ export function PlansPage() {
                               {formatCheckpointState(planDetail.currentCheckpoint.state)}
                             </Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-red-100/90">
                             {planDetail.currentCheckpoint.message || "No checkpoint message provided."}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-red-100/70">
                             {formatCheckpointTimestamp(planDetail.currentCheckpoint.timestamp)}
                           </p>
                         </div>
                       ) : (
-                        <p className="text-sm text-muted-foreground">No checkpoint activity recorded yet.</p>
+                        <p className="text-sm text-red-100/80">No checkpoint activity recorded yet.</p>
                       )}
                     </div>
 
-                    <div className="space-y-2 rounded-lg border border-border/60 bg-background/30 p-3" data-testid="plan-runtime-observer">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Live plan observer</p>
-                        {planRuntimeQuery.isFetching ? (
-                          <Badge variant="outline" className="text-[10px]">
-                            Refreshing
-                          </Badge>
-                        ) : null}
-                      </div>
-                      {runtimeError ? (
-                        <AlertMessage variant="error">Couldn’t load runtime observer: {runtimeError}</AlertMessage>
-                      ) : planRuntimeQuery.isLoading ? (
-                        <p className="text-sm text-muted-foreground">Loading runtime observer…</p>
-                      ) : planRuntime ? (
-                        <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge variant="outline" className="text-[10px]">
-                              Session {planRuntime.sessionId ?? "unresolved"}
-                            </Badge>
-                            {planRuntime.mode ? (
-                              <Badge variant="outline" className="text-[10px] capitalize">
-                                {planRuntime.mode}
-                              </Badge>
-                            ) : null}
-                            {planRuntime.phase ? (
-                              <Badge variant="outline" className="text-[10px] capitalize">
-                                {planRuntime.phase.replace(/_/g, " ")}
-                              </Badge>
-                            ) : null}
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] capitalize",
-                                runtimeStatusBadgeClass(planRuntime.active ? "active" : "inactive"),
-                              )}
-                            >
-                              {planRuntime.active ? "Active" : "Inactive"}
-                            </Badge>
-                            {planRuntime.partial ? (
-                              <Badge variant="outline" className="text-[10px]">
-                                Partial
-                              </Badge>
-                            ) : null}
-                            {planRuntime.correlationConfidence ? (
-                              <Badge variant="outline" className="text-[10px] capitalize">
-                                {planRuntime.correlationConfidence} confidence
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Last update: {formatRuntimeTimestamp(planRuntime.updatedAt)}
-                          </p>
-
-                          {!planRuntime.available ? (
-                            <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-100/90">
-                              Runtime data unavailable
-                              {planRuntime.unavailableReason ? ` (${planRuntime.unavailableReason.replace(/_/g, " ")})` : ""}.
-                            </div>
-                          ) : null}
-
-                          {planRuntime.reasons.length > 0 ? (
-                            <p className="text-xs text-muted-foreground">
-                              Reasons: {planRuntime.reasons.join(", ")}
-                            </p>
-                          ) : null}
-
-                          <div className="space-y-1.5" data-testid="plan-runtime-agents">
-                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                              Active lanes
-                            </p>
-                            {planRuntime.agents.length > 0 ? (
-                              <div className="grid gap-1.5 sm:grid-cols-2">
-                                {planRuntime.agents.map((agent) => (
-                                  <div
-                                    key={`${agent.name}-${agent.role ?? "role"}-${agent.model ?? "model"}`}
-                                    className="rounded-md border border-border/50 bg-background/60 px-2.5 py-2 text-xs"
-                                  >
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      <p className="font-medium text-foreground">{agent.name}</p>
-                                      <Badge
-                                        variant="outline"
-                                        className={cn("text-[10px] capitalize", runtimeStatusBadgeClass(agent.status))}
-                                      >
-                                        {(agent.status ?? "unknown").replace(/_/g, " ")}
-                                      </Badge>
-                                    </div>
-                                    <p className="mt-1 text-muted-foreground">
-                                      {agent.role ? formatRoleLabel(agent.role) : "Unknown role"}
-                                      {agent.model ? ` · ${agent.model}` : ""}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-muted-foreground">
-                                No authoritative agent roster available.
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="space-y-1.5" data-testid="plan-runtime-events">
-                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                              Timeline
-                            </p>
-                            {planRuntime.events.length > 0 ? (
-                              <div className="max-h-44 space-y-1.5 overflow-auto rounded-md border border-border/50 bg-background/60 p-2">
-                                {planRuntime.events.slice(0, 12).map((event, index) => (
-                                  <div key={`${event.ts}-${event.kind}-${index}`} className="rounded border border-border/40 bg-background/70 px-2 py-1.5 text-xs">
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      <p className="text-muted-foreground">{formatRuntimeTimestamp(event.ts)}</p>
-                                      <Badge variant="outline" className="text-[10px] capitalize">
-                                        {event.kind.replace(/_/g, " ")}
-                                      </Badge>
-                                      {event.status ? (
-                                        <Badge
-                                          variant="outline"
-                                          className={cn("text-[10px] capitalize", runtimeStatusBadgeClass(event.status))}
-                                        >
-                                          {event.status.replace(/_/g, " ")}
-                                        </Badge>
-                                      ) : null}
-                                    </div>
-                                    <p className="mt-1 text-foreground/90">
-                                      {event.message}
-                                      {event.agentName ? ` · ${event.agentName}` : ""}
-                                      {event.model ? ` (${event.model})` : ""}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-muted-foreground">No runtime timeline events yet.</p>
-                            )}
-                          </div>
-
-                          <div className="space-y-1.5 rounded-md border border-border/50 bg-background/60 p-2" data-testid="plan-runtime-resume">
-                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Resume state</p>
-                            {planRuntime.lastCheckpoint ? (
-                              <p className="text-xs text-foreground/90">
-                                Last checkpoint: {formatRoleLabel(planRuntime.lastCheckpoint.role)} ·{" "}
-                                {planRuntime.lastCheckpoint.checkpointId} ·{" "}
-                                {formatCheckpointState(planRuntime.lastCheckpoint.state)}
-                              </p>
-                            ) : (
-                              <p className="text-xs text-muted-foreground">No checkpoint recovery marker recorded.</p>
-                            )}
-                            {planRuntime.lastError ? (
-                              <p className="text-xs text-amber-100/90">
-                                Last error: {planRuntime.lastError.message}
-                                {planRuntime.lastError.code ? ` (${planRuntime.lastError.code})` : ""}
-                              </p>
-                            ) : null}
-                            <p className="text-xs text-muted-foreground">
-                              Can resume: {planRuntime.canResume ? "Yes" : "No"}
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No runtime observer data available.</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Role checkpoints</p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {planDetail.roles.map((role) => {
-                          const roleVisual = getRoleVisual(role.role);
-                          const RoleIcon = roleVisual.icon;
-                          const percentComplete = roleProgressPercent(
-                            role.doneCheckpoints,
-                            role.totalCheckpoints,
-                          );
-                          const hasCheckpoints = role.totalCheckpoints > 0;
-                          const isComplete = hasCheckpoints && role.doneCheckpoints >= role.totalCheckpoints;
-
-                          return (
-                            <div
-                              key={role.role}
-                              className={cn(
-                                "group relative overflow-hidden rounded-xl border px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-200",
-                                roleVisual.cardClass,
-                                isComplete ? "ring-1 ring-emerald-400/25" : undefined,
-                              )}
-                            >
-                              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/20 opacity-50" />
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex min-w-0 items-center gap-2.5">
-                                  <span
-                                    className={cn(
-                                      "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border backdrop-blur-sm",
-                                      roleVisual.iconClass,
-                                    )}
-                                  >
-                                    <RoleIcon className="size-4" />
-                                  </span>
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm font-semibold text-foreground">
-                                      {formatRoleLabel(role.role)}
-                                    </p>
-                                    <p className={cn("text-[10px] uppercase tracking-[0.11em]", roleVisual.metaClass)}>
-                                      {hasCheckpoints ? `${role.totalCheckpoints} checkpoints` : "No checkpoints"}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-sm font-semibold tabular-nums text-foreground">
-                                    {percentComplete}%
-                                  </p>
-                                  <span
-                                    className={cn(
-                                      "inline-flex rounded-md border px-1.5 py-0.5 text-[11px] tabular-nums",
-                                      isComplete
-                                        ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-100"
-                                        : "border-white/15 bg-white/[0.05] text-zinc-200/90",
-                                    )}
-                                  >
-                                    {roleCompletionLabel(role.doneCheckpoints, role.totalCheckpoints)}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-black/30">
-                                <div
-                                  className={cn("h-full rounded-full transition-[width] duration-300", roleVisual.progressClass)}
-                                  style={{ width: `${percentComplete}%` }}
-                                />
-                              </div>
-                              <div className="mt-2 flex items-center justify-between gap-2">
-                                <p className={cn("text-[10px] uppercase tracking-[0.11em]", roleVisual.metaClass)}>
-                                  {hasCheckpoints ? `${percentComplete}% complete` : "No checkpoints yet"}
-                                </p>
-                                <span
-                                  className={cn(
-                                    "text-[10px] font-medium uppercase tracking-[0.11em]",
-                                    isComplete ? "text-emerald-200" : "text-zinc-300/80",
-                                  )}
-                                >
-                                  {isComplete ? "Complete" : hasCheckpoints ? "In progress" : "Pending"}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Summary</p>
-                      <div
-                        className="max-h-56 space-y-2 overflow-auto rounded-lg border border-cyan-500/15 bg-[#030915] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
-                        data-testid="plan-summary-content"
-                      >
-                        {summaryLines.length > 0 ? (
-                          summaryLines.map((line, index) => {
-                            const keyValueMatch = line.match(/^([^:]{1,40}):\s*(.+)$/);
-                            if (!keyValueMatch) {
-                              return (
-                                <p key={`${index}-${line}`} className="text-xs leading-relaxed text-foreground/90">
-                                  {line}
-                                </p>
-                              );
-                            }
-
-                            return (
-                              <div
-                                key={`${index}-${line}`}
-                                className="rounded-md border border-cyan-500/15 bg-[#020714] px-2.5 py-1.5"
-                              >
-                                <p className="text-[11px] uppercase tracking-wide text-cyan-100/70">
-                                  {keyValueMatch[1]}
-                                </p>
-                                <p className="text-xs leading-relaxed text-zinc-100">{keyValueMatch[2]}</p>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <p className="text-xs text-muted-foreground">No summary details available.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Checkpoints log</p>
-                      <div
-                        className="max-h-56 space-y-2 overflow-auto rounded-lg border border-border/60 bg-background/30 p-3"
-                        data-testid="plan-checkpoints-content"
-                      >
-                        {checkpointLines.length > 0 ? (
-                          checkpointLines.map((line, index) => {
-                            if (line.type === "text") {
-                              return (
-                                <p key={`${index}-${line.text}`} className="text-xs leading-relaxed text-muted-foreground">
-                                  {line.text}
-                                </p>
-                              );
-                            }
-
-                            return (
-                              <div
-                                key={`${line.entry.timestamp}-${index}`}
-                                className="rounded-md border border-border/50 bg-background/50 p-2.5"
-                                data-testid={`plan-checkpoint-entry-${index}`}
-                              >
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <p className="text-[11px] font-medium text-muted-foreground">
-                                    {formatCheckpointTimestamp(line.entry.timestamp)}
-                                  </p>
-                                  {line.entry.role
-                                    ? (() => {
-                                        const roleVisual = getRoleVisual(line.entry.role);
-                                        const RoleIcon = roleVisual.icon;
-                                        return (
-                                          <Badge
-                                            variant="outline"
-                                            className={cn(
-                                              "inline-flex items-center gap-1 text-[10px]",
-                                              roleVisual.badgeClass,
-                                            )}
-                                          >
-                                            <RoleIcon className="size-3" />
-                                            {formatRoleLabel(line.entry.role)}
-                                          </Badge>
-                                        );
-                                      })()
-                                    : null}
-                                  {line.entry.checkpointId ? (
-                                    <Badge variant="outline" className="text-[10px]">
-                                      {line.entry.checkpointId}
-                                    </Badge>
-                                  ) : null}
-                                  {line.entry.state ? (
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        "text-[10px] capitalize",
-                                        checkpointStateBadgeClass(line.entry.state),
-                                      )}
-                                    >
-                                      {formatCheckpointState(line.entry.state)}
-                                    </Badge>
-                                  ) : null}
-                                </div>
-                                <p className="mt-1 text-xs leading-relaxed text-foreground/90">
-                                  {line.entry.message ?? "Checkpoint event recorded."}
-                                </p>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <p className="text-xs text-muted-foreground">No checkpoint log entries yet.</p>
-                        )}
-                      </div>
-                    </div>
                   </div>
                 ) : null}
               </>

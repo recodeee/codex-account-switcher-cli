@@ -1,8 +1,15 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
-import { Search, Users } from "lucide-react";
+import { Plus, Search, Users } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   AccountCard,
@@ -22,13 +29,15 @@ import {
   getMergedQuotaRemainingPercent,
   getRawQuotaWindowFallback,
   hasActiveCliSessionSignal,
+  hasRecentWorkingNowSignal,
   hasRecentUsageSignal,
   hasFreshLiveTelemetry,
   isAccountWorkingNow,
+  noteWorkingNowSignal,
   selectStableRemainingPercent,
 } from "@/utils/account-working";
 import { resolveEffectiveAccountStatus } from "@/utils/account-status";
-import { formatCompactNumber, formatWindowLabel } from "@/utils/formatters";
+import { formatCompactNumber, formatEuro, formatWindowLabel } from "@/utils/formatters";
 import { normalizeRemainingPercentForDisplay } from "@/utils/quota-display";
 
 const RECENT_LAST_SEEN_SORT_WINDOW_MS = 30 * 60 * 1000;
@@ -37,7 +46,11 @@ const QUOTA_SORT_BUCKET_PERCENT = 5;
 const ACCOUNT_CARDS_CLOCK_TICK_MS = 5_000;
 const EMAIL_AUTOCORRECT_MAX_DISTANCE = 3;
 const ACCOUNT_GRID_CLASSNAME =
-  "grid auto-rows-fr items-stretch gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,21.5rem),1fr))] [&_.card-hover]:h-full";
+  "grid auto-rows-fr items-stretch gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,21.5rem),1fr))] [&_.card-hover]:h-full";
+const WORKING_ACCOUNT_GRID_CLASSNAME =
+  "grid auto-rows-fr items-stretch gap-3 grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 [&_.card-hover]:h-full";
+const WORKING_ACCOUNT_PLACEHOLDER_TARGET = 3;
+const WORKING_ACCOUNT_SUGGESTION_LIMIT = 3;
 
 type OtherAccountsSortMode =
   | "available-first"
@@ -412,6 +425,65 @@ function sortAccountsByUsageLimitAvailableFirst(
   return [...usageLimitAvailable, ...otherAccounts];
 }
 
+function resolveTopSuggestedAccounts(
+  accounts: AccountSummary[],
+  nowMs: number,
+  limit: number,
+): AccountSummary[] {
+  if (limit <= 0 || accounts.length === 0) {
+    return [];
+  }
+
+  return sortAccountsByLastSeenAndAvailableQuota(accounts, nowMs)
+    .filter((account) => {
+      const hasActiveCliSession = hasActiveCliSessionSignal(account, nowMs);
+      const effectiveStatus = resolveEffectiveAccountStatus({
+        status: account.status,
+        hasSnapshot: account.codexAuth?.hasSnapshot,
+        isActiveSnapshot: account.codexAuth?.isActiveSnapshot,
+        hasLiveSession: hasActiveCliSession,
+        hasRecentUsageSignal:
+          (account.codexAuth?.hasSnapshot ?? false) &&
+          hasRecentUsageSignal(account, nowMs),
+        allowDeactivatedOverride: false,
+      });
+      if (effectiveStatus === "deactivated") {
+        return false;
+      }
+      if (account.status === "rate_limited" || account.status === "quota_exceeded") {
+        return false;
+      }
+
+      const primaryRemaining = resolveSortableRemainingPercent(
+        account,
+        "primary",
+        nowMs,
+      );
+      const secondaryRemaining = resolveSortableRemainingPercent(
+        account,
+        "secondary",
+        nowMs,
+      );
+
+      const hasPrimaryWindow =
+        account.windowMinutesPrimary != null || primaryRemaining != null;
+      const hasSecondaryWindow =
+        account.windowMinutesSecondary != null || secondaryRemaining != null;
+
+      const primaryAvailable =
+        !hasPrimaryWindow ||
+        (primaryRemaining != null &&
+          normalizeNearZeroQuotaPercent(primaryRemaining) > 0);
+      const secondaryAvailable =
+        !hasSecondaryWindow ||
+        (secondaryRemaining != null &&
+          normalizeNearZeroQuotaPercent(secondaryRemaining) > 0);
+
+      return primaryAvailable && secondaryAvailable;
+    })
+    .slice(0, limit);
+}
+
 function resolveMostRecentUsageRecordedAtMs(
   account: AccountSummary,
 ): number | null {
@@ -503,6 +575,13 @@ export type AccountCardsProps = {
   onAction?: AccountCardProps["onAction"];
 };
 
+function formatConsumedCostEur(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) {
+    return "--";
+  }
+  return formatEuro(Math.max(0, value));
+}
+
 function formatConsumedTokens(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) {
     return "--";
@@ -541,6 +620,10 @@ function resolveCardTokensRemaining(
     return secondaryRemaining;
   }
 
+  if (primaryRemaining != null && secondaryRemaining != null) {
+    return Math.min(primaryRemaining, secondaryRemaining);
+  }
+
   if (primaryRemaining != null) {
     return primaryRemaining;
   }
@@ -566,6 +649,7 @@ export function AccountCards({
   const [otherAccountsSortMode, setOtherAccountsSortMode] =
     useState<OtherAccountsSortMode>("available-first");
   const [otherAccountsEmailSearch, setOtherAccountsEmailSearch] = useState("");
+  const [isSuggestionDialogOpen, setIsSuggestionDialogOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -618,12 +702,16 @@ export function AccountCards({
         allowDeactivatedOverride: false,
       });
 
-      const hasWorkingNowSignal =
-        isAccountWorkingNow(account, nowMs) ||
-        (account.status !== "deactivated" &&
-          (account.codexAuth?.hasLiveSession ?? false) &&
-          hasActiveCliSession);
+      const hasWorkingNowSignal = isAccountWorkingNow(account, nowMs);
       if (hasWorkingNowSignal) {
+        noteWorkingNowSignal(account, nowMs);
+        working.push(account);
+        continue;
+      }
+      if (
+        account.status !== "deactivated" &&
+        hasRecentWorkingNowSignal(account, nowMs)
+      ) {
         working.push(account);
         continue;
       }
@@ -656,7 +744,9 @@ export function AccountCards({
       groupedAccounts.working.map((account) => account.accountId),
     );
     const liveSessions = groupedAccounts.working.reduce((sum, account) => {
-      if (!hasFreshLiveTelemetry(account, nowMs)) {
+      const hasLiveProcessSessionSignal =
+        Math.max(account.codexLiveSessionCount ?? 0, 0) > 0;
+      if (!hasFreshLiveTelemetry(account, nowMs) && !hasLiveProcessSessionSignal) {
         return sum;
       }
       return sum + Math.max(account.codexLiveSessionCount ?? 0, 1);
@@ -672,10 +762,22 @@ export function AccountCards({
               }
               return sum + row.tokens;
             }, 0);
+    const primaryConsumedCostEur =
+      primaryUsageSummary == null
+        ? null
+        : primaryUsageSummary.accounts.length === 0
+          ? primaryUsageSummary.totalCostEur
+          : primaryUsageSummary.accounts.reduce((sum, row) => {
+              if (!row.accountId || !workingAccountIds.has(row.accountId)) {
+                return sum;
+              }
+              return sum + row.costEur;
+            }, 0);
 
     return {
       liveSessions,
       primaryConsumedTokens,
+      primaryConsumedCostEur,
     };
   }, [groupedAccounts.working, nowMs, primaryUsageSummary]);
   const otherAccountsEmailSuggestions = useMemo(() => {
@@ -699,8 +801,29 @@ export function AccountCards({
       matchesOtherAccountEmailQuery(account, normalizedQuery),
     );
   }, [groupedAccounts.remaining, otherAccountsEmailSearch]);
+  const suggestedAccounts = useMemo(
+    () =>
+      resolveTopSuggestedAccounts(
+        groupedAccounts.remaining,
+        nowMs,
+        WORKING_ACCOUNT_SUGGESTION_LIMIT,
+      ),
+    [groupedAccounts.remaining, nowMs],
+  );
   const hasOtherAccountsEmailSearch =
     normalizeEmailSearchValue(otherAccountsEmailSearch).length > 0;
+  const hasSuggestedAccounts = suggestedAccounts.length > 0;
+
+  const handleSuggestedAccountAction: AccountCardProps["onAction"] = (
+    account,
+    action,
+    context,
+  ) => {
+    if (action === "useLocal") {
+      setIsSuggestionDialogOpen(false);
+    }
+    onAction?.(account, action, context);
+  };
 
   if (accounts.length === 0) {
     return (
@@ -712,54 +835,101 @@ export function AccountCards({
     );
   }
 
-  const renderGrid = (items: AccountSummary[], keyPrefix: string) => (
-    <div className={ACCOUNT_GRID_CLASSNAME}>
-      {items.map((account, index) => (
-        <div
-          key={`${keyPrefix}-${account.accountId}`}
-          className={
-            keyPrefix === "working"
-              ? "h-full min-w-0 animate-working-account-enter"
-              : "h-full min-w-0 animate-fade-in-up"
-          }
-          style={
-            keyPrefix === "working"
-              ? ({
-                  animationDelay: `${index * 85}ms`,
-                  animationDuration: `${Math.min(640, 520 + index * 35)}ms`,
-                } satisfies CSSProperties)
-              : ({
-                  animationDelay: `${index * 60}ms`,
-                } satisfies CSSProperties)
-          }
-        >
-          <AccountCard
-            account={account}
-            tokensRemaining={resolveCardTokensRemaining(
-              account,
-              primaryRemainingByAccount,
-              secondaryRemainingByAccount,
-            )}
-            showTokensRemaining
-            showAccountId={duplicateAccountIds.has(account.accountId)}
-            useLocalBusy={
-              useLocalBusy &&
-              useLocalBusyAccountId != null &&
-              useLocalBusyAccountId === account.accountId
+  const renderGrid = (
+    items: AccountSummary[],
+    keyPrefix: string,
+    options?: { className?: string; placeholderCount?: number },
+  ) => {
+    const placeholderCount = Math.max(0, options?.placeholderCount ?? 0);
+    return (
+      <div className={options?.className ?? ACCOUNT_GRID_CLASSNAME}>
+        {items.map((account, index) => (
+          <div
+            key={`${keyPrefix}-${account.accountId}`}
+            className={
+              keyPrefix === "working"
+                ? "h-full min-w-0 animate-working-account-enter"
+                : "h-full min-w-0 animate-fade-in-up"
             }
-            deleteBusy={deleteBusy}
-            initialSessionTasksCollapsed
-            onAction={onAction}
-          />
-        </div>
-      ))}
-    </div>
-  );
+            style={
+              keyPrefix === "working"
+                ? ({
+                    animationDelay: `${index * 85}ms`,
+                    animationDuration: `${Math.min(640, 520 + index * 35)}ms`,
+                  } satisfies CSSProperties)
+                : ({
+                    animationDelay: `${index * 60}ms`,
+                  } satisfies CSSProperties)
+            }
+          >
+            <AccountCard
+              account={account}
+              tokensRemaining={resolveCardTokensRemaining(
+                account,
+                primaryRemainingByAccount,
+                secondaryRemainingByAccount,
+              )}
+              showTokensRemaining
+              showAccountId={duplicateAccountIds.has(account.accountId)}
+              showIdleCodexStatusPanel={keyPrefix !== "remaining"}
+              useLocalBusy={
+                useLocalBusy &&
+                useLocalBusyAccountId != null &&
+                useLocalBusyAccountId === account.accountId
+              }
+              deleteBusy={deleteBusy}
+              initialSessionTasksCollapsed
+              onAction={onAction}
+            />
+          </div>
+        ))}
+        {Array.from({ length: placeholderCount }).map((_, placeholderIndex) => (
+          <div
+            key={`${keyPrefix}-placeholder-${placeholderIndex}`}
+            className="h-full min-w-0 animate-working-account-enter"
+            style={
+              {
+                animationDelay: `${(items.length + placeholderIndex) * 85}ms`,
+                animationDuration: `${Math.min(
+                  640,
+                  520 + (items.length + placeholderIndex) * 35,
+                )}ms`,
+              } satisfies CSSProperties
+            }
+          >
+            <button
+              type="button"
+              data-testid="working-now-placeholder-card"
+              className="flex h-full min-h-[22rem] w-full cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-cyan-400/35 bg-[#050d18]/85 px-5 py-6 text-center transition-colors hover:border-cyan-300/55 hover:bg-[#071120]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/45"
+              aria-label="Suggest top three accounts for Working now"
+              onClick={() => {
+                setIsSuggestionDialogOpen(true);
+              }}
+            >
+              <div className="space-y-3">
+                <span className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-cyan-300/[0.10] text-cyan-100">
+                  <Plus className="h-7 w-7" aria-hidden="true" />
+                </span>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-semibold text-zinc-100">
+                    Add new card here
+                  </p>
+                  <p className="text-xs text-zinc-400">
+                    Connect another account and it will appear in Working now.
+                  </p>
+                </div>
+              </div>
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
       {groupedAccounts.working.length > 0 ? (
-        <section className="space-y-4 rounded-xl border border-white/10 bg-[#0d1522] p-4 md:p-5">
+        <section className="space-y-4 rounded-xl border border-white/10 bg-[#060A13] p-4 md:p-5">
           <div className="flex flex-col gap-4 border-b border-white/8 pb-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 space-y-1">
               <h3 className="text-base font-semibold tracking-tight text-zinc-100">
@@ -771,7 +941,7 @@ export function AccountCards({
               </p>
             </div>
             <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:w-auto xl:min-w-[34rem] xl:grid-cols-3">
-              <span className="flex min-h-16 flex-col justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3.5 py-3">
+              <span className="flex min-h-16 flex-col justify-between rounded-lg border border-white/10 bg-[#060A13] px-3.5 py-3">
                 <span className="text-[11px] font-medium text-zinc-400">
                   Active accounts
                 </span>
@@ -780,7 +950,7 @@ export function AccountCards({
                 </span>
               </span>
               {workingSummary.liveSessions > 0 ? (
-                <span className="flex min-h-16 flex-col justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3.5 py-3">
+                <span className="flex min-h-16 flex-col justify-between rounded-lg border border-white/10 bg-[#060A13] px-3.5 py-3">
                   <span className="text-[11px] font-medium text-zinc-400">
                     CLI sessions
                   </span>
@@ -790,18 +960,27 @@ export function AccountCards({
                 </span>
               ) : null}
               {workingSummary.primaryConsumedTokens !== null ? (
-                <span className="flex min-h-16 flex-col justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3.5 py-3">
+                <span className="flex min-h-16 flex-col justify-between rounded-lg border border-white/10 bg-[#060A13] px-3.5 py-3">
                   <span className="text-[11px] font-medium text-zinc-400">
-                    {primaryWindowLabel} token spend
+                    {primaryWindowLabel} price spend
                   </span>
                   <span className="text-base font-semibold text-zinc-100 tabular-nums">
-                    {formatConsumedTokens(workingSummary.primaryConsumedTokens)}
+                    {`${formatConsumedCostEur(workingSummary.primaryConsumedCostEur)} · ${formatConsumedTokens(
+                      workingSummary.primaryConsumedTokens,
+                    )}`}
                   </span>
                 </span>
               ) : null}
             </div>
           </div>
-          {renderGrid(groupedAccounts.working, "working")}
+          {renderGrid(groupedAccounts.working, "working", {
+            className: WORKING_ACCOUNT_GRID_CLASSNAME,
+            placeholderCount: Math.max(
+              0,
+              WORKING_ACCOUNT_PLACEHOLDER_TARGET -
+                groupedAccounts.working.length,
+            ),
+          })}
         </section>
       ) : (
         <section className="rounded-xl border border-dashed border-border/70 bg-background/25 px-4 py-6 text-center md:px-5">
@@ -943,6 +1122,54 @@ export function AccountCards({
           )}
         </section>
       ) : null}
+      <Dialog open={isSuggestionDialogOpen} onOpenChange={setIsSuggestionDialogOpen}>
+        <DialogContent className="max-h-[88vh] overflow-y-auto border-cyan-400/35 bg-[#020308] p-4 sm:max-w-[72rem] sm:p-5 [&>[data-slot=dialog-close]]:h-10 [&>[data-slot=dialog-close]]:w-10 [&>[data-slot=dialog-close]_svg]:size-6">
+          <DialogHeader>
+            <DialogTitle className="text-zinc-100">
+              Suggested cards for Working now
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Top {WORKING_ACCOUNT_SUGGESTION_LIMIT} accounts from Other accounts,
+              showing only cards with available quota so you can switch quickly.
+            </DialogDescription>
+          </DialogHeader>
+          {hasSuggestedAccounts ? (
+            <div
+              className="grid auto-rows-fr items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3 [&_.card-hover]:h-full"
+              data-testid="working-now-suggestion-grid"
+            >
+              {suggestedAccounts.map((account) => (
+                <div key={`suggested-${account.accountId}`} className="h-full min-w-0">
+                  <AccountCard
+                    account={account}
+                    tokensRemaining={resolveCardTokensRemaining(
+                      account,
+                      primaryRemainingByAccount,
+                      secondaryRemainingByAccount,
+                    )}
+                    showTokensRemaining
+                    showAccountId={duplicateAccountIds.has(account.accountId)}
+                    showIdleCodexStatusPanel={false}
+                    useLocalBusy={
+                      useLocalBusy &&
+                      useLocalBusyAccountId != null &&
+                      useLocalBusyAccountId === account.accountId
+                    }
+                    deleteBusy={deleteBusy}
+                    initialSessionTasksCollapsed
+                    onAction={handleSuggestedAccountAction}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-cyan-400/35 bg-[#061020] px-4 py-5 text-sm text-zinc-300">
+              No suggestion is available yet. Add or refresh accounts and try
+              again.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

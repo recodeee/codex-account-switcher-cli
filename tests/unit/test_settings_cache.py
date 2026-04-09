@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 import app.core.config.settings_cache as settings_cache_module
 from app.core.config.settings_cache import SettingsCache
@@ -50,3 +51,51 @@ async def test_settings_cache_ttl_and_invalidate(monkeypatch) -> None:
     fourth = await cache.get()
     assert fourth is not third
     assert state["calls"] == 3
+
+
+@pytest.mark.asyncio
+async def test_settings_cache_uses_stale_value_when_refresh_query_fails(monkeypatch) -> None:
+    state = {"now": 100.0, "calls": 0, "raise_error": False}
+
+    class _FakeRepository:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def get_or_create(self):
+            state["calls"] += 1
+            if state["raise_error"]:
+                raise SQLAlchemyError("db timeout")
+            return SimpleNamespace(version=state["calls"])
+
+    monkeypatch.setattr(settings_cache_module, "SessionLocal", lambda: _FakeSessionContext())
+    monkeypatch.setattr(settings_cache_module, "SettingsRepository", _FakeRepository)
+    monkeypatch.setattr(settings_cache_module.time, "monotonic", lambda: state["now"])
+
+    cache = SettingsCache(ttl_seconds=5.0)
+
+    first = await cache.get()
+    state["raise_error"] = True
+    state["now"] = 106.0
+    second = await cache.get()
+    assert second is first
+    assert state["calls"] == 2
+
+
+@pytest.mark.asyncio
+async def test_settings_cache_raises_when_no_stale_value_and_query_fails(monkeypatch) -> None:
+    state = {"now": 100.0}
+
+    class _FakeRepository:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def get_or_create(self):
+            raise SQLAlchemyError("db timeout")
+
+    monkeypatch.setattr(settings_cache_module, "SessionLocal", lambda: _FakeSessionContext())
+    monkeypatch.setattr(settings_cache_module, "SettingsRepository", _FakeRepository)
+    monkeypatch.setattr(settings_cache_module.time, "monotonic", lambda: state["now"])
+
+    cache = SettingsCache(ttl_seconds=5.0)
+    with pytest.raises(SQLAlchemyError, match="db timeout"):
+        await cache.get()

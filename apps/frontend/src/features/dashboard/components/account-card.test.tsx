@@ -63,6 +63,19 @@ describe("AccountCard", () => {
     expect(screen.getByRole("button", { name: "Sessions" })).toBeInTheDocument();
   });
 
+  it("keeps the card icon inline before team/email values", () => {
+    const account = createAccountSummary();
+
+    render(<AccountCard account={account} />);
+
+    const iconText = screen.getByText(")))");
+    const identityRow = iconText.parentElement?.parentElement as HTMLElement | null;
+    expect(identityRow).not.toBeNull();
+    expect(identityRow).toHaveClass("mt-2", "flex", "items-start");
+    expect(within(identityRow as HTMLElement).getByText("Plus · main")).toBeInTheDocument();
+    expect(within(identityRow as HTMLElement).getByText("primary@example.com")).toBeInTheDocument();
+  });
+
   it("renders quota bars inside the OpenAI token card container", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 2,
@@ -789,16 +802,13 @@ describe("AccountCard", () => {
     expect(onAction).toHaveBeenCalledWith(account, "useLocal");
   });
 
-  it("calls terminal action when terminal button is clicked", async () => {
-    const user = userEvent.setup({ delay: null });
+  it("does not render terminal action button on account cards", () => {
     const account = createAccountSummary();
     const onAction = vi.fn();
 
     render(<AccountCard account={account} onAction={onAction} />);
 
-    await user.click(screen.getByRole("button", { name: "Terminal" }));
-
-    expect(onAction).toHaveBeenCalledWith(account, "terminal");
+    expect(screen.queryByRole("button", { name: "Terminal" })).not.toBeInTheDocument();
   });
 
   it("calls sessions action when sessions button is clicked", async () => {
@@ -972,6 +982,33 @@ describe("AccountCard", () => {
     const tokensSection = screen.getByText("Tokens remaining").parentElement;
     expect(tokensSection).not.toBeNull();
     expect(within(tokensSection as HTMLElement).getByText("0")).toBeInTheDocument();
+  });
+
+  it("does not show usage-limit badge from zero tokens when live quota still has headroom", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 68,
+        secondaryRemainingPercent: 43,
+      },
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "odin",
+        activeSnapshotName: "odin",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} showTokensRemaining tokensRemaining={0} />);
+
+    expect(screen.queryByText(/^Usage limit hit$/)).not.toBeInTheDocument();
   });
 
   it("shows usage-limit badge when 5h is depleted even without a live session", () => {
@@ -1528,6 +1565,7 @@ describe("AccountCard", () => {
   });
 
   it("renders current task preview when provided", () => {
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 2,
       codexSessionCount: 2,
@@ -1540,14 +1578,31 @@ describe("AccountCard", () => {
         isActiveSnapshot: true,
         hasLiveSession: true,
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} />);
 
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
-    expect(screen.getByText("Prompt task")).toBeInTheDocument();
+    expect(screen.queryByText("Prompt task")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(codexActiveCard).toBeInTheDocument();
     expect(
-      screen.getAllByText("Trace session-affinity fallback for codex websocket flow").length,
+      within(codexActiveCard).getByTestId("cpu-architecture-backdrop-codex-active"),
+    ).toBeInTheDocument();
+    expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
+    expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
+      "Thinking",
+    );
+    expect(
+      within(codexActiveCard).getByTestId("codex-inline-status-activity"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryAllByText(
+        "Trace session-affinity fallback for codex websocket flow",
+      ).length,
     ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Last codex response:")).toBeInTheDocument();
     expect(
@@ -1556,7 +1611,8 @@ describe("AccountCard", () => {
     expect(screen.getByText("working...")).toBeInTheDocument();
   });
 
-  it("renders the OMX planning graph in place of the prompt pill for $ralplan tasks", () => {
+  it("renders the OMX planning graph with planning role nodes", () => {
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
       codexSessionCount: 1,
@@ -1569,6 +1625,8 @@ describe("AccountCard", () => {
         isActiveSnapshot: true,
         hasLiveSession: true,
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} />);
@@ -1577,16 +1635,330 @@ describe("AccountCard", () => {
     const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
     expect(planningGraph).toBeInTheDocument();
     expect(
-      within(planningGraph).getByText(
+      within(planningGraph).queryByText(
         "$ralplan can you make this card show planning mode runtime state",
       ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(planningGraph).getByTestId("cpu-architecture-backdrop-planning"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Web")).toBeInTheDocument();
-    expect(screen.getByText("Plan")).toBeInTheDocument();
-    expect(screen.getByText("DB")).toBeInTheDocument();
-    expect(screen.getByText("API")).toBeInTheDocument();
-    expect(screen.getByText("Deploy")).toBeInTheDocument();
-    expect(screen.getByText("LLM")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("Planner")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("Architect")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("Critic")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("Engineer")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("Writer")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("Verifier")).toBeInTheDocument();
+    expect(within(planningGraph).getByText("RALPLAN")).toBeInTheDocument();
+    expect(
+      planningGraph.querySelector('path[d="M 0 50 H 56"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      planningGraph.querySelector('path[d="M 200 50 H 144"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      within(planningGraph).getByTestId("omx-planning-cli-state"),
+    ).toHaveTextContent("Thinking");
+    const thinkingBadge = within(planningGraph).getByTestId("omx-planning-cli-state");
+    expect(thinkingBadge.parentElement).toHaveClass("right-3");
+    expect(thinkingBadge).not.toHaveClass(
+      "shadow-[0_0_14px_rgba(129,140,248,0.45)]",
+    );
+  });
+
+  it("renders only the active planning connector line", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan architect review runtime-ready account handoff",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
+    const connectorLines = planningGraph.querySelectorAll("line");
+    expect(connectorLines).toHaveLength(1);
+
+    const connector = within(planningGraph).getByTestId("omx-planning-active-connector");
+    expect(connector).toHaveAttribute("x1", "50");
+    expect(connector).toHaveAttribute("y1", "50");
+    expect(connector).toHaveAttribute("x2", "16");
+    expect(connector).toHaveAttribute("y2", "26");
+    expect(connector).toHaveAttribute("stroke-width", "0.55");
+  });
+
+  it("shows waiting CLI runtime state inside the OMX planning graph when sessions are idle", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan can you make this card show planning mode runtime state",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "session-1",
+          taskPreview: "Waiting for new task",
+          taskUpdatedAt: new Date().toISOString(),
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
+    expect(
+      within(planningGraph).getByTestId("omx-planning-cli-state"),
+    ).toHaveTextContent("Waiting");
+    const waitingBadge = within(planningGraph).getByTestId("omx-planning-cli-state");
+    expect(waitingBadge.parentElement).toHaveClass("right-3");
+    expect(waitingBadge).not.toHaveClass(
+      "shadow-[0_0_14px_rgba(34,211,238,0.35)]",
+    );
+  });
+
+  it("renders the planning graph when current preview is waiting but newest session preview is ralplan", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Waiting for new task",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "session-old",
+          taskPreview: "Investigate generic dashboard request",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+        {
+          sessionKey: "session-new",
+          taskPreview: "$ralplan finalize consensus acceptance criteria",
+          taskUpdatedAt: "2026-04-05T10:05:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByTestId("omx-planning-prompt-graph")).toBeInTheDocument();
+    expect(screen.queryByTestId("codex-active-agent-card")).not.toBeInTheDocument();
+  });
+
+  it("keeps planner highlighted when CLI state is waiting even if prompt keywords map elsewhere", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "$ralplan verify runtime test handoff",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "session-1",
+          taskPreview: "Waiting for new task",
+          taskUpdatedAt: new Date().toISOString(),
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
+    const plannerNode = within(planningGraph).getByText("Planner").closest("div");
+    const verifierNode = within(planningGraph).getByText("Verifier").closest("div");
+
+    expect(plannerNode).toHaveClass("scale-[1.05]");
+    expect(verifierNode).not.toHaveClass("scale-[1.05]");
+  });
+
+  it("keeps newest non-waiting prompt in the last response panel", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Waiting for new task",
+      codexLastTaskPreview:
+        "Architect and critic review the runtime ready fail-closed field",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(codexActiveCard).toBeInTheDocument();
+    expect(screen.getByText("Last codex response:")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "Architect and critic review the runtime ready fail-closed field",
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps codex-active panel when current prompt is non-ralplan even if last prompt contains ralplan", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Investigate sticky routing for sessions page",
+      codexLastTaskPreview: "$ralplan iterate on reviewer feedback",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Investigate sticky routing for sessions page").length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps codex-active panel when current prompt is non-ralplan even if an older session preview contains ralplan", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 2,
+      codexSessionCount: 2,
+      codexCurrentTaskPreview: "Investigate sticky routing for sessions page",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "session-old",
+          taskPreview: "$ralplan finalize consensus acceptance criteria",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+        {
+          sessionKey: "session-new",
+          taskPreview: "Investigate sticky routing for sessions page",
+          taskUpdatedAt: "2026-04-05T10:05:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Investigate sticky routing for sessions page").length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not keep planning mode on an older ralplan session when a newer session preview is non-ralplan", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 2,
+      codexSessionCount: 2,
+      codexCurrentTaskPreview: "Waiting for new task",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "session-old",
+          taskPreview: "$ralplan finalize consensus acceptance criteria",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+        {
+          sessionKey: "session-new",
+          taskPreview: "Investigate sticky routing for sessions page",
+          taskUpdatedAt: "2026-04-05T10:05:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    expect(screen.getByTestId("codex-active-agent-card")).toBeInTheDocument();
+  });
+
+  it("treats role-keyword prompts without ralplan marker as codex-active mode", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Architect and critic review session-attribution edge cases",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    expect(screen.getByTestId("codex-active-agent-card")).toBeInTheDocument();
   });
 
   it("shows a Next.js badge when task previews mention next.js or turbopack", () => {
@@ -1617,7 +1989,7 @@ describe("AccountCard", () => {
     expect(screen.getAllByLabelText("Next.js task").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("renders current task preview for non-working accounts when provided", () => {
+  it("hides the planning prompt graph for non-working accounts", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,
       codexSessionCount: 0,
@@ -1634,20 +2006,55 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
+    expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
+      "Waiting",
+    );
     expect(
-      screen.getByText("Review sticky session cleanup edge-cases"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("cpu-architecture-backdrop-planning"),
+    ).not.toBeInTheDocument();
+    expect(within(codexActiveCard).getByTestId("cpu-architecture-backdrop-codex-active")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Review sticky session cleanup edge-cases"),
+    ).not.toBeInTheDocument();
   });
 
-  it("shows a current task placeholder when no task preview is available", () => {
+  it("renders codex-active panel (not planning graph) when runtime reports a live session but no ralplan prompt", () => {
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexCurrentTaskPreview: null,
+      codexLiveSessionCount: 0,
+      codexSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} />);
 
     expect(screen.queryByText("Current task")).not.toBeInTheDocument();
-    expect(screen.getByText("No active task reported")).toBeInTheDocument();
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(
+      within(codexActiveCard).getByTestId("cpu-architecture-backdrop-codex-active"),
+    ).toBeInTheDocument();
+    expect(within(codexActiveCard).getByText("Codex")).toBeInTheDocument();
+    expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
+      "Waiting",
+    );
+    expect(
+      within(codexActiveCard).queryByTestId("codex-inline-status-activity"),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows waiting for new task without the thinking indicator when a live session has no task preview", () => {
@@ -1706,7 +2113,9 @@ describe("AccountCard", () => {
 
     expect(screen.getByText("working...")).toBeInTheDocument();
     expect(screen.queryByText("waiting for new task")).not.toBeInTheDocument();
-    expect(screen.getByText("Investigate stuck admin routing")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Investigate stuck admin routing").length,
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("thinking")).toBeInTheDocument();
   });
 
@@ -1801,6 +2210,80 @@ describe("AccountCard", () => {
     expect(
       screen.queryByText("No task assigned yet for this account."),
     ).not.toBeInTheDocument();
+  });
+
+  it("prefers waiting session rows when live sessions shrink after account switching", () => {
+    const stalePrompt =
+      "Investigate old account prompt that should not be reused";
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: stalePrompt,
+      codexLastTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "old-session",
+          taskPreview: stalePrompt,
+          taskUpdatedAt: "2026-04-05T09:58:00.000Z",
+        },
+        {
+          sessionKey: "new-session",
+          taskPreview: "Waiting for new task",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByText(stalePrompt)).not.toBeInTheDocument();
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
+    expect(screen.getByText("1 waiting")).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps the newest prompt when duplicate session keys are reported", () => {
+    const olderPrompt = "Older prompt should be replaced";
+    const newestPrompt = "Newest prompt should be visible";
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: newestPrompt,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-duplicate",
+          taskPreview: olderPrompt,
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+        {
+          sessionKey: "sess-duplicate",
+          taskPreview: newestPrompt,
+          taskUpdatedAt: "2026-04-05T10:02:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("sess-duplicate")).toBeInTheDocument();
+    expect(screen.getByText(newestPrompt)).toBeInTheDocument();
+    expect(screen.queryByText(olderPrompt)).not.toBeInTheDocument();
   });
 
   it("renders usage-limit session previews in red", () => {
@@ -1966,34 +2449,34 @@ describe("AccountCard", () => {
     });
   });
 
-  it("truncates long current task previews and allows expanding them", async () => {
-    const user = userEvent.setup();
+  it("keeps codex-active panel CPU-only while task text stays in session rows", () => {
     const longTaskPreview = `Task trace ${"x".repeat(130)}`;
     const account = createAccountSummary({
       codexCurrentTaskPreview: longTaskPreview,
-      codexLiveSessionCount: 0,
-      codexSessionCount: 0,
-      codexTrackedSessionCount: 0,
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      usage: {
+        primaryRemainingPercent: 10,
+        secondaryRemainingPercent: 67,
+      },
       codexAuth: {
         hasSnapshot: true,
         snapshotName: "main",
         activeSnapshotName: "main",
         isActiveSnapshot: true,
-        hasLiveSession: false,
+        hasLiveSession: true,
       },
     });
 
     render(<AccountCard account={account} />);
 
-    const truncated = truncateTaskPreviewForExpectation(longTaskPreview);
-    expect(screen.getByText(truncated)).toBeInTheDocument();
-    expect(screen.queryByText(longTaskPreview)).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "View Full" }));
-    expect(screen.getByText(longTaskPreview)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Show Less" }));
-    expect(screen.getByText(truncated)).toBeInTheDocument();
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(within(codexActiveCard).queryByText(longTaskPreview)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(truncateTaskPreviewForExpectation(longTaskPreview)),
+    ).toBeInTheDocument();
   });
 
   it("truncates long per-session task previews and allows expanding them", async () => {
@@ -2101,6 +2584,36 @@ describe("AccountCard", () => {
     render(<AccountCard account={account} />);
 
     expect(screen.getByText("sess-done")).toBeInTheDocument();
+    expect(screen.getByText("task finished")).toBeInTheDocument();
+    expect(screen.queryByText("thinking")).not.toBeInTheDocument();
+    expect(screen.getByText("1 finished")).toBeInTheDocument();
+  });
+
+  it("treats failed-style task previews as finished instead of thinking", () => {
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Investigate snapshot handoff",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-failed",
+          taskPreview: "Task failed: command exited with code 1",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByText("sess-failed")).toBeInTheDocument();
     expect(screen.getByText("task finished")).toBeInTheDocument();
     expect(screen.queryByText("thinking")).not.toBeInTheDocument();
     expect(screen.getByText("1 finished")).toBeInTheDocument();
@@ -2273,7 +2786,12 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Waiting for new task")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(
+      within(codexActiveCard).queryByText("Investigate Zeus quota overlay mapping"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Last codex response:")).toBeInTheDocument();
     expect(
       screen.getAllByText("Investigate Zeus quota overlay mapping").length,
@@ -2601,10 +3119,62 @@ describe("AccountCard", () => {
 
     const { container } = render(<AccountCard account={account} />);
 
-    const upToDate = screen.getByText("Up to date");
-    expect(upToDate).toBeInTheDocument();
-    expect(upToDate).toHaveClass("text-emerald-600");
+    const upToDate = screen.getAllByText("Up to date");
+    expect(upToDate.length).toBeGreaterThanOrEqual(1);
+    expect(upToDate[0]).toHaveClass("text-emerald-600");
     expect(container.textContent).not.toContain("last seen 0m ago");
+    vi.useRealTimers();
+  });
+
+  it("shows up-to-date for recently refreshed usage timestamps when active CLI signals still exist", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: "2025-12-31T23:47:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-31T23:45:00.000Z",
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getAllByText("Up to date").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("last seen 13m ago")).not.toBeInTheDocument();
+    expect(screen.queryByText("last seen 15m ago")).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("shows explicit last-seen labels when there is no active CLI signal", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: "2025-12-31T23:47:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-31T23:45:00.000Z",
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByText("Up to date")).not.toBeInTheDocument();
+    expect(screen.getByText("last seen 13m ago")).toBeInTheDocument();
+    expect(screen.getByText("last seen 15m ago")).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -2801,8 +3371,8 @@ describe("AccountCard", () => {
     expect(within(card as HTMLElement).getByRole("button", { name: "Sessions" })).toBeDisabled();
   });
 
-  it("keeps live quota debug collapsed by default and expands on demand", async () => {
-    const user = userEvent.setup();
+  it("shows a compact logs shortcut button without rendering the codex logs panel", () => {
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 2,
       codexTrackedSessionCount: 1,
@@ -2856,40 +3426,84 @@ describe("AccountCard", () => {
           },
         ],
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} />);
 
-    expect(screen.getByRole("button", { name: /debug/i })).toBeInTheDocument();
-    expect(screen.queryByText(/cli session logs/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/\$ merged 5h=17% weekly=77%/)).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /debug/i }));
-    expect(screen.getByText(/cli session logs/i)).toBeInTheDocument();
-    expect(screen.getByText(/\$ merged 5h=17% weekly=77%/)).toBeInTheDocument();
-    expect(screen.getByText(/\$ override=applied_live_usage_windows/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/\$ cli_mapping selected_snapshot=snap-a active_snapshot=snap-a match=yes/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/\$ cli_session_counts mapped=2 tracked=1 displayed=2 live_signal=yes/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/\$ attribution=account-attributed override applied/),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /save log file/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /copy logs/i })).toBeInTheDocument();
-    expect(screen.queryByText(/\$ no cli sessions sampled/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /debug/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Logs" })).toBeInTheDocument();
+    expect(screen.queryByText(/hidden on the card/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("codex-logs-label")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /save log file/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /copy logs/i })).not.toBeInTheDocument();
   });
 
-  it("surfaces mapped live sessions without quota rows in CLI session logs", async () => {
+  it("hides codex logs section on cards that are not working now", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "idle-snap",
+        activeSnapshotName: "idle-snap",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: "2025-12-25T00:00:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-25T00:00:00.000Z",
+      liveQuotaDebug: {
+        snapshotsConsidered: ["idle-snap"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/rollout-idle.jsonl",
+            snapshotName: "idle-snap",
+            recordedAt: "2025-12-25T00:00:00.000Z",
+            stale: true,
+            primary: {
+              usedPercent: 60,
+              remainingPercent: 40,
+              resetAt: 1760000000,
+              windowMinutes: 300,
+            },
+            secondary: {
+              usedPercent: 70,
+              remainingPercent: 30,
+              resetAt: 1760600000,
+              windowMinutes: 10080,
+            },
+          },
+        ],
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("codex-logs-label")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Logs" })).not.toBeInTheDocument();
+  });
+
+  it("routes logs shortcut action to watch view for the current cli session", async () => {
     const user = userEvent.setup();
+    const onAction = vi.fn();
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
-      codexLiveSessionCount: 2,
+      codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
-      codexSessionCount: 2,
-      codexCurrentTaskPreview: null,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Investigate websocket sticky routing",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-alpha-123456",
+          taskPreview: "Investigate websocket sticky routing",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
       codexAuth: {
         hasSnapshot: true,
         snapshotName: "snap-a",
@@ -2899,42 +3513,135 @@ describe("AccountCard", () => {
       },
       lastUsageRecordedAtPrimary: nowIso,
       lastUsageRecordedAtSecondary: nowIso,
-      liveQuotaDebug: {
-        snapshotsConsidered: ["snap-a"],
-        overrideApplied: false,
-        overrideReason: "no_live_telemetry",
-        merged: null,
-        rawSamples: [],
+    });
+
+    render(<AccountCard account={account} onAction={onAction} />);
+    await user.click(screen.getByRole("button", { name: "Logs" }));
+
+    expect(onAction).toHaveBeenCalledWith(account, "sessions", {
+      focusSessionKey: "sess-alpha-123456",
+      source: "watch-logs",
+    });
+  });
+
+  it("keeps a single logs shortcut button when critic lane is active", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan critic review runtime-ready mapping and constraints",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-critic-001",
+          taskPreview:
+            "$ralplan critic review runtime-ready mapping and constraints",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "snap-a",
+        activeSnapshotName: "snap-a",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} />);
-    await user.click(screen.getByRole("button", { name: /debug/i }));
 
-    expect(
-      screen.getByText(/\$ cli_session_counts mapped=2 tracked=1 displayed=2 live_signal=yes/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/\$ mapped_cli_sessions=2 quota_sampled_rows=0/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/\$ live_sessions_without_quota_rows=2/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/\$ task_preview_state=waiting_for_new_task/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/\$ no quota-bearing cli samples/i)).toBeInTheDocument();
-    expect(screen.queryByText(/\$ no cli sessions sampled/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Logs" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Logs" })).toHaveLength(1);
   });
 
-  it("scopes CLI session logs to the current account snapshot", async () => {
+  it("routes logs shortcut to watch view when critic lane is active", async () => {
     const user = userEvent.setup();
+    const onAction = vi.fn();
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan critic review runtime-ready mapping and constraints",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-critic-001",
+          taskPreview:
+            "$ralplan critic review runtime-ready mapping and constraints",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "snap-a",
+        activeSnapshotName: "snap-a",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} onAction={onAction} />);
+
+    await user.click(screen.getByRole("button", { name: "Logs" }));
+
+    expect(onAction).toHaveBeenCalledWith(account, "sessions", {
+      focusSessionKey: "sess-critic-001",
+      source: "watch-logs",
+    });
+  });
+
+  it("keeps logs shortcut visible for ralplan subagent prompts", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan subagent implementing quota fallback rendering updates",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-engineer-001",
+          taskPreview:
+            "$ralplan subagent implementing quota fallback rendering updates",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "snap-a",
+        activeSnapshotName: "snap-a",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.getByRole("button", { name: "Logs" })).toBeInTheDocument();
+  });
+
+  it("routes codex logs open action without focus when only synthetic rows exist", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
       codexAuth: {
         hasSnapshot: true,
         snapshotName: "csoves.com",
         activeSnapshotName: "csoves.com",
         isActiveSnapshot: true,
+        hasLiveSession: true,
       },
       liveQuotaDebug: {
         snapshotsConsidered: ["csoves.com", "viktor"],
@@ -2980,22 +3687,13 @@ describe("AccountCard", () => {
           },
         ],
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
-    render(<AccountCard account={account} />);
-    await user.click(screen.getByRole("button", { name: /debug/i }));
+    render(<AccountCard account={account} onAction={onAction} />);
+    await user.click(screen.getByRole("button", { name: "Logs" }));
 
-    expect(
-      screen.getByText(/\$ cli_mapping selected_snapshot=csoves\.com active_snapshot=csoves\.com match=yes/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/\$ cli_session_counts mapped=0 tracked=0 displayed=0 live_signal=no/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/\$ attribution=diagnostic sample only \(not attributed\)/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/rollout-csoves\.jsonl/i)).toBeInTheDocument();
-    expect(screen.queryByText(/rollout-viktor\.jsonl/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/snapshot=viktor/i)).not.toBeInTheDocument();
+    expect(onAction).toHaveBeenCalledWith(account, "sessions", undefined);
   });
 });

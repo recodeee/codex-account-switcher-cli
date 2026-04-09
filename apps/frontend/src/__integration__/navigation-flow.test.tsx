@@ -1,9 +1,13 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import App from "@/App";
 import { renderWithProviders } from "@/test/utils";
+
+vi.mock("@/features/dashboard/components/system-monitor-card", () => ({
+  SystemMonitorCard: () => <div data-testid="sidebar-system-monitor">System Monitor</div>,
+}));
 
 describe("navigation flow integration", () => {
   it("switches route content from the sidebar without tearing down layout chrome", async () => {
@@ -13,12 +17,12 @@ describe("navigation flow integration", () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    expect(screen.getByText("Monitoring your Codex sessions")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-system-monitor")).toHaveTextContent("System Monitor");
 
     await user.click(screen.getByRole("link", { name: "Accounts" }));
 
     expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
-    expect(screen.getByText("Monitoring your Codex sessions")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-system-monitor")).toHaveTextContent("System Monitor");
     expect(window.location.pathname).toBe("/accounts");
 
     await user.click(screen.getByRole("link", { name: "Referrals" }));

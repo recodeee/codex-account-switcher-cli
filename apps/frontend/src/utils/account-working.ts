@@ -2,6 +2,8 @@ import type { AccountSummary } from "@/features/accounts/schemas";
 
 const LIVE_TELEMETRY_STALE_AFTER_MS = 5 * 60 * 1000;
 const LIVE_TELEMETRY_WORKING_GRACE_AFTER_MS = 20 * 60 * 1000;
+const SESSION_TASK_PREVIEW_WORKING_GRACE_AFTER_MS = 2 * 60 * 60 * 1000;
+const WORKING_NOW_TRANSIENT_SIGNAL_GRACE_MS = 90 * 1000;
 const WORKING_NOW_LIMIT_HIT_GRACE_MS = 60 * 1000;
 const WORKING_NOW_DEPLETED_QUOTA_THRESHOLD_PERCENT = 5;
 const WORKING_NOW_LOW_QUOTA_FALLBACK_THRESHOLD_PERCENT = 15;
@@ -9,13 +11,28 @@ const RECENT_USAGE_SIGNAL_STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 const RESET_ALIGNMENT_TOLERANCE_MS = 30 * 1000;
 const STATUS_ONLY_TASK_PREVIEW_RE =
   /^(?:task\s+)?(?:is\s+)?(?:already\s+)?(?:done|complete(?:d)?|finished)(?:\s+already)?[.!]?$/i;
+const TERMINAL_SESSION_TASK_PREVIEW_RE =
+  /^(?:task\s+)?(?:error|errored|failed|failure|stopped|terminated|aborted|cancelled|canceled|exited)\b/i;
 
 type UsageLimitHitEntry = {
   fingerprint: string;
   startedAtMs: number;
 };
 
+type WorkingNowTransientSignalEntry = {
+  observedAtMs: number;
+  codexLiveSessionCount: number;
+  codexTrackedSessionCount: number;
+  codexSessionCount: number;
+  taskPreview: string | null;
+};
+
 const usageLimitHitByAccount = new Map<string, UsageLimitHitEntry>();
+const workingNowTransientSignalByAccount = new Map<string, number>();
+const workingNowTransientSignalEntryByAccount = new Map<
+  string,
+  WorkingNowTransientSignalEntry
+>();
 
 function parseRecordedAtMs(value: string | null | undefined): number | null {
   if (!value) return null;
@@ -27,6 +44,71 @@ function parseRecordedAtMs(value: string | null | undefined): number | null {
 function normalizeSnapshotName(value: string | null | undefined): string | null {
   const normalized = value?.trim().toLowerCase();
   return normalized ? normalized : null;
+}
+
+function isMeaningfulTaskPreview(
+  taskPreview: string | null | undefined,
+  { sessionScoped = false }: { sessionScoped?: boolean } = {},
+): boolean {
+  const normalized = taskPreview?.trim().replace(/\s+/g, " ") ?? "";
+  if (!normalized) {
+    return false;
+  }
+  if (/^warning\b/i.test(normalized)) {
+    return false;
+  }
+  if (STATUS_ONLY_TASK_PREVIEW_RE.test(normalized)) {
+    return false;
+  }
+  if (sessionScoped && TERMINAL_SESSION_TASK_PREVIEW_RE.test(normalized)) {
+    return false;
+  }
+  return true;
+}
+
+function hasFreshSessionTaskPreviewSignal(
+  account: Pick<AccountSummary, "codexSessionTaskPreviews">,
+  nowMs: number,
+): boolean {
+  return hasRecentSessionTaskPreviewSignal(
+    account,
+    nowMs,
+    LIVE_TELEMETRY_STALE_AFTER_MS,
+  );
+}
+
+function hasRecentSessionTaskPreviewSignal(
+  account: Pick<AccountSummary, "codexSessionTaskPreviews">,
+  nowMs: number,
+  staleAfterMs: number = SESSION_TASK_PREVIEW_WORKING_GRACE_AFTER_MS,
+): boolean {
+  const sessionTaskPreviews = account.codexSessionTaskPreviews ?? [];
+  for (const preview of sessionTaskPreviews) {
+    if (!isMeaningfulTaskPreview(preview.taskPreview, { sessionScoped: true })) {
+      continue;
+    }
+    const taskUpdatedAtMs = parseRecordedAtMs(preview.taskUpdatedAt);
+    if (taskUpdatedAtMs == null) {
+      continue;
+    }
+    if (nowMs - taskUpdatedAtMs <= staleAfterMs) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isWaitingLikeTaskPreview(taskPreview: string | null | undefined): boolean {
+  const normalized = taskPreview?.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.startsWith("waiting") ||
+    normalized.startsWith("awaiting") ||
+    normalized.includes("waiting for") ||
+    normalized.includes("awaiting user")
+  );
 }
 
 function getScopedQuotaDebugSamples(
@@ -71,6 +153,7 @@ function shouldSuppressNoCliSampleSessionSignal(
     | "codexTrackedSessionCount"
     | "codexSessionCount"
     | "liveQuotaDebug"
+    | "codexSessionTaskPreviews"
     | "lastUsageRecordedAtPrimary"
     | "lastUsageRecordedAtSecondary"
   >,
@@ -101,8 +184,19 @@ function shouldSuppressNoCliSampleSessionSignal(
     return false;
   }
 
+  if (hasRecentSessionTaskPreviewSignal(account, nowMs)) {
+    return false;
+  }
+
   const hasSnapshotLiveSession = account.codexAuth?.hasLiveSession ?? false;
   if (hasSnapshotLiveSession) {
+    return false;
+  }
+
+  const hasFreshActiveSnapshotSessionPreviewSignal =
+    (account.codexAuth?.isActiveSnapshot ?? false) &&
+    hasFreshSessionTaskPreviewSignal(account, nowMs);
+  if (hasFreshActiveSnapshotSessionPreviewSignal) {
     return false;
   }
 
@@ -439,29 +533,13 @@ export function hasFreshLiveTelemetry(
 function hasFreshTaskPreviewSignal(
   account: Pick<AccountSummary, "codexCurrentTaskPreview" | "codexSessionTaskPreviews">,
 ): boolean {
-  const isMeaningfulTaskPreview = (
-    taskPreview: string | null | undefined,
-  ): boolean => {
-    const normalized = taskPreview?.trim().replace(/\s+/g, " ") ?? "";
-    if (!normalized) {
-      return false;
-    }
-    if (/^warning\b/i.test(normalized)) {
-      return false;
-    }
-    if (STATUS_ONLY_TASK_PREVIEW_RE.test(normalized)) {
-      return false;
-    }
-    return true;
-  };
-
   if (isMeaningfulTaskPreview(account.codexCurrentTaskPreview)) {
     return true;
   }
 
   const sessionTaskPreviews = account.codexSessionTaskPreviews ?? [];
   for (const preview of sessionTaskPreviews) {
-    if (!isMeaningfulTaskPreview(preview.taskPreview)) {
+    if (!isMeaningfulTaskPreview(preview.taskPreview, { sessionScoped: true })) {
       continue;
     }
     // Session rows represent concrete tracked Codex sessions; keep them as
@@ -502,6 +580,7 @@ export function hasActiveCliSessionSignal(
   const hasHardSignal =
     (account.codexAuth?.hasLiveSession ?? false) ||
     hasFreshLiveTelemetry(account, nowMs) ||
+    Math.max(account.codexLiveSessionCount ?? 0, 0) > 0 ||
     Math.max(account.codexTrackedSessionCount ?? 0, account.codexSessionCount ?? 0, 0) > 0 ||
     hasFreshTaskPreviewSignal(account) ||
     getFreshDebugRawSampleCount(account, nowMs) > 0;
@@ -609,6 +688,79 @@ function buildWorkingNowLimitHitCacheKey(account: WorkingNowAccount): string {
     normalizeSnapshotName(account.codexAuth?.snapshotName) ??
     "none";
   return `${account.accountId}::${targetSnapshot}`;
+}
+
+function buildWorkingNowTransientSignalCacheKey(
+  account: Pick<AccountSummary, "accountId" | "codexAuth">,
+): string {
+  const targetSnapshot =
+    normalizeSnapshotName(account.codexAuth?.expectedSnapshotName) ??
+    normalizeSnapshotName(account.codexAuth?.snapshotName) ??
+    "none";
+  return `${account.accountId}::${targetSnapshot}`;
+}
+
+export function noteWorkingNowSignal(
+  account: Pick<
+    AccountSummary,
+    | "accountId"
+    | "codexAuth"
+    | "codexLiveSessionCount"
+    | "codexTrackedSessionCount"
+    | "codexSessionCount"
+    | "codexCurrentTaskPreview"
+    | "codexLastTaskPreview"
+  >,
+  nowMs: number = Date.now(),
+): void {
+  const cacheKey = buildWorkingNowTransientSignalCacheKey(account);
+  workingNowTransientSignalByAccount.set(cacheKey, nowMs);
+  const codexLiveSessionCount = Math.max(account.codexLiveSessionCount ?? 0, 0);
+  const codexTrackedSessionCount = Math.max(account.codexTrackedSessionCount ?? 0, 0);
+  const codexSessionCount = Math.max(account.codexSessionCount ?? 0, 0);
+  const currentTaskPreview = account.codexCurrentTaskPreview?.trim() || null;
+  const lastTaskPreview = account.codexLastTaskPreview?.trim() || null;
+  const taskPreviewCandidate =
+    currentTaskPreview && !isWaitingLikeTaskPreview(currentTaskPreview)
+      ? currentTaskPreview
+      : lastTaskPreview && !isWaitingLikeTaskPreview(lastTaskPreview)
+        ? lastTaskPreview
+        : null;
+  workingNowTransientSignalEntryByAccount.set(cacheKey, {
+    observedAtMs: nowMs,
+    codexLiveSessionCount,
+    codexTrackedSessionCount,
+    codexSessionCount,
+    taskPreview: taskPreviewCandidate,
+  });
+}
+
+export function hasRecentWorkingNowSignal(
+  account: Pick<AccountSummary, "accountId" | "codexAuth">,
+  nowMs: number = Date.now(),
+): boolean {
+  const cacheKey = buildWorkingNowTransientSignalCacheKey(account);
+  const lastSignalAtMs = workingNowTransientSignalByAccount.get(cacheKey);
+  if (lastSignalAtMs == null) {
+    return false;
+  }
+  if (nowMs - lastSignalAtMs > WORKING_NOW_TRANSIENT_SIGNAL_GRACE_MS) {
+    workingNowTransientSignalByAccount.delete(cacheKey);
+    workingNowTransientSignalEntryByAccount.delete(cacheKey);
+    return false;
+  }
+  return true;
+}
+
+export function getRecentWorkingNowSignalEntry(
+  account: Pick<AccountSummary, "accountId" | "codexAuth">,
+  nowMs: number = Date.now(),
+): WorkingNowTransientSignalEntry | null {
+  if (!hasRecentWorkingNowSignal(account, nowMs)) {
+    return null;
+  }
+  const cacheKey = buildWorkingNowTransientSignalCacheKey(account);
+  return workingNowTransientSignalEntryByAccount.get(cacheKey) ?? null;
 }
 
 function isDepletedPrimaryQuota(value: number | null | undefined): boolean {
@@ -777,10 +929,22 @@ export function isAccountWorkingNow(
       0,
     ) > 0;
   const hasTaskPreviewSignal = hasFreshTaskPreviewSignal(account);
+  const hasRecentSessionTaskPreview = hasRecentSessionTaskPreviewSignal(
+    account,
+    nowMs,
+  );
+  const hasLiveProcessSessionSignal =
+    Math.max(account.codexLiveSessionCount ?? 0, 0) > 0;
   const hasActiveCliSessionSignal =
     hasActiveSessionCounterSignal ||
     (account.codexAuth?.hasLiveSession ?? false) ||
     hasTaskPreviewSignal;
+  const hasAnyUsageTelemetryTimestamp =
+    parseRecordedAtMs(account.lastUsageRecordedAtPrimary) != null ||
+    parseRecordedAtMs(account.lastUsageRecordedAtSecondary) != null;
+  const hasNoLiveTelemetryOverride =
+    (account.liveQuotaDebug?.overrideReason ?? "").trim().toLowerCase() ===
+    "no_live_telemetry";
   // Keep disconnected accounts out of "Working now" unless they still have a
   // verifiable live session signal.
   if (account.status === "deactivated" && !hasFreshLiveSession) {
@@ -825,11 +989,31 @@ export function isAccountWorkingNow(
     }
   }
 
+  const hasFastStartupWorkingSignal =
+    !hasAnyUsageTelemetryTimestamp &&
+    (hasLiveProcessSessionSignal ||
+      ((account.codexAuth?.hasLiveSession ?? false) &&
+        !hasNoLiveTelemetryOverride));
+  if (hasFastStartupWorkingSignal) {
+    return true;
+  }
+
   if (hasFreshLiveSession) {
     return true;
   }
 
   if (hasGraceLiveSessionHint) {
+    return true;
+  }
+
+  const hasFreshActiveSnapshotSessionPreviewSignal =
+    (account.codexAuth?.isActiveSnapshot ?? false) &&
+    hasFreshSessionTaskPreviewSignal(account, nowMs);
+  if (hasFreshActiveSnapshotSessionPreviewSignal) {
+    return true;
+  }
+
+  if (hasRecentSessionTaskPreview && hasActiveCliSessionSignal) {
     return true;
   }
 
@@ -876,4 +1060,6 @@ export function isAccountWorkingNow(
 
 export function resetWorkingNowLimitHitStateForTests(): void {
   usageLimitHitByAccount.clear();
+  workingNowTransientSignalByAccount.clear();
+  workingNowTransientSignalEntryByAccount.clear();
 }

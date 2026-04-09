@@ -37,9 +37,8 @@ from app.modules.usage.depletion_service import (
     compute_aggregate_depletion,
     compute_depletion_for_account,
 )
-from app.modules.usage.updater import UsageUpdater
 
-_TRACKED_CLI_SESSION_ACTIVE_WINDOW = timedelta(minutes=30)
+_DASHBOARD_ACTIVE_CLI_SESSION_WINDOW = timedelta(minutes=90)
 
 
 class DashboardService:
@@ -49,20 +48,12 @@ class DashboardService:
 
     async def get_overview(self) -> DashboardOverviewResponse:
         now = utcnow()
-        tracked_session_active_since = now - _TRACKED_CLI_SESSION_ACTIVE_WINDOW
         await sync_local_codex_auth_snapshots(repo=self._repo.accounts_repo, encryptor=self._encryptor)
         accounts = await self._repo.list_accounts()
         primary_usage = await self._repo.latest_usage_by_account("primary")
-        if accounts:
-            updater = UsageUpdater(
-                self._repo.usage_repo,
-                self._repo.accounts_repo,
-                self._repo.additional_usage_repo,
-            )
-            await updater.refresh_accounts(accounts, primary_usage)
-            primary_usage = await self._repo.latest_usage_by_account("primary")
         secondary_usage = await self._repo.latest_usage_by_account("secondary")
         account_ids = [account.id for account in accounts]
+        active_cli_session_since = now - _DASHBOARD_ACTIVE_CLI_SESSION_WINDOW
         request_usage_rows = await self._repo.list_request_usage_summary_by_account(account_ids)
         request_usage_by_account = {
             account_id: AccountRequestUsage(
@@ -75,16 +66,16 @@ class DashboardService:
         }
         codex_tracked_session_counts_by_account = await self._repo.list_codex_session_counts_by_account(
             account_ids,
-            active_since=tracked_session_active_since,
+            active_since=active_cli_session_since,
         )
         codex_live_session_counts_by_account = {account_id: 0 for account_id in account_ids}
         codex_current_task_preview_by_account = await self._repo.list_codex_current_task_preview_by_account(
             account_ids,
-            active_since=tracked_session_active_since,
+            active_since=active_cli_session_since,
         )
         raw_codex_session_task_previews_by_account = await self._repo.list_codex_session_task_previews_by_account(
             account_ids,
-            active_since=tracked_session_active_since,
+            active_since=active_cli_session_since,
             limit_per_account=None,
         )
         codex_session_task_previews_by_account: dict[str, list[AccountSessionTaskPreview]] = {
@@ -128,16 +119,23 @@ class DashboardService:
                 usage_repo=self._repo.usage_repo,
                 candidates=persist_candidates,
             )
-        overlay_live_codex_task_previews(
-            accounts=accounts,
-            codex_auth_by_account=codex_auth_by_account,
-            snapshot_names_by_account=snapshot_names_by_account,
+        if _should_overlay_live_task_previews(
+            codex_live_session_counts_by_account=codex_live_session_counts_by_account,
+            codex_tracked_session_counts_by_account=codex_tracked_session_counts_by_account,
             codex_current_task_preview_by_account=codex_current_task_preview_by_account,
-            codex_last_task_preview_by_account=codex_last_task_preview_by_account,
             codex_session_task_previews_by_account=codex_session_task_previews_by_account,
             live_quota_debug_by_account=live_quota_debug_by_account,
-            now=now,
-        )
+        ):
+            overlay_live_codex_task_previews(
+                accounts=accounts,
+                codex_auth_by_account=codex_auth_by_account,
+                snapshot_names_by_account=snapshot_names_by_account,
+                codex_current_task_preview_by_account=codex_current_task_preview_by_account,
+                codex_last_task_preview_by_account=codex_last_task_preview_by_account,
+                codex_session_task_previews_by_account=codex_session_task_previews_by_account,
+                live_quota_debug_by_account=live_quota_debug_by_account,
+                now=now,
+            )
 
         account_summaries = build_account_summaries(
             accounts=accounts,
@@ -300,9 +298,8 @@ class DashboardService:
 
         pri_depletion, sec_depletion = _build_depletion_by_window(primary_history, secondary_history, now)
 
-        additional_ts = await self._repo.latest_additional_recorded_at()
         return DashboardOverviewResponse(
-            last_sync_at=_latest_recorded_at(primary_usage, secondary_usage, additional_ts),
+            last_sync_at=now,
             accounts=account_summaries,
             summary=summary,
             windows=windows,
@@ -310,6 +307,30 @@ class DashboardService:
             depletion_primary=pri_depletion,
             depletion_secondary=sec_depletion,
         )
+
+
+def _should_overlay_live_task_previews(
+    *,
+    codex_live_session_counts_by_account: dict[str, int],
+    codex_tracked_session_counts_by_account: dict[str, int],
+    codex_current_task_preview_by_account: dict[str, str],
+    codex_session_task_previews_by_account: dict[str, list[AccountSessionTaskPreview]],
+    live_quota_debug_by_account: dict[str, AccountLiveQuotaDebug] | None = None,
+) -> bool:
+    if any(count > 0 for count in codex_live_session_counts_by_account.values()):
+        return True
+    if any(count > 0 for count in codex_tracked_session_counts_by_account.values()):
+        return True
+    if codex_current_task_preview_by_account:
+        return True
+    if any(previews for previews in codex_session_task_previews_by_account.values()):
+        return True
+    if live_quota_debug_by_account and any(
+        debug.raw_samples for debug in live_quota_debug_by_account.values()
+    ):
+        return True
+    return False
+
 
 def _build_depletion_by_window(
     primary_history: dict[str, list[UsageHistory]],
@@ -375,18 +396,3 @@ def _usage_history_to_window_row(entry: UsageHistory) -> UsageWindowRow:
         window_minutes=entry.window_minutes,
         recorded_at=entry.recorded_at,
     )
-
-
-def _latest_recorded_at(
-    primary_usage: dict[str, UsageHistory],
-    secondary_usage: dict[str, UsageHistory],
-    additional_ts: datetime | None = None,
-):
-    timestamps = [
-        entry.recorded_at
-        for entry in list(primary_usage.values()) + list(secondary_usage.values())
-        if entry.recorded_at is not None
-    ]
-    if additional_ts is not None:
-        timestamps.append(additional_ts)
-    return max(timestamps) if timestamps else None

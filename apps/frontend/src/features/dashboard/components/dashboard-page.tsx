@@ -148,6 +148,7 @@ export function DashboardPage() {
 
   const overview = dashboardQuery.data;
   const logPage = logsQuery.data;
+  const hasAnyRequestLogs = (logPage?.total ?? 0) > 0;
   const mergedUsageSummary = useMemo(
     () =>
       mergeRequestLogUsageSummaryWithLiveFallback(
@@ -294,47 +295,56 @@ export function DashboardPage() {
                 overview?.summary.primaryWindow.windowMinutes ?? null
               }
             />
-            <RequestFilters
-              filters={filters}
-              accountOptions={accountOptions}
-              modelOptions={modelOptions}
-              statusOptions={statusOptions}
-              onSearchChange={(search) => updateFilters({ search, offset: 0 })}
-              onTimeframeChange={(timeframe) =>
-                updateFilters({ timeframe, offset: 0 })
-              }
-              onAccountChange={(accountIds) =>
-                updateFilters({ accountIds, offset: 0 })
-              }
-              onModelChange={(modelOptionsSelected) =>
-                updateFilters({ modelOptions: modelOptionsSelected, offset: 0 })
-              }
-              onStatusChange={(statuses) =>
-                updateFilters({ statuses, offset: 0 })
-              }
-              onReset={() =>
-                updateFilters({
-                  search: "",
-                  timeframe: "all",
-                  accountIds: [],
-                  modelOptions: [],
-                  statuses: [],
-                  offset: 0,
-                })
-              }
-            />
-            <div className="transition-opacity duration-200">
-              <RecentRequestsTable
-                requests={view.requestLogs}
-                accounts={overview?.accounts ?? []}
-                total={logPage?.total ?? 0}
-                limit={filters.limit}
-                offset={filters.offset}
-                hasMore={logPage?.hasMore ?? false}
-                onLimitChange={(limit) => updateFilters({ limit, offset: 0 })}
-                onOffsetChange={(offset) => updateFilters({ offset })}
+            {hasAnyRequestLogs ? (
+              <RequestFilters
+                filters={filters}
+                accountOptions={accountOptions}
+                modelOptions={modelOptions}
+                statusOptions={statusOptions}
+                onSearchChange={(search) =>
+                  updateFilters({ search, offset: 0 })
+                }
+                onTimeframeChange={(timeframe) =>
+                  updateFilters({ timeframe, offset: 0 })
+                }
+                onAccountChange={(accountIds) =>
+                  updateFilters({ accountIds, offset: 0 })
+                }
+                onModelChange={(modelOptionsSelected) =>
+                  updateFilters({
+                    modelOptions: modelOptionsSelected,
+                    offset: 0,
+                  })
+                }
+                onStatusChange={(statuses) =>
+                  updateFilters({ statuses, offset: 0 })
+                }
+                onReset={() =>
+                  updateFilters({
+                    search: "",
+                    timeframe: "all",
+                    accountIds: [],
+                    modelOptions: [],
+                    statuses: [],
+                    offset: 0,
+                  })
+                }
               />
-            </div>
+            ) : null}
+            {hasAnyRequestLogs && view.requestLogs.length > 0 ? (
+              <div className="transition-opacity duration-200">
+                <RecentRequestsTable
+                  requests={view.requestLogs}
+                  accounts={overview?.accounts ?? []}
+                  total={logPage?.total ?? 0}
+                  limit={filters.limit}
+                  offset={filters.offset}
+                  hasMore={logPage?.hasMore ?? false}
+                  onLimitChange={(limit) => updateFilters({ limit, offset: 0 })}
+                  onOffsetChange={(offset) => updateFilters({ offset })}
+                />
+              </div>
+            ) : null}
           </section>
         </>
       )}

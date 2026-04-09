@@ -251,9 +251,10 @@ def test_read_local_codex_live_usage_reports_live_session_even_without_rate_limi
 
     day_dir = _sessions_day_dir(sessions_root, now)
     new_active_without_usage = day_dir / "rollout-new-active.jsonl"
+    rollout_timestamp = now - timedelta(seconds=10)
     _write_rollout_without_usage(
         new_active_without_usage,
-        timestamp=now - timedelta(seconds=10),
+        timestamp=rollout_timestamp,
     )
 
     usage = read_local_codex_live_usage(now=now)
@@ -261,6 +262,7 @@ def test_read_local_codex_live_usage_reports_live_session_even_without_rate_limi
     assert usage.active_session_count == 1
     assert usage.primary is None
     assert usage.secondary is None
+    assert usage.recorded_at == rollout_timestamp
 
 
 def test_read_local_codex_live_usage_recovers_rate_limit_outside_tail_window(
@@ -1828,6 +1830,61 @@ def test_read_live_codex_process_session_counts_by_snapshot_skips_ambiguous_post
     counts = read_live_codex_process_session_counts_by_snapshot()
     assert attribution.counts_by_snapshot == {}
     assert attribution.unattributed_session_pids == [911, 912]
+    assert counts == {}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_skips_single_post_switch_unlabeled_process_until_owner_is_clear(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "default" / "current"
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text("unique", encoding="utf-8")
+
+    now_ts = 2_000.0
+    switch_ts = now_ts - 10.0
+    os.utime(current_path, (switch_ts, switch_ts))
+
+    monkeypatch.setattr("app.modules.accounts.codex_live_usage.time.time", lambda: now_ts)
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_LB_UNLABELED_PROCESS_START_TOLERANCE_SECONDS", "0")
+
+    registry_path = tmp_path / "accounts" / "registry.json"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "activeAccountName": "unique",
+                "previousActiveAccountName": "tokio",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_AUTH_REGISTRY_PATH", str(registry_path))
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [
+            (913, ["/usr/bin/codex", "model_instructions_file=agents"]),
+        ],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._process_belongs_to_current_user",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda _pid: switch_ts + 1.0,
+    )
+
+    attribution = read_live_codex_process_session_attribution()
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert attribution.counts_by_snapshot == {}
+    assert attribution.unattributed_session_pids == [913]
     assert counts == {}
 
 

@@ -2,7 +2,8 @@ import { create } from "zustand";
 
 const THEME_STORAGE_KEY = "codex-lb-theme";
 const LIGHT_BACKGROUND_COLOR = "#f8f9fb";
-const DARK_BACKGROUND_COLOR = "#0f1118";
+const DARK_BACKGROUND_COLOR = "#020308";
+const DARK_BACKGROUND_IMAGE = "none";
 
 export type ThemePreference = "light" | "dark" | "auto";
 export type ResolvedTheme = "light" | "dark";
@@ -29,8 +30,17 @@ function applyThemeToDocument(theme: ResolvedTheme): void {
     : LIGHT_BACKGROUND_COLOR;
 
   document.documentElement.classList.toggle("dark", isDark);
+  document.documentElement.classList.toggle("light", !isDark);
   document.documentElement.style.colorScheme = isDark ? "dark" : "light";
   document.documentElement.style.backgroundColor = backgroundColor;
+  document.documentElement.style.backgroundImage = isDark
+    ? DARK_BACKGROUND_IMAGE
+    : "none";
+  document.documentElement.style.backgroundPosition = isDark
+    ? "center top"
+    : "";
+  document.documentElement.style.backgroundRepeat = isDark ? "no-repeat" : "";
+  document.documentElement.style.backgroundSize = isDark ? "cover" : "";
 }
 
 function getSystemTheme(): ResolvedTheme {

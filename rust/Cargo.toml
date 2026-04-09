@@ -1,0 +1,10 @@
+[workspace]
+members = [
+  "codex-lb-runtime",
+  "crates/contracts",
+  "crates/domain",
+  "crates/application",
+  "crates/infra-db",
+  "crates/infra-python-bridge",
+]
+resolver = "2"

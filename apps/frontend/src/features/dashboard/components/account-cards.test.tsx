@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AccountCards } from "@/features/dashboard/components/account-cards";
 import { createAccountSummary } from "@/test/mocks/factories";
@@ -28,6 +28,10 @@ function buildWindow(
 }
 
 describe("AccountCards", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("keeps card DOM nodes stable when account ordering changes", () => {
     const alpha = createAccountSummary({
       accountId: "acc_alpha",
@@ -199,15 +203,395 @@ describe("AccountCards", () => {
       screen.getByText("Accounts with active CLI sessions are grouped first so you can switch faster."),
     ).toBeInTheDocument();
     expect(screen.getByText("2 live sessions")).toBeInTheDocument();
-    expect(screen.getByText("5h token spend")).toBeInTheDocument();
-    expect(screen.getByText("1.2M")).toBeInTheDocument();
+    expect(screen.getByText("5h price spend")).toBeInTheDocument();
+    expect(screen.getByText("€0.00 · 1.2M")).toBeInTheDocument();
     expect(screen.queryByText(/weekly avg \d+%/i)).not.toBeInTheDocument();
-    expect(screen.queryByText("Weekly token spend")).not.toBeInTheDocument();
+    expect(screen.queryByText("Weekly price spend")).not.toBeInTheDocument();
 
     const cards = Array.from(container.querySelectorAll(".card-hover"));
     expect(cards).toHaveLength(2);
-    expect(within(cards[0] as HTMLElement).getByText("working@example.com")).toBeInTheDocument();
-    expect(within(cards[1] as HTMLElement).getByText("idle@example.com")).toBeInTheDocument();
+    const workingCard = cards[0] as HTMLElement;
+    const idleCard = cards[1] as HTMLElement;
+    expect(within(workingCard).getByText("working@example.com")).toBeInTheDocument();
+    expect(within(idleCard).getByText("idle@example.com")).toBeInTheDocument();
+    expect(within(workingCard).getByTestId("codex-active-agent-card")).toBeInTheDocument();
+    expect(within(idleCard).queryByTestId("codex-active-agent-card")).not.toBeInTheDocument();
+  });
+
+  it("keeps a recently-working account in Working now during short telemetry dips", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-09T10:00:00.000Z"));
+
+    const idle = createAccountSummary({
+      accountId: "acc_idle",
+      email: "idle@example.com",
+      displayName: "idle@example.com",
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "idle",
+        activeSnapshotName: "working",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+    });
+    const working = createAccountSummary({
+      accountId: "acc_working",
+      email: "working@example.com",
+      displayName: "working@example.com",
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working",
+        activeSnapshotName: "working",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: "2026-04-09T09:59:20.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-09T09:59:20.000Z",
+    });
+
+    const { rerender } = render(
+      <AccountCards
+        accounts={[idle, working]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const workingSectionHeading = screen.getByRole("heading", { name: "Working now" });
+    const workingSection = workingSectionHeading.closest("section");
+    expect(workingSection).not.toBeNull();
+    expect(within(workingSection as HTMLElement).getByText("working@example.com")).toBeInTheDocument();
+
+    const transientDrop = {
+      ...working,
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexSessionTaskPreviews: [],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working",
+        activeSnapshotName: "working",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    };
+
+    rerender(
+      <AccountCards
+        accounts={[idle, transientDrop]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.getByText("working@example.com")).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(95_000);
+    });
+
+    expect(screen.queryByRole("heading", { name: "Working now" })).not.toBeInTheDocument();
+    expect(screen.getByText("No account is working now currently.")).toBeInTheDocument();
+  });
+
+  it("keeps the Working now row at three cards by rendering add-card placeholders", () => {
+    const nowIso = new Date().toISOString();
+    const workingOne = createAccountSummary({
+      accountId: "acc_working_one",
+      email: "working-one@example.com",
+      displayName: "working-one@example.com",
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-one",
+        activeSnapshotName: "working-one",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+    const workingTwo = createAccountSummary({
+      accountId: "acc_working_two",
+      email: "working-two@example.com",
+      displayName: "working-two@example.com",
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-two",
+        activeSnapshotName: "working-two",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+    const workingThree = createAccountSummary({
+      accountId: "acc_working_three",
+      email: "working-three@example.com",
+      displayName: "working-three@example.com",
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-three",
+        activeSnapshotName: "working-three",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    const { rerender } = render(
+      <AccountCards
+        accounts={[workingOne]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.getAllByTestId("working-now-placeholder-card")).toHaveLength(2);
+    expect(screen.getAllByText("Add new card here")).toHaveLength(2);
+
+    rerender(
+      <AccountCards
+        accounts={[workingOne, workingTwo]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+    expect(screen.getAllByTestId("working-now-placeholder-card")).toHaveLength(1);
+
+    rerender(
+      <AccountCards
+        accounts={[workingOne, workingTwo, workingThree]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+    expect(screen.queryByTestId("working-now-placeholder-card")).not.toBeInTheDocument();
+  });
+
+  it("opens a popup with suggested accounts that still have available quota", () => {
+    const nowIso = new Date().toISOString();
+    const working = createAccountSummary({
+      accountId: "acc_working_popup",
+      email: "working-popup@example.com",
+      displayName: "working-popup@example.com",
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-popup",
+        activeSnapshotName: "working-popup",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+    const usageLimitSoonA = createAccountSummary({
+      accountId: "acc_usage_limit_a",
+      email: "usage-limit-a@example.com",
+      displayName: "usage-limit-a@example.com",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "usage-limit-a",
+        activeSnapshotName: "working-popup",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 83,
+      },
+    });
+    const usageLimitSoonB = createAccountSummary({
+      accountId: "acc_usage_limit_b",
+      email: "usage-limit-b@example.com",
+      displayName: "usage-limit-b@example.com",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "usage-limit-b",
+        activeSnapshotName: "working-popup",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 62,
+      },
+    });
+    const availableHigh = createAccountSummary({
+      accountId: "acc_available_high",
+      email: "available-high@example.com",
+      displayName: "available-high@example.com",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "available-high",
+        activeSnapshotName: "working-popup",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      usage: {
+        primaryRemainingPercent: 91,
+        secondaryRemainingPercent: 71,
+      },
+    });
+    const availableLow = createAccountSummary({
+      accountId: "acc_available_low",
+      email: "available-low@example.com",
+      displayName: "available-low@example.com",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "available-low",
+        activeSnapshotName: "working-popup",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      usage: {
+        primaryRemainingPercent: 35,
+        secondaryRemainingPercent: 92,
+      },
+    });
+    const disconnectedAvailable = createAccountSummary({
+      accountId: "acc_disconnected_available",
+      email: "disconnected-available@example.com",
+      displayName: "disconnected-available@example.com",
+      status: "deactivated",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "disconnected-available",
+        activeSnapshotName: "working-popup",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      usage: {
+        primaryRemainingPercent: 72,
+        secondaryRemainingPercent: 64,
+      },
+    });
+
+    render(
+      <AccountCards
+        accounts={[
+          working,
+          usageLimitSoonA,
+          usageLimitSoonB,
+          availableHigh,
+          availableLow,
+          disconnectedAvailable,
+        ]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const placeholderButtons = screen.getAllByRole("button", {
+      name: "Suggest top three accounts for Working now",
+    });
+    fireEvent.click(placeholderButtons[0] as HTMLElement);
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Suggested cards for Working now",
+      }),
+    ).toBeInTheDocument();
+    const suggestionGrid = screen.getByTestId("working-now-suggestion-grid");
+    const suggestionCards = Array.from(
+      suggestionGrid.querySelectorAll(".card-hover"),
+    );
+    const suggestionTitles = suggestionCards.map((card) =>
+      card.querySelector("p.truncate.text-sm.font-semibold.leading-tight")
+        ?.textContent,
+    );
+    expect(suggestionTitles).toEqual([
+      "available-high@example.com",
+      "available-low@example.com",
+    ]);
+    expect(suggestionTitles).not.toContain("usage-limit-a@example.com");
+    expect(suggestionTitles).not.toContain("usage-limit-b@example.com");
+    expect(suggestionTitles).not.toContain("disconnected-available@example.com");
+  });
+
+  it("forwards account selection from the suggestion popup and closes it after choosing use this account", () => {
+    const nowIso = new Date().toISOString();
+    const onAction = vi.fn();
+    const working = createAccountSummary({
+      accountId: "acc_working_popup_action",
+      email: "working-popup-action@example.com",
+      displayName: "working-popup-action@example.com",
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-popup-action",
+        activeSnapshotName: "working-popup-action",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+    const candidate = createAccountSummary({
+      accountId: "acc_popup_candidate",
+      email: "popup-candidate@example.com",
+      displayName: "popup-candidate@example.com",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "popup-candidate",
+        activeSnapshotName: "working-popup-action",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      usage: {
+        primaryRemainingPercent: 88,
+        secondaryRemainingPercent: 64,
+      },
+    });
+
+    render(
+      <AccountCards
+        accounts={[working, candidate]}
+        primaryWindow={null}
+        secondaryWindow={null}
+        onAction={onAction}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "Suggest top three accounts for Working now",
+      })[0] as HTMLElement,
+    );
+
+    const suggestionGrid = screen.getByTestId("working-now-suggestion-grid");
+    const useThisAccountButton = within(suggestionGrid).getAllByRole("button", {
+      name: "Use this account",
+    })[0];
+    fireEvent.click(useThisAccountButton as HTMLElement);
+
+    expect(onAction).toHaveBeenCalled();
+    expect(onAction.mock.calls[0]?.[0]?.accountId).toBe("acc_popup_candidate");
+    expect(onAction.mock.calls[0]?.[1]).toBe("useLocal");
+    expect(
+      screen.queryByRole("heading", {
+        name: "Suggested cards for Working now",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("appends newly-live cards after the current working-now cards without reordering", () => {
@@ -353,8 +737,13 @@ describe("AccountCards", () => {
     );
     expect(taskingCard).toBeDefined();
     expect(
-      within(taskingCard as HTMLElement).getByText("Investigate session handoff mismatch"),
-    ).toBeInTheDocument();
+      within(taskingCard as HTMLElement).queryByText(
+        "Investigate session handoff mismatch",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(taskingCard as HTMLElement).queryByTestId("omx-planning-prompt-graph"),
+    ).not.toBeInTheDocument();
   });
 
   it("uses primary window remaining for regular-account token balance", () => {
@@ -420,8 +809,8 @@ describe("AccountCards", () => {
       />,
     );
 
-    expect(screen.getByText("8h token spend")).toBeInTheDocument();
-    expect(screen.queryByText("5h token spend")).not.toBeInTheDocument();
+    expect(screen.getByText("8h price spend")).toBeInTheDocument();
+    expect(screen.queryByText("5h price spend")).not.toBeInTheDocument();
   });
 
   it("keeps accounts in working-now when primary rounds to 0% but sessions are active", () => {
@@ -547,7 +936,7 @@ describe("AccountCards", () => {
     expect(screen.getByText("depleted-idle@example.com")).toBeInTheDocument();
   });
 
-  it("keeps no-live-telemetry accounts in working-now when codex auth still reports live sessions", () => {
+  it("keeps no-live-telemetry accounts out of working-now when scoped samples do not confirm live ownership", () => {
     const account = createAccountSummary({
       accountId: "acc_itrexsale",
       email: "itrexsale@example.com",
@@ -591,8 +980,54 @@ describe("AccountCards", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Working now" })).not.toBeInTheDocument();
     expect(screen.getByText("itrexsale@example.com")).toBeInTheDocument();
+  });
+
+  it("shows no-live-telemetry accounts in working-now when active snapshot gets a fresh session task preview", () => {
+    const account = createAccountSummary({
+      accountId: "acc_pia_active_preview",
+      email: "pia@edix.hu",
+      displayName: "pia@edix.hu",
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "pid:51888",
+          taskPreview: "Continue work on old removed card mapping",
+          taskUpdatedAt: new Date().toISOString(),
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "pia-edix",
+        activeSnapshotName: "pia-edix",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["pia-edix"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    render(
+      <AccountCards
+        accounts={[account]}
+        primaryWindow={buildWindow("primary", "acc_pia_active_preview", 1000, 440)}
+        secondaryWindow={buildWindow("secondary", "acc_pia_active_preview", 1000, 600)}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.getByText("pia@edix.hu")).toBeInTheDocument();
   });
 
   it("uses secondary window remaining for weekly-only-account token balance", () => {
@@ -621,6 +1056,26 @@ describe("AccountCards", () => {
     const card = screen.getByText("weekly@example.com").closest(".card-hover");
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).getByText("500k")).toBeInTheDocument();
+  });
+
+  it("uses the tighter remaining quota when both 5h and weekly token windows exist", () => {
+    const account = createAccountSummary({
+      accountId: "acc_tight_quota",
+      email: "tight-quota@example.com",
+      displayName: "tight-quota@example.com",
+    });
+
+    render(
+      <AccountCards
+        accounts={[account]}
+        primaryWindow={buildWindow("primary", "acc_tight_quota", 1000, 225)}
+        secondaryWindow={buildWindow("secondary", "acc_tight_quota", 2000, 12)}
+      />,
+    );
+
+    const card = screen.getByText("tight-quota@example.com").closest(".card-hover");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByText("12k")).toBeInTheDocument();
   });
 
   it("renders deactivated accounts after active accounts", () => {
@@ -1312,6 +1767,48 @@ describe("AccountCards", () => {
     expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
     expect(screen.getByText("deactivated-live@example.com")).toBeInTheDocument();
     expect(screen.getByText("2 live sessions")).toBeInTheDocument();
+  });
+
+  it("keeps live process sessions in working-now during no-live-telemetry startup gaps", () => {
+    const startupLiveProcess = createAccountSummary({
+      accountId: "acc_startup_live_process",
+      email: "startup-live-process@example.com",
+      displayName: "startup-live-process@example.com",
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "startup-live-process",
+        activeSnapshotName: "different",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["startup-live-process"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    render(
+      <AccountCards
+        accounts={[startupLiveProcess]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.getByText("startup-live-process@example.com")).toBeInTheDocument();
+    expect(screen.getByText("1 live sessions")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No account is working now currently."),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps tracked-session-only accounts out of the working-now section", () => {

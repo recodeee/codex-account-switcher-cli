@@ -104,7 +104,8 @@ async def lifespan(app: FastAPI):
 
     startup_module._startup_complete = False
     shutdown_state.reset()
-    await get_settings_cache().invalidate()
+    settings_cache = get_settings_cache()
+    await settings_cache.invalidate()
     await get_rate_limit_headers_cache().invalidate()
     reload_additional_quota_registry()
     settings = get_settings()
@@ -114,6 +115,9 @@ async def lifespan(app: FastAPI):
         init_tracing(service_name="codex-lb", endpoint=settings.otel_exporter_endpoint, app=app)
     await init_db()
     init_background_db()
+    warm_settings_cache = getattr(settings_cache, "get", None)
+    if callable(warm_settings_cache):
+        await warm_settings_cache()
     await init_http_client()
     usage_scheduler = build_usage_refresh_scheduler()
     model_scheduler = build_model_refresh_scheduler()

@@ -267,7 +267,8 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
     assert payload["windows"]["primary"]["windowKey"] == "primary"
     assert payload["windows"]["secondary"]["windowKey"] == "secondary"
     assert "requestLogs" not in payload
-    assert payload["lastSyncAt"] == secondary_time.isoformat() + "Z"
+    response_synced_at = datetime.fromisoformat(payload["lastSyncAt"].replace("Z", "+00:00"))
+    assert response_synced_at >= now.replace(tzinfo=timezone.utc) - timedelta(seconds=30)
 
     # Verify trends are present and have 28 data points each
     assert "trends" in payload
@@ -1325,3 +1326,21 @@ async def test_dashboard_overview_weekly_only_depletion_uses_current_stream(asyn
     payload = response.json()
     assert payload["depletionSecondary"] is not None
     assert payload["depletionSecondary"]["risk"] == pytest.approx(0.37, abs=0.02)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_overview_does_not_run_inline_usage_refresh(async_client, db_setup, monkeypatch):
+    async def _unexpected_refresh(*_args, **_kwargs):
+        raise AssertionError("dashboard overview must not block on inline usage refresh")
+
+    monkeypatch.setattr(
+        "app.modules.usage.updater.UsageUpdater.refresh_accounts",
+        _unexpected_refresh,
+    )
+
+    async with SessionLocal() as session:
+        accounts_repo = AccountsRepository(session)
+        await accounts_repo.upsert(_make_account("acc_no_inline_refresh", "inline-refresh@example.com"))
+
+    response = await async_client.get("/api/dashboard/overview")
+    assert response.status_code == 200

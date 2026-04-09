@@ -22,6 +22,18 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def _write_rust_runtime_dev_stub(project: Path) -> None:
+    _write_executable(
+        project / "scripts" / "run-rust-runtime-dev.sh",
+        """#!/bin/sh
+set -eu
+bind="${RUST_RUNTIME_BIND:-127.0.0.1:8099}"
+port="${bind##*:}"
+exec python3 -m http.server "${port}" --bind 127.0.0.1
+""",
+    )
+
+
 def _read_until(process: subprocess.Popen[str], needle: str, timeout: float = 20.0) -> str:
     deadline = time.time() + timeout
     chunks: list[str] = []
@@ -136,6 +148,8 @@ echo "[stub] App URL -> http://localhost:${port}"
 exec python3 -m http.server "${port}" --bind 127.0.0.1
 """,
     )
+    _write_rust_runtime_dev_stub(project)
+    _write_rust_runtime_dev_stub(project)
 
     _write_executable(
         project / "apps" / "backend" / "dev-stub.sh",
@@ -179,6 +193,7 @@ exit 1
     env["APP_BACKEND_PORT"] = "32455"
     env["MEDUSA_BACKEND_PORT"] = "39000"
     env["FRONTEND_PORT"] = "35174"
+    env["RUST_RUNTIME_PORT"] = "38090"
 
     proc = subprocess.Popen(
         ["bash", "./scripts/dev-all.sh"],
@@ -196,6 +211,8 @@ exit 1
         assert "http://localhost:32455" in output
         assert "http://localhost:39000/app" in output
         assert "http://localhost:35174" in output
+        assert "runtime  http://localhost:32455 (python)" in output
+        assert "bun run logs -watch rust" not in output
         assert "APP NOISY LINE" not in output
         assert "BACKEND NOISY LINE" not in output
         assert "FRONTEND NOISY LINE" not in output
@@ -203,6 +220,109 @@ exit 1
         assert "APP NOISY LINE" in (project / "logs" / "server.log").read_text(encoding="utf-8")
         assert "BACKEND NOISY LINE" in (project / "logs" / "backend.log").read_text(encoding="utf-8")
         assert "FRONTEND NOISY LINE" in (project / "logs" / "frontend.log").read_text(encoding="utf-8")
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+
+def test_dev_all_forwards_app_backend_port_to_rust_runtime(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    (project / "scripts").mkdir(parents=True)
+    (project / "apps" / "backend").mkdir(parents=True)
+    (project / "apps" / "frontend" / "scripts").mkdir(parents=True)
+    (project / "logs").mkdir()
+    (project / "apps" / "backend" / ".medusa").mkdir(parents=True)
+
+    shutil.copy2(DEV_ALL_SCRIPT, project / "scripts" / "dev-all.sh")
+
+    _write_executable(
+        project / "scripts" / "run-server-dev.sh",
+        """#!/bin/sh
+set -eu
+port="${APP_BACKEND_PORT:-2455}"
+echo "[stub] App URL -> http://localhost:${port}"
+exec python3 -m http.server "${port}" --bind 127.0.0.1
+""",
+    )
+    _write_rust_runtime_dev_stub(project)
+
+    _write_executable(
+        project / "scripts" / "run-rust-runtime-dev.sh",
+        """#!/bin/sh
+set -eu
+bind="${RUST_RUNTIME_BIND:-127.0.0.1:8099}"
+port="${bind##*:}"
+echo "RUST APP PORT ${APP_BACKEND_PORT:-missing}"
+exec python3 -m http.server "${port}" --bind 127.0.0.1
+""",
+    )
+
+    _write_executable(
+        project / "apps" / "backend" / "dev-stub.sh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+port="${MEDUSA_PORT:-9000}"
+echo "info:    Admin URL → http://localhost:${port}/app"
+exec python3 -m http.server "${port}" --bind 127.0.0.1
+""",
+    )
+
+    _write_executable(
+        project / "apps" / "frontend" / "scripts" / "run-frontend-dev.sh",
+        """#!/bin/sh
+set -eu
+port="${NEXT_DEV_PORT:-5174}"
+echo "[codex-lb] Frontend dev server: http://localhost:${port}"
+exec python3 -m http.server "${port}" --bind 127.0.0.1
+""",
+    )
+
+    stubs = project / "stubs"
+    stubs.mkdir()
+    _write_executable(
+        stubs / "bun",
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${{1:-}}" == "run" && "${{2:-}}" == "dev" && "$PWD" == "{project / 'apps' / 'backend'}" ]]; then
+  shift 2
+  exec bash ./dev-stub.sh "$@"
+fi
+echo "unsupported bun invocation: $*" >&2
+exit 1
+""",
+    )
+    _write_executable(
+        stubs / "cargo",
+        """#!/usr/bin/env bash
+set -euo pipefail
+echo "cargo stub"
+""",
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{stubs}:{env['PATH']}"
+    env["APP_BACKEND_PORT"] = "32465"
+    env["MEDUSA_BACKEND_PORT"] = "39065"
+    env["FRONTEND_PORT"] = "35165"
+    env["RUST_RUNTIME_PORT"] = "38099"
+    env["RUNTIME_LAYER"] = "rust"
+
+    proc = subprocess.Popen(
+        ["bash", "./scripts/dev-all.sh"],
+        cwd=project,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+    try:
+        output = _read_until(proc, "[dev] Ready")
+        output += _read_until(proc, "bun run logs -watch frontend")
+        assert "runtime  http://localhost:38099 (rust)" in output
+        assert "bun run logs -watch rust" in output
+        rust_log = (project / "logs" / "rust-runtime.log").read_text(encoding="utf-8")
+        assert "RUST APP PORT 32465" in rust_log
     finally:
         proc.terminate()
         proc.wait(timeout=5)
@@ -227,6 +347,7 @@ echo "[stub] App URL -> http://localhost:${port}"
 exec python3 -m http.server "${port}" --bind 127.0.0.1
 """,
     )
+    _write_rust_runtime_dev_stub(project)
 
     _write_executable(
         project / "apps" / "backend" / "dev-stub.sh",
@@ -279,6 +400,7 @@ exit 1
     env["APP_BACKEND_PORT"] = "32456"
     env["MEDUSA_BACKEND_PORT"] = "39000"
     env["FRONTEND_PORT"] = "35175"
+    env["RUST_RUNTIME_PORT"] = "38091"
 
     blocker = subprocess.Popen(
         ["python3", "-m", "http.server", "39000", "--bind", "127.0.0.1"],
@@ -331,6 +453,7 @@ echo "app should have been reused instead of restarted" >&2
 exit 99
 """,
     )
+    _write_rust_runtime_dev_stub(project)
 
     _write_executable(
         project / "apps" / "backend" / "dev-stub.sh",
@@ -382,6 +505,7 @@ exit 1
     env["APP_BACKEND_PORT"] = "32457"
     env["MEDUSA_BACKEND_PORT"] = "39010"
     env["FRONTEND_PORT"] = "35176"
+    env["RUST_RUNTIME_PORT"] = "38092"
 
     app_blocker = _start_health_stub(32457, project)
     _wait_for_listening_port(32457)
@@ -431,6 +555,7 @@ echo "app should have been reused instead of restarted" >&2
 exit 99
 """,
     )
+    _write_rust_runtime_dev_stub(project)
 
     _write_executable(
         project / "apps" / "backend" / "dev-stub.sh",
@@ -476,6 +601,7 @@ exit 1
     env["APP_BACKEND_PORT"] = "32459"
     env["MEDUSA_BACKEND_PORT"] = "39012"
     env["FRONTEND_PORT"] = "35178"
+    env["RUST_RUNTIME_PORT"] = "38093"
 
     app_blocker = _start_health_stub(32459, project)
     _wait_for_listening_port(32459)
@@ -525,6 +651,7 @@ echo "app should not start when a non-codex blocker owns the port" >&2
 exit 99
 """,
     )
+    _write_rust_runtime_dev_stub(project)
 
     _write_executable(
         project / "apps" / "backend" / "dev-stub.sh",
@@ -560,6 +687,7 @@ exit 96
     env["APP_BACKEND_PORT"] = "32458"
     env["MEDUSA_BACKEND_PORT"] = "39011"
     env["FRONTEND_PORT"] = "35177"
+    env["RUST_RUNTIME_PORT"] = "38094"
 
     app_blocker = subprocess.Popen(
         ["python3", "-m", "http.server", "32458", "--bind", "127.0.0.1"],

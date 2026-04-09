@@ -22,6 +22,7 @@ import { NavLink } from "@/lib/router-compat";
 
 import { CodexLogo } from "@/components/brand/codex-logo";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
+import { SystemMonitorCard } from "@/features/dashboard/components/system-monitor-card";
 import { NAV_ITEMS } from "@/components/layout/nav-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -303,19 +304,15 @@ export function AppSidebar() {
               className="h-2 w-2 rounded-full bg-emerald-300/90"
               aria-hidden="true"
             />
-            <span className="sr-only">Monitoring your Codex sessions</span>
+            <span className="sr-only">System Monitor</span>
           </div>
         ) : (
-          <div className="mt-auto rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
-            <p className="text-xs text-slate-400">
-              Monitoring your Codex sessions
-            </p>
-            <NavLink
-              to="/coming-soon"
-              className="mt-1 inline-flex text-xs font-medium text-slate-300 transition-colors hover:text-white"
-            >
-              Coming soon page
-            </NavLink>
+          <div className="mt-auto">
+            <SystemMonitorCard
+              placement="inline"
+              className="w-full min-w-0"
+              defaultCollapsed={false}
+            />
           </div>
         )}
       </div>

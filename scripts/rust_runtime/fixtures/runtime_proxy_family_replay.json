@@ -1,0 +1,49 @@
+{
+  "requests": [
+    {
+      "label": "request_logs_usage_summary",
+      "method": "GET",
+      "endpoint": "/api/request-logs/usage-summary",
+      "headers": {
+        "Cookie": "dashboard_session=test"
+      }
+    },
+    {
+      "label": "usage_history_48h",
+      "method": "GET",
+      "endpoint": "/api/usage/history?hours=48",
+      "headers": {
+        "Cookie": "dashboard_session=test"
+      }
+    },
+    {
+      "label": "dashboard_auth_session",
+      "method": "GET",
+      "endpoint": "/api/dashboard-auth/session",
+      "headers": {
+        "Cookie": "dashboard_session=test"
+      }
+    },
+    {
+      "label": "accounts_list_auth_required",
+      "method": "GET",
+      "endpoint": "/api/accounts"
+    },
+    {
+      "label": "v1_model_list_auth_required",
+      "method": "GET",
+      "endpoint": "/v1/models"
+    },
+    {
+      "label": "v1_echo_post_proxy",
+      "method": "POST",
+      "endpoint": "/v1/echo",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "task": "quota-sync"
+      }
+    }
+  ]
+}

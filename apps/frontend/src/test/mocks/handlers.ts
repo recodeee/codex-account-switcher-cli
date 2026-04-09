@@ -203,6 +203,7 @@ type MockState = {
 		slug: string;
 		title: string;
 		status: string;
+		createdAt: string;
 		updatedAt: string;
 		roles: Array<{
 			role: string;
@@ -324,6 +325,7 @@ function createDefaultOpenSpecPlans(): MockState["openSpecPlans"] {
 			slug: "projects-plans-page",
 			title: "projects-plans-page",
 			status: "approved",
+			createdAt: new Date("2026-04-08T07:41:12Z").toISOString(),
 			updatedAt: new Date("2026-04-08T09:51:46Z").toISOString(),
 			roles: [
 				{
@@ -389,7 +391,7 @@ function createDefaultOpenSpecPlans(): MockState["openSpecPlans"] {
 				message: "Implementing plans progress UI",
 			},
 			summaryMarkdown:
-				"# Plan Summary: projects-plans-page\\n\\n- **Mode:** ralplan\\n- **Status:** approved\\n",
+				"# Plan Summary: projects-plans-page\\n\\n- **Mode:** ralplan\\n- **Status:** approved\\n- **Task:** Create a Projects -> Plans page (`/projects/plans`) with visualized OpenSpec plan data. ![Plans Header](https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=96&h=96&fit=crop) [Image #1]\\n",
 			checkpointsMarkdown:
 				"# Plan Checkpoints: projects-plans-page\\n\\n- 2026-04-08T09:52:21Z | role=executor | id=E1 | state=IN_PROGRESS | Implementing plans progress UI\\n",
 			runtime: {
@@ -455,6 +457,7 @@ function createDefaultOpenSpecPlans(): MockState["openSpecPlans"] {
 			slug: "ralplan-openspec-plan-export",
 			title: "ralplan-openspec-plan-export",
 			status: "proposed",
+			createdAt: new Date("2026-04-08T06:58:03Z").toISOString(),
 			updatedAt: new Date("2026-04-08T09:46:52Z").toISOString(),
 			roles: [
 				{
@@ -892,6 +895,18 @@ export const handlers = [
 				accounts: state.accounts,
 			}),
 		);
+	}),
+
+	http.get("/api/dashboard/system-monitor", () => {
+		return HttpResponse.json({
+			sampledAt: new Date().toISOString(),
+			cpuPercent: 39.8,
+			gpuPercent: 33.5,
+			vramPercent: 57.5,
+			networkMbS: 5.3,
+			memoryPercent: 61.2,
+			spike: true,
+		});
 	}),
 
 	http.get("/api/request-logs", ({ request }) => {
@@ -1512,7 +1527,9 @@ export const handlers = [
 				slug: plan.slug,
 				title: plan.title,
 				status: plan.status,
+				createdAt: plan.createdAt,
 				updatedAt: plan.updatedAt,
+				summaryMarkdown: plan.summaryMarkdown,
 				roles: plan.roles.map((role) => ({
 					role: role.role,
 					totalCheckpoints: role.totalCheckpoints,
@@ -1543,6 +1560,7 @@ export const handlers = [
 			slug: plan.slug,
 			title: plan.title,
 			status: plan.status,
+			createdAt: plan.createdAt,
 			updatedAt: plan.updatedAt,
 			summaryMarkdown: plan.summaryMarkdown,
 			checkpointsMarkdown: plan.checkpointsMarkdown,

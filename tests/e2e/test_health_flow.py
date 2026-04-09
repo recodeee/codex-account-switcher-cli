@@ -26,3 +26,20 @@ async def test_all_health_endpoints_respond(client):
 
     response = await client.get("/health/startup")
     assert response.status_code in (200, 503)
+
+    response = await client.get("/_rust_layer/info")
+    assert response.status_code == 200
+    info_payload = response.json()
+    assert info_payload["language"] == "python"
+    assert info_payload["service"] == "codex-lb-python-runtime"
+
+    response = await client.get("/_python_layer/health")
+    assert response.status_code == 200
+    python_health_payload = response.json()
+    assert python_health_payload["status"] in ("ok", "degraded")
+    assert "/health" in python_health_payload["checks"]
+
+    response = await client.get("/_python_layer/apis")
+    assert response.status_code == 200
+    apis_payload = response.json()
+    assert "/health" in apis_payload["paths"]

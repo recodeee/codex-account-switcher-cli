@@ -30,6 +30,7 @@ _SESSION_ID_FROM_KEY_RE = re.compile(r"([0-9a-fA-F-]{36})")
 _ROLLOUT_USER_CONTENT_TAGS = {"input_text", "text", "user_text"}
 _ROLLOUT_ASSISTANT_CONTENT_TAGS = {"output_text", "text", "assistant_text"}
 _ROLLOUT_MAX_TEXT_LENGTH = 600
+_ROLLOUT_MAX_COMMAND_OUTPUT_LINES = 18
 
 
 @dataclass(frozen=True, slots=True)
@@ -599,6 +600,36 @@ def _parse_rollout_event_msg(
             raw_type="event_msg:task_started",
         )
 
+    if message_type in {"exec_command_start", "exec_command_end"}:
+        command_text = _extract_exec_command_text(event_payload)
+        status = _extract_first_string(event_payload.get("status"))
+        exit_code = event_payload.get("exit_code")
+        summary_lines: list[str] = []
+        if command_text:
+            summary_lines.append(f"$ {command_text}")
+        if message_type == "exec_command_start":
+            summary_lines.append("Terminal command started.")
+        else:
+            status_text = status or "completed"
+            if isinstance(exit_code, int):
+                summary_lines.append(f"status={status_text} exit={exit_code}")
+            else:
+                summary_lines.append(f"status={status_text}")
+            output_preview = _extract_exec_command_output_preview(event_payload)
+            if output_preview:
+                summary_lines.append(output_preview)
+
+        return StickySessionEventData(
+            timestamp=timestamp,
+            kind="tool",
+            title="Terminal command",
+            text=_truncate_multiline_event_text(
+                "\n".join(summary_lines).strip() or "Terminal command event."
+            ),
+            role="tool",
+            raw_type=f"event_msg:{message_type}",
+        )
+
     if message_type == "token_count":
         rate_limits = event_payload.get("rate_limits")
         summary = "Updated token usage telemetry."
@@ -628,6 +659,39 @@ def _parse_rollout_event_msg(
         role=None,
         raw_type=f"event_msg:{message_type_label}",
     )
+
+
+def _extract_exec_command_text(event_payload: dict[str, Any]) -> str | None:
+    command = event_payload.get("command")
+    if isinstance(command, str):
+        normalized = command.strip()
+        return normalized or None
+    if isinstance(command, list):
+        command_parts = [str(part).strip() for part in command if isinstance(part, str)]
+        if len(command_parts) >= 3 and command_parts[1] == "-lc":
+            shell_cmd = command_parts[2].strip()
+            return shell_cmd or None
+        normalized = " ".join(part for part in command_parts if part)
+        return normalized or None
+    return None
+
+
+def _extract_exec_command_output_preview(event_payload: dict[str, Any]) -> str | None:
+    output = _extract_first_string(
+        event_payload.get("formatted_output"),
+        event_payload.get("stdout"),
+        event_payload.get("stderr"),
+        event_payload.get("aggregated_output"),
+    )
+    if output is None:
+        return None
+
+    lines = [line.rstrip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        return None
+    if len(lines) > _ROLLOUT_MAX_COMMAND_OUTPUT_LINES:
+        lines = ["…", *lines[-_ROLLOUT_MAX_COMMAND_OUTPUT_LINES :]]
+    return "\n".join(lines)
 
 
 def _extract_message_text(content: Any, *, role: str | None) -> str | None:
@@ -689,6 +753,15 @@ def _extract_first_string(*values: Any) -> str | None:
 
 def _truncate_event_text(text: str) -> str:
     normalized = " ".join(text.split())
+    if len(normalized) <= _ROLLOUT_MAX_TEXT_LENGTH:
+        return normalized
+    return f"{normalized[:_ROLLOUT_MAX_TEXT_LENGTH].rstrip()}…"
+
+
+def _truncate_multiline_event_text(text: str) -> str:
+    normalized = "\n".join(
+        line.strip() for line in text.splitlines() if line.strip()
+    )
     if len(normalized) <= _ROLLOUT_MAX_TEXT_LENGTH:
         return normalized
     return f"{normalized[:_ROLLOUT_MAX_TEXT_LENGTH].rstrip()}…"

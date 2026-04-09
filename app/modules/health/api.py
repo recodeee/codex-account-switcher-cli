@@ -4,8 +4,9 @@ import re
 from datetime import timedelta
 from hashlib import sha256
 from html import escape
+from typing import Awaitable, Callable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy import select as sa_select
 from sqlalchemy import text
@@ -61,6 +62,71 @@ async def health_check() -> HealthResponse:
 @router.get("/health/live", response_model=HealthCheckResponse)
 async def health_live() -> HealthCheckResponse:
     return HealthCheckResponse(status="ok")
+
+
+def _python_layer_check(status_code: int | None, ok: bool, detail: str) -> dict[str, int | bool | str | None]:
+    return {
+        "status_code": status_code,
+        "ok": ok,
+        "detail": detail,
+    }
+
+
+@router.get("/_rust_layer/info")
+async def python_runtime_info() -> dict[str, str]:
+    settings = get_settings()
+    profile = getattr(settings, "environment", None) or "python"
+    return {
+        "service": "codex-lb-python-runtime",
+        "language": "python",
+        "version": "python",
+        "profile": str(profile),
+    }
+
+
+@router.get("/_python_layer/health")
+async def python_layer_health() -> dict[str, str | dict[str, dict[str, int | bool | str | None]]]:
+    checks: dict[str, dict[str, int | bool | str | None]] = {}
+    degraded = False
+
+    health_checks: tuple[tuple[str, Callable[[], Awaitable[object]]], ...] = (
+        ("/health", health_check),
+        ("/health/live", health_live),
+        ("/health/ready", health_ready),
+        ("/health/startup", health_startup),
+    )
+    for endpoint, check_fn in health_checks:
+        try:
+            await check_fn()
+            checks[endpoint] = _python_layer_check(200, True, "ok")
+        except HTTPException as exc:
+            degraded = True
+            checks[endpoint] = _python_layer_check(
+                exc.status_code,
+                False,
+                str(exc.detail) if exc.detail else "request failed",
+            )
+        except Exception as exc:
+            degraded = True
+            checks[endpoint] = _python_layer_check(None, False, f"{type(exc).__name__}: request failed")
+
+    return {
+        "status": "degraded" if degraded else "ok",
+        "python_base_url": "http://127.0.0.1",
+        "checks": checks,
+    }
+
+
+@router.get("/_python_layer/apis")
+async def python_layer_apis(request: Request) -> dict[str, str | list[str] | None]:
+    paths = sorted(request.app.openapi().get("paths", {}).keys())
+    return {
+        "status": "ok",
+        "python_base_url": "http://127.0.0.1",
+        "source": "openapi.json",
+        "paths": paths,
+        "detail": None,
+    }
 
 
 @router.get("/live_usage")

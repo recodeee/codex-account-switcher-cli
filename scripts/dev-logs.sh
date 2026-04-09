@@ -16,6 +16,7 @@ Usage:
 
 Targets:
   app, server   Python /app API log
+  rust          Rust runtime log
   backend       Medusa commerce backend log
   frontend      Next.js frontend log
 EOF
@@ -25,6 +26,9 @@ resolve_target() {
   case "$1" in
     app|server)
       printf '%s\n' "${APP_LOG_FILE:-$LOG_DIR/server.log}"
+      ;;
+    rust|rust-runtime)
+      printf '%s\n' "${RUST_RUNTIME_LOG_FILE:-$LOG_DIR/rust-runtime.log}"
       ;;
     backend|medusa)
       local primary="${BACKEND_LOG_FILE:-$LOG_DIR/backend.log}"

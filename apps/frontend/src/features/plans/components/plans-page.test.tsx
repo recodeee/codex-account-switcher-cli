@@ -7,6 +7,7 @@ const planDetail: OpenSpecPlanDetail = {
   slug: "plans-live-execution-observer",
   title: "plans-live-execution-observer",
   status: "approved",
+  createdAt: "2026-04-08T10:11:00.000Z",
   updatedAt: "2026-04-08T12:44:08.000Z",
   summaryMarkdown: "# Plan Summary: plans-live-execution-observer",
   checkpointsMarkdown: "# Plan Checkpoints: plans-live-execution-observer",
@@ -76,8 +77,9 @@ describe("buildPlanStarterPrompt", () => {
       "Status: approved",
     ]);
 
-    expect(prompt.startsWith("$ralph")).toBe(true);
+    expect(prompt.startsWith("$ralph \"Continue OpenSpec plan plans-live-execution-observer")).toBe(true);
     expect(prompt).toContain("openspec/plan/plans-live-execution-observer");
+    expect(prompt).toContain("without restarting planning.");
     expect(prompt).toContain("Current checkpoint: Planner · P1 · in progress");
     expect(prompt).toContain("Current checkpoint note: Initial RALPLAN-DR draft captured; requesting architect review");
     expect(prompt).toContain("Remaining role checkpoints:");

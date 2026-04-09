@@ -1,4 +1,4 @@
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar } from "@/components/layout/app-sidebar";
@@ -22,6 +22,8 @@ import { StoragePage } from "@/features/storage/components/storage-page";
 function AppLayout() {
   const logout = useMedusaCustomerAuthStore((state) => state.logout);
   const customer = useMedusaCustomerAuthStore((state) => state.customer);
+  const location = useLocation();
+  const isDashboardRoute = location.pathname === "/dashboard";
 
   return (
     <div className="flex min-h-screen bg-background pb-10">
@@ -34,7 +36,11 @@ function AppLayout() {
           showLogout={Boolean(customer)}
           sidebarAware
         />
-        <main className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-8 sm:px-6 lg:px-8">
+        <main
+          className={`mx-auto w-full flex-1 px-4 py-8 sm:px-6 lg:px-8 ${
+            isDashboardRoute ? "max-w-[1800px]" : "max-w-[1500px]"
+          }`}
+        >
           <Outlet />
         </main>
         <StatusBar />

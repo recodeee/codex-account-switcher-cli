@@ -2,6 +2,7 @@ import { get } from "@/lib/api-client";
 
 import {
   DashboardOverviewSchema,
+  DashboardSystemMonitorSchema,
   RequestLogFilterOptionsSchema,
   RequestLogUsageSummarySchema,
   RequestLogsResponseSchema,
@@ -41,6 +42,10 @@ function appendMany(params: URLSearchParams, key: string, values?: string[]): vo
 
 export function getDashboardOverview() {
   return get(`${DASHBOARD_PATH}/overview`, DashboardOverviewSchema);
+}
+
+export function getDashboardSystemMonitor() {
+  return get(`${DASHBOARD_PATH}/system-monitor`, DashboardSystemMonitorSchema);
 }
 
 export function getRequestLogs(params: RequestLogsListFilters = {}) {

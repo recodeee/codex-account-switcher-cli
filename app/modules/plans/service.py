@@ -52,7 +52,9 @@ class PlanSummaryData:
     slug: str
     title: str
     status: str
+    created_at: datetime
     updated_at: datetime
+    summary_markdown: str
     roles: list[PlanRoleProgressData]
     overall_progress: PlanOverallProgressData
     current_checkpoint: PlanCheckpointData | None
@@ -72,6 +74,7 @@ class PlanDetailData:
     slug: str
     title: str
     status: str
+    created_at: datetime
     updated_at: datetime
     summary_markdown: str
     checkpoints_markdown: str
@@ -159,6 +162,10 @@ class OpenSpecPlansService:
                 continue
             entries.append(self._read_plan_summary(plan_dir, summary_path))
 
+        entries.sort(
+            key=lambda entry: (entry.created_at, entry.updated_at, entry.slug.lower()),
+            reverse=True,
+        )
         return entries
 
     def get_plan(self, slug: str) -> PlanDetailData | None:
@@ -179,6 +186,7 @@ class OpenSpecPlansService:
             if checkpoints_path.exists()
             else ""
         )
+        created_at = self._first_created(plan_dir)
         updated_at = self._last_updated(plan_dir)
         status = _extract_status(summary_markdown)
         title = _extract_title(summary_markdown, slug)
@@ -209,6 +217,7 @@ class OpenSpecPlansService:
             slug=slug,
             title=title,
             status=status,
+            created_at=created_at,
             updated_at=updated_at,
             summary_markdown=summary_markdown,
             checkpoints_markdown=checkpoints_markdown,
@@ -536,7 +545,9 @@ class OpenSpecPlansService:
             slug=plan_dir.name,
             title=_extract_title(summary_markdown, plan_dir.name),
             status=_extract_status(summary_markdown),
+            created_at=self._first_created(plan_dir),
             updated_at=self._last_updated(plan_dir),
+            summary_markdown=summary_markdown,
             roles=roles,
             overall_progress=_overall_progress(roles),
             current_checkpoint=_resolve_current_checkpoint(checkpoints_markdown),
@@ -551,11 +562,26 @@ class OpenSpecPlansService:
 
     @staticmethod
     def _last_updated(path: Path) -> datetime:
-        newest = path.stat().st_mtime
-        for candidate in path.rglob("*"):
-            if candidate.is_file():
-                newest = max(newest, candidate.stat().st_mtime)
+        _, newest = OpenSpecPlansService._mtime_bounds(path)
         return datetime.fromtimestamp(newest, tz=UTC)
+
+    @staticmethod
+    def _first_created(path: Path) -> datetime:
+        oldest, _ = OpenSpecPlansService._mtime_bounds(path)
+        return datetime.fromtimestamp(oldest, tz=UTC)
+
+    @staticmethod
+    def _mtime_bounds(path: Path) -> tuple[float, float]:
+        base_mtime = _safe_path_mtime(path)
+        oldest = base_mtime
+        newest = base_mtime
+        for candidate in path.rglob("*"):
+            if not candidate.is_file():
+                continue
+            mtime = _safe_path_mtime(candidate)
+            oldest = min(oldest, mtime)
+            newest = max(newest, mtime)
+        return oldest, newest
 
 
 def _extract_status(summary_markdown: str) -> str:

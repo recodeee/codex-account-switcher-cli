@@ -4,7 +4,9 @@
 import json
 import os
 import re
+import subprocess
 import sys
+import time
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -14,6 +16,12 @@ except ImportError:
 
     def emit_event(*_a: object, **_k: object) -> None:
         pass
+
+
+MAIN_RS_REL_PATH = "rust/codex-lb-runtime/src/main.rs"
+MAIN_RS_LOCK_REL_PATH = ".omx/locks/rust-main-rs.lock.json"
+PROTECTED_BRANCHES = {"dev", "main", "master"}
+DEFAULT_MAIN_RS_INTEGRATOR_AGENT = os.environ.get("MAIN_RS_INTEGRATOR_AGENT", "integrator")
 
 
 def load_skill_rules() -> dict:
@@ -73,6 +81,126 @@ def check_file_markers(file_path: str, markers: list[str]) -> bool:
         return False
 
 
+def find_repo_root(file_path: str) -> Path:
+    """Resolve repository root by walking up from file path until .git is found."""
+    candidate = Path(file_path).resolve()
+    for parent in [candidate, *candidate.parents]:
+        git_dir = parent / ".git"
+        if git_dir.exists():
+            return parent
+    return Path.cwd()
+
+
+def normalize_path(value: str) -> str:
+    return value.replace("\\", "/")
+
+
+def current_branch(repo_root: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def branch_agent_name(branch: str) -> str:
+    parts = branch.split("/")
+    if len(parts) >= 3 and parts[0] == "agent":
+        return parts[1]
+    return ""
+
+
+def ensure_main_rs_lock(file_path: str, session_id: str) -> str | None:
+    """Return an error message when main.rs lock is missing/owned by another session."""
+    if not normalize_path(file_path).endswith(MAIN_RS_REL_PATH):
+        return None
+
+    repo_root = find_repo_root(file_path)
+    branch = current_branch(repo_root)
+    if branch in PROTECTED_BRANCHES and os.environ.get("ALLOW_MAIN_RS_EDIT_ON_PROTECTED_BRANCH") != "1":
+        return (
+            f"BLOCKED: main.rs edits are not allowed on protected branch '{branch}'.\n"
+            "Use agent branch/worktree first:\n"
+            '  bash scripts/agent-branch-start.sh "<task>" "<agent-name>"'
+        )
+
+    required_agent = DEFAULT_MAIN_RS_INTEGRATOR_AGENT
+    if os.environ.get("ALLOW_MAIN_RS_NON_INTEGRATOR_BRANCH") != "1":
+        if branch_agent_name(branch) != required_agent:
+            return (
+                f"BLOCKED: main.rs can only be edited from integrator branch agent/{required_agent}/...\n"
+                f"Current branch: '{branch}'."
+            )
+
+    lock_path = repo_root / MAIN_RS_LOCK_REL_PATH
+    if not lock_path.exists():
+        return (
+            "BLOCKED: rust/codex-lb-runtime/src/main.rs requires an ownership lock.\n"
+            "Run: python3 scripts/main_rs_lock.py claim --owner \"<agent-name>\" "
+            f'--branch "{branch or "<agent-branch>"}"'
+        )
+
+    try:
+        lock_data = json.loads(lock_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return (
+            "BLOCKED: rust main.rs lock file is unreadable.\n"
+            "Run: python3 scripts/main_rs_lock.py claim --owner \"<agent-name>\" --force"
+        )
+
+    expires_at_epoch = lock_data.get("expires_at_epoch")
+    if isinstance(expires_at_epoch, (int, float)) and time.time() > float(expires_at_epoch):
+        return (
+            "BLOCKED: rust main.rs lock is expired.\n"
+            "Run: python3 scripts/main_rs_lock.py claim --owner \"<agent-name>\""
+        )
+
+    owner_branch = lock_data.get("owner_branch")
+    if owner_branch and branch and owner_branch != branch:
+        owner_label = lock_data.get("owner") or owner_branch
+        return (
+            f"BLOCKED: rust main.rs lock is owned by branch '{owner_branch}' ({owner_label}).\n"
+            f"Current branch: '{branch}'.\n"
+            "Status: python3 scripts/main_rs_lock.py status"
+        )
+
+    integrator_agent = lock_data.get("integrator_agent") or required_agent
+    if branch_agent_name(branch) != integrator_agent:
+        return (
+            f"BLOCKED: main.rs lock requires integrator branch agent/{integrator_agent}/...\n"
+            f"Current branch: '{branch}'."
+        )
+
+    if not owner_branch:
+        return (
+            "BLOCKED: rust main.rs lock is legacy/missing owner_branch.\n"
+            "Re-claim with branch ownership:\n"
+            "  python3 scripts/main_rs_lock.py claim --owner \"<agent-name>\" "
+            f'--branch "{branch or "<agent-branch>"}" --force'
+        )
+
+    owner_session_id = lock_data.get("owner_session_id")
+    if not owner_session_id:
+        return None
+    if owner_session_id == session_id:
+        return None
+
+    owner_label = lock_data.get("owner") or owner_branch or "unknown owner"
+    return (
+        f"BLOCKED: rust main.rs lock is currently owned by {owner_label} on branch '{owner_branch}'.\n"
+        "Use a different file/module or wait for release.\n"
+        "Status: python3 scripts/main_rs_lock.py status"
+    )
+
+
 def main() -> None:
     try:
         input_data = json.loads(sys.stdin.read())
@@ -85,6 +213,22 @@ def main() -> None:
 
     if not file_path:
         sys.exit(0)
+
+    lock_error = ensure_main_rs_lock(file_path, session_id)
+    if lock_error:
+        emit_event(
+            session_id,
+            "hook.invoked",
+            {
+                "hook": "skill_guard",
+                "trigger": "PreToolUse",
+                "outcome": "main_rs_locked",
+                "matched_count": 1,
+                "exit_code": 2,
+            },
+        )
+        print(lock_error, file=sys.stderr)
+        sys.exit(2)
 
     try:
         rules = load_skill_rules()

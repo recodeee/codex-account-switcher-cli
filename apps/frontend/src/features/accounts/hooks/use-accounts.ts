@@ -18,7 +18,7 @@ import type { AccountSummary } from "@/features/accounts/schemas";
 import { resetQuotaDisplayFloorCacheForAccount } from "@/utils/quota-display";
 import { hasActiveCliSessionSignal } from "@/utils/account-working";
 
-const DEFAULT_ACCOUNTS_POLL_MS = 30_000;
+const DEFAULT_ACCOUNTS_POLL_MS = 10_000;
 const ACTIVE_ACCOUNTS_POLL_MS = 5_000;
 
 function extractAccounts(data: unknown): AccountSummary[] | undefined {

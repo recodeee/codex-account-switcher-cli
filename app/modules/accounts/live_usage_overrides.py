@@ -180,6 +180,7 @@ def apply_local_live_usage_overrides(
         should_defer_active_snapshot_usage=should_defer_active_snapshot_usage,
     )
     live_process_session_counts_by_account: dict[str, int] = {}
+    live_runtime_session_counts_by_account: dict[str, int] = {}
     forced_live_session_counts_by_account: dict[str, int] = {}
     force_clear_live_session_account_ids: set[str] = set()
 
@@ -271,9 +272,12 @@ def apply_local_live_usage_overrides(
         live_process_session_counts_by_account[account.id] = max(0, live_process_session_count)
         has_live_process_session = live_process_session_count > 0
         effective_live_runtime_session_count = (
-            live_runtime_session_count if not has_process_session_visibility else 0
+            live_runtime_session_count if live_process_session_count <= 0 else 0
         )
-        has_live_runtime_session = live_runtime_session_count > 0
+        live_runtime_session_counts_by_account[account.id] = max(
+            0, effective_live_runtime_session_count
+        )
+        has_live_runtime_session = effective_live_runtime_session_count > 0
         has_recently_terminated_cli_session = has_recently_terminated_cli_session_snapshot(
             session_presence_snapshot_names,
             selected_snapshot_name=effective_selected_snapshot_name,
@@ -452,28 +456,36 @@ def apply_local_live_usage_overrides(
             and live_usage_match.account_id != account_id
             and not has_shared_chatgpt_account_identity
         ):
-            matched_account_id = live_usage_match.account_id
-            # Strong fingerprint says this live sample belongs to another
-            # account identity. Keep this account disconnected for live-session
-            # grouping and transfer process/session presence to the matched
-            # account so "Working now" stays aligned with quota ownership.
-            force_clear_live_session_account_ids.add(account_id)
-            transferred_live_session_count = max(
-                0,
-                live_process_session_count,
-                effective_live_runtime_session_count,
-            )
-            if transferred_live_session_count > 0:
-                forced_live_session_counts_by_account[matched_account_id] = max(
-                    forced_live_session_counts_by_account.get(matched_account_id, 0),
-                    transferred_live_session_count,
+            # Process-level ownership is stronger than quota-fingerprint
+            # matching. If this account currently owns observable live
+            # processes, keep sessions on this account and only suppress quota
+            # window overrides.
+            if has_live_process_session:
+                override_reason = "live_usage_confident_match_other_account_process_guard"
+            else:
+                matched_account_id = live_usage_match.account_id
+                # Strong fingerprint says this live sample belongs to another
+                # account identity. Keep this account disconnected for
+                # live-session grouping and transfer inferred session presence
+                # to the matched account so "Working now" stays aligned with
+                # quota ownership.
+                force_clear_live_session_account_ids.add(account_id)
+                transferred_live_session_count = max(
+                    0,
+                    live_process_session_count,
+                    effective_live_runtime_session_count,
                 )
+                if transferred_live_session_count > 0:
+                    forced_live_session_counts_by_account[matched_account_id] = max(
+                        forced_live_session_counts_by_account.get(matched_account_id, 0),
+                        transferred_live_session_count,
+                    )
+                override_reason = "live_usage_confident_match_other_account"
 
             # Guardrail for multi-session mixed snapshot scopes:
             # when a live-usage sample strongly fingerprints another account,
             # keep this account on baseline quota windows instead of applying
             # a wrong cross-account override.
-            override_reason = "live_usage_confident_match_other_account"
             _set_live_quota_debug(
                 account_id=account_id,
                 snapshots_considered=snapshots_considered,
@@ -687,6 +699,7 @@ def apply_local_live_usage_overrides(
         accounts=accounts,
         codex_live_session_counts_by_account=codex_live_session_counts_by_account,
         live_process_session_counts_by_account=live_process_session_counts_by_account,
+        live_runtime_session_counts_by_account=live_runtime_session_counts_by_account,
         codex_auth_by_account=codex_auth_by_account,
         has_process_session_visibility=has_process_session_visibility,
     )
@@ -698,6 +711,7 @@ def _normalize_live_session_counts_to_process_presence(
     accounts: list[Account],
     codex_live_session_counts_by_account: dict[str, int],
     live_process_session_counts_by_account: dict[str, int],
+    live_runtime_session_counts_by_account: dict[str, int],
     codex_auth_by_account: dict[str, AccountCodexAuthStatus],
     has_process_session_visibility: bool,
 ) -> None:
@@ -717,6 +731,14 @@ def _normalize_live_session_counts_to_process_presence(
         )
         if process_count > 0:
             codex_live_session_counts_by_account[account_id] = process_count
+            continue
+
+        runtime_count = max(
+            0,
+            live_runtime_session_counts_by_account.get(account_id, 0),
+        )
+        if runtime_count > 0:
+            codex_live_session_counts_by_account[account_id] = runtime_count
             continue
 
         if has_process_session_visibility:
@@ -1137,68 +1159,13 @@ def _resolve_session_presence_snapshot_names_for_account(
             snapshot_names=fallback_snapshot_names,
         )
 
-    if any(_is_email_like_snapshot_name(name) for name in snapshot_names_from_index):
-        return _augment_session_presence_snapshot_names_with_email_aliases(
-            account_email=account_email,
-            snapshot_names=snapshot_names_from_index,
-        )
-
-    if not selected_snapshot_name:
-        return _augment_session_presence_snapshot_names_with_email_aliases(
-            account_email=account_email,
-            snapshot_names=snapshot_names_from_index,
-        )
-
-    selected = _normalize_snapshot_name(selected_snapshot_name)
-    account_local_part = _normalize_snapshot_local_part(account_email)
-    selected_local_part = _normalize_snapshot_local_part(selected_snapshot_name)
-
-    if selected is None:
-        return _augment_session_presence_snapshot_names_with_email_aliases(
-            account_email=account_email,
-            snapshot_names=fallback_snapshot_names,
-        )
-
-    scoped_names: list[str] = []
-    seen: set[str] = set()
-    for snapshot_name in snapshot_names_from_index:
-        normalized_snapshot = _normalize_snapshot_name(snapshot_name)
-        if normalized_snapshot is None or normalized_snapshot in seen:
-            continue
-        snapshot_local_part = _normalize_snapshot_local_part(snapshot_name)
-
-        if normalized_snapshot == selected:
-            scoped_names.append(snapshot_name)
-            seen.add(normalized_snapshot)
-            continue
-
-        if account_local_part is None or snapshot_local_part is None:
-            continue
-
-        if snapshot_local_part == account_local_part:
-            scoped_names.append(snapshot_name)
-            seen.add(normalized_snapshot)
-            continue
-
-        if selected_local_part is None:
-            continue
-
-        if (
-            snapshot_local_part.startswith(account_local_part)
-            and selected_local_part.startswith(account_local_part)
-        ):
-            scoped_names.append(snapshot_name)
-            seen.add(normalized_snapshot)
-
-    if scoped_names:
-        return _augment_session_presence_snapshot_names_with_email_aliases(
-            account_email=account_email,
-            snapshot_names=scoped_names,
-        )
-
+    # Keep the full account-owned snapshot set for live-session presence hints.
+    # The upstream candidate resolver already limits names to this account's
+    # ownership scope; pruning non-email aliases here can hide real running
+    # CLI sessions after snapshot renames/rotations.
     return _augment_session_presence_snapshot_names_with_email_aliases(
         account_email=account_email,
-        snapshot_names=fallback_snapshot_names,
+        snapshot_names=snapshot_names_from_index,
     )
 
 
@@ -1779,6 +1746,13 @@ def _resolve_live_process_session_count_for_account(
     normalized_counts_by_snapshot = _build_normalized_snapshot_count_index(
         live_process_session_counts_by_snapshot
     )
+    selected_count = _resolve_snapshot_count(
+        snapshot_name=selected_snapshot_name,
+        normalized_counts_by_snapshot=normalized_counts_by_snapshot,
+    )
+    if selected_count > 0:
+        return selected_count
+
     total = 0
     for snapshot_name in candidate_names:
         total += _resolve_snapshot_count(
@@ -1801,6 +1775,13 @@ def _resolve_live_runtime_session_count_for_account(
     normalized_counts_by_snapshot = _build_normalized_snapshot_count_index(
         runtime_live_session_counts_by_snapshot
     )
+    selected_count = _resolve_snapshot_count(
+        snapshot_name=selected_snapshot_name,
+        normalized_counts_by_snapshot=normalized_counts_by_snapshot,
+    )
+    if selected_count > 0:
+        return selected_count
+
     total = 0
     for snapshot_name in candidate_names:
         total += _resolve_snapshot_count(

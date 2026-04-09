@@ -560,6 +560,26 @@ async def test_sticky_sessions_api_returns_codex_session_events(async_client, mo
     )
     _append_rollout_payload(
         rollout_path,
+        timestamp=now - timedelta(seconds=17),
+        payload={
+            "timestamp": (now - timedelta(seconds=17)).isoformat().replace("+00:00", "Z"),
+            "type": "event_msg",
+            "payload": {
+                "type": "exec_command_end",
+                "command": ["/bin/bash", "-lc", "bun run test --watch"],
+                "status": "completed",
+                "exit_code": 0,
+                "aggregated_output": (
+                    "Running PreToolUse hook: Running OMX Bash preflight\n"
+                    "PreToolUse hook (completed)\n"
+                    "Running PostToolUse hook: Running OMX Bash review\n"
+                    "PostToolUse hook (completed)"
+                ),
+            },
+        },
+    )
+    _append_rollout_payload(
+        rollout_path,
         timestamp=now - timedelta(seconds=16),
         payload={
             "timestamp": (now - timedelta(seconds=16)).isoformat().replace("+00:00", "Z"),
@@ -585,12 +605,16 @@ async def test_sticky_sessions_api_returns_codex_session_events(async_client, mo
     assert payload["resolvedSessionId"] == session_id
     assert payload["sourceFile"] is not None
     events = payload["events"]
-    assert len(events) == 3
+    assert len(events) == 4
     assert events[0]["kind"] == "prompt"
     assert events[0]["text"] == "Collect per-session watch logs"
     assert events[1]["kind"] == "answer"
     assert events[1]["text"] == "Loaded session logs and summarized active quotas."
-    assert events[2]["kind"] == "status"
+    assert events[2]["kind"] == "tool"
+    assert events[2]["title"] == "Terminal command"
+    assert "$ bun run test --watch" in events[2]["text"]
+    assert "Running PreToolUse hook" in events[2]["text"]
+    assert events[3]["kind"] == "status"
 
 
 @pytest.mark.asyncio

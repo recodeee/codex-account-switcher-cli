@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -86,6 +87,8 @@ async def test_plans_api_lists_and_returns_detail(async_client):
         matching = [entry for entry in payload["entries"] if entry["slug"] == slug]
         assert len(matching) == 1
         assert matching[0]["status"] == "draft"
+        assert isinstance(matching[0]["createdAt"], str)
+        assert "Plan Summary" in matching[0]["summaryMarkdown"]
         assert matching[0]["roles"][0]["role"] == "planner"
         assert matching[0]["roles"][0]["totalCheckpoints"] == 2
         assert matching[0]["roles"][0]["doneCheckpoints"] == 1
@@ -105,6 +108,7 @@ async def test_plans_api_lists_and_returns_detail(async_client):
         detail_payload = detail.json()
         assert detail_payload["slug"] == slug
         assert detail_payload["status"] == "draft"
+        assert isinstance(detail_payload["createdAt"], str)
         assert "Plan Summary" in detail_payload["summaryMarkdown"]
         assert "Plan Checkpoints" in detail_payload["checkpointsMarkdown"]
         assert detail_payload["roles"][0]["role"] == "planner"
@@ -156,6 +160,49 @@ async def test_plans_api_rejects_path_traversal_slug(async_client, app_instance,
         response = await async_client.get("/api/projects/plans/%2E%2E")
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "plan_not_found"
+    finally:
+        app_instance.dependency_overrides.pop(get_plans_service, None)
+
+
+@pytest.mark.asyncio
+async def test_plans_api_sorts_newest_created_plan_first(async_client, app_instance, tmp_path):
+    plans_root = tmp_path / "openspec" / "plan"
+    plans_root.mkdir(parents=True, exist_ok=False)
+
+    older_slug = "older-plan"
+    newer_slug = "newer-plan"
+    older_dir = plans_root / older_slug
+    newer_dir = plans_root / newer_slug
+    older_dir.mkdir(parents=True, exist_ok=False)
+    newer_dir.mkdir(parents=True, exist_ok=False)
+
+    older_summary = older_dir / "summary.md"
+    newer_summary = newer_dir / "summary.md"
+    older_summary.write_text(
+        f"# Plan Summary: {older_slug}\n\n- **Status:** draft\n",
+        encoding="utf-8",
+    )
+    newer_summary.write_text(
+        f"# Plan Summary: {newer_slug}\n\n- **Status:** draft\n",
+        encoding="utf-8",
+    )
+
+    older_ts = 1_700_000_000
+    newer_ts = 1_800_000_000
+    os.utime(older_summary, (older_ts, older_ts))
+    os.utime(older_dir, (older_ts, older_ts))
+    os.utime(newer_summary, (newer_ts, newer_ts))
+    os.utime(newer_dir, (newer_ts, newer_ts))
+
+    app_instance.dependency_overrides[get_plans_service] = lambda: OpenSpecPlansService(
+        plans_root=plans_root,
+    )
+    try:
+        response = await async_client.get("/api/projects/plans")
+        assert response.status_code == 200
+        payload = response.json()
+        slugs = [entry["slug"] for entry in payload["entries"]]
+        assert slugs == [newer_slug, older_slug]
     finally:
         app_instance.dependency_overrides.pop(get_plans_service, None)
 

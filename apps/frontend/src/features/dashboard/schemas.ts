@@ -81,6 +81,16 @@ export const DashboardOverviewSchema = z.object({
   depletionSecondary: DepletionSchema.nullable().optional(),
 });
 
+export const DashboardSystemMonitorSchema = z.object({
+  sampledAt: z.string().datetime({ offset: true }),
+  cpuPercent: z.number(),
+  gpuPercent: z.number().nullable(),
+  vramPercent: z.number().nullable(),
+  networkMbS: z.number(),
+  memoryPercent: z.number(),
+  spike: z.boolean(),
+});
+
 export const RequestLogSchema = z.object({
   requestedAt: z.string().datetime({ offset: true }),
   accountId: z.string().nullable(),
@@ -151,6 +161,7 @@ export const FilterStateSchema = z.object({
 
 export type DashboardMetrics = z.infer<typeof DashboardMetricsSchema>;
 export type DashboardOverview = z.infer<typeof DashboardOverviewSchema>;
+export type DashboardSystemMonitor = z.infer<typeof DashboardSystemMonitorSchema>;
 export type TrendPoint = z.infer<typeof TrendPointSchema>;
 export type MetricsTrends = z.infer<typeof MetricsTrendsSchema>;
 export type UsageWindow = z.infer<typeof UsageWindowSchema>;

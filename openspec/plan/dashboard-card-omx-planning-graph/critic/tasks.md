@@ -2,20 +2,20 @@
 
 ## 1. Spec
 
-- [ ] 1.1 Validate principle-driver-option consistency across the plan
-- [ ] 1.2 Validate risks, consequences, and mitigation clarity (including idempotency expectations)
+- [x] 1.1 Validate principle-driver-option consistency across the plan
+- [x] 1.2 Validate risks, consequences, and mitigation clarity (including idempotency expectations)
 
 ## 2. Tests
 
-- [ ] 2.1 Validate testability and measurability of all acceptance criteria
-- [ ] 2.2 Validate verification steps are concrete and reproducible
+- [x] 2.1 Validate testability and measurability of all acceptance criteria
+- [x] 2.2 Validate verification steps are concrete and reproducible
 
 ## 3. Implementation
 
-- [ ] 3.1 Produce verdict (APPROVE / ITERATE / REJECT) with actionable feedback
-- [ ] 3.2 Confirm revised drafts resolve prior findings before approval
-- [ ] 3.3 Publish final quality/risk sign-off notes
+- [x] 3.1 Produce verdict (APPROVE / ITERATE / REJECT) with actionable feedback
+- [x] 3.2 Confirm revised drafts resolve prior findings before approval
+- [x] 3.3 Publish final quality/risk sign-off notes
 
 ## 4. Checkpoints
 
-- [ ] [C1] READY - Quality gate checkpoint
+- [x] [C1] DONE - Quality gate approved with concrete acceptance and mitigation coverage

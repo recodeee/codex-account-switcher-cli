@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,6 +23,9 @@ from app.db.models import (
 _SETTINGS_ROW_ID = 1
 _DUPLICATE_ACCOUNT_SUFFIX = "__copy"
 _DELETED_ACCOUNT_DEACTIVATION_REASON = "deleted_by_user"
+_SQLITE_MERGE_LOCK_MAX_ATTEMPTS = 6
+_SQLITE_MERGE_LOCK_BASE_BACKOFF_SECONDS = 0.05
+_SQLITE_MERGE_LOCK_MAX_BACKOFF_SECONDS = 0.4
 
 
 def _not_deleted_account_clause():
@@ -482,15 +486,28 @@ class AccountsRepository:
         return self._session.get_bind().dialect.name
 
     async def _acquire_sqlite_merge_lock(self) -> None:
-        try:
-            await self._session.execute(text("BEGIN IMMEDIATE"))
-        except OperationalError as exc:
-            message = str(exc).lower()
-            if "within a transaction" not in message:
+        for attempt in range(_SQLITE_MERGE_LOCK_MAX_ATTEMPTS):
+            try:
+                await self._session.execute(text("BEGIN IMMEDIATE"))
+                return
+            except OperationalError as exc:
+                message = str(exc).lower()
+                if "within a transaction" in message:
+                    # A no-op write escalates the current deferred transaction to a write
+                    # transaction, serializing concurrent writers.
+                    await self._session.execute(text("UPDATE accounts SET id = id WHERE 1 = 0"))
+                    return
+                if (
+                    "database is locked" in message
+                    and attempt < (_SQLITE_MERGE_LOCK_MAX_ATTEMPTS - 1)
+                ):
+                    delay = min(
+                        _SQLITE_MERGE_LOCK_BASE_BACKOFF_SECONDS * (2**attempt),
+                        _SQLITE_MERGE_LOCK_MAX_BACKOFF_SECONDS,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
                 raise
-            # A no-op write escalates the current deferred transaction to a write
-            # transaction, serializing concurrent writers.
-            await self._session.execute(text("UPDATE accounts SET id = id WHERE 1 = 0"))
 
     async def _acquire_postgresql_merge_lock(self, email: str) -> None:
         lock_key = _advisory_lock_key("merge-email", email)

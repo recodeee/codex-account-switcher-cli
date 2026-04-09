@@ -197,7 +197,7 @@ def test_overlay_includes_live_process_session_task_previews(monkeypatch) -> Non
     assert session_previews[1].task_preview is None
 
 
-def test_overlay_reattributes_fallback_mapped_session_to_matching_snapshot_preview(
+def test_overlay_keeps_fallback_mapped_session_on_original_snapshot(
     monkeypatch,
 ) -> None:
     now = datetime(2026, 4, 8, tzinfo=timezone.utc)
@@ -269,15 +269,14 @@ def test_overlay_reattributes_fallback_mapped_session_to_matching_snapshot_previ
         now=now,
     )
 
-    assert codex_current_task_preview_by_account[old_account.id] == "old dashboard cleanup"
-    assert codex_current_task_preview_by_account[new_account.id] == "new billing attribution fix"
-    new_session_previews = codex_session_task_previews_by_account[new_account.id]
-    assert [preview.session_key for preview in new_session_previews] == [
-        "pid:61001",
-        "pid:62001",
-    ]
-    assert new_session_previews[0].task_preview == "new billing attribution fix"
-    assert new_session_previews[1].task_preview is None
+    assert (
+        codex_current_task_preview_by_account[old_account.id]
+        == "new billing attribution fix"
+    )
+    assert codex_current_task_preview_by_account[new_account.id] == "Waiting for new task"
+    old_session_previews = codex_session_task_previews_by_account[old_account.id]
+    assert [preview.session_key for preview in old_session_previews] == ["pid:61001"]
+    assert old_session_previews[0].task_preview == "new billing attribution fix"
 
 
 def test_overlay_uses_expected_live_snapshot_when_snapshot_index_is_missing(monkeypatch) -> None:
@@ -331,7 +330,9 @@ def test_overlay_uses_expected_live_snapshot_when_snapshot_index_is_missing(monk
     )
 
 
-def test_overlay_keeps_waiting_state_and_adds_last_task_preview(monkeypatch) -> None:
+def test_overlay_keeps_waiting_state_without_snapshot_fallback_last_task_preview(
+    monkeypatch,
+) -> None:
     now = datetime(2026, 4, 5, tzinfo=timezone.utc)
     account = _make_account("acc-zeus", "zeus@example.com")
     codex_auth_by_account = {
@@ -382,10 +383,7 @@ def test_overlay_keeps_waiting_state_and_adds_last_task_preview(monkeypatch) -> 
     )
 
     assert codex_current_task_preview_by_account[account.id] == "Waiting for new task"
-    assert (
-        codex_last_task_preview_by_account[account.id]
-        == "Investigate Zeus quota overlay mapping"
-    )
+    assert account.id not in codex_last_task_preview_by_account
 
 
 def test_overlay_waiting_multi_session_does_not_copy_last_task_from_debug_sample(

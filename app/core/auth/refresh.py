@@ -88,11 +88,24 @@ async def refresh_access_token(
             )
             raise RefreshError("invalid_response", "Refresh response invalid", False) from exc
         if resp.status >= 400:
-            logger.warning(
-                "Token refresh failed request_id=%s status=%s",
-                get_request_id(),
-                resp.status,
-            )
+            error_code = _extract_error_code(payload_data) or f"http_{resp.status}"
+            error_message = _extract_error_message(payload_data) or f"Token refresh failed ({resp.status})"
+            if resp.status == 401 and classify_refresh_error(error_code):
+                logger.debug(
+                    "Token refresh rejected permanently request_id=%s status=%s code=%s message=%s",
+                    get_request_id() or "-",
+                    resp.status,
+                    error_code,
+                    error_message,
+                )
+            else:
+                logger.warning(
+                    "Token refresh failed request_id=%s status=%s code=%s message=%s",
+                    get_request_id() or "-",
+                    resp.status,
+                    error_code,
+                    error_message,
+                )
             raise _refresh_error_from_payload(payload_data, resp.status)
 
     if not payload_data.access_token or not payload_data.refresh_token or not payload_data.id_token:

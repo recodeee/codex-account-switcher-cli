@@ -10,6 +10,10 @@ import {
   type MedusaCustomerRegisterRequest,
 } from "@/features/medusa-customer-auth/schemas";
 
+export const DASHBOARD_OVERVIEW_METADATA_KEY = "codex_lb_dashboard_overview_v1";
+export const DASHBOARD_OVERVIEW_METADATA_SAVED_AT_KEY =
+  "codex_lb_dashboard_overview_saved_at_v1";
+
 function buildMedusaUrl(pathname: string): string {
   const { backendUrl } = getMedusaRuntimeConfig();
   const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
@@ -116,5 +120,56 @@ export async function registerMedusaCustomer(
   return loginMedusaCustomer({
     email: validatedPayload.email,
     password: validatedPayload.password,
+  });
+}
+
+export async function loadMedusaCustomerDashboardOverviewState(
+  token: string,
+): Promise<unknown | null> {
+  const response = await medusaStoreFetch<unknown>("/customers/me", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const parsed = MedusaCustomerResponseSchema.parse(response);
+  const metadata = parsed.customer.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  return metadata[DASHBOARD_OVERVIEW_METADATA_KEY] ?? null;
+}
+
+export async function saveMedusaCustomerDashboardOverviewState(
+  token: string,
+  state: unknown,
+): Promise<void> {
+  const response = await medusaStoreFetch<unknown>("/customers/me", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const parsed = MedusaCustomerResponseSchema.parse(response);
+  const existingMetadata =
+    parsed.customer.metadata && typeof parsed.customer.metadata === "object" && !Array.isArray(parsed.customer.metadata)
+      ? parsed.customer.metadata
+      : {};
+
+  const nextMetadata = {
+    ...existingMetadata,
+    [DASHBOARD_OVERVIEW_METADATA_KEY]: state,
+    [DASHBOARD_OVERVIEW_METADATA_SAVED_AT_KEY]: new Date().toISOString(),
+  };
+
+  await medusaStoreFetch("/customers/me", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      metadata: nextMetadata,
+    }),
   });
 }

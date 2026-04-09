@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
+import time
 from pathlib import Path
 from typing import NamedTuple
 
 from pydantic import ValidationError
+from sqlalchemy.exc import OperationalError
 
 from app.core.auth import (
     DEFAULT_EMAIL,
@@ -24,6 +28,11 @@ from app.modules.accounts.codex_auth_switcher import build_email_snapshot_name
 from app.modules.accounts.repository import AccountIdentityConflictError, AccountsRepository
 from app.modules.proxy.account_cache import get_account_selection_cache
 
+logger = logging.getLogger(__name__)
+_AUTO_IMPORT_MIN_INTERVAL_SECONDS = 15.0
+_auto_import_lock = asyncio.Lock()
+_last_auto_import_completed_at_monotonic: float | None = None
+
 
 class ParsedSnapshotAuth(NamedTuple):
     account: Account
@@ -33,9 +42,27 @@ class ParsedSnapshotAuth(NamedTuple):
 
 
 async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor: TokenEncryptor) -> None:
+    global _last_auto_import_completed_at_monotonic
     if not get_settings().codex_auth_auto_import_on_accounts_list:
         return
 
+    now_monotonic = time.monotonic()
+    if _auto_import_is_recent(now_monotonic):
+        return
+
+    async with _auto_import_lock:
+        now_monotonic = time.monotonic()
+        if _auto_import_is_recent(now_monotonic):
+            return
+        await _sync_local_codex_auth_snapshots_unlocked(repo=repo, encryptor=encryptor)
+        _last_auto_import_completed_at_monotonic = time.monotonic()
+
+
+async def _sync_local_codex_auth_snapshots_unlocked(
+    *,
+    repo: AccountsRepository,
+    encryptor: TokenEncryptor,
+) -> None:
     accounts_dir = _resolve_codex_auth_accounts_dir()
     active_auth_path = _resolve_codex_auth_path()
     _materialize_active_auth_snapshot(
@@ -85,22 +112,33 @@ async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor
                     # Keep Usage API-disconnected accounts deactivated even when
                     # a newer local snapshot appears. Update tokens in-place so
                     # manual reactivation uses the newest credentials.
-                    await repo.update_tokens(
-                        existing.id,
-                        access_token_encrypted=account.access_token_encrypted,
-                        refresh_token_encrypted=account.refresh_token_encrypted,
-                        id_token_encrypted=account.id_token_encrypted,
-                        last_refresh=account.last_refresh,
-                        plan_type=existing.plan_type or account.plan_type,
-                        email=existing.email or account.email,
-                        chatgpt_account_id=existing.chatgpt_account_id or account.chatgpt_account_id,
-                    )
+                    try:
+                        await repo.update_tokens(
+                            existing.id,
+                            access_token_encrypted=account.access_token_encrypted,
+                            refresh_token_encrypted=account.refresh_token_encrypted,
+                            id_token_encrypted=account.id_token_encrypted,
+                            last_refresh=account.last_refresh,
+                            plan_type=existing.plan_type or account.plan_type,
+                            email=existing.email or account.email,
+                            chatgpt_account_id=existing.chatgpt_account_id or account.chatgpt_account_id,
+                        )
+                    except OperationalError as exc:
+                        if _is_sqlite_locked_operational_error(exc):
+                            _log_auto_import_lock_skip(snapshot_path, exc)
+                            return
+                        raise
                     changed_any = True
             elif snapshot_tokens_changed:
                 try:
                     await repo.upsert(account)
                 except AccountIdentityConflictError:
                     continue
+                except OperationalError as exc:
+                    if _is_sqlite_locked_operational_error(exc):
+                        _log_auto_import_lock_skip(snapshot_path, exc)
+                        return
+                    raise
                 changed_any = True
             continue
 
@@ -108,10 +146,41 @@ async def sync_local_codex_auth_snapshots(*, repo: AccountsRepository, encryptor
             await repo.upsert(account)
         except AccountIdentityConflictError:
             continue
+        except OperationalError as exc:
+            if _is_sqlite_locked_operational_error(exc):
+                _log_auto_import_lock_skip(snapshot_path, exc)
+                return
+            raise
         changed_any = True
 
     if changed_any:
         get_account_selection_cache().invalidate()
+
+
+def _auto_import_is_recent(now_monotonic: float) -> bool:
+    if _last_auto_import_completed_at_monotonic is None:
+        return False
+    return (
+        now_monotonic - _last_auto_import_completed_at_monotonic
+        < _AUTO_IMPORT_MIN_INTERVAL_SECONDS
+    )
+
+
+def _reset_auto_import_sync_window_for_tests() -> None:
+    global _last_auto_import_completed_at_monotonic
+    _last_auto_import_completed_at_monotonic = None
+
+
+def _is_sqlite_locked_operational_error(exc: OperationalError) -> bool:
+    return "database is locked" in str(exc).lower()
+
+
+def _log_auto_import_lock_skip(snapshot_path: Path, exc: OperationalError) -> None:
+    logger.warning(
+        "Skipping codex-auth auto-import due to sqlite lock snapshot=%s error=%s",
+        snapshot_path.name,
+        exc,
+    )
 
 
 def _parse_account_from_auth_bytes(*, raw: bytes, encryptor: TokenEncryptor) -> ParsedSnapshotAuth | None:

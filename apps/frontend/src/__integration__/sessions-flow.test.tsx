@@ -1,5 +1,4 @@
 import { screen } from "@testing-library/react";
-import { within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
@@ -77,9 +76,7 @@ describe("sessions flow integration", () => {
     expect(requestUrl).toContain("activeOnly=false");
   });
 
-  it("opens prompt dialog from a session row action", async () => {
-    const user = userEvent.setup({ delay: null });
-
+  it("does not render prompt button in session rows", async () => {
     server.use(
       http.get("/api/sticky-sessions", ({ request }) => {
         const url = new URL(request.url);
@@ -113,13 +110,8 @@ describe("sessions flow integration", () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Prompt" }));
-
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText("Send prompt to CLI")).toBeInTheDocument();
-    expect(within(dialog).getByText("alpha@example.com")).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Send prompt" })).toBeDisabled();
+    expect(screen.queryByRole("columnheader", { name: "Action" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Prompt" })).not.toBeInTheDocument();
   });
 
   it("highlights and announces a focused session when sessionKey query is present", async () => {
@@ -381,6 +373,41 @@ describe("sessions flow integration", () => {
     expect(screen.getByText("No account matched this snapshot.")).toBeInTheDocument();
   });
 
+  it("shows empty sessions state without waiting for slow overview fallback", async () => {
+    server.use(
+      http.get("/api/sticky-sessions", () =>
+        HttpResponse.json({
+          entries: [],
+          stalePromptCacheCount: 0,
+          total: 0,
+          hasMore: false,
+        }),
+      ),
+      http.get("/api/dashboard/overview", async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1600));
+        return HttpResponse.json(createDashboardOverview({ accounts: [] }));
+      }),
+    );
+
+    window.history.pushState({}, "", "/sessions");
+    renderWithProviders(<App />);
+
+    const startedAt = Date.now();
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(
+      await screen.findByText("No Codex sessions", undefined, { timeout: 1200 }),
+    ).toBeInTheDocument();
+    expect(Date.now() - startedAt).toBeLessThan(1200);
+    expect(screen.getByText(/checking dashboard telemetry/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Codex sessions will appear here once routed requests create sticky session mappings.",
+        undefined,
+        { timeout: 3000 },
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("fallback mode renders account-level live status, task preview, and recency from overview telemetry", async () => {
     const now = Date.now();
     server.use(
@@ -437,6 +464,123 @@ describe("sessions flow integration", () => {
     expect(screen.getAllByText("6").length).toBeGreaterThan(0);
   });
 
+  it("fallback mode shows each tracked session task preview when overview provides per-session tasks", async () => {
+    const now = Date.now();
+    server.use(
+      http.get("/api/sticky-sessions", () =>
+        HttpResponse.json({
+          entries: [],
+          stalePromptCacheCount: 0,
+          total: 0,
+          hasMore: false,
+        }),
+      ),
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_multi",
+                email: "multi@example.com",
+                displayName: "multi@example.com",
+                codexLiveSessionCount: 1,
+                codexTrackedSessionCount: 2,
+                codexSessionCount: 0,
+                codexCurrentTaskPreview: "Reconcile dashboard session rows",
+                codexSessionTaskPreviews: [
+                  {
+                    sessionKey: "4b52c8f7",
+                    taskPreview: "remove the prompt button from session row",
+                    taskUpdatedAt: new Date(now - 15_000).toISOString(),
+                  },
+                  {
+                    sessionKey: "5f90e123",
+                    taskPreview: "save medusa pq values per account",
+                    taskUpdatedAt: new Date(now - 30_000).toISOString(),
+                  },
+                ],
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "multi",
+                  activeSnapshotName: "multi",
+                  isActiveSnapshot: true,
+                  hasLiveSession: true,
+                },
+                lastUsageRecordedAtPrimary: new Date(now - 30_000).toISOString(),
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/sessions?accountId=acc_multi");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(await screen.findByText("multi@example.com")).toBeInTheDocument();
+    expect(screen.getByText("4b52c8f7:")).toBeInTheDocument();
+    expect(screen.getByText("5f90e123:")).toBeInTheDocument();
+    expect(screen.getByText("remove the prompt button from session row")).toBeInTheDocument();
+    expect(screen.getByText("save medusa pq values per account")).toBeInTheDocument();
+  });
+
+  it("fallback mode keeps live session inventory even when tracked previews only include one session", async () => {
+    const now = Date.now();
+    server.use(
+      http.get("/api/sticky-sessions", () =>
+        HttpResponse.json({
+          entries: [],
+          stalePromptCacheCount: 0,
+          total: 0,
+          hasMore: false,
+        }),
+      ),
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_planning",
+                email: "planning@example.com",
+                displayName: "planning@example.com",
+                codexLiveSessionCount: 2,
+                codexTrackedSessionCount: 1,
+                codexSessionCount: 0,
+                codexCurrentTaskPreview: "keep planning session alive",
+                codexSessionTaskPreviews: [
+                  {
+                    sessionKey: "019d-plan-1",
+                    taskPreview: "keep planning session alive",
+                    taskUpdatedAt: new Date(now - 10_000).toISOString(),
+                  },
+                ],
+                codexAuth: {
+                  hasSnapshot: true,
+                  snapshotName: "planning",
+                  activeSnapshotName: "planning",
+                  isActiveSnapshot: true,
+                  hasLiveSession: true,
+                },
+                lastUsageRecordedAtPrimary: new Date(now - 10_000).toISOString(),
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    window.history.pushState({}, "", "/sessions?accountId=acc_planning");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect((await screen.findAllByText("planning@example.com")).length).toBeGreaterThan(0);
+    expect(screen.getByText("019d-plan-1:")).toBeInTheDocument();
+    expect(screen.getByText("live-session-2:")).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2").length).toBeGreaterThan(0);
+  });
+
   it("fallback mode keeps waiting label and shows last task context from overview telemetry", async () => {
     server.use(
       http.get("/api/sticky-sessions", () =>
@@ -479,7 +623,7 @@ describe("sessions flow integration", () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
-    expect(await screen.findByText("waiting@example.com")).toBeInTheDocument();
+    expect((await screen.findAllByText("waiting@example.com")).length).toBeGreaterThan(0);
     expect(screen.getByText("Waiting for new task")).toBeInTheDocument();
     expect(screen.getByText("Last task:")).toBeInTheDocument();
     expect(
@@ -577,7 +721,7 @@ describe("sessions flow integration", () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
-    expect(await screen.findByText("pending@example.com")).toBeInTheDocument();
+    expect((await screen.findAllByText("pending@example.com")).length).toBeGreaterThan(0);
     expect(screen.getByText("Idle")).toBeInTheDocument();
     expect(screen.getByText("telemetry pending")).toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument();
@@ -642,7 +786,7 @@ describe("sessions flow integration", () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
-    expect(await screen.findByText("sample@example.com")).toBeInTheDocument();
+    expect((await screen.findAllByText("sample@example.com")).length).toBeGreaterThan(0);
     expect(screen.getByText("1 fresh sample")).toBeInTheDocument();
     expect(screen.getByText("Idle")).toBeInTheDocument();
     expect(screen.getByText("Investigate sample attribution")).toBeInTheDocument();

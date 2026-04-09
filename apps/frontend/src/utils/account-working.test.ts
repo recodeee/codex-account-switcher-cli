@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createAccountSummary } from "@/test/mocks/factories";
 import {
+  getRecentWorkingNowSignalEntry,
   getWorkingNowUsageLimitHitCountdownMs,
   hasActiveCliSessionSignal,
+  hasRecentWorkingNowSignal,
   getMergedQuotaRemainingPercent,
+  noteWorkingNowSignal,
   getRawQuotaWindowFallback,
   resetWorkingNowLimitHitStateForTests,
   isAccountWorkingNow,
@@ -13,6 +16,59 @@ import {
 
 afterEach(() => {
   resetWorkingNowLimitHitStateForTests();
+});
+
+describe("working-now transient signal cache", () => {
+  it("reuses recent session counters and last non-waiting preview for short telemetry dips", () => {
+    const account = createAccountSummary({
+      accountId: "acc_working_cache",
+      codexLiveSessionCount: 2,
+      codexTrackedSessionCount: 2,
+      codexSessionCount: 2,
+      codexCurrentTaskPreview: "Waiting for new task",
+      codexLastTaskPreview: "Syncing Klara order attribution",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-cache",
+        activeSnapshotName: "working-cache",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+    const nowMs = new Date("2026-04-09T10:00:00.000Z").getTime();
+
+    noteWorkingNowSignal(account, nowMs);
+    const transientEntry = getRecentWorkingNowSignalEntry(account, nowMs + 30_000);
+
+    expect(transientEntry).not.toBeNull();
+    expect(transientEntry?.codexLiveSessionCount).toBe(2);
+    expect(transientEntry?.codexTrackedSessionCount).toBe(2);
+    expect(transientEntry?.codexSessionCount).toBe(2);
+    expect(transientEntry?.taskPreview).toBe("Syncing Klara order attribution");
+  });
+
+  it("expires the transient signal cache after the grace window", () => {
+    const account = createAccountSummary({
+      accountId: "acc_working_cache_expire",
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "Refining Zeus task dispatch",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-cache-expire",
+        activeSnapshotName: "working-cache-expire",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+    const nowMs = new Date("2026-04-09T10:00:00.000Z").getTime();
+
+    noteWorkingNowSignal(account, nowMs);
+    expect(hasRecentWorkingNowSignal(account, nowMs + 60_000)).toBe(true);
+    expect(getRecentWorkingNowSignalEntry(account, nowMs + 95_000)).toBeNull();
+    expect(hasRecentWorkingNowSignal(account, nowMs + 95_000)).toBe(false);
+  });
 });
 
 describe("isAccountWorkingNow", () => {
@@ -28,6 +84,24 @@ describe("isAccountWorkingNow", () => {
       },
       lastUsageRecordedAtPrimary: "2026-04-04T11:57:00.000Z",
     });
+    expect(isAccountWorkingNow(account, now.getTime())).toBe(true);
+  });
+
+  it("returns true immediately when live-session startup signal arrives before telemetry timestamps", () => {
+    const now = new Date("2026-04-04T12:00:00.000Z");
+    const account = createAccountSummary({
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "secondary",
+        activeSnapshotName: "main",
+        isActiveSnapshot: false,
+        hasLiveSession: true,
+      },
+      codexLiveSessionCount: 1,
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
     expect(isAccountWorkingNow(account, now.getTime())).toBe(true);
   });
 
@@ -614,6 +688,45 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(resumedSameCycle, resumedNowMs)).toBe(true);
   });
 
+  it("drops working-now after grace once session task previews report terminal errors", () => {
+    const base = createAccountSummary({
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      resetAtPrimary: "2026-04-04T14:30:00.000Z",
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-error",
+          taskPreview: "Task failed: command exited with code 1",
+          taskUpdatedAt: "2026-04-04T11:59:30.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
+    const firstNowMs = new Date("2026-04-04T11:59:00.000Z").getTime();
+    expect(getWorkingNowUsageLimitHitCountdownMs(base, firstNowMs)).toBeGreaterThan(0);
+
+    const afterGraceMs = new Date("2026-04-04T12:00:10.000Z").getTime();
+    expect(getWorkingNowUsageLimitHitCountdownMs(base, afterGraceMs)).toBe(0);
+    expect(hasActiveCliSessionSignal(base, afterGraceMs)).toBe(true);
+    expect(isAccountWorkingNow(base, afterGraceMs)).toBe(false);
+  });
+
   it("returns false when no-live-telemetry fallback reports 0% even if baseline usage is higher", () => {
     const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
     const account = createAccountSummary({
@@ -718,6 +831,142 @@ describe("isAccountWorkingNow", () => {
     });
 
     expect(hasActiveCliSessionSignal(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(false);
+  });
+
+  it("returns true when live process session count is present during no-live-telemetry startup gaps", () => {
+    const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "planning",
+        activeSnapshotName: "other",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["planning"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    expect(hasActiveCliSessionSignal(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(true);
+  });
+
+  it("returns true when active snapshot has a fresh session task preview during no-live-telemetry gaps", () => {
+    const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "pid:4242",
+          taskPreview: "Re-activate the old removed card for pia@edix.hu",
+          taskUpdatedAt: "2026-04-04T11:58:45.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "pia-edix",
+        activeSnapshotName: "pia-edix",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["pia-edix"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    expect(hasActiveCliSessionSignal(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(true);
+  });
+
+  it("keeps working-now when recent non-terminal session rows remain visible during no-live-telemetry gaps", () => {
+    const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "pid:9001",
+          taskPreview: "Waiting for new task",
+          taskUpdatedAt: "2026-04-04T11:15:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "odin",
+        activeSnapshotName: "zeus",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["odin"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    expect(hasActiveCliSessionSignal(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(true);
+  });
+
+  it("drops working-now when session rows are older than the long preview grace window", () => {
+    const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "pid:9002",
+          taskPreview: "Waiting for new task",
+          taskUpdatedAt: "2026-04-04T08:00:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "odin",
+        activeSnapshotName: "zeus",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["odin"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    expect(hasActiveCliSessionSignal(account, nowMs)).toBe(false);
     expect(isAccountWorkingNow(account, nowMs)).toBe(false);
   });
 
