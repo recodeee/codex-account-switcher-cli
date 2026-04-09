@@ -1614,12 +1614,84 @@ export function AccountCard(props: AccountCardProps) {
     usageLimitHitCountdownMs != null &&
     usageLimitHitCountdownMs <= 0,
   );
-  const codexCurrentTaskPreview = usageLimitHitGraceExpired
+  const rawCodexCurrentTaskPreview = usageLimitHitGraceExpired
     ? isWorkingNow
       ? account.codexCurrentTaskPreview?.trim() || null
       : null
     : account.codexCurrentTaskPreview?.trim() || null;
   const codexLastTaskPreview = account.codexLastTaskPreview?.trim() || null;
+  const sessionTaskPreviews = useMemo(() => {
+    const seenSessionKeys = new Set<string>();
+    const normalized = (account.codexSessionTaskPreviews ?? [])
+      .filter((preview) => {
+        const sessionKey = preview.sessionKey?.trim();
+        if (!sessionKey || seenSessionKeys.has(sessionKey)) {
+          return false;
+        }
+        seenSessionKeys.add(sessionKey);
+        return true;
+      })
+      .map((preview) => ({
+        sessionKey: preview.sessionKey.trim(),
+        taskPreview: resolveSessionTaskPreview(preview.taskPreview),
+        taskUpdatedAt: preview.taskUpdatedAt ?? null,
+      }));
+    if (
+      codexLiveSessionCount <= 0 ||
+      normalized.length <= codexLiveSessionCount
+    ) {
+      return normalized;
+    }
+
+    const toTimestamp = (value: string | null): number => {
+      if (!value) {
+        return Number.NEGATIVE_INFINITY;
+      }
+      const timestamp = Date.parse(value);
+      return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+    };
+
+    return [...normalized]
+      .sort((left, right) => {
+        const leftWaiting = isWaitingTaskPreview(left.taskPreview);
+        const rightWaiting = isWaitingTaskPreview(right.taskPreview);
+        if (leftWaiting !== rightWaiting) {
+          return leftWaiting ? -1 : 1;
+        }
+
+        const timestampDelta =
+          toTimestamp(right.taskUpdatedAt) - toTimestamp(left.taskUpdatedAt);
+        if (timestampDelta !== 0) {
+          return timestampDelta;
+        }
+        return left.sessionKey.localeCompare(right.sessionKey);
+      })
+      .slice(0, codexLiveSessionCount);
+  }, [
+    account.codexSessionTaskPreviews,
+    codexLiveSessionCount,
+  ]);
+  const codexCurrentTaskPreview = useMemo(() => {
+    if (
+      rawCodexCurrentTaskPreview == null ||
+      isWaitingTaskPreview(rawCodexCurrentTaskPreview) ||
+      codexLiveSessionCount <= 0 ||
+      sessionTaskPreviews.length === 0
+    ) {
+      return rawCodexCurrentTaskPreview;
+    }
+
+    const waitingPreviewCount = sessionTaskPreviews.filter((preview) =>
+      isWaitingTaskPreview(preview.taskPreview),
+    ).length;
+    if (waitingPreviewCount >= codexLiveSessionCount) {
+      return hasRalplanTaskMarker(rawCodexCurrentTaskPreview)
+        ? rawCodexCurrentTaskPreview
+        : null;
+    }
+
+    return rawCodexCurrentTaskPreview;
+  }, [codexLiveSessionCount, rawCodexCurrentTaskPreview, sessionTaskPreviews]);
   const effectiveCurrentTaskPreview =
     codexCurrentTaskPreview ??
     (hasActiveCliSession && codexLiveSessionCount > 0
@@ -1650,75 +1722,6 @@ export function AccountCard(props: AccountCardProps) {
   const waitingTaskPillLabel = resolveWaitingTaskPillLabel(
     displayCurrentTaskPreview,
   );
-  const sessionTaskPreviews = useMemo(() => {
-    const seenSessionKeys = new Set<string>();
-    const normalized = (account.codexSessionTaskPreviews ?? [])
-      .filter((preview) => {
-        const sessionKey = preview.sessionKey?.trim();
-        if (!sessionKey || seenSessionKeys.has(sessionKey)) {
-          return false;
-        }
-        seenSessionKeys.add(sessionKey);
-        return true;
-      })
-      .map((preview) => ({
-        sessionKey: preview.sessionKey.trim(),
-        taskPreview: resolveSessionTaskPreview(preview.taskPreview),
-        taskUpdatedAt: preview.taskUpdatedAt ?? null,
-      }));
-    if (
-      codexLiveSessionCount <= 0 ||
-      normalized.length <= codexLiveSessionCount
-    ) {
-      return normalized;
-    }
-
-    const activeCurrentTaskPreview = account.codexCurrentTaskPreview?.trim() ?? null;
-    const hasActiveCurrentTaskPreview =
-      activeCurrentTaskPreview != null &&
-      !isWaitingTaskPreview(activeCurrentTaskPreview);
-
-    const toTimestamp = (value: string | null): number => {
-      if (!value) {
-        return Number.NEGATIVE_INFINITY;
-      }
-      const timestamp = Date.parse(value);
-      return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
-    };
-
-    return [...normalized]
-      .sort((left, right) => {
-        const leftMatchesCurrentTask =
-          hasActiveCurrentTaskPreview &&
-          left.taskPreview === activeCurrentTaskPreview;
-        const rightMatchesCurrentTask =
-          hasActiveCurrentTaskPreview &&
-          right.taskPreview === activeCurrentTaskPreview;
-        if (leftMatchesCurrentTask !== rightMatchesCurrentTask) {
-          return leftMatchesCurrentTask ? -1 : 1;
-        }
-
-        if (!hasActiveCurrentTaskPreview) {
-          const leftWaiting = isWaitingTaskPreview(left.taskPreview);
-          const rightWaiting = isWaitingTaskPreview(right.taskPreview);
-          if (leftWaiting !== rightWaiting) {
-            return leftWaiting ? -1 : 1;
-          }
-        }
-
-        const timestampDelta =
-          toTimestamp(right.taskUpdatedAt) - toTimestamp(left.taskUpdatedAt);
-        if (timestampDelta !== 0) {
-          return timestampDelta;
-        }
-        return left.sessionKey.localeCompare(right.sessionKey);
-      })
-      .slice(0, codexLiveSessionCount);
-  }, [
-    account.codexCurrentTaskPreview,
-    account.codexSessionTaskPreviews,
-    codexLiveSessionCount,
-  ]);
   const newestNonWaitingSessionTaskPreview = useMemo(() => {
     let fallbackPreview: string | null = null;
     let newestPreview: string | null = null;

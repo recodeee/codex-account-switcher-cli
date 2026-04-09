@@ -2173,7 +2173,7 @@ describe("AccountCard", () => {
     const stalePrompt =
       "Investigate old account prompt that should not be reused";
     const account = createAccountSummary({
-      codexCurrentTaskPreview: null,
+      codexCurrentTaskPreview: stalePrompt,
       codexLastTaskPreview: null,
       codexSessionTaskPreviews: [
         {
