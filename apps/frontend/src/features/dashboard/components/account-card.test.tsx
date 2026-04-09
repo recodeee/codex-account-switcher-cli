@@ -3292,7 +3292,8 @@ describe("AccountCard", () => {
     expect(within(card as HTMLElement).getByRole("button", { name: "Sessions" })).toBeDisabled();
   });
 
-  it("shows codex logs as hidden on-card content without the debug toggle", () => {
+  it("shows a compact logs shortcut button without rendering the codex logs panel", () => {
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 2,
       codexTrackedSessionCount: 1,
@@ -3346,23 +3347,72 @@ describe("AccountCard", () => {
           },
         ],
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} />);
 
     expect(screen.queryByRole("button", { name: /debug/i })).not.toBeInTheDocument();
-    expect(screen.getByTestId("codex-logs-label")).toHaveTextContent("Codex logs");
-    expect(screen.getByText(/hidden on the card/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /open logs/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Logs" })).toBeInTheDocument();
+    expect(screen.queryByText(/hidden on the card/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("codex-logs-label")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /save log file/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /copy logs/i })).not.toBeInTheDocument();
   });
 
-  it("routes codex logs open action to watch view for the current cli session", async () => {
+  it("hides codex logs section on cards that are not working now", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "idle-snap",
+        activeSnapshotName: "idle-snap",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: "2025-12-25T00:00:00.000Z",
+      lastUsageRecordedAtSecondary: "2025-12-25T00:00:00.000Z",
+      liveQuotaDebug: {
+        snapshotsConsidered: ["idle-snap"],
+        overrideApplied: false,
+        overrideReason: "deferred_active_snapshot_mixed_default_sessions",
+        merged: null,
+        rawSamples: [
+          {
+            source: "/tmp/rollout-idle.jsonl",
+            snapshotName: "idle-snap",
+            recordedAt: "2025-12-25T00:00:00.000Z",
+            stale: true,
+            primary: {
+              usedPercent: 60,
+              remainingPercent: 40,
+              resetAt: 1760000000,
+              windowMinutes: 300,
+            },
+            secondary: {
+              usedPercent: 70,
+              remainingPercent: 30,
+              resetAt: 1760600000,
+              windowMinutes: 10080,
+            },
+          },
+        ],
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("codex-logs-label")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Logs" })).not.toBeInTheDocument();
+  });
+
+  it("routes logs shortcut action to watch view for the current cli session", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
@@ -3382,10 +3432,12 @@ describe("AccountCard", () => {
         isActiveSnapshot: true,
         hasLiveSession: true,
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} onAction={onAction} />);
-    await user.click(screen.getByRole("button", { name: /open logs/i }));
+    await user.click(screen.getByRole("button", { name: "Logs" }));
 
     expect(onAction).toHaveBeenCalledWith(account, "sessions", {
       focusSessionKey: "sess-alpha-123456",
@@ -3393,7 +3445,7 @@ describe("AccountCard", () => {
     });
   });
 
-  it("shows critic logs label under codex logs when critic lane is active", () => {
+  it("keeps a single logs shortcut button when critic lane is active", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
@@ -3422,16 +3474,11 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(
-      screen.getByTestId("codex-logs-active-agent-column"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("codex-logs-active-agent-label")).toHaveTextContent(
-      "Critic logs",
-    );
-    expect(screen.getAllByRole("button", { name: /open logs/i })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Logs" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Logs" })).toHaveLength(1);
   });
 
-  it("routes lane-specific open logs button to watch view when critic lane is active", async () => {
+  it("routes logs shortcut to watch view when critic lane is active", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();
     const nowIso = new Date().toISOString();
@@ -3462,8 +3509,7 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} onAction={onAction} />);
 
-    const openButtons = screen.getAllByRole("button", { name: /open logs/i });
-    await user.click(openButtons[1] as HTMLElement);
+    await user.click(screen.getByRole("button", { name: "Logs" }));
 
     expect(onAction).toHaveBeenCalledWith(account, "sessions", {
       focusSessionKey: "sess-critic-001",
@@ -3471,7 +3517,7 @@ describe("AccountCard", () => {
     });
   });
 
-  it("maps ralplan subagent prompts to engineer logs label", () => {
+  it("keeps logs shortcut visible for ralplan subagent prompts", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
@@ -3500,18 +3546,13 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    expect(
-      screen.getByTestId("codex-logs-active-agent-column"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("codex-logs-active-agent-label")).toHaveTextContent(
-      "Engineer logs",
-    );
-    expect(screen.getAllByRole("button", { name: /open logs/i })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Logs" })).toBeInTheDocument();
   });
 
   it("routes codex logs open action without focus when only synthetic rows exist", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();
+    const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
       codexTrackedSessionCount: 1,
@@ -3521,6 +3562,7 @@ describe("AccountCard", () => {
         snapshotName: "csoves.com",
         activeSnapshotName: "csoves.com",
         isActiveSnapshot: true,
+        hasLiveSession: true,
       },
       liveQuotaDebug: {
         snapshotsConsidered: ["csoves.com", "viktor"],
@@ -3566,10 +3608,12 @@ describe("AccountCard", () => {
           },
         ],
       },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
     });
 
     render(<AccountCard account={account} onAction={onAction} />);
-    await user.click(screen.getByRole("button", { name: /open logs/i }));
+    await user.click(screen.getByRole("button", { name: "Logs" }));
 
     expect(onAction).toHaveBeenCalledWith(account, "sessions", undefined);
   });

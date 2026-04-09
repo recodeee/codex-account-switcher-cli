@@ -166,14 +166,6 @@ const LAST_TASK_PREVIEW_EXPANSION_KEY = "__last_task_preview__";
 const STALE_SESSION_TASK_MS = 90_000;
 type OmxPlanningNodeKey = (typeof OMX_PLANNING_NODES)[number]["key"];
 type OmxCliRuntimeState = "finished" | "waiting" | "thinking";
-const OMX_PLANNING_NODE_LOG_LABELS: Record<OmxPlanningNodeKey, string> = {
-  planner: "Planner logs",
-  critic: "Critic logs",
-  engineer: "Engineer logs",
-  verifier: "Verifier logs",
-  writer: "Writer logs",
-  architect: "Architect logs",
-};
 
 function CpuArchitectureBackdrop({
   className,
@@ -1647,6 +1639,8 @@ export function AccountCard(props: AccountCardProps) {
   );
   const hasSessionInventory =
     codexLiveSessionCount > 0 || codexTrackedSessionCount > 0;
+  const showCodexLogsShortcut =
+    isWorkingNow && (hasSessionInventory || liveQuotaDebug != null);
   const usageLimitHitGraceExpired = Boolean(
     usageLimitHit &&
     usageLimitHitCountdownMs != null &&
@@ -2010,9 +2004,6 @@ export function AccountCard(props: AccountCardProps) {
     }
     return promptDrivenOmxPlanningActiveNodeKey;
   }, [omxPlanningCliRuntimeState, promptDrivenOmxPlanningActiveNodeKey]);
-  const activeOmxPlanningLogLabel = showRalplanPlanningGraph
-    ? OMX_PLANNING_NODE_LOG_LABELS[omxPlanningActiveNodeKey]
-    : null;
   const quotaDebugLogText = liveQuotaDebug
     ? buildQuotaDebugLogLines(
         liveQuotaDebug,
@@ -2737,6 +2728,19 @@ export function AccountCard(props: AccountCardProps) {
                 <ExternalLink className="h-3 w-3" />
                 Sessions
               </Button>
+              {showCodexLogsShortcut ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1.5 rounded-lg border border-white/20 bg-black/35 px-2.5 text-xs text-zinc-200 hover:border-cyan-300/40 hover:bg-black/55 hover:text-cyan-100 dark:text-zinc-100"
+                  disabled={disableSecondaryActions}
+                  onClick={openCodexLogsView}
+                >
+                  <Eye className="h-3 w-3" />
+                  Logs
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
@@ -2777,60 +2781,6 @@ export function AccountCard(props: AccountCardProps) {
             </div>
           </div>
 
-          {hasSessionInventory || liveQuotaDebug ? (
-            <div className="mt-2.5 rounded-xl border border-cyan-500/20 bg-[#020812]/95 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <div className="space-y-2.5">
-                <div
-                  className="flex w-full items-center justify-between gap-2"
-                  data-testid="codex-logs-label"
-                >
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/95">
-                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-200/85 shadow-[0_0_0_2px_rgba(34,211,238,0.12)]" />
-                      Codex logs
-                    </p>
-                    <p className="mt-1 text-[10px] leading-relaxed text-cyan-100/70">
-                      Hidden on the card. Open the session page to view terminal
-                      commands and runtime logs.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 shrink-0 gap-1.5 rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/16"
-                    onClick={openCodexLogsView}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Open logs
-                  </Button>
-                </div>
-                {activeOmxPlanningLogLabel ? (
-                  <div
-                    data-testid="codex-logs-active-agent-column"
-                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-indigo-400/20 bg-indigo-500/[0.08] px-2 py-1.5"
-                  >
-                    <p
-                      data-testid="codex-logs-active-agent-label"
-                      className="inline-flex items-center rounded-md border border-indigo-300/35 bg-indigo-500/14 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-indigo-100/95"
-                    >
-                      {activeOmxPlanningLogLabel}
-                    </p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 shrink-0 gap-1.5 rounded-md border border-indigo-300/35 bg-indigo-500/14 px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-indigo-100 hover:bg-indigo-500/20"
-                      onClick={openCodexLogsView}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      Open logs
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
       {showUsageLimitGraceOverlay ? (
