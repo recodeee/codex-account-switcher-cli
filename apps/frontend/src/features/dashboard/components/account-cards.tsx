@@ -785,9 +785,19 @@ export function AccountCards({
               className="flex h-full min-h-[22rem] flex-col items-center justify-center rounded-3xl border border-dashed border-cyan-400/35 bg-[#050d18]/85 px-5 py-6 text-center"
             >
               <div className="space-y-3">
-                <span className="inline-flex h-14 w-14 items-center justify-center rounded-full border border-cyan-300/35 bg-cyan-300/10 text-cyan-200">
-                  <Plus className="h-5 w-5" aria-hidden="true" />
-                </span>
+                <div className="relative mx-auto h-20 w-20">
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-0 rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] shadow-[0_0_0_1px_rgba(34,211,238,0.06),0_10px_28px_rgba(8,145,178,0.22)]"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-[7px] rounded-full border border-cyan-200/35 bg-cyan-300/[0.09]"
+                  />
+                  <span className="absolute inset-[17px] inline-flex items-center justify-center rounded-full border border-cyan-200/55 bg-cyan-300/15 text-cyan-100">
+                    <Plus className="h-6 w-6" aria-hidden="true" />
+                  </span>
+                </div>
                 <div className="space-y-1.5">
                   <p className="text-sm font-semibold text-zinc-100">
                     Add new card here
