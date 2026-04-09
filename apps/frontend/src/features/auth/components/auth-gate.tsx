@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { PropsWithChildren } from "react";
 
-import { SpinnerBlock } from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/spinner";
 import { MedusaCustomerAuthPage } from "@/features/medusa-customer-auth/components/medusa-customer-auth-page";
 import { useMedusaCustomerAuthStore } from "@/features/medusa-customer-auth/hooks/use-medusa-customer-auth";
 
@@ -31,7 +31,10 @@ export function AuthGate({ children }: PropsWithChildren) {
   if (!initialized) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#020308]">
-        <SpinnerBlock />
+        <div role="status" className="flex flex-col items-center gap-3">
+          <Spinner />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
       </div>
     );
   }
