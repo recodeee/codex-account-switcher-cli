@@ -1,10 +1,10 @@
 use axum::{
     Json, Router,
     body::Body,
-    extract::{RawQuery, State},
-    http::{HeaderMap, StatusCode, header},
+    extract::{Bytes, Path, RawQuery, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{Html, Response},
-    routing::get,
+    routing::{delete, get, post},
 };
 use reqwest::Client;
 use serde::Serialize;
@@ -115,6 +115,17 @@ fn app_with_state(state: RuntimeState) -> Router {
         .route("/api/usage/summary", get(usage_summary))
         .route("/api/usage/history", get(usage_history))
         .route("/api/usage/window", get(usage_window))
+        .route("/api/dashboard/overview", get(dashboard_overview))
+        .route(
+            "/api/dashboard/system-monitor",
+            get(dashboard_system_monitor),
+        )
+        .route("/api/projects/plans", get(projects_plans))
+        .route("/api/projects/plans/{plan_slug}", get(project_plan))
+        .route(
+            "/api/projects/plans/{plan_slug}/runtime",
+            get(project_plan_runtime),
+        )
         .route("/_rust_layer/info", get(runtime_info))
         .route("/_python_layer/health", get(python_layer_health))
         .route("/_python_layer/apis", get(python_layer_apis))
@@ -329,6 +340,68 @@ async fn usage_window(
         &headers,
     )
     .await
+}
+
+async fn dashboard_overview(
+    State(state): State<RuntimeState>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    proxy_python_json_endpoint(
+        &state,
+        "/api/dashboard/overview",
+        raw_query.0.as_deref(),
+        &headers,
+    )
+    .await
+}
+
+async fn dashboard_system_monitor(
+    State(state): State<RuntimeState>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    proxy_python_json_endpoint(
+        &state,
+        "/api/dashboard/system-monitor",
+        raw_query.0.as_deref(),
+        &headers,
+    )
+    .await
+}
+
+async fn projects_plans(
+    State(state): State<RuntimeState>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    proxy_python_json_endpoint(
+        &state,
+        "/api/projects/plans",
+        raw_query.0.as_deref(),
+        &headers,
+    )
+    .await
+}
+
+async fn project_plan(
+    State(state): State<RuntimeState>,
+    Path(plan_slug): Path<String>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let endpoint = format!("/api/projects/plans/{plan_slug}");
+    proxy_python_json_endpoint(&state, &endpoint, raw_query.0.as_deref(), &headers).await
+}
+
+async fn project_plan_runtime(
+    State(state): State<RuntimeState>,
+    Path(plan_slug): Path<String>,
+    raw_query: RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let endpoint = format!("/api/projects/plans/{plan_slug}/runtime");
+    proxy_python_json_endpoint(&state, &endpoint, raw_query.0.as_deref(), &headers).await
 }
 
 async fn python_layer_health(
@@ -605,8 +678,12 @@ fn runtime_state_from_env() -> RuntimeState {
 }
 
 fn runtime_state_with_flags(flags: RuntimeFlags) -> RuntimeState {
-    let python_base_url =
-        env::var("PYTHON_RUNTIME_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:8000".to_string());
+    let python_runtime_base_url = env::var("PYTHON_RUNTIME_BASE_URL").ok();
+    let app_backend_port = env::var("APP_BACKEND_PORT").ok();
+    let python_base_url = resolve_python_base_url(
+        python_runtime_base_url.as_deref(),
+        app_backend_port.as_deref(),
+    );
 
     let timeout_ms = env::var("RUST_RUNTIME_PYTHON_TIMEOUT_MS")
         .ok()
@@ -624,6 +701,27 @@ fn runtime_state_with_flags(flags: RuntimeFlags) -> RuntimeState {
         python_base_url,
         python_client,
     }
+}
+
+fn resolve_python_base_url(
+    python_runtime_base_url: Option<&str>,
+    app_backend_port: Option<&str>,
+) -> String {
+    if let Some(base_url) = python_runtime_base_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return base_url.to_string();
+    }
+
+    let app_backend_port = app_backend_port
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|raw| raw.parse::<u16>().ok())
+        .filter(|port| *port > 0)
+        .unwrap_or(2455);
+
+    format!("http://127.0.0.1:{app_backend_port}")
 }
 
 fn runtime_flags_from_env() -> RuntimeFlags {
@@ -850,7 +948,9 @@ fn json_fallback_response(body: String) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeFlags, RuntimeState, app, app_with_flags, app_with_state};
+    use super::{
+        RuntimeFlags, RuntimeState, app, app_with_flags, app_with_state, resolve_python_base_url,
+    };
     use axum::{
         Json, Router,
         body::Body,
@@ -938,6 +1038,30 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
+    #[test]
+    fn python_base_url_prefers_explicit_runtime_value() {
+        assert_eq!(
+            resolve_python_base_url(Some("http://127.0.0.1:8888"), Some("2455")),
+            "http://127.0.0.1:8888"
+        );
+    }
+
+    #[test]
+    fn python_base_url_uses_app_backend_port_when_runtime_value_missing() {
+        assert_eq!(
+            resolve_python_base_url(None, Some("32455")),
+            "http://127.0.0.1:32455"
+        );
+    }
+
+    #[test]
+    fn python_base_url_falls_back_to_default_port_for_invalid_app_port() {
+        assert_eq!(
+            resolve_python_base_url(None, Some("not-a-port")),
+            "http://127.0.0.1:2455"
+        );
+    }
+
     #[tokio::test]
     async fn health_startup_pending_returns_503() {
         let response = app_with_flags(RuntimeFlags {
@@ -966,7 +1090,8 @@ mod tests {
 
     #[tokio::test]
     async fn live_usage_returns_xml_with_no_store_cache() {
-        let response = app()
+        let app = app_with_state(state_for_python_base_url("http://127.0.0.1:9".to_string()));
+        let response = app
             .oneshot(
                 Request::builder()
                     .uri("/live_usage")
@@ -999,7 +1124,8 @@ mod tests {
 
     #[tokio::test]
     async fn live_usage_mapping_returns_xml_with_no_store_cache() {
-        let response = app()
+        let app = app_with_state(state_for_python_base_url("http://127.0.0.1:9".to_string()));
+        let response = app
             .oneshot(
                 Request::builder()
                     .uri("/live_usage/mapping")
@@ -1176,6 +1302,95 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/api/usage/summary")
+                    .header("cookie", "dashboard_session=test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert!(
+            payload["detail"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("upstream request failed")
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_overview_proxies_with_forwarded_cookie() {
+        let (python_base_url, server_handle) = spawn_python_dashboard_api_stub().await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/dashboard/overview")
+                    .header("cookie", "dashboard_session=test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["status"], "ok");
+        assert_eq!(payload["overview"], "proxied");
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn project_plan_runtime_forwards_slug_and_query_parameters() {
+        let (python_base_url, server_handle) = spawn_python_dashboard_api_stub().await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projects/plans/plan-alpha/runtime?project_id=proj-7")
+                    .header("cookie", "dashboard_session=test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["plan_slug"], "plan-alpha");
+        assert_eq!(payload["project_id"], "proj-7");
+        assert_eq!(payload["runtime_status"], "active");
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn projects_plans_fail_closed_when_python_unreachable() {
+        let app = app_with_state(state_for_python_base_url("http://127.0.0.1:9".to_string()));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projects/plans")
                     .header("cookie", "dashboard_session=test")
                     .body(Body::empty())
                     .unwrap(),
@@ -1502,16 +1717,34 @@ mod tests {
 
     async fn spawn_python_dashboard_api_stub()
     -> (String, tokio::task::JoinHandle<Result<(), std::io::Error>>) {
+        fn has_dashboard_cookie(headers: &axum::http::HeaderMap) -> bool {
+            headers
+                .get("cookie")
+                .and_then(|value| value.to_str().ok())
+                .map(|value| value.contains("dashboard_session=test"))
+                .unwrap_or(false)
+        }
+
+        fn query_param(raw_query: Option<&str>, key: &str) -> Option<String> {
+            raw_query.and_then(|query| {
+                query
+                    .split('&')
+                    .filter_map(|pair| pair.split_once('='))
+                    .find_map(|(pair_key, value)| {
+                        if pair_key == key {
+                            Some(value.to_string())
+                        } else {
+                            None
+                        }
+                    })
+            })
+        }
+
         let router = Router::new()
             .route(
                 "/api/request-logs/usage-summary",
                 get(|headers: axum::http::HeaderMap| async move {
-                    let has_dashboard_cookie = headers
-                        .get("cookie")
-                        .and_then(|value| value.to_str().ok())
-                        .map(|value| value.contains("dashboard_session=test"))
-                        .unwrap_or(false);
-                    if !has_dashboard_cookie {
+                    if !has_dashboard_cookie(&headers) {
                         return (
                             StatusCode::UNAUTHORIZED,
                             Json(json!({ "detail": "missing dashboard session" })),
@@ -1533,28 +1766,15 @@ mod tests {
                 get(
                     |axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
                      headers: axum::http::HeaderMap| async move {
-                        let has_dashboard_cookie = headers
-                            .get("cookie")
-                            .and_then(|value| value.to_str().ok())
-                            .map(|value| value.contains("dashboard_session=test"))
-                            .unwrap_or(false);
-                        if !has_dashboard_cookie {
+                        if !has_dashboard_cookie(&headers) {
                             return (
                                 StatusCode::UNAUTHORIZED,
                                 Json(json!({ "detail": "missing dashboard session" })),
                             );
                         }
 
-                        let hours = raw_query
-                            .as_deref()
-                            .and_then(|query| query.split('&').find_map(|pair| pair.split_once('=')))
-                            .and_then(|(key, value)| {
-                                if key == "hours" {
-                                    value.parse::<u64>().ok()
-                                } else {
-                                    None
-                                }
-                            })
+                        let hours = query_param(raw_query.as_deref(), "hours")
+                            .and_then(|value| value.parse::<u64>().ok())
                             .unwrap_or(24);
 
                         (
@@ -1581,6 +1801,123 @@ mod tests {
                         })),
                     )
                 }),
+            )
+            .route(
+                "/api/dashboard/overview",
+                get(|headers: axum::http::HeaderMap| async move {
+                    if !has_dashboard_cookie(&headers) {
+                        return (
+                            StatusCode::UNAUTHORIZED,
+                            Json(json!({ "detail": "missing dashboard session" })),
+                        );
+                    }
+
+                    (
+                        StatusCode::OK,
+                        Json(json!({
+                            "status": "ok",
+                            "overview": "proxied"
+                        })),
+                    )
+                }),
+            )
+            .route(
+                "/api/dashboard/system-monitor",
+                get(
+                    |axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
+                     headers: axum::http::HeaderMap| async move {
+                        if !has_dashboard_cookie(&headers) {
+                            return (
+                                StatusCode::UNAUTHORIZED,
+                                Json(json!({ "detail": "missing dashboard session" })),
+                            );
+                        }
+
+                        let include_processes = query_param(raw_query.as_deref(), "include_processes")
+                            .map(|value| value == "true")
+                            .unwrap_or(false);
+
+                        (
+                            StatusCode::OK,
+                            Json(json!({
+                                "status": "ok",
+                                "include_processes": include_processes
+                            })),
+                        )
+                    },
+                ),
+            )
+            .route(
+                "/api/projects/plans",
+                get(
+                    |axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
+                     headers: axum::http::HeaderMap| async move {
+                        if !has_dashboard_cookie(&headers) {
+                            return (
+                                StatusCode::UNAUTHORIZED,
+                                Json(json!({ "detail": "missing dashboard session" })),
+                            );
+                        }
+
+                        let project_id = query_param(raw_query.as_deref(), "project_id");
+                        (
+                            StatusCode::OK,
+                            Json(json!({
+                                "status": "ok",
+                                "project_id": project_id,
+                                "items": [{ "slug": "plan-alpha" }]
+                            })),
+                        )
+                    },
+                ),
+            )
+            .route(
+                "/api/projects/plans/{plan_slug}/runtime",
+                get(
+                    |axum::extract::Path(plan_slug): axum::extract::Path<String>,
+                     axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
+                     headers: axum::http::HeaderMap| async move {
+                        if !has_dashboard_cookie(&headers) {
+                            return (
+                                StatusCode::UNAUTHORIZED,
+                                Json(json!({ "detail": "missing dashboard session" })),
+                            );
+                        }
+
+                        let project_id = query_param(raw_query.as_deref(), "project_id");
+                        (
+                            StatusCode::OK,
+                            Json(json!({
+                                "status": "ok",
+                                "plan_slug": plan_slug,
+                                "project_id": project_id,
+                                "runtime_status": "active"
+                            })),
+                        )
+                    },
+                ),
+            )
+            .route(
+                "/api/projects/plans/{plan_slug}",
+                get(
+                    |axum::extract::Path(plan_slug): axum::extract::Path<String>,
+                     headers: axum::http::HeaderMap| async move {
+                        if !has_dashboard_cookie(&headers) {
+                            return (
+                                StatusCode::UNAUTHORIZED,
+                                Json(json!({ "detail": "missing dashboard session" })),
+                            );
+                        }
+
+                        (
+                            StatusCode::OK,
+                            Json(json!({
+                                "status": "ok",
+                                "plan_slug": plan_slug
+                            })),
+                        )
+                    },
+                ),
             );
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
