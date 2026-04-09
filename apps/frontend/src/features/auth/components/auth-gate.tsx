@@ -18,7 +18,6 @@ function resolveInitialMode(): "login" | "register" {
 export function AuthGate({ children }: PropsWithChildren) {
   const initialize = useMedusaCustomerAuthStore((state) => state.initialize);
   const initialized = useMedusaCustomerAuthStore((state) => state.initialized);
-  const loading = useMedusaCustomerAuthStore((state) => state.loading);
   const customer = useMedusaCustomerAuthStore((state) => state.customer);
 
   useEffect(() => {
@@ -41,13 +40,7 @@ export function AuthGate({ children }: PropsWithChildren) {
     return <MedusaCustomerAuthPage initialMode={resolveInitialMode()} />;
   }
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#020308]">
-        <SpinnerBlock />
-      </div>
-    );
-  }
-
+  // Keep the authenticated shell visible while auth refresh/login state is busy.
+  // Individual pages can render their own skeletons without hiding sidebar/header.
   return <>{children}</>;
 }
