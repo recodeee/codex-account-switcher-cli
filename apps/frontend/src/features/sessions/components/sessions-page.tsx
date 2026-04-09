@@ -982,7 +982,6 @@ export function SessionsPage() {
                         <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground/80">Status</TableHead>
                         <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground/80">Current task</TableHead>
                         <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground/80">Progress</TableHead>
-                        <TableHead className="text-right text-[11px] uppercase tracking-wider text-muted-foreground/80">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1054,23 +1053,6 @@ export function SessionsPage() {
                             )}
                           >
                             {row.progressLabel}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-[11px]"
-                              onClick={() =>
-                                openPromptDialog({
-                                  accountId: row.accountId,
-                                  displayName: row.displayName,
-                                  sessionKey: row.identity,
-                                })
-                              }
-                            >
-                              Prompt
-                            </Button>
                           </TableCell>
                         </TableRow>
                       )})}

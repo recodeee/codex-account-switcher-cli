@@ -1,5 +1,4 @@
 import { screen } from "@testing-library/react";
-import { within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
@@ -77,9 +76,7 @@ describe("sessions flow integration", () => {
     expect(requestUrl).toContain("activeOnly=false");
   });
 
-  it("opens prompt dialog from a session row action", async () => {
-    const user = userEvent.setup({ delay: null });
-
+  it("does not render prompt button in session rows", async () => {
     server.use(
       http.get("/api/sticky-sessions", ({ request }) => {
         const url = new URL(request.url);
@@ -113,13 +110,8 @@ describe("sessions flow integration", () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Sessions" })).toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Prompt" }));
-
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText("Send prompt to CLI")).toBeInTheDocument();
-    expect(within(dialog).getByText("alpha@example.com")).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Send prompt" })).toBeDisabled();
+    expect(screen.queryByRole("columnheader", { name: "Action" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Prompt" })).not.toBeInTheDocument();
   });
 
   it("highlights and announces a focused session when sessionKey query is present", async () => {
