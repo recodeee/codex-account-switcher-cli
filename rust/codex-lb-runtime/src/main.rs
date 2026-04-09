@@ -421,7 +421,7 @@ async fn proxy_api_wildcard(
     body: Bytes,
 ) -> Response {
     let endpoint = format!("/api/{path}");
-    proxy_python_json_endpoint_with_method(
+    proxy_python_raw_endpoint_with_method(
         &state,
         reqwest_method_from_axum(&method),
         &endpoint,
@@ -441,7 +441,7 @@ async fn proxy_backend_api_wildcard(
     body: Bytes,
 ) -> Response {
     let endpoint = format!("/backend-api/{path}");
-    proxy_python_json_endpoint_with_method(
+    proxy_python_raw_endpoint_with_method(
         &state,
         reqwest_method_from_axum(&method),
         &endpoint,
@@ -461,7 +461,7 @@ async fn proxy_v1_wildcard(
     body: Bytes,
 ) -> Response {
     let endpoint = format!("/v1/{path}");
-    proxy_python_json_endpoint_with_method(
+    proxy_python_raw_endpoint_with_method(
         &state,
         reqwest_method_from_axum(&method),
         &endpoint,
@@ -1002,6 +1002,47 @@ async fn proxy_python_json_endpoint_with_method(
     incoming_headers: &HeaderMap,
     body: Option<Bytes>,
 ) -> Response {
+    proxy_python_endpoint_with_method(
+        state,
+        method,
+        endpoint,
+        raw_query,
+        incoming_headers,
+        body,
+        "application/json",
+    )
+    .await
+}
+
+async fn proxy_python_raw_endpoint_with_method(
+    state: &RuntimeState,
+    method: reqwest::Method,
+    endpoint: &str,
+    raw_query: Option<&str>,
+    incoming_headers: &HeaderMap,
+    body: Option<Bytes>,
+) -> Response {
+    proxy_python_endpoint_with_method(
+        state,
+        method,
+        endpoint,
+        raw_query,
+        incoming_headers,
+        body,
+        "application/octet-stream",
+    )
+    .await
+}
+
+async fn proxy_python_endpoint_with_method(
+    state: &RuntimeState,
+    method: reqwest::Method,
+    endpoint: &str,
+    raw_query: Option<&str>,
+    incoming_headers: &HeaderMap,
+    body: Option<Bytes>,
+    default_content_type: &str,
+) -> Response {
     let url = build_python_url(&state.python_base_url, endpoint, raw_query);
     let mut request =
         forward_proxy_headers(state.python_client.request(method, url), incoming_headers);
@@ -1023,7 +1064,7 @@ async fn proxy_python_json_endpoint_with_method(
                 .headers()
                 .get(header::CONTENT_TYPE)
                 .and_then(|value| value.to_str().ok())
-                .unwrap_or("application/json")
+                .unwrap_or(default_content_type)
                 .to_string();
             let cache_control = upstream_response
                 .headers()
@@ -1031,19 +1072,14 @@ async fn proxy_python_json_endpoint_with_method(
                 .and_then(|value| value.to_str().ok())
                 .unwrap_or("no-store")
                 .to_string();
-
-            match upstream_response.bytes().await {
-                Ok(body) => raw_response(
-                    status,
-                    &content_type,
-                    &cache_control,
-                    &set_cookie_headers,
-                    Body::from(body),
-                ),
-                Err(error) => json_fallback_response(format!(
-                    r#"{{"detail":"upstream body read failed: {error}"}}"#
-                )),
-            }
+            let upstream_stream = upstream_response.bytes_stream();
+            raw_response(
+                status,
+                &content_type,
+                &cache_control,
+                &set_cookie_headers,
+                Body::from_stream(upstream_stream),
+            )
         }
         Err(error) => json_fallback_response(format!(
             r#"{{"detail":"upstream request failed: {error}"}}"#
@@ -1688,6 +1724,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn v1_wildcard_preserves_stream_content_type() {
+        let (python_base_url, server_handle) = spawn_python_dashboard_api_stub().await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/events")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"stream":true}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get("content-type")
+                .and_then(|value| value.to_str().ok()),
+            Some("text/event-stream")
+        );
+        assert!(response.headers().get("set-cookie").is_some());
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let body_text = String::from_utf8_lossy(&body);
+        assert!(body_text.contains("data: ping"));
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
     async fn project_plan_runtime_forwards_slug_and_query_parameters() {
         let (python_base_url, server_handle) = spawn_python_dashboard_api_stub().await;
         let app = app_with_state(state_for_python_base_url(python_base_url));
@@ -2232,6 +2305,20 @@ mod tests {
                             "content_type": content_type,
                             "payload": payload
                         })),
+                    )
+                }),
+            )
+            .route(
+                "/v1/events",
+                post(|| async move {
+                    (
+                        StatusCode::OK,
+                        [
+                            ("content-type", "text/event-stream"),
+                            ("cache-control", "no-cache"),
+                            ("set-cookie", "stream_session=ok; HttpOnly; Path=/; SameSite=Lax"),
+                        ],
+                        "data: ping\n\n",
                     )
                 }),
             )
