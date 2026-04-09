@@ -3422,9 +3422,53 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
+    expect(
+      screen.getByTestId("codex-logs-active-agent-column"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("codex-logs-active-agent-label")).toHaveTextContent(
       "Critic logs",
     );
+    expect(screen.getAllByRole("button", { name: /open logs/i })).toHaveLength(2);
+  });
+
+  it("routes lane-specific open logs button to watch view when critic lane is active", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview:
+        "$ralplan critic review runtime-ready mapping and constraints",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "sess-critic-001",
+          taskPreview:
+            "$ralplan critic review runtime-ready mapping and constraints",
+          taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "snap-a",
+        activeSnapshotName: "snap-a",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} onAction={onAction} />);
+
+    const openButtons = screen.getAllByRole("button", { name: /open logs/i });
+    await user.click(openButtons[1] as HTMLElement);
+
+    expect(onAction).toHaveBeenCalledWith(account, "sessions", {
+      focusSessionKey: "sess-critic-001",
+      source: "watch-logs",
+    });
   });
 
   it("maps ralplan subagent prompts to engineer logs label", () => {
@@ -3456,9 +3500,13 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
+    expect(
+      screen.getByTestId("codex-logs-active-agent-column"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("codex-logs-active-agent-label")).toHaveTextContent(
       "Engineer logs",
     );
+    expect(screen.getAllByRole("button", { name: /open logs/i })).toHaveLength(2);
   });
 
   it("routes codex logs open action without focus when only synthetic rows exist", async () => {

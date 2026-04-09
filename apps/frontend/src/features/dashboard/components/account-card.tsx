@@ -2779,37 +2779,55 @@ export function AccountCard(props: AccountCardProps) {
 
           {hasSessionInventory || liveQuotaDebug ? (
             <div className="mt-2.5 rounded-xl border border-cyan-500/20 bg-[#020812]/95 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <div
-                className="flex w-full items-center justify-between gap-2"
-                data-testid="codex-logs-label"
-              >
-                <div className="min-w-0">
-                  <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/95">
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-200/85 shadow-[0_0_0_2px_rgba(34,211,238,0.12)]" />
-                    Codex logs
-                  </p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-cyan-100/70">
-                    Hidden on the card. Open the session page to view terminal commands and runtime logs.
-                  </p>
-                  {activeOmxPlanningLogLabel ? (
+              <div className="space-y-2.5">
+                <div
+                  className="flex w-full items-center justify-between gap-2"
+                  data-testid="codex-logs-label"
+                >
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/95">
+                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-200/85 shadow-[0_0_0_2px_rgba(34,211,238,0.12)]" />
+                      Codex logs
+                    </p>
+                    <p className="mt-1 text-[10px] leading-relaxed text-cyan-100/70">
+                      Hidden on the card. Open the session page to view terminal
+                      commands and runtime logs.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 shrink-0 gap-1.5 rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/16"
+                    onClick={openCodexLogsView}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Open logs
+                  </Button>
+                </div>
+                {activeOmxPlanningLogLabel ? (
+                  <div
+                    data-testid="codex-logs-active-agent-column"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-indigo-400/20 bg-indigo-500/[0.08] px-2 py-1.5"
+                  >
                     <p
                       data-testid="codex-logs-active-agent-label"
-                      className="mt-1.5 inline-flex items-center rounded-md border border-indigo-300/35 bg-indigo-500/14 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-indigo-100/95"
+                      className="inline-flex items-center rounded-md border border-indigo-300/35 bg-indigo-500/14 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-indigo-100/95"
                     >
                       {activeOmxPlanningLogLabel}
                     </p>
-                  ) : null}
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 shrink-0 gap-1.5 rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/16"
-                  onClick={openCodexLogsView}
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Open logs
-                </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 shrink-0 gap-1.5 rounded-md border border-indigo-300/35 bg-indigo-500/14 px-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-indigo-100 hover:bg-indigo-500/20"
+                      onClick={openCodexLogsView}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open logs
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
