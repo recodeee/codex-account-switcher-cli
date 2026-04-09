@@ -961,6 +961,52 @@ describe("AccountCards", () => {
     expect(screen.getByText("itrexsale@example.com")).toBeInTheDocument();
   });
 
+  it("shows no-live-telemetry accounts in working-now when active snapshot gets a fresh session task preview", () => {
+    const account = createAccountSummary({
+      accountId: "acc_pia_active_preview",
+      email: "pia@edix.hu",
+      displayName: "pia@edix.hu",
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "pid:51888",
+          taskPreview: "Continue work on old removed card mapping",
+          taskUpdatedAt: new Date().toISOString(),
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "pia-edix",
+        activeSnapshotName: "pia-edix",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["pia-edix"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    render(
+      <AccountCards
+        accounts={[account]}
+        primaryWindow={buildWindow("primary", "acc_pia_active_preview", 1000, 440)}
+        secondaryWindow={buildWindow("secondary", "acc_pia_active_preview", 1000, 600)}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(screen.getByText("pia@edix.hu")).toBeInTheDocument();
+  });
+
   it("uses secondary window remaining for weekly-only-account token balance", () => {
     const account = createAccountSummary({
       accountId: "acc_weekly",

@@ -816,6 +816,42 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account, nowMs)).toBe(false);
   });
 
+  it("returns true when active snapshot has a fresh session task preview during no-live-telemetry gaps", () => {
+    const nowMs = new Date("2026-04-04T12:00:00.000Z").getTime();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "pid:4242",
+          taskPreview: "Re-activate the old removed card for pia@edix.hu",
+          taskUpdatedAt: "2026-04-04T11:58:45.000Z",
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "pia-edix",
+        activeSnapshotName: "pia-edix",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+      liveQuotaDebug: {
+        snapshotsConsidered: ["pia-edix"],
+        overrideApplied: false,
+        overrideReason: "no_live_telemetry",
+        merged: null,
+        rawSamples: [],
+      },
+    });
+
+    expect(hasActiveCliSessionSignal(account, nowMs)).toBe(true);
+    expect(isAccountWorkingNow(account, nowMs)).toBe(true);
+  });
+
   it("returns false when compatibility codexSessionCount is present without fresh telemetry", () => {
     const account = createAccountSummary({
       codexLiveSessionCount: 0,

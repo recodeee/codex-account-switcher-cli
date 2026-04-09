@@ -45,6 +45,46 @@ function normalizeSnapshotName(value: string | null | undefined): string | null 
   return normalized ? normalized : null;
 }
 
+function isMeaningfulTaskPreview(
+  taskPreview: string | null | undefined,
+  { sessionScoped = false }: { sessionScoped?: boolean } = {},
+): boolean {
+  const normalized = taskPreview?.trim().replace(/\s+/g, " ") ?? "";
+  if (!normalized) {
+    return false;
+  }
+  if (/^warning\b/i.test(normalized)) {
+    return false;
+  }
+  if (STATUS_ONLY_TASK_PREVIEW_RE.test(normalized)) {
+    return false;
+  }
+  if (sessionScoped && TERMINAL_SESSION_TASK_PREVIEW_RE.test(normalized)) {
+    return false;
+  }
+  return true;
+}
+
+function hasFreshSessionTaskPreviewSignal(
+  account: Pick<AccountSummary, "codexSessionTaskPreviews">,
+  nowMs: number,
+): boolean {
+  const sessionTaskPreviews = account.codexSessionTaskPreviews ?? [];
+  for (const preview of sessionTaskPreviews) {
+    if (!isMeaningfulTaskPreview(preview.taskPreview, { sessionScoped: true })) {
+      continue;
+    }
+    const taskUpdatedAtMs = parseRecordedAtMs(preview.taskUpdatedAt);
+    if (taskUpdatedAtMs == null) {
+      continue;
+    }
+    if (nowMs - taskUpdatedAtMs <= LIVE_TELEMETRY_STALE_AFTER_MS) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isWaitingLikeTaskPreview(taskPreview: string | null | undefined): boolean {
   const normalized = taskPreview?.trim().toLowerCase();
   if (!normalized) {
@@ -100,6 +140,7 @@ function shouldSuppressNoCliSampleSessionSignal(
     | "codexTrackedSessionCount"
     | "codexSessionCount"
     | "liveQuotaDebug"
+    | "codexSessionTaskPreviews"
     | "lastUsageRecordedAtPrimary"
     | "lastUsageRecordedAtSecondary"
   >,
@@ -132,6 +173,13 @@ function shouldSuppressNoCliSampleSessionSignal(
 
   const hasSnapshotLiveSession = account.codexAuth?.hasLiveSession ?? false;
   if (hasSnapshotLiveSession) {
+    return false;
+  }
+
+  const hasFreshActiveSnapshotSessionPreviewSignal =
+    (account.codexAuth?.isActiveSnapshot ?? false) &&
+    hasFreshSessionTaskPreviewSignal(account, nowMs);
+  if (hasFreshActiveSnapshotSessionPreviewSignal) {
     return false;
   }
 
@@ -468,26 +516,6 @@ export function hasFreshLiveTelemetry(
 function hasFreshTaskPreviewSignal(
   account: Pick<AccountSummary, "codexCurrentTaskPreview" | "codexSessionTaskPreviews">,
 ): boolean {
-  const isMeaningfulTaskPreview = (
-    taskPreview: string | null | undefined,
-    { sessionScoped = false }: { sessionScoped?: boolean } = {},
-  ): boolean => {
-    const normalized = taskPreview?.trim().replace(/\s+/g, " ") ?? "";
-    if (!normalized) {
-      return false;
-    }
-    if (/^warning\b/i.test(normalized)) {
-      return false;
-    }
-    if (STATUS_ONLY_TASK_PREVIEW_RE.test(normalized)) {
-      return false;
-    }
-    if (sessionScoped && TERMINAL_SESSION_TASK_PREVIEW_RE.test(normalized)) {
-      return false;
-    }
-    return true;
-  };
-
   if (isMeaningfulTaskPreview(account.codexCurrentTaskPreview)) {
     return true;
   }
@@ -936,6 +964,13 @@ export function isAccountWorkingNow(
   }
 
   if (hasGraceLiveSessionHint) {
+    return true;
+  }
+
+  const hasFreshActiveSnapshotSessionPreviewSignal =
+    (account.codexAuth?.isActiveSnapshot ?? false) &&
+    hasFreshSessionTaskPreviewSignal(account, nowMs);
+  if (hasFreshActiveSnapshotSessionPreviewSignal) {
     return true;
   }
 
