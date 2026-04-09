@@ -76,8 +76,9 @@ describe("buildPlanStarterPrompt", () => {
       "Status: approved",
     ]);
 
-    expect(prompt.startsWith("$ralph")).toBe(true);
+    expect(prompt.startsWith("$ralph \"Continue OpenSpec plan plans-live-execution-observer")).toBe(true);
     expect(prompt).toContain("openspec/plan/plans-live-execution-observer");
+    expect(prompt).toContain("without restarting planning.");
     expect(prompt).toContain("Current checkpoint: Planner · P1 · in progress");
     expect(prompt).toContain("Current checkpoint note: Initial RALPLAN-DR draft captured; requesting architect review");
     expect(prompt).toContain("Remaining role checkpoints:");

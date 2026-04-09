@@ -14,6 +14,11 @@ describe("plans flow integration", () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Plans" })).toBeInTheDocument();
+    expect(await screen.findByTestId("plan-initial-prompt")).toHaveTextContent(
+      "Initial prompt: Create a Projects -> Plans page (/projects/plans) with visualized OpenSpec plan data.",
+    );
+    expect(await screen.findByTestId("plan-initial-prompt-images")).toHaveTextContent("[Image #1]");
+    expect(await screen.findByRole("img", { name: "Initial prompt attachment 1" })).toBeInTheDocument();
 
     expect(await screen.findByTestId("plan-progress-percent")).toHaveTextContent("43%");
     const currentCheckpoint = await screen.findByTestId("plan-current-checkpoint");

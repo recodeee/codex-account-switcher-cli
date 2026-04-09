@@ -389,7 +389,7 @@ function createDefaultOpenSpecPlans(): MockState["openSpecPlans"] {
 				message: "Implementing plans progress UI",
 			},
 			summaryMarkdown:
-				"# Plan Summary: projects-plans-page\\n\\n- **Mode:** ralplan\\n- **Status:** approved\\n",
+				"# Plan Summary: projects-plans-page\\n\\n- **Mode:** ralplan\\n- **Status:** approved\\n- **Task:** Create a Projects -> Plans page (`/projects/plans`) with visualized OpenSpec plan data. ![Plans Header](https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=96&h=96&fit=crop) [Image #1]\\n",
 			checkpointsMarkdown:
 				"# Plan Checkpoints: projects-plans-page\\n\\n- 2026-04-08T09:52:21Z | role=executor | id=E1 | state=IN_PROGRESS | Implementing plans progress UI\\n",
 			runtime: {

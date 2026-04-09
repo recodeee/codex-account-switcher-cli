@@ -6,7 +6,9 @@ import {
   ChevronDown,
   ClipboardList,
   Compass,
+  ExternalLink,
   FolderTree,
+  Image as ImageIcon,
   Palette,
   PenLine,
   ShieldCheck,
@@ -224,6 +226,99 @@ function parseSummaryLines(summaryMarkdown: string): string[] {
     .filter((line) => line.length > 0);
 }
 
+type InitialPromptPreview = {
+  text: string | null;
+  imageUrls: string[];
+  imageReferences: string[];
+};
+
+function extractInitialPromptImageUrls(markdown: string): string[] {
+  const imageUrls = new Set<string>();
+  const markdownImageRegex = /!\[[^\]]*]\(([^)\s]+(?:\?[^)\s]*)?)\)/gi;
+
+  for (const match of markdown.matchAll(markdownImageRegex)) {
+    const url = match[1]?.trim();
+    if (!url) {
+      continue;
+    }
+    if (/^(https?:\/\/|\/|data:image\/)/i.test(url)) {
+      imageUrls.add(url);
+    }
+  }
+
+  const directImageUrlRegex = /(https?:\/\/[^\s)]+?\.(?:png|jpe?g|gif|webp|svg)(?:\?[^)\s]*)?)/gi;
+  for (const match of markdown.matchAll(directImageUrlRegex)) {
+    const url = match[1]?.trim();
+    if (url) {
+      imageUrls.add(url);
+    }
+  }
+
+  return [...imageUrls];
+}
+
+function extractInitialPromptImageReferences(markdown: string): string[] {
+  const references = new Set<string>();
+  for (const match of markdown.matchAll(/\[Image\s*#\d+\]/gi)) {
+    const value = match[0]?.trim();
+    if (value) {
+      references.add(value);
+    }
+  }
+  return [...references];
+}
+
+function sanitizeInitialPromptText(rawPrompt: string): string | null {
+  const withoutImages = rawPrompt
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[Image\s*#\d+\]/gi, " ");
+  const normalized = normalizeMarkdownLine(withoutImages).replace(/\s+/g, " ").trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function parseInitialPrompt(summaryMarkdown: string): InitialPromptPreview {
+  const normalizedMarkdown = summaryMarkdown.replace(/\\n/g, "\n");
+  const taskMatch = normalizedMarkdown.match(/^\s*-\s*\*\*(?:Task|Initial Prompt|Prompt):\*\*\s*(.+)$/im);
+  if (taskMatch?.[1]) {
+    const rawPrompt = taskMatch[1];
+    return {
+      text: sanitizeInitialPromptText(rawPrompt),
+      imageUrls: extractInitialPromptImageUrls(rawPrompt),
+      imageReferences: extractInitialPromptImageReferences(rawPrompt),
+    };
+  }
+
+  const lines = normalizedMarkdown.split("\n");
+  const contextHeadingIndex = lines.findIndex((line) => /^##\s+context\b/i.test(line.trim()));
+  if (contextHeadingIndex === -1) {
+    return {
+      text: null,
+      imageUrls: [],
+      imageReferences: [],
+    };
+  }
+
+  const contextLines: string[] = [];
+  for (const rawLine of lines.slice(contextHeadingIndex + 1)) {
+    if (/^##\s+/i.test(rawLine.trim())) {
+      break;
+    }
+    if (!rawLine.trim()) {
+      continue;
+    }
+    contextLines.push(rawLine.trim());
+  }
+
+  const contextBlock = contextLines.join("\n");
+  const textLine = contextLines.length > 0 ? sanitizeInitialPromptText(contextLines[0]) : null;
+
+  return {
+    text: textLine,
+    imageUrls: extractInitialPromptImageUrls(contextBlock),
+    imageReferences: extractInitialPromptImageReferences(contextBlock),
+  };
+}
+
 type PlanStepStatus = "completed" | "in-progress" | "pending";
 
 type ParsedRoleTaskItem = {
@@ -346,9 +441,11 @@ export function buildPlanStarterPrompt(
   const remainingRoles = planDetail.roles.filter((role) => role.doneCheckpoints < role.totalCheckpoints);
   const nextRole = remainingRoles[0] ?? null;
   const currentCheckpoint = planDetail.currentCheckpoint;
+  const starterCommand = `$ralph "Continue OpenSpec plan ${planDetail.slug} from the latest checkpoint in ${planPath} without restarting planning."`;
 
   const lines = [
-    "$ralph",
+    starterCommand,
+    "",
     "You are a new Codex session/account continuing an existing OpenSpec implementation plan.",
     `Repository: /home/deadpool/Documents/codex-lb`,
     `Plan workspace: ${planPath}`,
@@ -435,6 +532,9 @@ export function PlansPage() {
     ? getDisplayStatus(selectedEntry.status, selectedEntry.overallProgress)
     : null;
   const summaryLines = planDetail ? parseSummaryLines(planDetail.summaryMarkdown) : [];
+  const initialPrompt = planDetail
+    ? parseInitialPrompt(planDetail.summaryMarkdown)
+    : { text: null, imageUrls: [], imageReferences: [] };
   const stepTimelineRows: PlanStepTimelineRow[] = planDetail
     ? planDetail.roles.map((role) => {
         const resolvedStatus = resolvePlanStepStatus(
@@ -565,17 +665,64 @@ export function PlansPage() {
           <div className="rounded-xl border border-border/60 bg-card/60 p-4">
             {selectedEntry ? (
               <>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold">{selectedEntry.title}</h2>
-                    <Badge
-                      variant="outline"
-                      className={cn("capitalize", statusBadgeClass(selectedEntryDisplayStatus ?? selectedEntry.status))}
-                    >
-                      {selectedEntryDisplayStatus ?? selectedEntry.status}
-                    </Badge>
+                <div className="mb-3 rounded-lg border border-cyan-500/15 bg-gradient-to-r from-[#040c18]/95 via-[#050c16]/95 to-[#060913]/95 p-3 shadow-[0_10px_30px_-24px_rgba(34,211,238,0.75)]">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h2 className="truncate text-lg font-semibold">{selectedEntry.title}</h2>
+                        <Badge
+                          variant="outline"
+                          className={cn("capitalize", statusBadgeClass(selectedEntryDisplayStatus ?? selectedEntry.status))}
+                        >
+                          {selectedEntryDisplayStatus ?? selectedEntry.status}
+                        </Badge>
+                      </div>
+                      {initialPrompt.text ? (
+                        <p
+                          className="max-w-[44rem] truncate rounded-md border border-white/10 bg-background/35 px-2.5 py-1.5 text-xs text-muted-foreground"
+                          data-testid="plan-initial-prompt"
+                          title={initialPrompt.text}
+                        >
+                          <span className="font-medium text-foreground/80">Initial prompt:</span> {initialPrompt.text}
+                        </p>
+                      ) : null}
+                      {initialPrompt.imageUrls.length > 0 || initialPrompt.imageReferences.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-2" data-testid="plan-initial-prompt-images">
+                          {initialPrompt.imageUrls.map((imageUrl, index) => (
+                            <a
+                              key={`${imageUrl}-${index}`}
+                              href={imageUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="group relative block overflow-hidden rounded-md border border-white/15 bg-background/60"
+                            >
+                              <img
+                                src={imageUrl}
+                                alt={`Initial prompt attachment ${index + 1}`}
+                                className="h-12 w-12 object-cover transition-transform duration-200 group-hover:scale-105"
+                                loading="lazy"
+                              />
+                              <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/60 py-0.5 text-[10px] text-white/90 opacity-0 transition-opacity group-hover:opacity-100">
+                                Open <ExternalLink className="h-2.5 w-2.5" />
+                              </span>
+                            </a>
+                          ))}
+                          {initialPrompt.imageReferences.map((reference) => (
+                            <span
+                              key={reference}
+                              className="inline-flex items-center gap-1 rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100/90"
+                            >
+                              <ImageIcon className="h-3 w-3" />
+                              {reference}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0">
+                      {starterPrompt ? <CopyButton value={starterPrompt} label="Copy starter prompt" /> : null}
+                    </div>
                   </div>
-                  {starterPrompt ? <CopyButton value={starterPrompt} label="Copy starter prompt" /> : null}
                 </div>
 
                 {detailError ? (
