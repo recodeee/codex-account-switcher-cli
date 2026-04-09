@@ -67,7 +67,13 @@ if git show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
   git pull --ff-only origin "$BASE_BRANCH"
 fi
 
-git merge --no-ff --no-edit "$SOURCE_BRANCH"
+if ! git merge --no-ff --no-edit "$SOURCE_BRANCH"; then
+  echo "[agent-branch-finish] Merge conflict detected while merging '${SOURCE_BRANCH}' into '${BASE_BRANCH}'." >&2
+  echo "[agent-branch-finish] Aborting merge to avoid leaving unmerged files in your working tree." >&2
+  git merge --abort >/dev/null 2>&1 || true
+  echo "[agent-branch-finish] Resolve conflicts on '${SOURCE_BRANCH}' first (e.g. rebase/merge '${BASE_BRANCH}' there), then re-run finish." >&2
+  exit 1
+fi
 
 if [[ "$PUSH_ENABLED" -eq 1 ]]; then
   git push origin "$BASE_BRANCH"
