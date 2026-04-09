@@ -1,11 +1,32 @@
-use axum::{Json, Router, response::Html, routing::get};
+use axum::{Json, Router, extract::State, http::StatusCode, response::Html, routing::get};
 use serde::Serialize;
-use std::{env, net::SocketAddr};
+use std::{collections::BTreeMap, env, net::SocketAddr};
 use tracing::info;
 
 #[derive(Debug, Serialize)]
 struct StatusResponse {
     status: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct HealthCheckResponse {
+    status: &'static str,
+    checks: Option<BTreeMap<&'static str, &'static str>>,
+    bridge_ring: Option<BridgeRingResponse>,
+}
+
+#[derive(Debug, Serialize)]
+struct BridgeRingResponse {
+    ring_fingerprint: Option<String>,
+    ring_size: usize,
+    instance_id: Option<String>,
+    is_member: bool,
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorDetailResponse {
+    detail: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -16,12 +37,26 @@ struct RuntimeInfoResponse {
     profile: String,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeFlags {
+    profile: String,
+    draining: bool,
+    startup_pending: bool,
+}
+
 pub fn app() -> Router {
+    app_with_flags(runtime_flags_from_env())
+}
+
+fn app_with_flags(flags: RuntimeFlags) -> Router {
     Router::new()
         .route("/", get(root_panel))
         .route("/health", get(health))
         .route("/health/live", get(health_live))
+        .route("/health/ready", get(health_ready))
+        .route("/health/startup", get(health_startup))
         .route("/_rust_layer/info", get(runtime_info))
+        .with_state(flags)
 }
 
 #[tokio::main]
@@ -72,22 +107,64 @@ async fn health() -> Json<StatusResponse> {
     Json(StatusResponse { status: "ok" })
 }
 
-async fn health_live() -> Json<StatusResponse> {
-    Json(StatusResponse { status: "ok" })
+async fn health_live() -> Json<HealthCheckResponse> {
+    Json(HealthCheckResponse {
+        status: "ok",
+        checks: None,
+        bridge_ring: None,
+    })
 }
 
-async fn runtime_info() -> Json<RuntimeInfoResponse> {
-    let profile = env::var("RUST_RUNTIME_PROFILE").unwrap_or_else(|_| "phase0".to_string());
+async fn health_ready(
+    State(flags): State<RuntimeFlags>,
+) -> Result<Json<HealthCheckResponse>, (StatusCode, Json<ErrorDetailResponse>)> {
+    if flags.draining {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorDetailResponse {
+                detail: "Service is draining",
+            }),
+        ));
+    }
+
+    let mut checks = BTreeMap::new();
+    checks.insert("database", "ok");
+    Ok(Json(HealthCheckResponse {
+        status: "ok",
+        checks: Some(checks),
+        bridge_ring: None,
+    }))
+}
+
+async fn health_startup(
+    State(flags): State<RuntimeFlags>,
+) -> Result<Json<HealthCheckResponse>, (StatusCode, Json<ErrorDetailResponse>)> {
+    if flags.startup_pending {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorDetailResponse {
+                detail: "Service is starting",
+            }),
+        ));
+    }
+
+    Ok(Json(HealthCheckResponse {
+        status: "ok",
+        checks: None,
+        bridge_ring: None,
+    }))
+}
+
+async fn runtime_info(State(flags): State<RuntimeFlags>) -> Json<RuntimeInfoResponse> {
     Json(RuntimeInfoResponse {
         service: "codex-lb-rust-runtime",
         language: "rust",
         version: env!("CARGO_PKG_VERSION"),
-        profile,
+        profile: flags.profile,
     })
 }
 
-async fn root_panel() -> Html<String> {
-    let profile = env::var("RUST_RUNTIME_PROFILE").unwrap_or_else(|_| "phase0".to_string());
+async fn root_panel(State(flags): State<RuntimeFlags>) -> Html<String> {
     let version = env!("CARGO_PKG_VERSION");
     Html(format!(
         r#"<!doctype html>
@@ -165,18 +242,40 @@ async fn root_panel() -> Html<String> {
       <div class="links">
         <a href="/health">/health</a>
         <a href="/health/live">/health/live</a>
+        <a href="/health/ready">/health/ready</a>
+        <a href="/health/startup">/health/startup</a>
         <a href="/_rust_layer/info">/_rust_layer/info</a>
       </div>
     </main>
   </body>
 </html>
-"#
+"#,
+        profile = flags.profile
     ))
+}
+
+fn runtime_flags_from_env() -> RuntimeFlags {
+    RuntimeFlags {
+        profile: env::var("RUST_RUNTIME_PROFILE").unwrap_or_else(|_| "phase0".to_string()),
+        draining: env_flag_true("RUST_RUNTIME_DRAINING"),
+        startup_pending: env_flag_true("RUST_RUNTIME_STARTUP_PENDING"),
+    }
+}
+
+fn env_flag_true(name: &str) -> bool {
+    env::var(name)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::app;
+    use super::{RuntimeFlags, app, app_with_flags};
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -197,6 +296,94 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn health_live_shape_matches_python_contract() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/health/live")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["status"], "ok");
+        assert!(payload["checks"].is_null());
+        assert!(payload["bridge_ring"].is_null());
+    }
+
+    #[tokio::test]
+    async fn health_ready_reports_database_check() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/health/ready")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["status"], "ok");
+        assert_eq!(payload["checks"]["database"], "ok");
+    }
+
+    #[tokio::test]
+    async fn health_startup_defaults_to_ok() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/health/startup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn health_startup_pending_returns_503() {
+        let response = app_with_flags(RuntimeFlags {
+            profile: "test".to_string(),
+            draining: false,
+            startup_pending: true,
+        })
+        .oneshot(
+            Request::builder()
+                .uri("/health/startup")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["detail"], "Service is starting");
     }
 
     #[tokio::test]
@@ -237,6 +424,8 @@ mod tests {
             .to_bytes();
         let body_text = String::from_utf8(body.to_vec()).unwrap();
         assert!(body_text.contains("Rust runtime is healthy and running"));
+        assert!(body_text.contains("/health/ready"));
+        assert!(body_text.contains("/health/startup"));
         assert!(body_text.contains("/_rust_layer/info"));
     }
 }

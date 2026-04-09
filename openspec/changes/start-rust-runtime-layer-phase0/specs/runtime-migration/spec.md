@@ -7,6 +7,8 @@ The repository SHALL provide a Rust runtime scaffold under `rust/codex-lb-runtim
 - **WHEN** the Rust runtime scaffold is running
 - **THEN** `GET /health` returns HTTP 200 with a JSON payload that includes `status: "ok"`
 - **AND** `GET /health/live` returns HTTP 200 with a JSON payload that includes `status: "ok"`
+- **AND** `GET /health/ready` returns HTTP 200 with a JSON payload that includes `status: "ok"` and a runtime check entry
+- **AND** `GET /health/startup` returns HTTP 200 with a JSON payload that includes `status: "ok"`
 
 #### Scenario: Rust runtime identity endpoint
 - **WHEN** `GET /_rust_layer/info` is called

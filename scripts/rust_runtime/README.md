@@ -34,4 +34,10 @@ The script prints JSON with:
 - dominant body hash match
 - p50/p95 latency for both runtimes
 
+Default compared endpoints are:
+- `/health`
+- `/health/live`
+- `/health/ready`
+- `/health/startup`
+
 This is phase-0 evidence only. No production traffic cutover is included.

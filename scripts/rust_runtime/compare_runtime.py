@@ -125,7 +125,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--endpoints",
         nargs="+",
-        default=["/health", "/health/live"],
+        default=["/health", "/health/live", "/health/ready", "/health/startup"],
         help="List of endpoint paths to compare.",
     )
     parser.add_argument("--output", default="", help="Optional path to write JSON result.")
