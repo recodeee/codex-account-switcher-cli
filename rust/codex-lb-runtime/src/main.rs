@@ -392,9 +392,9 @@ async fn proxy_backend_codex_responses_ws(
     proxy_websocket_response(
         ws_upgrade,
         state,
+        "/backend-api/codex/responses",
         raw_query.0,
         headers,
-        "/backend-api/codex/responses",
     )
 }
 
@@ -407,20 +407,28 @@ async fn proxy_v1_responses_ws(
     proxy_websocket_response(
         ws_upgrade,
         state,
+        "/v1/responses",
         raw_query.0,
         headers,
-        "/v1/responses",
     )
 }
 
 async fn proxy_backend_codex_responses_http(
-    state: RuntimeState,
+    State(state): State<RuntimeState>,
     method: axum::http::Method,
     raw_query: RawQuery,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    proxy_responses_http_entry(state, method, raw_query.0, headers, body, "/backend-api/codex/responses").await
+    proxy_responses_http_entry(
+        state,
+        method,
+        raw_query.0,
+        headers,
+        body,
+        "/backend-api/codex/responses",
+    )
+    .await
 }
 
 async fn proxy_v1_responses_http(
@@ -660,7 +668,7 @@ async fn proxy_api_wildcard(
     Path(path): Path<String>,
     raw_query: RawQuery,
     headers: HeaderMap,
-    body: Body,
+    body: Bytes,
 ) -> Response {
     let endpoint = format!("/api/{path}");
     proxy_python_raw_endpoint_with_method(
@@ -680,7 +688,7 @@ async fn proxy_backend_api_wildcard(
     Path(path): Path<String>,
     raw_query: RawQuery,
     headers: HeaderMap,
-    body: Body,
+    body: Bytes,
 ) -> Response {
     let endpoint = format!("/backend-api/{path}");
     proxy_python_raw_endpoint_with_method(
@@ -700,7 +708,7 @@ async fn proxy_v1_wildcard(
     Path(path): Path<String>,
     raw_query: RawQuery,
     headers: HeaderMap,
-    body: Body,
+    body: Bytes,
 ) -> Response {
     let endpoint = format!("/v1/{path}");
     proxy_python_raw_endpoint_with_method(
