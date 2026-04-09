@@ -3,12 +3,12 @@ use super::{
     state::RuntimeState,
 };
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{
         Path, RawQuery, State,
         ws::{Message as AxumWsMessage, WebSocket, WebSocketUpgrade},
     },
-    http::{HeaderMap, HeaderName, HeaderValue},
+    http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     response::Response,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -103,6 +103,10 @@ async fn proxy_responses_http_entry(
     body: Bytes,
     endpoint: &'static str,
 ) -> Response {
+    if state.is_bridge_drain_active() {
+        return bridge_draining_response();
+    }
+
     proxy_python_raw_endpoint_with_method(
         &state,
         reqwest_method_from_axum(&method),
@@ -121,6 +125,10 @@ fn proxy_websocket_response(
     raw_query: Option<String>,
     headers: HeaderMap,
 ) -> Response {
+    if state.is_bridge_drain_active() {
+        return bridge_draining_response();
+    }
+
     let endpoint = endpoint.into();
     let turn_state = downstream_turn_state(&headers);
     let turn_state_header_value = HeaderValue::from_str(&turn_state).ok();
@@ -295,4 +303,22 @@ fn upstream_to_downstream_message(message: UpstreamWsMessage) -> Option<AxumWsMe
 
 async fn close_websocket_silent(mut socket: WebSocket) -> Result<(), axum::Error> {
     socket.send(AxumWsMessage::Close(None)).await
+}
+
+fn bridge_draining_response() -> Response {
+    Response::builder()
+        .status(StatusCode::SERVICE_UNAVAILABLE)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Body::from(
+            r#"{"detail":"HTTP bridge is draining — new sessions not accepted during shutdown"}"#,
+        ))
+        .unwrap_or_else(|_| {
+            Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::CACHE_CONTROL, "no-store")
+                .body(Body::from(r#"{"detail":"Service is draining"}"#))
+                .expect("build static JSON draining response")
+        })
 }

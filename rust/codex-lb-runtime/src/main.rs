@@ -1,15 +1,16 @@
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::{Path, RawQuery, State},
-    http::{HeaderMap, StatusCode},
+    extract::{Path, RawQuery, Request, State},
+    http::{HeaderMap, StatusCode, header},
+    middleware::{Next, from_fn_with_state},
     response::{Html, Response},
     routing::{any, get},
 };
 use reqwest::Client;
 use serde_json::Value;
 use std::{collections::BTreeMap, env, net::SocketAddr, time::Duration};
-use tracing::info;
+use tracing::{info, warn};
 
 mod runtime;
 #[cfg(test)]
@@ -108,6 +109,10 @@ fn app_with_state(state: RuntimeState) -> Router {
         .route("/_rust_layer/info", get(runtime_info))
         .route("/_python_layer/health", get(python_layer_health))
         .route("/_python_layer/apis", get(python_layer_apis))
+        .layer(from_fn_with_state(
+            state.clone(),
+            track_inflight_http_requests,
+        ))
         .with_state(state)
 }
 
@@ -125,9 +130,10 @@ async fn main() {
         .unwrap_or_else(|err| panic!("failed to bind {addr}: {err}"));
 
     info!(%addr, "starting codex-lb rust runtime scaffold");
+    let state = runtime_state_from_env();
 
-    axum::serve(listener, app())
-        .with_graceful_shutdown(shutdown_signal())
+    axum::serve(listener, app_with_state(state.clone()))
+        .with_graceful_shutdown(shutdown_signal(state))
         .await
         .expect("server crashed");
 }
@@ -138,7 +144,7 @@ fn init_tracing() {
     tracing_subscriber::fmt().with_env_filter(filter).init();
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(state: RuntimeState) {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{SignalKind, signal};
@@ -152,6 +158,24 @@ async fn shutdown_signal() {
     #[cfg(not(unix))]
     {
         let _ = tokio::signal::ctrl_c().await;
+    }
+
+    state.set_bridge_drain_active(true);
+    state.set_draining(true);
+
+    let drained = state
+        .wait_for_in_flight_http_drain(
+            Duration::from_secs(state.flags.shutdown_drain_timeout_seconds),
+            Duration::from_millis(100),
+        )
+        .await;
+
+    if !drained {
+        warn!(
+            timeout_seconds = state.flags.shutdown_drain_timeout_seconds,
+            remaining_in_flight = state.in_flight_http_requests(),
+            "rust runtime drain timeout reached, continuing shutdown",
+        );
     }
 }
 
@@ -170,7 +194,7 @@ async fn health_live() -> Json<HealthCheckResponse> {
 async fn health_ready(
     State(state): State<RuntimeState>,
 ) -> Result<Json<HealthCheckResponse>, (StatusCode, Json<ErrorDetailResponse>)> {
-    if state.flags.draining {
+    if state.is_draining() {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorDetailResponse {
@@ -186,6 +210,26 @@ async fn health_ready(
         checks: Some(checks),
         bridge_ring: None,
     }))
+}
+
+async fn track_inflight_http_requests(
+    State(state): State<RuntimeState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if request
+        .headers()
+        .get(header::UPGRADE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.eq_ignore_ascii_case("websocket"))
+    {
+        return next.run(request).await;
+    }
+
+    state.increment_in_flight_http_requests();
+    let response = next.run(request).await;
+    state.decrement_in_flight_http_requests();
+    response
 }
 
 async fn health_startup(
@@ -763,6 +807,7 @@ async fn root_panel(State(state): State<RuntimeState>) -> Html<String> {
 mod tests {
     use super::{
         RuntimeFlags, RuntimeState, app, app_with_flags, app_with_state, resolve_python_base_url,
+        runtime_state_with_flags,
     };
     use axum::{
         Json, Router,
@@ -881,6 +926,7 @@ mod tests {
             profile: "test".to_string(),
             draining: false,
             startup_pending: true,
+            shutdown_drain_timeout_seconds: 30,
         })
         .oneshot(
             Request::builder()
@@ -899,6 +945,31 @@ mod tests {
             .to_bytes();
         let payload: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(payload["detail"], "Service is starting");
+    }
+
+    #[tokio::test]
+    async fn health_ready_returns_503_when_runtime_is_draining() {
+        let state = state_for_python_base_url("http://127.0.0.1:9".to_string());
+        state.set_draining(true);
+        let app = app_with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health/ready")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["detail"], "Service is draining");
     }
 
     #[tokio::test]
@@ -1541,6 +1612,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn responses_http_rejects_new_sessions_when_bridge_draining() {
+        let state = state_for_python_base_url("http://127.0.0.1:9".to_string());
+        state.set_bridge_drain_active(true);
+        let app = app_with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/backend-api/codex/responses")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert!(
+            payload["detail"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("HTTP bridge is draining")
+        );
+    }
+
+    #[tokio::test]
     async fn projects_plans_fail_closed_when_python_unreachable() {
         let app = app_with_state(state_for_python_base_url("http://127.0.0.1:9".to_string()));
 
@@ -1748,18 +1851,18 @@ mod tests {
     }
 
     fn state_for_python_base_url(python_base_url: String) -> RuntimeState {
-        RuntimeState {
-            flags: RuntimeFlags {
-                profile: "test".to_string(),
-                draining: false,
-                startup_pending: false,
-            },
-            python_base_url,
-            python_client: reqwest::Client::builder()
-                .timeout(Duration::from_millis(500))
-                .build()
-                .unwrap(),
-        }
+        let mut state = runtime_state_with_flags(RuntimeFlags {
+            profile: "test".to_string(),
+            draining: false,
+            startup_pending: false,
+            shutdown_drain_timeout_seconds: 30,
+        });
+        state.python_base_url = python_base_url;
+        state.python_client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(500))
+            .build()
+            .unwrap();
+        state
     }
 
     async fn spawn_python_stub(
