@@ -24,8 +24,9 @@ use runtime::{
         proxy_python_live_usage_xml, proxy_python_raw_endpoint_with_method, query_param_true,
     },
     responses_bridge::{
-        proxy_backend_codex_responses_http, proxy_backend_codex_responses_ws,
-        proxy_v1_responses_http, proxy_v1_responses_ws,
+        proxy_account_terminal_ws, proxy_backend_codex_responses_http,
+        proxy_backend_codex_responses_ws, proxy_dashboard_overview_ws, proxy_v1_responses_http,
+        proxy_v1_responses_ws,
     },
     state::{RuntimeState, runtime_state_from_env},
 };
@@ -62,11 +63,19 @@ fn app_with_state(state: RuntimeState) -> Router {
             "/api/dashboard/system-monitor",
             get(dashboard_system_monitor),
         )
+        .route(
+            "/api/dashboard/overview/ws",
+            get(proxy_dashboard_overview_ws),
+        )
         .route("/api/projects/plans", get(projects_plans))
         .route("/api/projects/plans/{plan_slug}", get(project_plan))
         .route(
             "/api/projects/plans/{plan_slug}/runtime",
             get(project_plan_runtime),
+        )
+        .route(
+            "/api/accounts/{account_id}/terminal/ws",
+            get(proxy_account_terminal_ws),
         )
         .route(
             "/backend-api/codex/responses",
@@ -1301,6 +1310,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn backend_api_wildcard_forwards_transcribe_multipart_payload() {
+        let (python_base_url, server_handle) = spawn_python_dashboard_api_stub().await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let boundary = "----codex-lb-test-boundary";
+        let multipart_body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"clip.wav\"\r\nContent-Type: audio/wav\r\n\r\nFAKEAUDIO\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nhello from rust proxy\r\n--{boundary}--\r\n"
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/backend-api/transcribe")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={boundary}"),
+                    )
+                    .body(Body::from(multipart_body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["status"], "ok");
+        assert!(
+            payload["content_type"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("multipart/form-data")
+        );
+        assert_eq!(payload["has_file_part"], true);
+        assert!(payload["size_bytes"].as_u64().unwrap_or_default() > 0);
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
     async fn v1_wildcard_forwards_post_body_content_type_and_set_cookie() {
         let (python_base_url, server_handle) = spawn_python_dashboard_api_stub().await;
         let app = app_with_state(state_for_python_base_url(python_base_url));
@@ -1328,6 +1382,51 @@ mod tests {
         assert_eq!(payload["status"], "ok");
         assert_eq!(payload["content_type"], "application/json");
         assert_eq!(payload["payload"]["task"], "quota-sync");
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn v1_wildcard_forwards_audio_transcriptions_multipart_payload() {
+        let (python_base_url, server_handle) = spawn_python_dashboard_api_stub().await;
+        let app = app_with_state(state_for_python_base_url(python_base_url));
+
+        let boundary = "----codex-lb-v1-boundary";
+        let multipart_body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ngpt-4o-transcribe\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"sample.wav\"\r\nContent-Type: audio/wav\r\n\r\nAUDIOPAYLOAD\r\n--{boundary}--\r\n"
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/audio/transcriptions")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={boundary}"),
+                    )
+                    .body(Body::from(multipart_body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["status"], "ok");
+        assert!(
+            payload["content_type"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("multipart/form-data")
+        );
+        assert_eq!(payload["has_model_part"], true);
+        assert_eq!(payload["has_file_part"], true);
 
         server_handle.abort();
     }
@@ -1397,6 +1496,48 @@ mod tests {
         assert_eq!(payload["runtime_status"], "active");
 
         server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn dashboard_overview_ws_route_is_present() {
+        let app = app_with_state(state_for_python_base_url("http://127.0.0.1:9".to_string()));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/dashboard/overview/ws")
+                    .header("cookie", "dashboard_session=test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            response.status(),
+            StatusCode::BAD_REQUEST | StatusCode::UPGRADE_REQUIRED
+        ));
+    }
+
+    #[tokio::test]
+    async fn account_terminal_ws_route_is_present() {
+        let app = app_with_state(state_for_python_base_url("http://127.0.0.1:9".to_string()));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/accounts/account-1/terminal/ws")
+                    .header("cookie", "dashboard_session=test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            response.status(),
+            StatusCode::BAD_REQUEST | StatusCode::UPGRADE_REQUIRED
+        ));
     }
 
     #[tokio::test]
@@ -1896,6 +2037,27 @@ mod tests {
                 }),
             )
             .route(
+                "/backend-api/transcribe",
+                post(|headers: axum::http::HeaderMap, body: axum::body::Bytes| async move {
+                    let content_type = headers
+                        .get("content-type")
+                        .and_then(|value| value.to_str().ok())
+                        .unwrap_or_default()
+                        .to_string();
+                    let body_text = String::from_utf8_lossy(&body);
+
+                    (
+                        StatusCode::OK,
+                        Json(json!({
+                            "status": "ok",
+                            "content_type": content_type,
+                            "size_bytes": body.len(),
+                            "has_file_part": body_text.contains("filename=\"clip.wav\"")
+                        })),
+                    )
+                }),
+            )
+            .route(
                 "/v1/echo",
                 post(|headers: axum::http::HeaderMap, body: axum::body::Bytes| async move {
                     let content_type = headers
@@ -1913,6 +2075,28 @@ mod tests {
                             "status": "ok",
                             "content_type": content_type,
                             "payload": payload
+                        })),
+                    )
+                }),
+            )
+            .route(
+                "/v1/audio/transcriptions",
+                post(|headers: axum::http::HeaderMap, body: axum::body::Bytes| async move {
+                    let content_type = headers
+                        .get("content-type")
+                        .and_then(|value| value.to_str().ok())
+                        .unwrap_or_default()
+                        .to_string();
+                    let body_text = String::from_utf8_lossy(&body);
+
+                    (
+                        StatusCode::OK,
+                        Json(json!({
+                            "status": "ok",
+                            "content_type": content_type,
+                            "has_model_part": body_text.contains("name=\"model\"")
+                                && body_text.contains("gpt-4o-transcribe"),
+                            "has_file_part": body_text.contains("filename=\"sample.wav\"")
                         })),
                     )
                 }),
