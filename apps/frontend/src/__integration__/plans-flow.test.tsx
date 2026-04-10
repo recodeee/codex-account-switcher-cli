@@ -39,9 +39,25 @@ describe("plans flow integration", () => {
     expect(await screen.findByRole("button", { name: /copy prompt b/i })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /copy prompt c/i })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /copy prompt d/i })).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "You own Wave-7A for full Python->Rust replacement in /home/deadpool/Documents/codex-lb.",
+      ),
+    ).not.toBeInTheDocument();
+    const promptACard = await screen.findByTestId("plan-included-prompt-card-prompt-a-wave-7a-schedulers-jobs");
+    const promptAToggle = within(promptACard).getByRole("button", { expanded: false });
+    expect(promptAToggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(promptAToggle);
+    expect(promptAToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      await within(promptACard).findByText(
+        "You own Wave-7A for full Python->Rust replacement in /home/deadpool/Documents/codex-lb.",
+      ),
+    ).toBeInTheDocument();
     expect(await screen.findByTestId("plan-included-prompt-status-prompt-a-wave-7a-schedulers-jobs")).toHaveTextContent(
       /in progress/i,
     );
+    expect(screen.queryByTestId("plan-included-prompt-status-prompt-b-wave-7b-cache-invalidation-poller")).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /zoom prompt a/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /zoom prompt a/i }));
     const promptDialog = await screen.findByRole("dialog");

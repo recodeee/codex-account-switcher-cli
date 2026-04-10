@@ -756,7 +756,7 @@ export function PlansPage() {
   const togglePromptCard = (key: string) => {
     setCollapsedPromptCards((prev) => ({
       ...prev,
-      [key]: !(prev[key] ?? false),
+      [key]: !(prev[key] ?? true),
     }));
   };
   const starterPrompt =
@@ -1004,12 +1004,9 @@ export function PlansPage() {
                       </p>
                     </div>
 
-                    <div
-                      className="space-y-3 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3"
-                      data-testid="plan-included-prompts"
-                    >
+                    <div className="space-y-3 rounded-lg border border-border/60 bg-background/20 p-3" data-testid="plan-included-prompts">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs uppercase tracking-wide text-cyan-100/90">Included AI prompts</p>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Included AI prompts</p>
                         <Badge variant="outline" className="text-[10px]">
                           {includedPromptCards.length} prompt{includedPromptCards.length === 1 ? "" : "s"}
                         </Badge>
@@ -1018,42 +1015,56 @@ export function PlansPage() {
                       {includedPromptCards.length > 0 ? (
                         <ul className="grid gap-2 lg:grid-cols-2">
                           {includedPromptCards.map((prompt) => {
-                            const isCollapsed = collapsedPromptCards[prompt.key] ?? false;
+                            const isCollapsed = collapsedPromptCards[prompt.key] ?? true;
 
                             return (
                               <li
                                 key={prompt.key}
-                                className="overflow-hidden rounded-md border border-border/50 bg-background/45"
+                                className="overflow-hidden rounded-md border border-border/60 bg-background/15"
                                 data-testid={`plan-included-prompt-card-${prompt.id}`}
                               >
-                                <div className="flex items-start border-b border-transparent px-2.5 py-2 transition-colors hover:bg-background/80">
-                                  <button
-                                    type="button"
-                                    className="flex min-w-0 flex-1 items-start gap-2 text-left"
-                                    aria-expanded={!isCollapsed}
-                                    onClick={() => togglePromptCard(prompt.key)}
-                                  >
-                                    <StepStatusIcon status={prompt.status} className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                    <div className="min-w-0 space-y-1">
-                                      <p className="truncate text-sm font-medium text-foreground/90">{prompt.title}</p>
-                                      <p className="truncate text-[11px] text-muted-foreground">
-                                        {prompt.bundleTitle} · {prompt.sourcePath}
-                                      </p>
-                                      {prompt.goal ? (
-                                        <p className="line-clamp-2 text-[11px] text-cyan-100/80">
-                                          <span className="font-semibold text-cyan-100/95">Goal:</span> {prompt.goal}
-                                        </p>
-                                      ) : null}
-                                    </div>
-                                  </button>
-                                  <div className="ml-2 flex shrink-0 items-center gap-1.5">
-                                    <Badge
-                                      variant="outline"
-                                      className={cn("text-[10px] capitalize", stepStatusBadgeClass(prompt.status))}
-                                      data-testid={`plan-included-prompt-status-${prompt.id}`}
+                                <div
+                                  className={cn(
+                                    "px-2.5 py-2 transition-colors hover:bg-background/30",
+                                    !isCollapsed ? "border-b border-border/40" : null,
+                                  )}
+                                >
+                                  <div className="flex items-start gap-2">
+                                    <button
+                                      type="button"
+                                      className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                                      aria-expanded={!isCollapsed}
+                                      onClick={() => togglePromptCard(prompt.key)}
                                     >
-                                      {statusLabel(prompt.status)}
-                                    </Badge>
+                                      <StepStatusIcon status={prompt.status} className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                      <div className="min-w-0 space-y-1">
+                                        <p className="truncate text-sm font-medium text-foreground/90">{prompt.title}</p>
+                                        {prompt.goal ? (
+                                          <p className="text-[11px] leading-relaxed text-foreground/85">
+                                            <span className="font-semibold text-foreground/95">Goal:</span>
+                                            <span className="mt-0.5 block line-clamp-3">{prompt.goal}</span>
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                    </button>
+                                    <ChevronDown
+                                      className={cn(
+                                        "mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                        isCollapsed ? "-rotate-90" : "rotate-0",
+                                      )}
+                                      aria-hidden
+                                    />
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-5">
+                                    {prompt.status !== "pending" ? (
+                                      <Badge
+                                        variant="outline"
+                                        className={cn("text-[10px] capitalize", stepStatusBadgeClass(prompt.status))}
+                                        data-testid={`plan-included-prompt-status-${prompt.id}`}
+                                      >
+                                        {statusLabel(prompt.status)}
+                                      </Badge>
+                                    ) : null}
                                     {prompt.checkpointIds.length > 0 ? (
                                       <Badge variant="outline" className="text-[10px]">
                                         {prompt.checkpointIds.join(" · ")}
@@ -1070,18 +1081,11 @@ export function PlansPage() {
                                       <Maximize2 className="size-3" />
                                       Zoom
                                     </Button>
-                                    <ChevronDown
-                                      className={cn(
-                                        "h-4 w-4 text-muted-foreground transition-transform duration-200",
-                                        isCollapsed ? "-rotate-90" : "rotate-0",
-                                      )}
-                                      aria-hidden
-                                    />
                                   </div>
                                 </div>
                                 {!isCollapsed ? (
-                                  <div className="border-t border-border/40 px-3 py-2">
-                                    <pre className="max-h-64 overflow-auto rounded-md border border-white/10 bg-[#020714]/90 px-2 py-1.5 text-[11px] leading-relaxed whitespace-pre-wrap text-cyan-100/90">
+                                  <div className="px-3 py-2">
+                                    <pre className="max-h-64 overflow-auto rounded-md border border-border/60 bg-background/30 px-2 py-1.5 text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85">
                                       {prompt.content}
                                     </pre>
                                   </div>
@@ -1114,12 +1118,14 @@ export function PlansPage() {
                               </div>
                               <div className="flex items-center gap-1.5 pr-8">
                                 <StepStatusIcon status={zoomedPrompt.status} className="h-4 w-4" />
-                                <Badge
-                                  variant="outline"
-                                  className={cn("text-[10px] capitalize", stepStatusBadgeClass(zoomedPrompt.status))}
-                                >
-                                  {statusLabel(zoomedPrompt.status)}
-                                </Badge>
+                                {zoomedPrompt.status !== "pending" ? (
+                                  <Badge
+                                    variant="outline"
+                                    className={cn("text-[10px] capitalize", stepStatusBadgeClass(zoomedPrompt.status))}
+                                  >
+                                    {statusLabel(zoomedPrompt.status)}
+                                  </Badge>
+                                ) : null}
                                 <CopyButton value={zoomedPrompt.content} label={`Copy ${zoomedPrompt.title}`} />
                               </div>
                             </div>
