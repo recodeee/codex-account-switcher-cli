@@ -21,7 +21,7 @@ function targetShellRc() {
 function renderHookBlock() {
   return [
     MARK_START,
-    "# Auto-sync codex-auth snapshots after successful official `codex login`.",
+    "# Keep terminal-scoped snapshot memory in sync before/after each `codex` run.",
     "# Also restore common terminal modes to avoid leaked escape sequences after codex exits.",
     "__codex_auth_restore_tty() {",
     "  [[ -t 1 ]] || return 0",
@@ -31,21 +31,13 @@ function renderHookBlock() {
     "}",
     "if ! typeset -f codex >/dev/null 2>&1; then",
     "  codex() {",
+    "    if command -v codex-auth >/dev/null 2>&1; then",
+    "      command codex-auth restore-session >/dev/null 2>&1 || true",
+    "    fi",
     "    command codex \"$@\"",
     "    local __codex_exit=$?",
-    "    if [[ $__codex_exit -eq 0 ]]; then",
-    "      local __first_non_flag=\"\"",
-    "      local __arg",
-    "      for __arg in \"$@\"; do",
-    "        case \"$__arg\" in",
-    "          --) break ;;",
-    "          -*) ;;",
-    "          *) __first_non_flag=\"$__arg\"; break ;;",
-    "        esac",
-    "      done",
-    "      if [[ \"$__first_non_flag\" == \"login\" ]] && command -v codex-auth >/dev/null 2>&1; then",
-    "        command codex-auth status >/dev/null 2>&1 || true",
-    "      fi",
+    "    if command -v codex-auth >/dev/null 2>&1; then",
+    "      CODEX_AUTH_FORCE_EXTERNAL_SYNC=1 command codex-auth status >/dev/null 2>&1 || true",
     "    fi",
     "    if [[ -z \"${CODEX_AUTH_SKIP_TTY_RESTORE:-}\" ]]; then",
     "      __codex_auth_restore_tty",
@@ -57,11 +49,26 @@ function renderHookBlock() {
   ].join("\n");
 }
 
+function escapeRegex(input) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hookBlockRegex() {
+  const start = escapeRegex(MARK_START);
+  const end = escapeRegex(MARK_END);
+  return new RegExp(`\\n?${start}[\\s\\S]*?${end}\\n?`, "g");
+}
+
+function normalizeRcContents(contents) {
+  const collapsed = contents.replace(/\n{3,}/g, "\n\n");
+  return `${collapsed.replace(/\s*$/, "")}\n`;
+}
+
 async function maybeInstallHook() {
   if (process.env.npm_config_global !== "true") return;
   if (isTruthy(process.env.CODEX_AUTH_SKIP_POSTINSTALL)) return;
   if (isTruthy(process.env.CI)) return;
-  if (!process.stdin.isTTY || !process.stdout.isTTY) return;
+  const canPrompt = process.stdin.isTTY && process.stdout.isTTY;
 
   const rcPath = targetShellRc();
   await fs.mkdir(path.dirname(rcPath), { recursive: true });
@@ -73,7 +80,16 @@ async function maybeInstallHook() {
     if (error && error.code !== "ENOENT") throw error;
   }
 
-  if (rc.includes(MARK_START) && rc.includes(MARK_END)) return;
+  if (rc.includes(MARK_START) && rc.includes(MARK_END)) {
+    const refreshed = normalizeRcContents(rc.replace(hookBlockRegex(), `\n${renderHookBlock()}\n`));
+    if (refreshed !== normalizeRcContents(rc)) {
+      await fs.writeFile(rcPath, refreshed, "utf8");
+      process.stdout.write(`\nUpdated shell hook in ${rcPath}. Restart terminal or run: source ${rcPath}\n`);
+    }
+    return;
+  }
+
+  if (!canPrompt) return;
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -89,7 +105,7 @@ async function maybeInstallHook() {
     rl.close();
   }
 
-  const next = `${rc.replace(/\s*$/, "")}\n\n${renderHookBlock()}\n`;
+  const next = normalizeRcContents(`${rc}\n\n${renderHookBlock()}\n`);
   await fs.writeFile(rcPath, next, "utf8");
   process.stdout.write(`\nInstalled shell hook in ${rcPath}. Restart terminal or run: source ${rcPath}\n`);
 }

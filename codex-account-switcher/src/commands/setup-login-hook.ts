@@ -5,7 +5,7 @@ import { installLoginHook, resolveDefaultShellRcPath } from "../lib/config/login
 export default class SetupLoginHookCommand extends BaseCommand {
   protected readonly syncExternalAuthBeforeRun = false;
 
-  static description = "Install a shell hook that auto-syncs snapshots after successful `codex login`";
+  static description = "Install or refresh a shell hook that keeps terminal snapshot memory in sync";
 
   static flags = {
     shellRc: Flags.string({
@@ -23,6 +23,8 @@ export default class SetupLoginHookCommand extends BaseCommand {
 
       if (result === "already-installed") {
         this.log(`Login auto-snapshot hook is already installed in ${rcPath}.`);
+      } else if (result === "updated") {
+        this.log(`Updated login auto-snapshot hook in ${rcPath}.`);
       } else {
         this.log(`Installed login auto-snapshot hook in ${rcPath}.`);
       }

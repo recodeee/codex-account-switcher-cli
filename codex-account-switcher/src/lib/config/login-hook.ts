@@ -5,7 +5,7 @@ import path from "node:path";
 export const LOGIN_HOOK_MARK_START = "# >>> codex-auth-login-auto-snapshot >>>";
 export const LOGIN_HOOK_MARK_END = "# <<< codex-auth-login-auto-snapshot <<<";
 
-export type HookInstallStatus = "installed" | "already-installed";
+export type HookInstallStatus = "installed" | "updated" | "already-installed";
 export type HookRemoveStatus = "removed" | "not-installed";
 export interface LoginHookStatus {
   installed: boolean;
@@ -20,6 +20,11 @@ function hookBlockRegex(): RegExp {
   const start = escapeRegex(LOGIN_HOOK_MARK_START);
   const end = escapeRegex(LOGIN_HOOK_MARK_END);
   return new RegExp(`\\n?${start}[\\s\\S]*?${end}\\n?`, "g");
+}
+
+function normalizeRcContents(contents: string): string {
+  const collapsed = contents.replace(/\n{3,}/g, "\n\n");
+  return `${collapsed.replace(/\s*$/, "")}\n`;
 }
 
 export function resolveDefaultShellRcPath(): string {
@@ -74,10 +79,18 @@ export async function installLoginHook(rcPath = resolveDefaultShellRcPath()): Pr
   }
 
   if (existing.includes(LOGIN_HOOK_MARK_START) && existing.includes(LOGIN_HOOK_MARK_END)) {
-    return "already-installed";
+    const refreshed = normalizeRcContents(
+      existing.replace(hookBlockRegex(), `\n${renderLoginHookBlock()}\n`),
+    );
+    if (refreshed === normalizeRcContents(existing)) {
+      return "already-installed";
+    }
+
+    await fsp.writeFile(rcPath, refreshed, "utf8");
+    return "updated";
   }
 
-  const next = `${existing.replace(/\s*$/, "")}\n\n${renderLoginHookBlock()}\n`;
+  const next = normalizeRcContents(`${existing}\n\n${renderLoginHookBlock()}\n`);
   await fsp.writeFile(rcPath, next, "utf8");
   return "installed";
 }
@@ -100,7 +113,7 @@ export async function removeLoginHook(rcPath = resolveDefaultShellRcPath()): Pro
     return "not-installed";
   }
 
-  await fsp.writeFile(rcPath, stripped.replace(/\n{3,}/g, "\n\n"), "utf8");
+  await fsp.writeFile(rcPath, normalizeRcContents(stripped), "utf8");
   return "removed";
 }
 
