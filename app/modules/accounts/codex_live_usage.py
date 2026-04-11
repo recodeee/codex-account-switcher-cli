@@ -860,6 +860,11 @@ def _resolve_ambiguous_uncached_unlabeled_default_scope_pids(
                 default_current_path=process_default_current_path,
             )
         ):
+            if _has_clear_post_switch_rollout_start(
+                pid=pid,
+                default_current_path=process_default_current_path,
+            ):
+                continue
             recent_post_switch_uncached_pids.append(pid)
             continue
 
@@ -930,6 +935,23 @@ def _is_post_switch_unlabeled_default_scope_process(
 
     tolerance_seconds = float(_unlabeled_process_start_tolerance_seconds())
     return (started_at + tolerance_seconds) >= selection_changed_at
+
+
+def _has_clear_post_switch_rollout_start(
+    *,
+    pid: int,
+    default_current_path: Path,
+) -> bool:
+    selection_changed_at = _safe_mtime(default_current_path)
+    if selection_changed_at <= 0:
+        return False
+
+    rollout_started_at = _resolve_process_session_started_at(pid)
+    if rollout_started_at is None:
+        return False
+
+    tolerance_seconds = float(_unlabeled_process_start_tolerance_seconds())
+    return (rollout_started_at + tolerance_seconds) >= selection_changed_at
 
 
 def _is_unlabeled_default_scope_fallback_ambiguous_for_pid(

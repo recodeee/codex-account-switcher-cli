@@ -1888,6 +1888,65 @@ def test_read_live_codex_process_session_counts_by_snapshot_skips_single_post_sw
     assert counts == {}
 
 
+def test_read_live_codex_process_session_counts_by_snapshot_maps_single_post_switch_unlabeled_process_with_rollout_start_after_switch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "default" / "current"
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text("unique", encoding="utf-8")
+
+    now_ts = 2_000.0
+    switch_ts = now_ts - 10.0
+    os.utime(current_path, (switch_ts, switch_ts))
+
+    monkeypatch.setattr("app.modules.accounts.codex_live_usage.time.time", lambda: now_ts)
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_LB_UNLABELED_PROCESS_START_TOLERANCE_SECONDS", "0")
+
+    registry_path = tmp_path / "accounts" / "registry.json"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "activeAccountName": "unique",
+                "previousActiveAccountName": "tokio",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_AUTH_REGISTRY_PATH", str(registry_path))
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [
+            (914, ["/usr/bin/codex", "model_instructions_file=agents"]),
+        ],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._process_belongs_to_current_user",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda _pid: switch_ts + 1.0,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._resolve_process_session_started_at",
+        lambda _pid: switch_ts + 1.0,
+    )
+
+    attribution = read_live_codex_process_session_attribution()
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert attribution.counts_by_snapshot == {"unique": 1}
+    assert attribution.unattributed_session_pids == []
+    assert counts == {"unique": 1}
+
+
 def test_read_live_codex_process_session_counts_by_snapshot_infers_recent_previous_snapshot_from_registry_usage(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
