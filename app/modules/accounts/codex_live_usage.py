@@ -1724,6 +1724,12 @@ def _switch_process_fallback_seconds() -> int:
     return max(30, value)
 
 
+def _is_recent_snapshot_selection_change(*, selection_changed_at: float) -> bool:
+    if selection_changed_at <= 0:
+        return False
+    return (time.time() - selection_changed_at) <= float(_switch_process_fallback_seconds())
+
+
 def _has_running_default_scope_codex_process() -> bool:
     proc_root = _resolve_proc_root()
     if not proc_root.exists() or not proc_root.is_dir():
@@ -1868,14 +1874,20 @@ def _resolve_unlabeled_default_scope_snapshot_name(
                 )
                 if inferred_previous_snapshot_name:
                     return inferred_previous_snapshot_name
-                inferred_latest_previous_snapshot_name = (
-                    _infer_latest_previous_snapshot_name_from_registry_usage(
-                        current_snapshot_name=snapshot_name,
-                        selection_changed_at=selection_changed_at,
+                # Keep this fallback conservative: latest-registry usage can
+                # become stale quickly and should not keep forcing pre-switch
+                # processes into an old account long after a snapshot switch.
+                if _is_recent_snapshot_selection_change(
+                    selection_changed_at=selection_changed_at
+                ):
+                    inferred_latest_previous_snapshot_name = (
+                        _infer_latest_previous_snapshot_name_from_registry_usage(
+                            current_snapshot_name=snapshot_name,
+                            selection_changed_at=selection_changed_at,
+                        )
                     )
-                )
-                if inferred_latest_previous_snapshot_name:
-                    return inferred_latest_previous_snapshot_name
+                    if inferred_latest_previous_snapshot_name:
+                        return inferred_latest_previous_snapshot_name
                 return None
 
     return snapshot_name

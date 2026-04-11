@@ -2505,7 +2505,7 @@ def test_read_live_codex_process_session_counts_by_snapshot_falls_back_to_auth_p
     assert counts == {"cica": 1}
 
 
-def test_read_live_codex_process_session_counts_by_snapshot_falls_back_to_latest_registry_usage_when_previous_is_missing(
+def test_read_live_codex_process_session_counts_by_snapshot_keeps_unattributed_when_previous_is_missing_and_switch_is_not_recent(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -2565,6 +2565,79 @@ def test_read_live_codex_process_session_counts_by_snapshot_falls_back_to_latest
     monkeypatch.setattr(
         "app.modules.accounts.codex_live_usage._read_previous_active_snapshot_name_from_registry",
         lambda: None,
+    )
+
+    attribution = read_live_codex_process_session_attribution()
+    counts = read_live_codex_process_session_counts_by_snapshot()
+    assert attribution.counts_by_snapshot == {}
+    assert attribution.unattributed_session_pids == [863]
+    assert counts == {}
+
+
+def test_read_live_codex_process_session_counts_by_snapshot_uses_latest_registry_usage_when_previous_is_missing_and_switch_is_recent(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current_path = tmp_path / "default" / "current"
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text("zeus@edixai.com", encoding="utf-8")
+    os.utime(current_path, (1_500.0, 1_500.0))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(current_path))
+    monkeypatch.setenv("CODEX_LB_UNLABELED_PROCESS_START_TOLERANCE_SECONDS", "0")
+
+    auth_path = tmp_path / "default" / "accounts" / "zeus@edixai.com.json"
+    auth_path.parent.mkdir(parents=True, exist_ok=True)
+    auth_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(auth_path))
+
+    registry_path = tmp_path / "default" / "accounts" / "registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "activeAccountName": "zeus@edixai.com",
+                "accounts": {
+                    "zeus@edixai.com": {
+                        "name": "zeus@edixai.com",
+                        "lastUsageAt": "1970-01-01T00:25:00Z",
+                    },
+                    "odin@edixai.com": {
+                        "name": "odin@edixai.com",
+                        "lastUsageAt": "1970-01-01T00:24:59Z",
+                    },
+                    "tokio@edixai.com": {
+                        "name": "tokio@edixai.com",
+                        "lastUsageAt": "1970-01-01T00:20:00Z",
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_AUTH_REGISTRY_PATH", str(registry_path))
+
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._iter_running_codex_commands",
+        lambda _proc_root: [(863, ["/usr/bin/codex", "model_instructions_file=agents"])],
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_env",
+        lambda _pid: {},
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._process_belongs_to_current_user",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_process_started_at",
+        lambda _pid: 0.0,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage._read_previous_active_snapshot_name_from_registry",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "app.modules.accounts.codex_live_usage.time.time",
+        lambda: 1_520.0,
     )
 
     counts = read_live_codex_process_session_counts_by_snapshot()
