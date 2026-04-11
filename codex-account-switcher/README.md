@@ -27,6 +27,8 @@ official `codex login`.
 
 On later global updates, if the hook is already installed, `codex-auth` refreshes the
 hook block automatically to the latest template (no manual remove/setup needed).
+The refreshed hook always wraps `codex` in your shell so sync/restore still run even if
+another shell config already defined `codex` as a function.
 
 - Choose `y` to enable fully automatic login snapshot capture.
 - Choose `n` (default) to skip.
