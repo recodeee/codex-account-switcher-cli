@@ -12,6 +12,8 @@ script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="$(CDPATH= cd -- "${script_dir}/.." && pwd)"
 logging_to_file="${LOGGING_TO_FILE:-true}"
 python_bin="${PYTHON_BIN:-}"
+backend_port="${APP_BACKEND_PORT:-2455}"
+reload_dirs_raw="${APP_RELOAD_DIRS:-app}"
 
 if [ -z "$python_bin" ]; then
   if [ -x "${repo_root}/.venv/bin/python" ]; then
@@ -23,6 +25,18 @@ if [ -z "$python_bin" ]; then
   fi
 fi
 
+set -- "$python_bin" -m uvicorn app.main:app --host 0.0.0.0 --port "$backend_port" --reload
+for reload_dir in $(printf "%s" "$reload_dirs_raw" | tr ',:' ' '); do
+  [ -n "$reload_dir" ] || continue
+  case "$reload_dir" in
+    /*) resolved_reload_dir="$reload_dir" ;;
+    *) resolved_reload_dir="${repo_root}/${reload_dir}" ;;
+  esac
+  if [ -d "$resolved_reload_dir" ]; then
+    set -- "$@" --reload-dir "$resolved_reload_dir"
+  fi
+done
+
 if normalize_bool "${logging_to_file}"; then
   log_dir="${LOG_DIR:-/var/log/codex-lb}"
   if ! mkdir -p "$log_dir" 2>/dev/null || ! touch "$log_dir/.write-check" 2>/dev/null; then
@@ -32,14 +46,14 @@ if normalize_bool "${logging_to_file}"; then
   rm -f "${log_dir}/.write-check" 2>/dev/null || true
   log_file="${SERVER_LOG_FILE:-${log_dir}/server.log}"
   if mkdir -p "$log_dir" 2>/dev/null && touch "$log_file" 2>/dev/null; then
-    echo "[codex-lb] Backend server: http://localhost:2455"
+    echo "[codex-lb] Backend server: http://localhost:${backend_port}"
     echo "[codex-lb] Server logs -> ${log_file}"
-    "$python_bin" -m uvicorn app.main:app --host 0.0.0.0 --port 2455 --reload 2>&1 | tee -a "$log_file"
+    "$@" 2>&1 | tee -a "$log_file"
   else
     echo "[codex-lb] LOGGING_TO_FILE enabled, but ${log_file} is not writable. Falling back to stdout."
-    exec "$python_bin" -m uvicorn app.main:app --host 0.0.0.0 --port 2455 --reload
+    exec "$@"
   fi
 else
-  echo "[codex-lb] Backend server: http://localhost:2455"
-  exec "$python_bin" -m uvicorn app.main:app --host 0.0.0.0 --port 2455 --reload
+  echo "[codex-lb] Backend server: http://localhost:${backend_port}"
+  exec "$@"
 fi

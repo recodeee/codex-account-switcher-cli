@@ -57,6 +57,11 @@ type OtherAccountsSortMode =
   | "usage-limit-available-first"
   | "stable";
 
+function isLockedAccountForOtherAccountsSort(account: AccountSummary): boolean {
+  const snapshotName = account.codexAuth?.snapshotName?.trim();
+  return !snapshotName;
+}
+
 function normalizeEmailSearchValue(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -311,6 +316,12 @@ function sortAccountsByAvailableQuota(
   );
 
   return [...accounts].sort((left, right) => {
+    const leftLocked = isLockedAccountForOtherAccountsSort(left);
+    const rightLocked = isLockedAccountForOtherAccountsSort(right);
+    if (leftLocked !== rightLocked) {
+      return leftLocked ? 1 : -1;
+    }
+
     const leftMetrics = sortMetricsByAccount.get(left);
     const rightMetrics = sortMetricsByAccount.get(right);
     if (!leftMetrics || !rightMetrics) {
@@ -366,6 +377,12 @@ function sortAccountsByStableOrder(
   stableOrder: Map<string, number>,
 ): AccountSummary[] {
   return [...accounts].sort((left, right) => {
+    const leftLocked = isLockedAccountForOtherAccountsSort(left);
+    const rightLocked = isLockedAccountForOtherAccountsSort(right);
+    if (leftLocked !== rightLocked) {
+      return leftLocked ? 1 : -1;
+    }
+
     const leftRank =
       stableOrder.get(buildAccountEntryKey(left)) ?? Number.MAX_SAFE_INTEGER;
     const rightRank =

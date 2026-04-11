@@ -1510,6 +1510,126 @@ describe("AccountCards", () => {
     expect(cardText[2]).toContain("stable-third");
   });
 
+  it("pushes locked accounts to the end in available-first order", () => {
+    const unlockedHigh = createAccountSummary({
+      accountId: "acc_unlocked_high",
+      email: "unlocked-high@example.com",
+      displayName: "unlocked-high@example.com",
+      usage: {
+        primaryRemainingPercent: 92,
+        secondaryRemainingPercent: 81,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "unlocked-high",
+        activeSnapshotName: "unlocked-high",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+    });
+    const locked = createAccountSummary({
+      accountId: "acc_locked",
+      email: "locked@example.com",
+      displayName: "locked@example.com",
+      usage: {
+        primaryRemainingPercent: 97,
+        secondaryRemainingPercent: 88,
+      },
+      codexAuth: {
+        hasSnapshot: false,
+        snapshotName: null,
+        activeSnapshotName: null,
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+    });
+    const unlockedLow = createAccountSummary({
+      accountId: "acc_unlocked_low",
+      email: "unlocked-low@example.com",
+      displayName: "unlocked-low@example.com",
+      usage: {
+        primaryRemainingPercent: 55,
+        secondaryRemainingPercent: 50,
+      },
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "unlocked-low",
+        activeSnapshotName: "unlocked-low",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+    });
+
+    const { container } = render(
+      <AccountCards
+        accounts={[unlockedLow, locked, unlockedHigh]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const cards = Array.from(container.querySelectorAll(".card-hover"));
+    const cardText = cards.map((card) => card.textContent ?? "");
+    expect(cardText[0]).toContain("unlocked-high@example.com");
+    expect(cardText[1]).toContain("unlocked-low@example.com");
+    expect(cardText[2]).toContain("locked@example.com");
+  });
+
+  it("keeps locked accounts at the end even in stable order", () => {
+    const locked = createAccountSummary({
+      accountId: "acc_stable_locked",
+      email: "stable-locked@example.com",
+      displayName: "stable-locked@example.com",
+      codexAuth: {
+        hasSnapshot: false,
+        snapshotName: null,
+        activeSnapshotName: null,
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+    });
+    const first = createAccountSummary({
+      accountId: "acc_stable_unlocked_first",
+      email: "stable-unlocked-first@example.com",
+      displayName: "stable-unlocked-first@example.com",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "stable-unlocked-first",
+        activeSnapshotName: "stable-unlocked-first",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+    });
+    const second = createAccountSummary({
+      accountId: "acc_stable_unlocked_second",
+      email: "stable-unlocked-second@example.com",
+      displayName: "stable-unlocked-second@example.com",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "stable-unlocked-second",
+        activeSnapshotName: "stable-unlocked-second",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+    });
+
+    const { container } = render(
+      <AccountCards
+        accounts={[locked, first, second]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Stable order" }));
+
+    const cards = Array.from(container.querySelectorAll(".card-hover"));
+    const cardText = cards.map((card) => card.textContent ?? "");
+    expect(cardText[0]).toContain("stable-unlocked-first@example.com");
+    expect(cardText[1]).toContain("stable-unlocked-second@example.com");
+    expect(cardText[2]).toContain("stable-locked@example.com");
+  });
+
   it("filters Other accounts by email search", () => {
     const first = createAccountSummary({
       accountId: "acc_filter_first",

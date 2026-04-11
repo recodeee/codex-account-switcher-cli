@@ -30,13 +30,14 @@ is_next_dev_process() {
 resolve_frontend_next_dev_pid() {
   pid="$1"
   tries=0
+  found_pid=""
 
   while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null && [ "$tries" -lt 8 ]; do
     if is_next_dev_process "$pid"; then
       args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
       if printf "%s" "$args" | grep -Eiq 'next dev|next/dist/bin/next'; then
-        printf "%s\n" "$pid"
-        return 0
+        found_pid="$pid"
+        break
       fi
     fi
 
@@ -48,9 +49,12 @@ resolve_frontend_next_dev_pid() {
     tries=$((tries + 1))
   done
 
-  if [ -n "${1:-}" ] && [ "$1" -gt 1 ] 2>/dev/null; then
-    printf "%s\n" "$1"
+  if [ -n "$found_pid" ] && [ "$found_pid" -gt 1 ] 2>/dev/null; then
+    printf "%s\n" "$found_pid"
+    return 0
   fi
+
+  return 1
 }
 
 stop_pid_tree() {
@@ -95,6 +99,30 @@ wait_for_pid_exit() {
   done
 }
 
+ensure_frontend_dependencies() {
+  needs_install=0
+
+  if [ ! -d "${frontend_dir}/node_modules" ]; then
+    needs_install=1
+  fi
+
+  if normalize_bool "${FRONTEND_FORCE_INSTALL:-false}"; then
+    needs_install=1
+  fi
+
+  if [ ! -x "${frontend_dir}/node_modules/.bin/next" ] || [ ! -d "${frontend_dir}/node_modules/tailwindcss" ] || [ ! -d "${frontend_dir}/node_modules/@tailwindcss/postcss" ]; then
+    needs_install=1
+  fi
+
+  if [ "$needs_install" -eq 1 ]; then
+    bun install --frozen-lockfile
+  else
+    echo "[codex-lb] Reusing existing frontend dependencies (skip bun install)."
+  fi
+}
+
+cd "$frontend_dir"
+
 if [ -f "$lock_file" ]; then
   existing_pid="$(python3 - "$lock_file" <<'PY'
 import json, pathlib, sys
@@ -113,16 +141,19 @@ PY
 )"
 
   if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
-    target_pid="$(resolve_frontend_next_dev_pid "$existing_pid")"
-    if [ -n "$target_pid" ] && kill -0 "$target_pid" 2>/dev/null; then
+    target_pid="$(resolve_frontend_next_dev_pid "$existing_pid" || true)"
+    if [ -n "$target_pid" ] && kill -0 "$target_pid" 2>/dev/null && is_next_dev_process "$target_pid"; then
       target_cwd="$(readlink -f "/proc/$target_pid/cwd" 2>/dev/null || true)"
-      if normalize_bool "$reuse_existing_next" && [ "$target_cwd" = "$frontend_dir" ]; then
+      if normalize_bool "$reuse_existing_next" && [ "$target_cwd" = "$frontend_dir" ] && port_in_use "$port"; then
         echo "[codex-lb] Reusing existing Next dev server (PID ${target_pid})."
         wait_for_pid_exit "$target_pid"
         exit 0
       fi
       echo "[codex-lb] Stopping existing Next dev server (PID ${target_pid})."
       stop_pid_tree "$target_pid"
+    else
+      echo "[codex-lb] Stopping stale locked process (PID ${existing_pid})."
+      stop_pid_tree "$existing_pid"
     fi
   fi
 fi
@@ -149,11 +180,7 @@ if port_in_use "$port"; then
   echo "[codex-lb] Port ${original_port} is busy. Falling back to ${port}."
 fi
 
-if [ ! -d "${frontend_dir}/node_modules" ] || normalize_bool "${FRONTEND_FORCE_INSTALL:-false}"; then
-  bun install --frozen-lockfile
-else
-  echo "[codex-lb] Reusing existing frontend dependencies (skip bun install)."
-fi
+ensure_frontend_dependencies
 bun run sync-version
 
 logging_to_file="${LOGGING_TO_FILE:-true}"
