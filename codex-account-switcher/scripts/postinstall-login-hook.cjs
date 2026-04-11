@@ -70,16 +70,34 @@ function ensureBuiltDist() {
   if (fsSync.existsSync(distEntry)) return;
 
   const tscPath = path.join(projectRoot, "node_modules", "typescript", "bin", "tsc");
-  if (!fsSync.existsSync(tscPath)) {
-    throw new Error("Missing TypeScript compiler for git install bootstrap.");
+  if (fsSync.existsSync(tscPath)) {
+    const result = spawnSync(process.execPath, [tscPath, "-p", "tsconfig.json"], {
+      cwd: projectRoot,
+      stdio: "inherit",
+    });
+    if (result.status !== 0) {
+      throw new Error(`TypeScript build failed with exit code ${result.status ?? "unknown"}.`);
+    }
+    return;
   }
 
-  const result = spawnSync(process.execPath, [tscPath, "-p", "tsconfig.json"], {
-    cwd: projectRoot,
-    stdio: "inherit",
-  });
-  if (result.status !== 0) {
-    throw new Error(`TypeScript build failed with exit code ${result.status ?? "unknown"}.`);
+  const npmBinary = process.platform === "win32" ? "npm.cmd" : "npm";
+  const fallback = spawnSync(
+    npmBinary,
+    ["exec", "--yes", "typescript@5.6.3", "--", "tsc", "-p", "tsconfig.json"],
+    {
+      cwd: projectRoot,
+      stdio: "inherit",
+    },
+  );
+  if (fallback.status !== 0) {
+    throw new Error(
+      `Missing TypeScript compiler for git install bootstrap (fallback exit ${fallback.status ?? "unknown"}).`,
+    );
+  }
+
+  if (!fsSync.existsSync(distEntry)) {
+    throw new Error("TypeScript build completed but dist/index.js is still missing.");
   }
 }
 
@@ -129,11 +147,15 @@ async function maybeInstallHook() {
   process.stdout.write(`\nInstalled shell hook in ${rcPath}. Restart terminal or run: source ${rcPath}\n`);
 }
 
+function runPostinstall() {
+  ensureBuiltDist();
+  return maybeInstallHook();
+}
+
 Promise.resolve()
-  .then(() => ensureBuiltDist())
-  .then(() => maybeInstallHook())
+  .then(() => runPostinstall())
   .catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`\n[codex-auth postinstall] Failed: ${message}\n`);
-  process.exitCode = 1;
-});
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`\n[codex-auth postinstall] Failed: ${message}\n`);
+    process.exitCode = 1;
+  });
