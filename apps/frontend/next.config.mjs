@@ -13,6 +13,7 @@ const projectRoot = dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   output: "export",
   reactStrictMode: true,
+  outputFileTracingRoot: projectRoot,
   turbopack: {
     root: projectRoot,
   },
