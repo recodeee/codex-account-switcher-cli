@@ -2250,6 +2250,57 @@ describe("AccountCard", () => {
     expect(screen.getAllByText("Waiting for new task").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("keeps tracked session rows visible when live count dips after refresh", () => {
+    const sessionTaskPreviews = [
+      {
+        sessionKey: "sess-alpha-123456",
+        taskPreview: "Investigate websocket sticky routing",
+        taskUpdatedAt: "2026-04-05T10:00:00.000Z",
+      },
+      {
+        sessionKey: "sess-beta-abcdef",
+        taskPreview: "Audit fallback attribution merge",
+        taskUpdatedAt: "2026-04-05T10:01:00.000Z",
+      },
+      {
+        sessionKey: "sess-gamma-fedcba",
+        taskPreview: "Stabilize refresh-driven session rows",
+        taskUpdatedAt: "2026-04-05T10:02:00.000Z",
+      },
+    ];
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: "Investigate websocket sticky routing",
+      codexSessionTaskPreviews: sessionTaskPreviews,
+      codexLiveSessionCount: 3,
+      codexTrackedSessionCount: 3,
+      codexSessionCount: 3,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+    });
+
+    const { rerender } = render(<AccountCard account={account} />);
+    expect(screen.getByTitle("sess-alpha-123456")).toBeInTheDocument();
+    expect(screen.getByTitle("sess-beta-abcdef")).toBeInTheDocument();
+    expect(screen.getByTitle("sess-gamma-fedcba")).toBeInTheDocument();
+
+    const refreshedAccount = {
+      ...account,
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+    };
+    rerender(<AccountCard account={refreshedAccount} />);
+
+    expect(screen.getByTitle("sess-alpha-123456")).toBeInTheDocument();
+    expect(screen.getByTitle("sess-beta-abcdef")).toBeInTheDocument();
+    expect(screen.getByTitle("sess-gamma-fedcba")).toBeInTheDocument();
+    expect(screen.getByText("3 assigned")).toBeInTheDocument();
+  });
+
   it("keeps the newest prompt when duplicate session keys are reported", () => {
     const olderPrompt = "Older prompt should be replaced";
     const newestPrompt = "Newest prompt should be visible";

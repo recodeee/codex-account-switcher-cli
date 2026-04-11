@@ -1681,6 +1681,10 @@ export function AccountCard(props: AccountCardProps) {
     account.codexTrackedSessionCount ?? 0,
     0,
   );
+  const codexVisibleSessionCount = Math.max(
+    codexLiveSessionCount,
+    codexTrackedSessionCount,
+  );
   const hasSessionInventory =
     codexLiveSessionCount > 0 || codexTrackedSessionCount > 0;
   const showCodexLogsShortcut =
@@ -1759,8 +1763,8 @@ export function AccountCard(props: AccountCardProps) {
       }),
     );
     if (
-      codexLiveSessionCount <= 0 ||
-      normalized.length <= codexLiveSessionCount
+      codexVisibleSessionCount <= 0 ||
+      normalized.length <= codexVisibleSessionCount
     ) {
       return normalized;
     }
@@ -1788,8 +1792,8 @@ export function AccountCard(props: AccountCardProps) {
         }
         return left.sessionKey.localeCompare(right.sessionKey);
       })
-      .slice(0, codexLiveSessionCount);
-  }, [account.codexSessionTaskPreviews, codexLiveSessionCount]);
+      .slice(0, codexVisibleSessionCount);
+  }, [account.codexSessionTaskPreviews, codexVisibleSessionCount]);
   const codexCurrentTaskPreview = useMemo(() => {
     if (
       rawCodexCurrentTaskPreview == null ||
@@ -1906,7 +1910,7 @@ export function AccountCard(props: AccountCardProps) {
         synthetic: false,
       }),
     );
-    const targetCount = Math.max(codexLiveSessionCount, rows.length);
+    const targetCount = Math.max(codexVisibleSessionCount, rows.length);
     const fallbackCurrentTaskPreview = codexCurrentTaskPreview?.trim() || null;
     const fallbackLastTaskPreview = codexLastTaskPreview?.trim() || null;
     const fallbackSessionTaskPreview =
@@ -1944,7 +1948,7 @@ export function AccountCard(props: AccountCardProps) {
     account.lastUsageRecordedAtSecondary,
     codexCurrentTaskPreview,
     codexLastTaskPreview,
-    codexLiveSessionCount,
+    codexVisibleSessionCount,
     sessionTaskPreviews,
   ]);
   const hasSessionTaskRows = sessionTaskRows.length > 0;
