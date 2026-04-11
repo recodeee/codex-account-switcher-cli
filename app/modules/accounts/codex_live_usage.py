@@ -728,15 +728,23 @@ def _resolve_process_snapshot_name_for_accounting(
             snapshot_name=resolved_from_cache.snapshot_name,
             default_current_path=process_default_current_path,
         )
-        _remember_unlabeled_default_scope_session_snapshot_name(
-            pid,
-            resolved_from_cache.snapshot_name,
-            used_unlabeled_default_scope_fallback=used_unlabeled_default_scope_fallback,
-        )
-        return _ResolvedProcessSnapshotAttribution(
+        if used_unlabeled_default_scope_fallback and _should_invalidate_cached_latest_registry_fallback_owner(
+            pid=pid,
             snapshot_name=resolved_from_cache.snapshot_name,
-            used_unlabeled_default_scope_fallback=used_unlabeled_default_scope_fallback,
-        )
+            default_current_path=process_default_current_path,
+            default_auth_path=process_default_auth_path,
+        ):
+            _unlabeled_default_scope_process_owner_cache.pop(pid, None)
+        else:
+            _remember_unlabeled_default_scope_session_snapshot_name(
+                pid,
+                resolved_from_cache.snapshot_name,
+                used_unlabeled_default_scope_fallback=used_unlabeled_default_scope_fallback,
+            )
+            return _ResolvedProcessSnapshotAttribution(
+                snapshot_name=resolved_from_cache.snapshot_name,
+                used_unlabeled_default_scope_fallback=used_unlabeled_default_scope_fallback,
+            )
 
     resolved_from_session_cache = _resolve_cached_unlabeled_default_scope_session_snapshot_name(pid)
     if resolved_from_session_cache:
@@ -744,15 +752,26 @@ def _resolve_process_snapshot_name_for_accounting(
             snapshot_name=resolved_from_session_cache.snapshot_name,
             default_current_path=process_default_current_path,
         )
-        _remember_unlabeled_default_scope_snapshot_name(
-            pid,
-            resolved_from_session_cache.snapshot_name,
-            used_unlabeled_default_scope_fallback=used_unlabeled_default_scope_fallback,
-        )
-        return _ResolvedProcessSnapshotAttribution(
+        if used_unlabeled_default_scope_fallback and _should_invalidate_cached_latest_registry_fallback_owner(
+            pid=pid,
             snapshot_name=resolved_from_session_cache.snapshot_name,
-            used_unlabeled_default_scope_fallback=used_unlabeled_default_scope_fallback,
-        )
+            default_current_path=process_default_current_path,
+            default_auth_path=process_default_auth_path,
+        ):
+            session_id = _resolve_process_rollout_session_id(pid)
+            if session_id is not None:
+                _unlabeled_default_scope_session_owner_cache.pop(session_id, None)
+            _unlabeled_default_scope_process_owner_cache.pop(pid, None)
+        else:
+            _remember_unlabeled_default_scope_snapshot_name(
+                pid,
+                resolved_from_session_cache.snapshot_name,
+                used_unlabeled_default_scope_fallback=used_unlabeled_default_scope_fallback,
+            )
+            return _ResolvedProcessSnapshotAttribution(
+                snapshot_name=resolved_from_session_cache.snapshot_name,
+                used_unlabeled_default_scope_fallback=used_unlabeled_default_scope_fallback,
+            )
 
     if not _is_eligible_unlabeled_default_scope_process(
         pid=pid,
@@ -1728,6 +1747,60 @@ def _is_recent_snapshot_selection_change(*, selection_changed_at: float) -> bool
     if selection_changed_at <= 0:
         return False
     return (time.time() - selection_changed_at) <= float(_switch_process_fallback_seconds())
+
+
+def _should_invalidate_cached_latest_registry_fallback_owner(
+    *,
+    pid: int,
+    snapshot_name: str | None,
+    default_current_path: Path,
+    default_auth_path: Path,
+) -> bool:
+    if not snapshot_name:
+        return False
+
+    current_snapshot_name = _read_current_snapshot_name(default_current_path)
+    if not current_snapshot_name or snapshot_name == current_snapshot_name:
+        return False
+
+    selection_changed_at = _safe_mtime(default_current_path)
+    if selection_changed_at <= 0:
+        return False
+    if _is_recent_snapshot_selection_change(selection_changed_at=selection_changed_at):
+        return False
+
+    previous_snapshot_name = _read_previous_active_snapshot_name_from_registry()
+    if previous_snapshot_name and previous_snapshot_name == snapshot_name:
+        return False
+
+    if default_auth_path.parent == default_current_path.parent:
+        auth_snapshot_name = _infer_snapshot_name_from_auth_path(default_auth_path)
+        if auth_snapshot_name and auth_snapshot_name == snapshot_name:
+            return False
+
+    started_at = _read_process_started_at(pid)
+    rollout_started_at = _resolve_process_session_started_at(pid)
+    if rollout_started_at is not None and (
+        started_at is None or rollout_started_at < started_at
+    ):
+        started_at = rollout_started_at
+
+    if started_at is not None:
+        inferred_recent_previous_snapshot_name = _infer_recent_previous_snapshot_name_from_registry(
+            current_snapshot_name=current_snapshot_name,
+            selection_changed_at=selection_changed_at,
+            process_started_at=started_at,
+        )
+        if inferred_recent_previous_snapshot_name == snapshot_name:
+            return False
+
+    inferred_latest_previous_snapshot_name = (
+        _infer_latest_previous_snapshot_name_from_registry_usage(
+            current_snapshot_name=current_snapshot_name,
+            selection_changed_at=selection_changed_at,
+        )
+    )
+    return inferred_latest_previous_snapshot_name == snapshot_name
 
 
 def _has_running_default_scope_codex_process() -> bool:
