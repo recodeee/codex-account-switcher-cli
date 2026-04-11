@@ -3,9 +3,11 @@ set -euo pipefail
 
 TASK_NAME="task"
 AGENT_NAME="agent"
-BASE_BRANCH=""
+BASE_BRANCH="dev"
 WORKTREE_MODE=1
+ALLOW_IN_PLACE=0
 WORKTREE_ROOT_REL=".omx/agent-worktrees"
+POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,44 +27,50 @@ while [[ $# -gt 0 ]]; do
       WORKTREE_MODE=0
       shift
       ;;
+    --allow-in-place)
+      ALLOW_IN_PLACE=1
+      shift
+      ;;
     --worktree-root)
       WORKTREE_ROOT_REL="${2:-.omx/agent-worktrees}"
       shift 2
       ;;
     --)
       shift
+      while [[ $# -gt 0 ]]; do
+        POSITIONAL_ARGS+=("$1")
+        shift
+      done
       break
       ;;
     -*)
       echo "[agent-branch-start] Unknown option: $1" >&2
-      echo "Usage: $0 [task] [agent] [base] [--in-place] [--worktree-root <path>]" >&2
+      echo "Usage: $0 [task] [agent] [base] [--in-place --allow-in-place] [--worktree-root <path>]" >&2
       exit 1
       ;;
     *)
-      break
+      POSITIONAL_ARGS+=("$1")
+      shift
       ;;
   esac
 done
 
-if [[ $# -gt 0 ]]; then
-  TASK_NAME="$1"
-  shift
-fi
-
-if [[ $# -gt 0 ]]; then
-  AGENT_NAME="$1"
-  shift
-fi
-
-if [[ $# -gt 0 ]]; then
-  BASE_BRANCH="$1"
-  shift
-fi
-
-if [[ $# -gt 0 ]]; then
-  echo "[agent-branch-start] Unexpected extra arguments: $*" >&2
-  echo "Usage: $0 [task] [agent] [base] [--in-place] [--worktree-root <path>]" >&2
+if [[ "${#POSITIONAL_ARGS[@]}" -gt 3 ]]; then
+  echo "[agent-branch-start] Too many positional arguments." >&2
+  echo "Usage: $0 [task] [agent] [base] [--in-place --allow-in-place] [--worktree-root <path>]" >&2
   exit 1
+fi
+
+if [[ "${#POSITIONAL_ARGS[@]}" -ge 1 ]]; then
+  TASK_NAME="${POSITIONAL_ARGS[0]}"
+fi
+
+if [[ "${#POSITIONAL_ARGS[@]}" -ge 2 ]]; then
+  AGENT_NAME="${POSITIONAL_ARGS[1]}"
+fi
+
+if [[ "${#POSITIONAL_ARGS[@]}" -ge 3 ]]; then
+  BASE_BRANCH="${POSITIONAL_ARGS[2]}"
 fi
 
 sanitize_slug() {
@@ -81,13 +89,6 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 repo_root="$(git rev-parse --show-toplevel)"
-
-if [[ -z "$BASE_BRANCH" ]]; then
-  BASE_BRANCH="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
-fi
-if [[ -z "$BASE_BRANCH" ]]; then
-  BASE_BRANCH="dev"
-fi
 
 if git show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
   git fetch origin "${BASE_BRANCH}" --quiet
@@ -111,6 +112,12 @@ if git show-ref --verify --quiet "refs/heads/${branch_name}"; then
 fi
 
 if [[ "$WORKTREE_MODE" -eq 0 ]]; then
+  if [[ "$ALLOW_IN_PLACE" -ne 1 ]]; then
+    echo "[agent-branch-start] --in-place is blocked by default to prevent accidental edits on protected branches." >&2
+    echo "[agent-branch-start] If you really need it, pass both: --in-place --allow-in-place" >&2
+    exit 1
+  fi
+
   if ! git diff --quiet || ! git diff --cached --quiet; then
     echo "[agent-branch-start] Working tree is not clean. Commit/stash changes before starting an in-place branch." >&2
     exit 1
@@ -151,8 +158,5 @@ echo "[agent-branch-start] Worktree: ${worktree_path}"
 echo "[agent-branch-start] Next steps:"
 echo "  cd \"${worktree_path}\""
 echo "  python3 scripts/agent-file-locks.py claim --branch \"${branch_name}\" <file...>"
-echo "  # if touching main.rs:"
-echo "  python3 scripts/main_rs_lock.py claim --owner \"${agent_slug}\" --branch \"${branch_name}\""
-echo "  # note: main.rs lock is integrator-only by default (agent/integrator/...)"
 echo "  # implement + commit"
 echo "  bash scripts/agent-branch-finish.sh --branch \"${branch_name}\""

@@ -18,6 +18,16 @@
     "main-rs-lock:claim": "python3 ./scripts/main_rs_lock.py claim",
     "main-rs-lock:release": "python3 ./scripts/main_rs_lock.py release",
     "main-rs-lock:status": "python3 ./scripts/main_rs_lock.py status",
-    "main-rs-lock:validate": "python3 ./scripts/main_rs_lock.py validate --staged"
+    "main-rs-lock:validate": "python3 ./scripts/main_rs_lock.py validate --staged",
+    "agent:cleanup": "bash ./scripts/agent-worktree-prune.sh --base dev",
+    "agent:locks:allow-delete": "python3 ./scripts/agent-file-locks.py allow-delete",
+    "agent:plan:init": "bash ./scripts/openspec/init-plan-workspace.sh",
+    "agent:protect:list": "musafety protect list",
+    "agent:branch:sync": "musafety sync",
+    "agent:branch:sync:check": "musafety sync --check",
+    "agent:safety:setup": "musafety setup",
+    "agent:safety:scan": "musafety scan",
+    "agent:safety:fix": "musafety fix",
+    "agent:safety:doctor": "musafety doctor"
   }
 }
