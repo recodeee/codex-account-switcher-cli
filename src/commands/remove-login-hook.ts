@@ -5,7 +5,7 @@ import { removeLoginHook, resolveDefaultShellRcPath } from "../lib/config/login-
 export default class RemoveLoginHookCommand extends BaseCommand {
   protected readonly syncExternalAuthBeforeRun = false;
 
-  static description = "Remove the shell hook that auto-syncs snapshots after `codex login`";
+  static description = "Remove the shell hook that keeps terminal snapshot memory in sync";
 
   static flags = {
     shellRc: Flags.string({

@@ -52,6 +52,27 @@ test("installLoginHook is idempotent", async (t) => {
   });
 });
 
+test("installLoginHook refreshes an existing legacy hook block", async (t) => {
+  await withTempRcFile(t, async (rcPath) => {
+    const legacyBlock = [
+      LOGIN_HOOK_MARK_START,
+      "# legacy",
+      LOGIN_HOOK_MARK_END,
+    ].join("\n");
+    await fsp.writeFile(rcPath, `# test bashrc\n\n${legacyBlock}\n`, "utf8");
+
+    const result = await installLoginHook(rcPath);
+    assert.equal(result, "updated");
+
+    const contents = await fsp.readFile(rcPath, "utf8");
+    assert.ok(contents.includes("command codex-auth restore-session"));
+    assert.ok(contents.includes("CODEX_AUTH_FORCE_EXTERNAL_SYNC=1 command codex-auth status"));
+    assert.ok(!contents.includes("# legacy"));
+    const startCount = contents.split(LOGIN_HOOK_MARK_START).length - 1;
+    assert.equal(startCount, 1);
+  });
+});
+
 test("removeLoginHook removes installed marker block", async (t) => {
   await withTempRcFile(t, async (rcPath) => {
     await installLoginHook(rcPath);
