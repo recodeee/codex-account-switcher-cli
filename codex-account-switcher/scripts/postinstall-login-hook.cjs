@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 const fs = require("node:fs/promises");
+const fsSync = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const readline = require("node:readline/promises");
 
 const MARK_START = "# >>> codex-auth-login-auto-snapshot >>>";
@@ -62,6 +64,25 @@ function normalizeRcContents(contents) {
   return `${collapsed.replace(/\s*$/, "")}\n`;
 }
 
+function ensureBuiltDist() {
+  const projectRoot = path.resolve(__dirname, "..");
+  const distEntry = path.join(projectRoot, "dist", "index.js");
+  if (fsSync.existsSync(distEntry)) return;
+
+  const tscPath = path.join(projectRoot, "node_modules", "typescript", "bin", "tsc");
+  if (!fsSync.existsSync(tscPath)) {
+    throw new Error("Missing TypeScript compiler for git install bootstrap.");
+  }
+
+  const result = spawnSync(process.execPath, [tscPath, "-p", "tsconfig.json"], {
+    cwd: projectRoot,
+    stdio: "inherit",
+  });
+  if (result.status !== 0) {
+    throw new Error(`TypeScript build failed with exit code ${result.status ?? "unknown"}.`);
+  }
+}
+
 async function maybeInstallHook() {
   if (process.env.npm_config_global !== "true") return;
   if (isTruthy(process.env.CODEX_AUTH_SKIP_POSTINSTALL)) return;
@@ -108,7 +129,11 @@ async function maybeInstallHook() {
   process.stdout.write(`\nInstalled shell hook in ${rcPath}. Restart terminal or run: source ${rcPath}\n`);
 }
 
-maybeInstallHook().catch((error) => {
+Promise.resolve()
+  .then(() => ensureBuiltDist())
+  .then(() => maybeInstallHook())
+  .catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`\n[codex-auth postinstall] Failed to install login hook: ${message}\n`);
+  process.stderr.write(`\n[codex-auth postinstall] Failed: ${message}\n`);
+  process.exitCode = 1;
 });
