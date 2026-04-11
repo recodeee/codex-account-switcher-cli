@@ -157,3 +157,4 @@ Notes:
 - Works on macOS/Linux/Windows (regular-file auth snapshot activation).
 - Requires Node 18+.
 - Running bare `codex-auth` shows the help screen and also displays an update notice when a newer npm release is available.
+- Running bare `codex-auth` now prompts to install updates immediately when a newer npm release is available (`[Y/n]`, Enter defaults to yes).

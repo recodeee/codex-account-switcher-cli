@@ -76,6 +76,14 @@ export function formatUpdateSummaryInline(summary: UpdateSummary): string {
   return `ℹ Update status unknown (current: ${summary.currentVersion}, latest: ${summary.latestVersion})`;
 }
 
+export function shouldProceedWithYesDefault(answer: string): boolean {
+  const normalized = answer.trim().toLowerCase();
+  if (!normalized) return true;
+  if (normalized === "y" || normalized === "yes") return true;
+  if (normalized === "n" || normalized === "no") return false;
+  return false;
+}
+
 export async function fetchLatestNpmVersion(packageName: string, timeoutMs = 2_500): Promise<string | null> {
   return new Promise((resolve) => {
     const child = spawn("npm", ["view", packageName, "version", "--json"], {

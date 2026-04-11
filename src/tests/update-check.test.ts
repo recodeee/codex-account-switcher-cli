@@ -7,6 +7,7 @@ import {
   getUpdateSummary,
   isVersionNewer,
   parseVersionTriplet,
+  shouldProceedWithYesDefault,
 } from "../lib/update-check";
 
 test("parseVersionTriplet parses standard semver triplets", () => {
@@ -81,4 +82,17 @@ test("formatUpdateSummaryCard renders a stable 4-line card", () => {
   assert.equal(lines.length, 4);
   assert.equal(lines[0], "┌─ codex-auth update");
   assert.equal(lines[3], "└─ status : update available");
+});
+
+test("shouldProceedWithYesDefault accepts enter and yes responses", () => {
+  assert.equal(shouldProceedWithYesDefault(""), true);
+  assert.equal(shouldProceedWithYesDefault("   "), true);
+  assert.equal(shouldProceedWithYesDefault("y"), true);
+  assert.equal(shouldProceedWithYesDefault("Yes"), true);
+});
+
+test("shouldProceedWithYesDefault rejects no and unknown responses", () => {
+  assert.equal(shouldProceedWithYesDefault("n"), false);
+  assert.equal(shouldProceedWithYesDefault("No"), false);
+  assert.equal(shouldProceedWithYesDefault("later"), false);
 });
