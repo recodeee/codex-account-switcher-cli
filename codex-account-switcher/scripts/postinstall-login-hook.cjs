@@ -84,7 +84,7 @@ function ensureBuiltDist() {
   const npmBinary = process.platform === "win32" ? "npm.cmd" : "npm";
   const fallback = spawnSync(
     npmBinary,
-    ["exec", "--yes", "typescript@5.6.3", "--", "tsc", "-p", "tsconfig.json"],
+    ["exec", "--yes", "--package", "typescript@5.6.3", "--", "tsc", "-p", "tsconfig.json"],
     {
       cwd: projectRoot,
       stdio: "inherit",
