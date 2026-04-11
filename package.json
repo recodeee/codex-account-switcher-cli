@@ -25,6 +25,8 @@
     "agent:protect:list": "musafety protect list",
     "agent:branch:sync": "musafety sync",
     "agent:branch:sync:check": "musafety sync --check",
+    "agent:branch:sync:all": "bash ./scripts/agent-sync-on-base-update.sh",
+    "agent:branch:sync:all:check": "bash ./scripts/agent-sync-on-base-update.sh --check",
     "agent:safety:setup": "musafety setup",
     "agent:safety:scan": "musafety scan",
     "agent:safety:fix": "musafety fix",

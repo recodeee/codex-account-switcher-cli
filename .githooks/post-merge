@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Auto-sync agent worktrees when the base branch is updated in this worktree.
+if [[ -x "scripts/agent-sync-on-base-update.sh" ]]; then
+  bash scripts/agent-sync-on-base-update.sh --quiet || true
+fi
