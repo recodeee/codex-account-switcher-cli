@@ -615,3 +615,217 @@ test("useAccount writes auth.json as a regular file (never symlink)", async (t) 
     assert.equal(authStat.isSymbolicLink(), false);
   });
 });
+
+test("getCurrentAccountName prefers session-scoped snapshot over global current pointer", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir }) => {
+    const service = new AccountService();
+    const currentPath = path.join(codexDir, "current");
+    const sessionMapPath = path.join(accountsDir, "sessions.json");
+    const sessionKey = `ppid:${process.ppid}`;
+
+    await fsp.writeFile(
+      path.join(accountsDir, "odin@megkapja.hu.json"),
+      buildAuthPayload("odin@megkapja.hu", {
+        accountId: "acct-odin",
+        userId: "user-odin",
+      }),
+    );
+    await fsp.writeFile(
+      path.join(accountsDir, "lajos@edix.hu.json"),
+      buildAuthPayload("lajos@edix.hu", {
+        accountId: "acct-lajos",
+        userId: "user-lajos",
+      }),
+    );
+    await fsp.writeFile(currentPath, "lajos@edix.hu\n", "utf8");
+    await fsp.writeFile(
+      sessionMapPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          sessions: {
+            [sessionKey]: {
+              accountName: "odin@megkapja.hu",
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const active = await service.getCurrentAccountName();
+    assert.equal(active, "odin@megkapja.hu");
+  });
+});
+
+test("syncExternalAuthSnapshotIfNeeded ignores external login from another terminal when session snapshot differs", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const currentPath = path.join(codexDir, "current");
+    const sessionMapPath = path.join(accountsDir, "sessions.json");
+    const sessionKey = `ppid:${process.ppid}`;
+
+    await fsp.writeFile(
+      path.join(accountsDir, "odin@megkapja.hu.json"),
+      buildAuthPayload("odin@megkapja.hu", {
+        accountId: "acct-odin",
+        userId: "user-odin",
+      }),
+    );
+    await fsp.writeFile(currentPath, "odin@megkapja.hu\n", "utf8");
+    await fsp.writeFile(
+      sessionMapPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          sessions: {
+            [sessionKey]: {
+              accountName: "odin@megkapja.hu",
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload("lajos@edix.hu", {
+        accountId: "acct-lajos",
+        userId: "user-lajos",
+      }),
+      "utf8",
+    );
+
+    const result = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(result, {
+      synchronized: false,
+      autoSwitchDisabled: false,
+    });
+
+    await assert.rejects(() => fsp.access(path.join(accountsDir, "lajos@edix.hu.json")));
+    assert.equal((await fsp.readFile(currentPath, "utf8")).trim(), "odin@megkapja.hu");
+  });
+});
+
+test("syncExternalAuthSnapshotIfNeeded can be forced for explicit in-terminal codex login sync", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const currentPath = path.join(codexDir, "current");
+    const sessionMapPath = path.join(accountsDir, "sessions.json");
+    const sessionKey = `ppid:${process.ppid}`;
+    const previousFlag = process.env.CODEX_AUTH_FORCE_EXTERNAL_SYNC;
+
+    await fsp.writeFile(
+      path.join(accountsDir, "odin@megkapja.hu.json"),
+      buildAuthPayload("odin@megkapja.hu", {
+        accountId: "acct-odin",
+        userId: "user-odin",
+      }),
+    );
+    await fsp.writeFile(currentPath, "odin@megkapja.hu\n", "utf8");
+    await fsp.writeFile(
+      sessionMapPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          sessions: {
+            [sessionKey]: {
+              accountName: "odin@megkapja.hu",
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload("lajos@edix.hu", {
+        accountId: "acct-lajos",
+        userId: "user-lajos",
+      }),
+      "utf8",
+    );
+
+    process.env.CODEX_AUTH_FORCE_EXTERNAL_SYNC = "1";
+    t.after(() => {
+      process.env.CODEX_AUTH_FORCE_EXTERNAL_SYNC = previousFlag;
+    });
+
+    const result = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(result, {
+      synchronized: true,
+      savedName: "lajos@edix.hu",
+      autoSwitchDisabled: false,
+    });
+    assert.equal((await fsp.readFile(currentPath, "utf8")).trim(), "lajos@edix.hu");
+  });
+});
+
+test("restoreSessionSnapshotIfNeeded re-activates the session-pinned snapshot when auth.json drifts", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const currentPath = path.join(codexDir, "current");
+    const sessionMapPath = path.join(accountsDir, "sessions.json");
+    const sessionKey = `ppid:${process.ppid}`;
+
+    await fsp.writeFile(
+      path.join(accountsDir, "odin@megkapja.hu.json"),
+      buildAuthPayload("odin@megkapja.hu", {
+        accountId: "acct-odin",
+        userId: "user-odin",
+      }),
+    );
+    await fsp.writeFile(
+      path.join(accountsDir, "lajos@edix.hu.json"),
+      buildAuthPayload("lajos@edix.hu", {
+        accountId: "acct-lajos",
+        userId: "user-lajos",
+      }),
+    );
+    await fsp.writeFile(currentPath, "lajos@edix.hu\n", "utf8");
+    await fsp.writeFile(
+      sessionMapPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          sessions: {
+            [sessionKey]: {
+              accountName: "odin@megkapja.hu",
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload("lajos@edix.hu", {
+        accountId: "acct-lajos",
+        userId: "user-lajos",
+      }),
+      "utf8",
+    );
+
+    const restored = await service.restoreSessionSnapshotIfNeeded();
+    assert.deepEqual(restored, {
+      restored: true,
+      accountName: "odin@megkapja.hu",
+    });
+
+    assert.equal((await fsp.readFile(currentPath, "utf8")).trim(), "odin@megkapja.hu");
+    const parsed = await parseAuthSnapshotFile(authPath);
+    assert.equal(parsed.email, "odin@megkapja.hu");
+  });
+});

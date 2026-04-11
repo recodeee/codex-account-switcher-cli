@@ -6,6 +6,7 @@ import {
   resolveAuthPath,
   resolveCodexDir,
   resolveCurrentNamePath,
+  resolveSessionMapPath,
 } from "../config/paths";
 import {
   AccountNotFoundError,
@@ -44,6 +45,18 @@ import {
 } from "./service-manager";
 
 const ACCOUNT_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._@+-]*$/;
+const EXTERNAL_SYNC_FORCE_ENV = "CODEX_AUTH_FORCE_EXTERNAL_SYNC";
+const SESSION_KEY_ENV = "CODEX_AUTH_SESSION_KEY";
+
+interface SessionMapEntry {
+  accountName: string;
+  updatedAt: string;
+}
+
+interface SessionMapData {
+  version: 1;
+  sessions: Record<string, SessionMapEntry>;
+}
 
 export interface AccountChoice {
   name: string;
@@ -96,6 +109,24 @@ export class AccountService {
       };
     }
 
+    const sessionAccountName = await this.getSessionAccountName();
+    if (sessionAccountName) {
+      const sessionSnapshotPath = this.accountFilePath(sessionAccountName);
+      if (await this.pathExists(sessionSnapshotPath)) {
+        const sessionSnapshot = await parseAuthSnapshotFile(sessionSnapshotPath);
+        if (
+          sessionSnapshot.authMode === "chatgpt" &&
+          !this.snapshotsShareIdentity(sessionSnapshot, incomingSnapshot) &&
+          !this.isExternalSyncForced()
+        ) {
+          return {
+            synchronized: false,
+            autoSwitchDisabled: false,
+          };
+        }
+      }
+    }
+
     const resolvedName = await this.resolveLoginAccountNameFromCurrentAuth();
     const activeName = await this.getCurrentAccountName();
     if (activeName) {
@@ -136,15 +167,60 @@ export class AccountService {
     };
   }
 
+  public async restoreSessionSnapshotIfNeeded(): Promise<{ restored: boolean; accountName?: string }> {
+    const sessionAccountName = await this.getSessionAccountName();
+    if (!sessionAccountName) {
+      return { restored: false };
+    }
+
+    const snapshotPath = this.accountFilePath(sessionAccountName);
+    if (!(await this.pathExists(snapshotPath))) {
+      await this.clearSessionAccountName();
+      return { restored: false };
+    }
+
+    const authPath = resolveAuthPath();
+    if (await this.pathExists(authPath)) {
+      const [sessionSnapshot, activeSnapshot] = await Promise.all([
+        parseAuthSnapshotFile(snapshotPath),
+        parseAuthSnapshotFile(authPath),
+      ]);
+      if (this.snapshotsShareIdentity(sessionSnapshot, activeSnapshot)) {
+        return {
+          restored: false,
+          accountName: sessionAccountName,
+        };
+      }
+    }
+
+    await this.activateSnapshot(sessionAccountName);
+    return {
+      restored: true,
+      accountName: sessionAccountName,
+    };
+  }
+
   public async listAccountNames(): Promise<string[]> {
     const accountsDir = resolveAccountsDir();
     if (!(await this.pathExists(accountsDir))) {
       return [];
     }
 
+    const sessionMapPath = resolveSessionMapPath();
+    const sessionMapBasename =
+      path.dirname(sessionMapPath) === accountsDir
+        ? path.basename(sessionMapPath)
+        : undefined;
+
     const entries = await fsp.readdir(accountsDir, { withFileTypes: true });
     return entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".json") && entry.name !== "registry.json")
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          entry.name.endsWith(".json") &&
+          entry.name !== "registry.json" &&
+          entry.name !== sessionMapBasename,
+      )
       .map((entry) => entry.name.replace(/\.json$/i, ""))
       .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
   }
@@ -210,9 +286,22 @@ export class AccountService {
   }
 
   public async getCurrentAccountName(): Promise<string | null> {
+    const sessionAccountName = await this.getSessionAccountName();
+    if (sessionAccountName) {
+      const sessionSnapshotPath = this.accountFilePath(sessionAccountName);
+      if (await this.pathExists(sessionSnapshotPath)) {
+        return sessionAccountName;
+      }
+
+      await this.clearSessionAccountName();
+    }
+
     const currentNamePath = resolveCurrentNamePath();
     const currentName = await this.readCurrentNameFile(currentNamePath);
-    if (currentName) return currentName;
+    if (currentName) {
+      await this.setSessionAccountName(currentName);
+      return currentName;
+    }
 
     const authPath = resolveAuthPath();
     if (!(await this.pathExists(authPath))) return null;
@@ -228,7 +317,9 @@ export class AccountService {
 
     const base = path.basename(resolvedTarget);
     if (!base.endsWith(".json") || base === "registry.json") return null;
-    return base.replace(/\.json$/i, "");
+    const resolvedName = base.replace(/\.json$/i, "");
+    await this.setSessionAccountName(resolvedName);
+    return resolvedName;
   }
 
   public async saveAccount(rawName: string, options?: SaveAccountOptions): Promise<string> {
@@ -682,6 +773,7 @@ export class AccountService {
     const currentNamePath = resolveCurrentNamePath();
     await this.ensureDir(path.dirname(currentNamePath));
     await fsp.writeFile(currentNamePath, `${name}\n`, "utf8");
+    await this.setSessionAccountName(name);
   }
 
   private async readCurrentNameFile(currentNamePath: string): Promise<string | null> {
@@ -795,6 +887,116 @@ export class AccountService {
     const authPath = resolveAuthPath();
     await this.removeIfExists(currentPath);
     await this.removeIfExists(authPath);
+    await this.clearSessionAccountName();
+  }
+
+  private isExternalSyncForced(): boolean {
+    const raw = process.env[EXTERNAL_SYNC_FORCE_ENV];
+    if (!raw) return false;
+    const normalized = raw.trim().toLowerCase();
+    if (!normalized) return false;
+    return !["0", "false", "no", "off"].includes(normalized);
+  }
+
+  private resolveSessionScopeKey(): string | null {
+    const explicit = process.env[SESSION_KEY_ENV]?.trim();
+    if (explicit) {
+      const sanitized = explicit.replace(/\s+/g, " ").slice(0, 160);
+      return `session:${sanitized}`;
+    }
+
+    if (typeof process.ppid === "number" && process.ppid > 1) {
+      return `ppid:${process.ppid}`;
+    }
+
+    return null;
+  }
+
+  private async getSessionAccountName(): Promise<string | null> {
+    const sessionKey = this.resolveSessionScopeKey();
+    if (!sessionKey) return null;
+
+    const sessionMap = await this.readSessionMap();
+    const entry = sessionMap.sessions[sessionKey];
+    if (!entry?.accountName) return null;
+
+    try {
+      return this.normalizeAccountName(entry.accountName);
+    } catch {
+      return null;
+    }
+  }
+
+  private async setSessionAccountName(accountName: string): Promise<void> {
+    const sessionKey = this.resolveSessionScopeKey();
+    if (!sessionKey) return;
+
+    const sessionMap = await this.readSessionMap();
+    sessionMap.sessions[sessionKey] = {
+      accountName,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.writeSessionMap(sessionMap);
+  }
+
+  private async clearSessionAccountName(): Promise<void> {
+    const sessionKey = this.resolveSessionScopeKey();
+    if (!sessionKey) return;
+
+    const sessionMap = await this.readSessionMap();
+    if (!sessionMap.sessions[sessionKey]) return;
+    delete sessionMap.sessions[sessionKey];
+    await this.writeSessionMap(sessionMap);
+  }
+
+  private async readSessionMap(): Promise<SessionMapData> {
+    const sessionMapPath = resolveSessionMapPath();
+    try {
+      const raw = await fsp.readFile(sessionMapPath, "utf8");
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") {
+        return {
+          version: 1,
+          sessions: {},
+        };
+      }
+
+      const root = parsed as Record<string, unknown>;
+      const sessionsRaw = root.sessions && typeof root.sessions === "object"
+        ? (root.sessions as Record<string, unknown>)
+        : {};
+      const sessions: Record<string, SessionMapEntry> = {};
+
+      for (const [key, value] of Object.entries(sessionsRaw)) {
+        if (!value || typeof value !== "object") continue;
+        const rawEntry = value as Record<string, unknown>;
+        const accountName = typeof rawEntry.accountName === "string" ? rawEntry.accountName.trim() : "";
+        if (!accountName) continue;
+        sessions[key] = {
+          accountName,
+          updatedAt:
+            typeof rawEntry.updatedAt === "string" && rawEntry.updatedAt.length > 0
+              ? rawEntry.updatedAt
+              : new Date().toISOString(),
+        };
+      }
+
+      return {
+        version: 1,
+        sessions,
+      };
+    } catch {
+      return {
+        version: 1,
+        sessions: {},
+      };
+    }
+  }
+
+  private async writeSessionMap(sessionMap: SessionMapData): Promise<void> {
+    const sessionMapPath = resolveSessionMapPath();
+    await this.ensureDir(path.dirname(sessionMapPath));
+    await fsp.writeFile(sessionMapPath, `${JSON.stringify(sessionMap, null, 2)}\n`, "utf8");
   }
 
   private snapshotsShareIdentity(a: ParsedAuthSnapshot, b: ParsedAuthSnapshot): boolean {

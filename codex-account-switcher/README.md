@@ -9,6 +9,8 @@ A command-line tool that lets you manage and switch between multiple Codex accou
 
 Codex stores your authentication session in a single `auth.json` file. This tool works by creating named snapshots of that file for each of your accounts. When you want to switch, `codex-auth` swaps the active `~/.codex/auth.json` with the snapshot you select, instantly changing your logged-in account.
 
+`codex-auth` also keeps a lightweight per-terminal session memory (scoped by shell parent PID by default), so older terminals keep using their original snapshot even if a different terminal logs into another account later.
+
 ## Requirements
 
 - Node.js 18 or newer
@@ -27,6 +29,7 @@ official `codex login`.
 - Choose `n` (default) to skip.
 - Set `CODEX_AUTH_SKIP_POSTINSTALL=1` to always suppress this prompt.
 - Set `CODEX_AUTH_SKIP_TTY_RESTORE=1` to keep the hook from restoring terminal modes after `codex` exits.
+- Set `CODEX_AUTH_SESSION_KEY=<id>` to explicitly scope session-memory identity (optional; default uses shell PPID).
 - For a calmer Codex footer, prefer a focused `[tui] status_line` such as:
 
   ```toml
@@ -120,7 +123,7 @@ codex-auth remove-login-hook
 - `codex-auth config auto ...` – Enables/disables managed auto-switch and updates threshold percentages.
 - `codex-auth config api enable|disable` – Chooses usage source mode (`api` or `local`).
 - `codex-auth daemon --once|--watch` – Runs the auto-switch loop once or continuously.
-- `codex-auth setup-login-hook [-f <path>]` – Installs an optional shell hook in your rc file to auto-sync snapshots after successful official `codex login` and restore common terminal modes before returning to your prompt.
+- `codex-auth setup-login-hook [-f <path>]` – Installs an optional shell hook in your rc file to restore session-pinned snapshot before each `codex` run, auto-sync snapshots after successful official `codex login`, and restore common terminal modes before returning to your prompt.
 - `codex-auth hook-status [-f <path>]` – Shows whether the optional login auto-snapshot hook is installed for the selected rc file.
 - `codex-auth remove-login-hook [-f <path>]` – Removes the optional shell hook.
 

@@ -46,8 +46,18 @@ export function resolveRegistryPath(): string {
   return path.join(resolveAccountsDir(), "registry.json");
 }
 
+export function resolveSessionMapPath(): string {
+  const envPath = process.env.CODEX_AUTH_SESSION_MAP_PATH;
+  if (envPath && envPath.trim().length > 0) {
+    return resolvePath(envPath.trim());
+  }
+
+  return path.join(resolveAccountsDir(), "sessions.json");
+}
+
 export const codexDir: string = resolveCodexDir();
 export const accountsDir: string = resolveAccountsDir();
 export const authPath: string = resolveAuthPath();
 export const currentNamePath: string = resolveCurrentNamePath();
 export const registryPath: string = resolveRegistryPath();
+export const sessionMapPath: string = resolveSessionMapPath();
