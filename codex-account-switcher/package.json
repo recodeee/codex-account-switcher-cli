@@ -10,6 +10,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
     "postinstall": "node scripts/postinstall-login-hook.cjs",
     "prepublishOnly": "npm run build",
     "test": "npm run build && node --test dist/tests/**/*.test.js"
