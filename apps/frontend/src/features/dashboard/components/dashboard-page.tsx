@@ -214,7 +214,7 @@ export function DashboardPage() {
       : null;
 
   return (
-    <div className="animate-fade-in-up space-y-8">
+    <div className="animate-fade-in-up w-full max-w-none space-y-8">
       {/* Page header */}
       <div className="flex items-start justify-between">
         <div className="space-y-2">

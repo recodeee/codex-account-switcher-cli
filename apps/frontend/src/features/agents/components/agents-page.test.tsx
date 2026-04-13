@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAgents } from "@/features/agents/hooks/use-agents";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
+import { listStickySessions } from "@/features/sticky-sessions/api";
 import { renderWithProviders } from "@/test/utils";
 
 import { AgentsPage } from "./agents-page";
@@ -14,6 +15,10 @@ vi.mock("@/features/dashboard/hooks/use-dashboard", () => ({
 
 vi.mock("@/features/agents/hooks/use-agents", () => ({
   useAgents: vi.fn(),
+}));
+
+vi.mock("@/features/sticky-sessions/api", () => ({
+  listStickySessions: vi.fn(),
 }));
 
 const NOW = "2026-04-13T20:00:00Z";
@@ -113,6 +118,13 @@ describe("AgentsPage", () => {
         ],
       },
     } as ReturnType<typeof useDashboard>);
+    vi.mocked(listStickySessions).mockResolvedValue({
+      entries: [],
+      unmappedCliSessions: [],
+      stalePromptCacheCount: 0,
+      total: 0,
+      hasMore: false,
+    });
 
     vi.mocked(useAgents).mockReturnValue({
       agentsQuery: {
@@ -274,5 +286,51 @@ describe("AgentsPage", () => {
       agentId: "agent-master",
       agentName: "Master Agent",
     });
+  });
+
+  it("includes unmapped Openclaw runtime in Create Agent runtime list", async () => {
+    const user = userEvent.setup({ delay: null });
+    vi.mocked(useDashboard).mockReturnValue({
+      data: {
+        accounts: [
+          {
+            accountId: "acc-codex",
+            email: "recodee@workspace.local",
+            displayName: "Recodee",
+            planType: "pro",
+            status: "active",
+            codexAuth: {
+              hasSnapshot: true,
+              snapshotName: "recodee",
+            },
+            codexLiveSessionCount: 1,
+            codexTrackedSessionCount: 1,
+            codexSessionCount: 1,
+          },
+        ],
+      },
+    } as ReturnType<typeof useDashboard>);
+    vi.mocked(listStickySessions).mockResolvedValue({
+      entries: [],
+      unmappedCliSessions: [
+        {
+          snapshotName: "openclaw-recodee",
+          processSessionCount: 1,
+          runtimeSessionCount: 0,
+          totalSessionCount: 1,
+          reason: "No account matched this snapshot.",
+        },
+      ],
+      stalePromptCacheCount: 0,
+      total: 1,
+      hasMore: false,
+    });
+
+    renderWithProviders(<AgentsPage />);
+
+    await user.click(screen.getByRole("button", { name: "Create agent" }));
+    await user.click(screen.getByRole("combobox"));
+
+    expect(await screen.findByText("Openclaw (openclaw-recodee)")).toBeInTheDocument();
   });
 });

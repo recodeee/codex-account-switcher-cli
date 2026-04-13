@@ -17,6 +17,7 @@ import {
   Sparkle,
   Trash2,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -50,6 +51,8 @@ import { useAgents } from "@/features/agents/hooks/use-agents";
 import type { AgentEntry } from "@/features/agents/schemas";
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
+import { listStickySessions } from "@/features/sticky-sessions/api";
+import type { UnmappedCliSession } from "@/features/sticky-sessions/schemas";
 import { cn } from "@/lib/utils";
 import { hasActiveCliSessionSignal } from "@/utils/account-working";
 
@@ -191,18 +194,46 @@ function resolveRuntimeProvider(...values: Array<string | null | undefined>): "c
   return values.some((value) => value && OPENCLAW_PROVIDER_MATCHER.test(value)) ? "openclaw" : "codex";
 }
 
-function buildRuntimeOptions(accounts: AccountSummary[] | undefined): RuntimeOption[] {
+function getRuntimeDisplayName(provider: RuntimeOption["provider"]) {
+  return provider === "openclaw" ? "Openclaw" : "Codex";
+}
+
+function buildRuntimeOptions(
+  accounts: AccountSummary[] | undefined,
+  unmappedCliSessions: UnmappedCliSession[] | undefined,
+): RuntimeOption[] {
   const nowMs = Date.now();
-  const options = (accounts ?? [])
-    .filter((account) => account.codexAuth?.hasSnapshot ?? false)
+  const accountOptions = (accounts ?? [])
+    .filter((account) => {
+      const hasNamedSnapshot = Boolean(
+        account.codexAuth?.snapshotName ??
+          account.codexAuth?.expectedSnapshotName ??
+          account.codexAuth?.activeSnapshotName,
+      );
+      const hasLiveSessionSignal =
+        Math.max(
+          account.codexLiveSessionCount ?? 0,
+          account.codexTrackedSessionCount ?? 0,
+          account.codexSessionCount ?? 0,
+        ) > 0 ||
+        hasActiveCliSessionSignal(account, nowMs) ||
+        Boolean(account.codexAuth?.hasLiveSession);
+      return (account.codexAuth?.hasSnapshot ?? false) || hasNamedSnapshot || hasLiveSessionSignal;
+    })
     .map((account) => {
       const snapshotName =
         account.codexAuth?.snapshotName ??
         account.codexAuth?.expectedSnapshotName ??
         account.codexAuth?.activeSnapshotName ??
         account.email;
-      const provider = resolveRuntimeProvider(snapshotName, account.email, account.displayName);
-      const providerName = provider === "openclaw" ? "Openclaw" : "Codex";
+      const provider = resolveRuntimeProvider(
+        snapshotName,
+        account.email,
+        account.displayName,
+        account.codexCurrentTaskPreview,
+        account.codexLastTaskPreview,
+      );
+      const providerName = getRuntimeDisplayName(provider);
       const online =
         Math.max(
           account.codexLiveSessionCount ?? 0,
@@ -217,7 +248,30 @@ function buildRuntimeOptions(accounts: AccountSummary[] | undefined): RuntimeOpt
         provider,
         online,
       } satisfies RuntimeOption;
-    })
+    });
+
+  const unmappedOptions = (unmappedCliSessions ?? [])
+    .filter((session) => session.totalSessionCount > 0)
+    .map((session) => {
+      const provider = resolveRuntimeProvider(session.snapshotName, session.reason);
+      const providerName = getRuntimeDisplayName(provider);
+      return {
+        value: `${providerName} (${session.snapshotName})`,
+        label: `${providerName} (${session.snapshotName})`,
+        subtitle: "unmapped snapshot · cli",
+        provider,
+        online: true,
+      } satisfies RuntimeOption;
+    });
+
+  const dedupedOptions = [...accountOptions, ...unmappedOptions].reduce<RuntimeOption[]>((acc, option) => {
+    if (!acc.some((existing) => existing.value === option.value)) {
+      acc.push(option);
+    }
+    return acc;
+  }, []);
+
+  const options = dedupedOptions
     .sort((left, right) => {
       if (left.online !== right.online) {
         return left.online ? -1 : 1;
@@ -288,10 +342,22 @@ export function AgentsPage() {
 
   const { agentsQuery, createMutation, updateMutation, deleteMutation } = useAgents();
   const dashboardQuery = useDashboard();
+  const stickySessionsQuery = useQuery({
+    queryKey: ["sticky-sessions", "agents-runtime-picker"],
+    queryFn: () =>
+      listStickySessions({
+        staleOnly: false,
+        activeOnly: false,
+        offset: 0,
+        limit: 500,
+      }),
+    refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
+  });
 
   const runtimeOptions = useMemo(
-    () => buildRuntimeOptions(dashboardQuery.data?.accounts),
-    [dashboardQuery.data?.accounts],
+    () => buildRuntimeOptions(dashboardQuery.data?.accounts, stickySessionsQuery.data?.unmappedCliSessions),
+    [dashboardQuery.data?.accounts, stickySessionsQuery.data?.unmappedCliSessions],
   );
   const createRuntimeOption = resolveRuntimeOption(createDraft.runtime, runtimeOptions);
   const defaultRuntime = runtimeOptions[0]?.value ?? DEFAULT_RUNTIME;

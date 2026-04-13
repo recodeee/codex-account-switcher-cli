@@ -763,7 +763,7 @@ export function getRecentWorkingNowSignalEntry(
   return workingNowTransientSignalEntryByAccount.get(cacheKey) ?? null;
 }
 
-function isDepletedPrimaryQuota(value: number | null | undefined): boolean {
+function isDepletedQuota(value: number | null | undefined): boolean {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return false;
   }
@@ -797,6 +797,41 @@ function resolveWorkingNowPrimaryQuota(
     mergedPrimaryRemaining,
     deferredPrimaryQuotaFallback,
     primaryRemaining,
+  };
+}
+
+function resolveWorkingNowSecondaryQuota(
+  account: WorkingNowAccount,
+  nowMs: number,
+): {
+  mergedSecondaryRemaining: number | null;
+  deferredSecondaryQuotaFallback: RawQuotaWindowFallback | null;
+  secondaryRemaining: number | null;
+} {
+  const mergedSecondaryRemaining = getMergedQuotaRemainingPercent(
+    account,
+    "secondary",
+  );
+  const deferredSecondaryQuotaFallback = getRawQuotaWindowFallback(
+    account,
+    "secondary",
+  );
+  const freshDeferredSecondaryRemaining = (() => {
+    if (!deferredSecondaryQuotaFallback) return null;
+    if (!isFreshTimestamp(deferredSecondaryQuotaFallback.recordedAt, nowMs))
+      return null;
+    return deferredSecondaryQuotaFallback.remainingPercent;
+  })();
+  const secondaryRemaining =
+    mergedSecondaryRemaining ??
+    freshDeferredSecondaryRemaining ??
+    account.usage?.secondaryRemainingPercent ??
+    null;
+
+  return {
+    mergedSecondaryRemaining,
+    deferredSecondaryQuotaFallback,
+    secondaryRemaining,
   };
 }
 
@@ -851,8 +886,8 @@ export function getWorkingNowUsageLimitHitCountdownMs(
 
   const quotaState = resolveWorkingNowPrimaryQuota(account, nowMs);
   const hasDepletedPrimaryQuota =
-    isDepletedPrimaryQuota(quotaState.mergedPrimaryRemaining) ||
-    isDepletedPrimaryQuota(quotaState.primaryRemaining);
+    isDepletedQuota(quotaState.mergedPrimaryRemaining) ||
+    isDepletedQuota(quotaState.primaryRemaining);
   if (!hasDepletedPrimaryQuota) {
     usageLimitHitByAccount.delete(cacheKey);
     return null;
@@ -956,8 +991,20 @@ export function isAccountWorkingNow(
 
   const quotaState = resolveWorkingNowPrimaryQuota(account, nowMs);
   const hasDepletedPrimaryQuota =
-    isDepletedPrimaryQuota(quotaState.mergedPrimaryRemaining) ||
-    isDepletedPrimaryQuota(quotaState.primaryRemaining);
+    isDepletedQuota(quotaState.mergedPrimaryRemaining) ||
+    isDepletedQuota(quotaState.primaryRemaining);
+  const secondaryQuotaState = resolveWorkingNowSecondaryQuota(account, nowMs);
+  const hasDepletedSecondaryQuota =
+    isDepletedQuota(secondaryQuotaState.mergedSecondaryRemaining) ||
+    isDepletedQuota(secondaryQuotaState.secondaryRemaining);
+  const hasAnyDepletedQuota =
+    hasDepletedPrimaryQuota || hasDepletedSecondaryQuota;
+
+  // For limit-hit accounts, keep "Working now" only when there is an actual
+  // live Codex process and fresh telemetry, not just tracked counters/snapshot hints.
+  if (hasAnyDepletedQuota && !(hasFreshLiveSession && hasLiveProcessSessionSignal)) {
+    return false;
+  }
 
   // Keep the grouping logic aligned with the UI percent label (rounded).
   // When the 5h budget renders as 0%, the account should not stay in

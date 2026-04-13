@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal, Protocol
 
 from app.core.resilience.degradation import set_degraded, set_normal
@@ -11,6 +11,10 @@ SubscriptionStatus = Literal["trialing", "active", "past_due", "canceled", "expi
 PaymentStatus = Literal["paid", "requires_action", "past_due", "unpaid"]
 BillingRole = Literal["Owner", "Member"]
 SeatType = Literal["ChatGPT", "Codex"]
+_EXCLUDED_AUTO_DOMAIN_SUFFIXES = ("gmail.com", "googlemail.com")
+_AUTO_CHATGPT_SEATS = 5
+_AUTO_CODEX_SEATS = 0
+_AUTO_RENEWAL_OFFSET_DAYS = 30
 
 
 class BillingSummaryUnavailableError(RuntimeError):
@@ -102,6 +106,7 @@ class BillingService:
             set_degraded(str(exc))
             raise
 
+        accounts = await self._auto_seed_runtime_domains(accounts)
         set_normal()
         return BillingAccountsData(accounts=accounts)
 
@@ -118,3 +123,52 @@ class BillingService:
     async def delete_account(self, account_id: str) -> None:
         await self._summary_provider.delete_account(account_id)
         set_normal()
+
+    async def _auto_seed_runtime_domains(
+        self,
+        accounts: list[BillingAccountData],
+    ) -> list[BillingAccountData]:
+        runtime_domains = await self._repository.list_runtime_domains()
+        existing_domains = {account.domain.strip().lower() for account in accounts}
+        attempted_create = False
+
+        for record in runtime_domains:
+            domain = record.domain.strip().lower()
+            if not domain:
+                continue
+            if domain.endswith(_EXCLUDED_AUTO_DOMAIN_SUFFIXES):
+                continue
+            if domain in existing_domains:
+                continue
+
+            attempted_create = True
+            try:
+                created_account = await self._summary_provider.add_account(
+                    BillingAccountCreateData(
+                        domain=domain,
+                        plan_code="business",
+                        plan_name="Business",
+                        subscription_status="active",
+                        payment_status="paid",
+                        entitled=True,
+                        renewal_at=record.first_detected_at + timedelta(days=_AUTO_RENEWAL_OFFSET_DAYS),
+                        chatgpt_seats_in_use=_AUTO_CHATGPT_SEATS,
+                        codex_seats_in_use=_AUTO_CODEX_SEATS,
+                    )
+                )
+            except (
+                BillingAccountConflictError,
+                BillingAccountValidationError,
+                BillingSummaryUnavailableError,
+            ):
+                continue
+
+            existing_domains.add(domain)
+            accounts.append(created_account)
+
+        if attempted_create:
+            try:
+                return await self._summary_provider.fetch_accounts()
+            except BillingSummaryUnavailableError:
+                return accounts
+        return accounts

@@ -183,7 +183,7 @@ describe("isAccountWorkingNow", () => {
     expect(isAccountWorkingNow(account)).toBe(true);
   });
 
-  it("returns true when 5h is depleted but tracked sessions are still present", () => {
+  it("returns false when 5h is depleted and only tracked sessions remain", () => {
     const account = createAccountSummary({
       usage: {
         primaryRemainingPercent: 0,
@@ -203,7 +203,7 @@ describe("isAccountWorkingNow", () => {
       lastUsageRecordedAtSecondary: "2026-04-04T11:59:00.000Z",
     });
 
-    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:40.000Z").getTime())).toBe(true);
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:40.000Z").getTime())).toBe(false);
   });
 
   it("returns true when 5h rounds down to 0% and live sessions are still present", () => {
@@ -219,6 +219,52 @@ describe("isAccountWorkingNow", () => {
         hasSnapshot: true,
         snapshotName: "main",
         activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: "2026-04-04T11:59:00.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-04T11:59:00.000Z",
+    });
+
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:40.000Z").getTime())).toBe(true);
+  });
+
+  it("returns false when weekly quota is depleted without a live process session", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 72,
+        secondaryRemainingPercent: 0,
+      },
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "odin",
+        activeSnapshotName: "odin",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: "2026-04-04T11:59:00.000Z",
+      lastUsageRecordedAtSecondary: "2026-04-04T11:59:00.000Z",
+    });
+
+    expect(isAccountWorkingNow(account, new Date("2026-04-04T11:59:40.000Z").getTime())).toBe(false);
+  });
+
+  it("returns true when weekly quota is depleted but live process telemetry is fresh", () => {
+    const account = createAccountSummary({
+      usage: {
+        primaryRemainingPercent: 72,
+        secondaryRemainingPercent: 0,
+      },
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "odin",
+        activeSnapshotName: "odin",
         isActiveSnapshot: true,
         hasLiveSession: true,
       },
@@ -587,7 +633,7 @@ describe("isAccountWorkingNow", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("drops working-now after grace expiry when only stale hasLiveSession remains", () => {
+  it("keeps usage-limit-hit accounts out of working-now when only stale hasLiveSession remains", () => {
     const base = createAccountSummary({
       status: "active",
       usage: {
@@ -611,7 +657,7 @@ describe("isAccountWorkingNow", () => {
 
     const firstNowMs = new Date("2026-04-04T11:59:00.000Z").getTime();
     expect(getWorkingNowUsageLimitHitCountdownMs(base, firstNowMs)).toBeGreaterThan(0);
-    expect(isAccountWorkingNow(base, firstNowMs)).toBe(true);
+    expect(isAccountWorkingNow(base, firstNowMs)).toBe(false);
 
     const afterGraceMs = new Date("2026-04-04T12:00:10.000Z").getTime();
     expect(getWorkingNowUsageLimitHitCountdownMs(base, afterGraceMs)).toBe(0);
@@ -685,7 +731,7 @@ describe("isAccountWorkingNow", () => {
     const resumedNowMs = new Date("2026-04-04T12:00:20.000Z").getTime();
 
     expect(getWorkingNowUsageLimitHitCountdownMs(resumedSameCycle, resumedNowMs)).toBe(0);
-    expect(isAccountWorkingNow(resumedSameCycle, resumedNowMs)).toBe(true);
+    expect(isAccountWorkingNow(resumedSameCycle, resumedNowMs)).toBe(false);
   });
 
   it("drops working-now after grace once session task previews report terminal errors", () => {
@@ -720,6 +766,7 @@ describe("isAccountWorkingNow", () => {
 
     const firstNowMs = new Date("2026-04-04T11:59:00.000Z").getTime();
     expect(getWorkingNowUsageLimitHitCountdownMs(base, firstNowMs)).toBeGreaterThan(0);
+    expect(isAccountWorkingNow(base, firstNowMs)).toBe(false);
 
     const afterGraceMs = new Date("2026-04-04T12:00:10.000Z").getTime();
     expect(getWorkingNowUsageLimitHitCountdownMs(base, afterGraceMs)).toBe(0);

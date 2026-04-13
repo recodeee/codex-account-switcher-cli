@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BusinessBillingAccount
+from app.db.models import Account, BusinessBillingAccount
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +32,12 @@ class BillingAccountRecord:
     members: list[BillingMemberRecord]
 
 
+@dataclass(frozen=True, slots=True)
+class RuntimeDomainRecord:
+    domain: str
+    first_detected_at: datetime
+
+
 class BillingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -42,6 +48,28 @@ class BillingRepository:
         )
         rows = list(result.scalars().all())
         return [_to_record(row) for row in rows]
+
+    async def list_runtime_domains(self) -> list[RuntimeDomainRecord]:
+        result = await self._session.execute(
+            select(Account.email, Account.created_at).where(func.coalesce(Account.deactivation_reason, "") != "deleted_by_user")
+        )
+
+        first_detected_by_domain: dict[str, datetime] = {}
+        for email, created_at in result.all():
+            if not email or created_at is None:
+                continue
+            domain = _extract_email_domain(str(email))
+            if domain is None:
+                continue
+            detected_at = _coerce_utc_datetime(created_at)
+            previous = first_detected_by_domain.get(domain)
+            if previous is None or detected_at < previous:
+                first_detected_by_domain[domain] = detected_at
+
+        return [
+            RuntimeDomainRecord(domain=domain, first_detected_at=detected_at)
+            for domain, detected_at in sorted(first_detected_by_domain.items(), key=lambda entry: entry[0])
+        ]
 
     async def replace_accounts(
         self,
@@ -120,3 +148,20 @@ def _parse_members(raw: str | None) -> list[BillingMemberRecord]:
             )
         )
     return members
+
+
+def _extract_email_domain(email: str) -> str | None:
+    normalized = email.strip().lower()
+    if "@" not in normalized:
+        return None
+    _, _, domain = normalized.rpartition("@")
+    domain = domain.strip().rstrip(".")
+    if not domain or "." not in domain:
+        return None
+    return domain
+
+
+def _coerce_utc_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

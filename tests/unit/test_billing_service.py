@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -47,12 +47,17 @@ def _account(*, entitled: bool = True, subscription_status: str = "active") -> B
     )
 
 
-@pytest.mark.asyncio
-async def test_get_accounts_reads_medusa_summary_without_python_seed_defaults() -> None:
-    repository = SimpleNamespace(
+def _repository_stub(*, runtime_domains: list[SimpleNamespace] | None = None) -> SimpleNamespace:
+    return SimpleNamespace(
         list_accounts=AsyncMock(return_value=[]),
         replace_accounts=AsyncMock(),
+        list_runtime_domains=AsyncMock(return_value=runtime_domains or []),
     )
+
+
+@pytest.mark.asyncio
+async def test_get_accounts_reads_medusa_summary_without_python_seed_defaults() -> None:
+    repository = _repository_stub()
     summary_provider = SimpleNamespace(
         fetch_accounts=AsyncMock(return_value=[_account()]),
         update_accounts=AsyncMock(),
@@ -66,6 +71,7 @@ async def test_get_accounts_reads_medusa_summary_without_python_seed_defaults() 
 
     assert result == BillingAccountsData(accounts=[_account()])
     summary_provider.fetch_accounts.assert_awaited_once()
+    repository.list_runtime_domains.assert_awaited_once()
     repository.list_accounts.assert_not_awaited()
     repository.replace_accounts.assert_not_awaited()
     set_normal.assert_called_once_with()
@@ -73,10 +79,7 @@ async def test_get_accounts_reads_medusa_summary_without_python_seed_defaults() 
 
 @pytest.mark.asyncio
 async def test_get_accounts_marks_degraded_and_raises_when_medusa_summary_is_unavailable() -> None:
-    repository = SimpleNamespace(
-        list_accounts=AsyncMock(return_value=[]),
-        replace_accounts=AsyncMock(),
-    )
+    repository = _repository_stub()
     summary_provider = SimpleNamespace(
         fetch_accounts=AsyncMock(
             side_effect=BillingSummaryUnavailableError("Medusa billing summary is unavailable")
@@ -95,6 +98,7 @@ async def test_get_accounts_marks_degraded_and_raises_when_medusa_summary_is_una
             await service.get_accounts()
 
     summary_provider.fetch_accounts.assert_awaited_once()
+    repository.list_runtime_domains.assert_not_awaited()
     repository.list_accounts.assert_not_awaited()
     repository.replace_accounts.assert_not_awaited()
     set_degraded.assert_called_once()
@@ -103,10 +107,7 @@ async def test_get_accounts_marks_degraded_and_raises_when_medusa_summary_is_una
 
 @pytest.mark.asyncio
 async def test_update_accounts_passes_updates_to_summary_provider() -> None:
-    repository = SimpleNamespace(
-        list_accounts=AsyncMock(return_value=[]),
-        replace_accounts=AsyncMock(),
-    )
+    repository = _repository_stub()
     updated_account = _account()
     summary_provider = SimpleNamespace(
         fetch_accounts=AsyncMock(return_value=[]),
@@ -125,10 +126,7 @@ async def test_update_accounts_passes_updates_to_summary_provider() -> None:
 
 @pytest.mark.asyncio
 async def test_add_account_passes_creation_to_summary_provider() -> None:
-    repository = SimpleNamespace(
-        list_accounts=AsyncMock(return_value=[]),
-        replace_accounts=AsyncMock(),
-    )
+    repository = _repository_stub()
     created_account = _account()
     summary_provider = SimpleNamespace(
         fetch_accounts=AsyncMock(return_value=[]),
@@ -159,10 +157,7 @@ async def test_add_account_passes_creation_to_summary_provider() -> None:
 
 @pytest.mark.asyncio
 async def test_add_account_propagates_validation_errors() -> None:
-    repository = SimpleNamespace(
-        list_accounts=AsyncMock(return_value=[]),
-        replace_accounts=AsyncMock(),
-    )
+    repository = _repository_stub()
     summary_provider = SimpleNamespace(
         fetch_accounts=AsyncMock(return_value=[]),
         update_accounts=AsyncMock(return_value=[]),
@@ -191,10 +186,7 @@ async def test_add_account_propagates_validation_errors() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_account_passes_deletion_to_summary_provider() -> None:
-    repository = SimpleNamespace(
-        list_accounts=AsyncMock(return_value=[]),
-        replace_accounts=AsyncMock(),
-    )
+    repository = _repository_stub()
     summary_provider = SimpleNamespace(
         fetch_accounts=AsyncMock(return_value=[]),
         update_accounts=AsyncMock(return_value=[]),
@@ -208,3 +200,51 @@ async def test_delete_account_passes_deletion_to_summary_provider() -> None:
 
     summary_provider.delete_account.assert_awaited_once_with("business-plan-edixai")
     set_normal.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_get_accounts_auto_adds_runtime_domains_with_default_chatgpt_seats() -> None:
+    runtime_domains = [
+        SimpleNamespace(domain="newshop.hu", first_detected_at=datetime(2026, 4, 10, tzinfo=UTC)),
+        SimpleNamespace(domain="gmail.com", first_detected_at=datetime(2026, 4, 8, tzinfo=UTC)),
+    ]
+    repository = _repository_stub(runtime_domains=runtime_domains)
+    summary_provider = SimpleNamespace(
+        fetch_accounts=AsyncMock(side_effect=[[_account()], [_account(), _account()]]),
+        update_accounts=AsyncMock(return_value=[]),
+        add_account=AsyncMock(return_value=_account()),
+        delete_account=AsyncMock(),
+    )
+    service = BillingService(repository, summary_provider)
+
+    with patch("app.modules.billing.service.set_normal"):
+        await service.get_accounts()
+
+    summary_provider.add_account.assert_awaited_once()
+    payload = summary_provider.add_account.await_args.args[0]
+    assert payload.domain == "newshop.hu"
+    assert payload.chatgpt_seats_in_use == 5
+    assert payload.codex_seats_in_use == 0
+    assert payload.renewal_at == datetime(2026, 4, 10, tzinfo=UTC) + timedelta(days=30)
+    assert summary_provider.fetch_accounts.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_accounts_skips_auto_add_for_existing_or_gmail_domains() -> None:
+    runtime_domains = [
+        SimpleNamespace(domain="edixai.com", first_detected_at=datetime(2026, 4, 1, tzinfo=UTC)),
+        SimpleNamespace(domain="gmail.com", first_detected_at=datetime(2026, 4, 2, tzinfo=UTC)),
+    ]
+    repository = _repository_stub(runtime_domains=runtime_domains)
+    summary_provider = SimpleNamespace(
+        fetch_accounts=AsyncMock(return_value=[_account()]),
+        update_accounts=AsyncMock(return_value=[]),
+        add_account=AsyncMock(),
+        delete_account=AsyncMock(),
+    )
+    service = BillingService(repository, summary_provider)
+
+    with patch("app.modules.billing.service.set_normal"):
+        await service.get_accounts()
+
+    summary_provider.add_account.assert_not_awaited()

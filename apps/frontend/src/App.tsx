@@ -27,7 +27,7 @@ function AppLayout() {
   const logout = useMedusaCustomerAuthStore((state) => state.logout);
   const customer = useMedusaCustomerAuthStore((state) => state.customer);
   const location = useLocation();
-  const isDashboardRoute = location.pathname === "/dashboard";
+  const isDashboardRoute = location.pathname === "/dashboard" || location.pathname.startsWith("/dashboard/");
   const isProjectsRoute = location.pathname === "/projects";
   const isAccountsRoute = location.pathname === "/accounts";
   const isPlansRoute = location.pathname === "/projects/plans";
@@ -35,6 +35,7 @@ function AppLayout() {
   const isRuntimesRoute = location.pathname === "/runtimes";
   const isSkillsRoute = location.pathname === "/skills";
   const isBillingRoute = location.pathname === "/billing";
+  const isApisRoute = location.pathname === "/apis";
 
   return (
     <div className="flex min-h-screen bg-background pb-10">
@@ -57,13 +58,14 @@ function AppLayout() {
               ? "max-w-none overflow-hidden p-0"
               : isDashboardRoute
                 ? "px-0 py-8"
-              : isProjectsRoute || isAccountsRoute || isPlansRoute || isBillingRoute
+              : isProjectsRoute || isAccountsRoute || isPlansRoute || isBillingRoute || isApisRoute
                 ? "px-2 py-5 sm:px-3 lg:px-4"
                 : "px-4 py-8 sm:px-6 lg:px-8",
             isPlansRoute ||
             isRuntimesRoute ||
             isSkillsRoute ||
             isAgentsRoute ||
+            isApisRoute ||
             isBillingRoute ||
             isDashboardRoute
               ? "max-w-none"

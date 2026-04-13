@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createApiKey } from "@/test/mocks/factories";
 import { renderWithProviders } from "@/test/utils";
+import { ApiError } from "@/lib/api-client";
 
 import { ApisPage } from "./apis-page";
 
@@ -141,5 +142,20 @@ describe("ApisPage", () => {
 
 		expect(apiKeysQuery.refetch).toHaveBeenCalledTimes(1);
 		expect(screen.queryByText("Create API Key")).not.toBeInTheDocument();
+	});
+
+	it("shows a coming soon state when the API endpoint is not available yet", () => {
+		const apiKeysQuery = createQueryMock<ReturnType<typeof createApiKey>[]>(undefined);
+		apiKeysQuery.error = new ApiError({
+			status: 404,
+			code: "not_found",
+			message: "Not Found",
+		});
+
+		renderApisPage({ apiKeys: [], apiKeysQuery });
+
+		expect(screen.getByRole("heading", { name: "Coming soon" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+		expect(screen.queryByText("Not Found")).not.toBeInTheDocument();
 	});
 });

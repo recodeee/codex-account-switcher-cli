@@ -949,6 +949,34 @@ describe("AccountCard", () => {
     expect(screen.getAllByText("Usage limit hit").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("suppresses stale limit badges when there is no live session and quota bars still have headroom", () => {
+    const account = createAccountSummary({
+      status: "rate_limited",
+      usage: {
+        primaryRemainingPercent: 81,
+        secondaryRemainingPercent: 67,
+      },
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "stale-limit-card",
+        activeSnapshotName: "different-active",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+    });
+
+    render(<AccountCard account={account} />);
+
+    const badgeRow = screen.getByTestId("token-card-badge-row");
+    expect(within(badgeRow).getByText("Active")).toBeInTheDocument();
+    expect(within(badgeRow).queryByText("Rate limited")).not.toBeInTheDocument();
+    expect(within(badgeRow).queryByText("Usage limit hit")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
+  });
+
   it("shows usage-limit badge when remaining tokens are depleted", () => {
     const account = createAccountSummary({
       status: "active",

@@ -1503,17 +1503,23 @@ export function AccountCard(props: AccountCardProps) {
     !hasLiveSession &&
     primaryRemainingRaw == null &&
     secondaryRemainingRaw == null;
-  const usageLimitHit = isLiveUsageLimitHit({
-    status: account.status,
-    hasLiveSession,
-    primaryRemainingPercent: primaryRemaining,
-  });
-  const remainingTokensValue = tokensRemaining ?? 0;
   const hasQuotaHeadroomSignal =
     (typeof primaryRemaining === "number" &&
       normalizeNearZeroQuotaPercent(primaryRemaining) >= 1) ||
     (typeof secondaryRemaining === "number" &&
       normalizeNearZeroQuotaPercent(secondaryRemaining) >= 1);
+  const hasPersistedLimitStatus =
+    account.status === "rate_limited" || account.status === "quota_exceeded";
+  const shouldSuppressStaleLimitSignals =
+    !hasLiveSession && hasQuotaHeadroomSignal && hasPersistedLimitStatus;
+  const usageLimitHit = shouldSuppressStaleLimitSignals
+    ? false
+    : isLiveUsageLimitHit({
+        status: account.status,
+        hasLiveSession,
+        primaryRemainingPercent: primaryRemaining,
+      });
+  const remainingTokensValue = tokensRemaining ?? 0;
   const shouldSuppressTokenDepletionLimitBadge =
     hasLiveSession && hasQuotaHeadroomSignal;
   const hasRemainingTokensExhausted =
@@ -1544,11 +1550,16 @@ export function AccountCard(props: AccountCardProps) {
     account.auth?.refresh?.state === "expired" ||
     hasExpiredRefreshTokenReason(account.deactivationReason);
   const status =
-    usageLimitHit && effectiveStatus === "active" ? "limited" : effectiveStatus;
+    shouldSuppressStaleLimitSignals &&
+    (effectiveStatus === "limited" || effectiveStatus === "exceeded")
+      ? "active"
+      : usageLimitHit && effectiveStatus === "active"
+        ? "limited"
+        : effectiveStatus;
   const useLocalBlockedByDisconnected =
     status === "deactivated" || hasExpiredRefreshToken;
   const canUseLocally = canUseLocalAccount({
-    status: account.status,
+    status,
     primaryRemainingPercent: primaryRemaining,
     secondaryRemainingPercent: secondaryRemaining,
     hasSnapshot: account.codexAuth?.hasSnapshot,
@@ -1558,7 +1569,7 @@ export function AccountCard(props: AccountCardProps) {
     codexSessionCount: account.codexSessionCount,
   });
   const useLocalDisabledReason = getUseLocalAccountDisabledReason({
-    status: account.status,
+    status,
     primaryRemainingPercent: primaryRemaining,
     secondaryRemainingPercent: secondaryRemaining,
     hasSnapshot: account.codexAuth?.hasSnapshot,

@@ -3,9 +3,10 @@ import {
   CheckCircle2,
   Info,
   Server,
+  Trash2,
   UserRound,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Area,
   AreaChart,
@@ -21,15 +22,21 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CopyButton } from "@/components/copy-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { deleteAccount } from "@/features/accounts/api";
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { getRequestLogs } from "@/features/dashboard/api";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import type { RequestLog } from "@/features/dashboard/schemas";
 import { listStickySessions } from "@/features/sticky-sessions/api";
+import { useDialogState } from "@/hooks/use-dialog-state";
 import { cn } from "@/lib/utils";
 import { hasActiveCliSessionSignal } from "@/utils/account-working";
+import { getErrorMessage } from "@/utils/errors";
 import { formatCompactNumber, formatLastUsageLabel } from "@/utils/formatters";
+import { toast } from "sonner";
 import { resolveFallbackDailyUsageWeights } from "./runtime-daily-usage";
 import {
   normalizeRuntimeTaskPreview,
@@ -58,6 +65,12 @@ type RuntimeRow = {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  daemonId: string | null;
+  deviceLabel: string | null;
+  cliVersion: string | null;
+  latestCliVersion: string | null;
+  cliUpdateAvailable: boolean;
+  cliUpdateCommand: string | null;
   activityTimestamps: string[];
   metadata: Record<string, string | number | boolean | null>;
   isUnmapped: boolean;
@@ -100,8 +113,53 @@ type DailyUsageTooltipProps = {
   label?: string;
 };
 
+type CliUpdateExample = "npm" | "pnpm" | "bun";
+
 const DAY_MS = 86_400_000;
 const OPENCLAW_PROVIDER_MATCHER = /\bopenclaw\b|\bopencl\b|\boclaw\b/i;
+const CLI_VERIFY_COMMAND = "codex --version";
+const CLI_UPDATE_EXAMPLES: Record<CliUpdateExample, { label: string; command: string }> = {
+  npm: { label: "npm", command: "npm install -g @openai/codex@latest" },
+  pnpm: { label: "pnpm", command: "pnpm add -g @openai/codex@latest" },
+  bun: { label: "bun", command: "bun add -g @openai/codex@latest" },
+};
+
+const CLI_CURRENT_VERSION_KEYS = [
+  "cliVersion",
+  "cli_version",
+  "currentCliVersion",
+  "current_cli_version",
+  "runtimeCliVersion",
+  "runtime_cli_version",
+  "codexCliVersion",
+  "codex_cli_version",
+] as const;
+
+const CLI_LATEST_VERSION_KEYS = [
+  "latestCliVersion",
+  "latest_cli_version",
+  "availableCliVersion",
+  "available_cli_version",
+  "latestVersion",
+  "latest_version",
+] as const;
+
+const CLI_UPDATE_AVAILABLE_KEYS = [
+  "cliUpdateAvailable",
+  "cli_update_available",
+  "updateAvailable",
+  "update_available",
+] as const;
+
+const CLI_UPDATE_COMMAND_KEYS = [
+  "cliUpdateCommand",
+  "cli_update_command",
+  "updateCommand",
+  "update_command",
+] as const;
+
+const RUNTIME_DAEMON_ID_KEYS = ["daemonId", "daemon_id", "runtimeId", "runtime_id"] as const;
+const RUNTIME_DEVICE_KEYS = ["device", "deviceName", "device_name"] as const;
 
 function resolveRuntimeProvider(...values: Array<string | null | undefined>): "codex" | "openclaw" {
   return values.some((value) => value && OPENCLAW_PROVIDER_MATCHER.test(value)) ? "openclaw" : "codex";
@@ -177,6 +235,100 @@ function resolveLatestTimestamp(...values: Array<string | null | undefined>): st
     }
   }
   return latestValue;
+}
+
+function normalizeNonEmptyString(value: unknown): string | null {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+  return null;
+}
+
+function parseVersionNumber(value: string): number[] | null {
+  const normalized = value.trim().replace(/^v/i, "");
+  const match = normalized.match(/(\d+(?:\.\d+)+)/);
+  if (!match) {
+    return null;
+  }
+  const segments = match[1]
+    .split(".")
+    .map((segment) => Number.parseInt(segment, 10))
+    .filter((segment) => Number.isFinite(segment));
+  return segments.length > 0 ? segments : null;
+}
+
+function isLatestVersionNewer(currentVersion: string, latestVersion: string): boolean | null {
+  const current = parseVersionNumber(currentVersion);
+  const latest = parseVersionNumber(latestVersion);
+  if (!current || !latest) {
+    return null;
+  }
+  const maxSegments = Math.max(current.length, latest.length);
+  for (let index = 0; index < maxSegments; index += 1) {
+    const currentValue = current[index] ?? 0;
+    const latestValue = latest[index] ?? 0;
+    if (latestValue > currentValue) {
+      return true;
+    }
+    if (latestValue < currentValue) {
+      return false;
+    }
+  }
+  return false;
+}
+
+function resolveRecordString(
+  source: Record<string, unknown> | null | undefined,
+  keys: readonly string[],
+): string | null {
+  if (!source) {
+    return null;
+  }
+  for (const key of keys) {
+    const directValue = source[key];
+    const normalizedDirect = normalizeNonEmptyString(directValue);
+    if (normalizedDirect) {
+      return normalizedDirect;
+    }
+    if (directValue && typeof directValue === "object" && !Array.isArray(directValue)) {
+      const nestedVersion = normalizeNonEmptyString((directValue as { version?: unknown }).version);
+      if (nestedVersion) {
+        return nestedVersion;
+      }
+    }
+  }
+  return null;
+}
+
+function resolveRecordBoolean(
+  source: Record<string, unknown> | null | undefined,
+  keys: readonly string[],
+): boolean | null {
+  if (!source) {
+    return null;
+  }
+  for (const key of keys) {
+    if (typeof source[key] === "boolean") {
+      return source[key] as boolean;
+    }
+  }
+  return null;
+}
+
+function resolveCliUpdateAvailable(
+  currentVersion: string | null,
+  latestVersion: string | null,
+  explicitAvailability: boolean | null,
+): boolean {
+  if (typeof explicitAvailability === "boolean") {
+    return explicitAvailability;
+  }
+  if (!currentVersion || !latestVersion) {
+    return false;
+  }
+  const comparison = isLatestVersionNewer(currentVersion, latestVersion);
+  return comparison ?? currentVersion !== latestVersion;
 }
 
 function buildStickyStats(entries: Awaited<ReturnType<typeof listStickySessions>>["entries"]) {
@@ -272,6 +424,20 @@ function buildRuntimeRows(
       ...(account.lastUsageRecordedAtPrimary ? [account.lastUsageRecordedAtPrimary] : []),
       ...(account.lastUsageRecordedAtSecondary ? [account.lastUsageRecordedAtSecondary] : []),
     ];
+    const codexAuthRecord =
+      account.codexAuth && typeof account.codexAuth === "object"
+        ? (account.codexAuth as Record<string, unknown>)
+        : null;
+    const cliVersion = resolveRecordString(codexAuthRecord, CLI_CURRENT_VERSION_KEYS);
+    const latestCliVersion = resolveRecordString(codexAuthRecord, CLI_LATEST_VERSION_KEYS);
+    const cliUpdateAvailable = resolveCliUpdateAvailable(
+      cliVersion,
+      latestCliVersion,
+      resolveRecordBoolean(codexAuthRecord, CLI_UPDATE_AVAILABLE_KEYS),
+    );
+    const cliUpdateCommand = resolveRecordString(codexAuthRecord, CLI_UPDATE_COMMAND_KEYS);
+    const daemonId = resolveRecordString(codexAuthRecord, RUNTIME_DAEMON_ID_KEYS) ?? snapshotName;
+    const deviceLabel = resolveRecordString(codexAuthRecord, RUNTIME_DEVICE_KEYS);
 
     accountRows.push({
       runtimeId: `account:${account.accountId}`,
@@ -292,11 +458,22 @@ function buildRuntimeRows(
       outputTokens,
       cacheReadTokens,
       cacheWriteTokens,
+      daemonId,
+      deviceLabel,
+      cliVersion,
+      latestCliVersion,
+      cliUpdateAvailable,
+      cliUpdateCommand,
       activityTimestamps: timestamps,
       metadata: {
-        cli_version: "auto-detected",
+        cli_version: cliVersion ?? "auto-detected",
+        latest_cli_version: latestCliVersion,
+        cli_update_available: cliUpdateAvailable,
+        cli_update_command: cliUpdateCommand,
         version: "codex-cli",
         provider,
+        daemon_id: daemonId,
+        device: deviceLabel,
         snapshot_name: snapshotName,
         runtime_mode: "local",
       },
@@ -308,6 +485,17 @@ function buildRuntimeRows(
     .filter((entry) => entry.totalSessionCount > 0)
     .map((entry) => {
       const provider = resolveRuntimeProvider(entry.snapshotName, entry.reason);
+      const entryRecord = entry as unknown as Record<string, unknown>;
+      const cliVersion = resolveRecordString(entryRecord, CLI_CURRENT_VERSION_KEYS);
+      const latestCliVersion = resolveRecordString(entryRecord, CLI_LATEST_VERSION_KEYS);
+      const cliUpdateAvailable = resolveCliUpdateAvailable(
+        cliVersion,
+        latestCliVersion,
+        resolveRecordBoolean(entryRecord, CLI_UPDATE_AVAILABLE_KEYS),
+      );
+      const cliUpdateCommand = resolveRecordString(entryRecord, CLI_UPDATE_COMMAND_KEYS);
+      const daemonId = resolveRecordString(entryRecord, RUNTIME_DAEMON_ID_KEYS) ?? entry.snapshotName;
+      const deviceLabel = resolveRecordString(entryRecord, RUNTIME_DEVICE_KEYS);
       return {
       runtimeId: `unmapped:${entry.snapshotName}`,
       accountId: null,
@@ -327,11 +515,22 @@ function buildRuntimeRows(
       outputTokens: 0,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
+      daemonId,
+      deviceLabel,
+      cliVersion,
+      latestCliVersion,
+      cliUpdateAvailable,
+      cliUpdateCommand,
       activityTimestamps: [],
       metadata: {
-        cli_version: "auto-detected",
+        cli_version: cliVersion ?? "auto-detected",
+        latest_cli_version: latestCliVersion,
+        cli_update_available: cliUpdateAvailable,
+        cli_update_command: cliUpdateCommand,
         version: "codex-cli",
         provider,
+        daemon_id: daemonId,
+        device: deviceLabel,
         snapshot_name: entry.snapshotName,
         runtime_mode: "local",
         unmapped_reason: entry.reason,
@@ -985,20 +1184,35 @@ function RuntimeListItem({
   runtime,
   selected,
   onClick,
+  onRequestDelete,
+  deleteBusy,
 }: {
   runtime: RuntimeRow;
   selected: boolean;
   onClick: () => void;
+  onRequestDelete: (runtime: RuntimeRow) => void;
+  deleteBusy: boolean;
 }) {
   const olderSessionPreviewCount = Math.max(
     0,
     runtime.currentTasks.length - runtime.sessionCount,
   );
+  const canDeleteRuntime = Boolean(runtime.accountId);
+  const deleteButtonTitle = canDeleteRuntime
+    ? `Delete ${runtime.name}`
+    : "This runtime is unmapped and cannot be deleted from here yet.";
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
       className={cn(
         "group/runtime w-full rounded-xl border px-3 py-2.5 text-left transition-colors",
         selected
@@ -1014,7 +1228,7 @@ function RuntimeListItem({
             <p className="truncate text-xs text-slate-400">{runtime.owner}</p>
           </div>
         </div>
-        <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-start gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
               <span
@@ -1067,12 +1281,36 @@ function RuntimeListItem({
               ) : null}
             </TooltipContent>
           </Tooltip>
-          <span
-            className={cn(
-              "h-2.5 w-2.5 rounded-full",
-              runtime.status === "online" ? "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-slate-500",
-            )}
-          />
+          <span className="inline-flex flex-col items-center gap-1.5">
+            <button
+              type="button"
+              aria-label={`Delete runtime ${runtime.name}`}
+              title={deleteButtonTitle}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!canDeleteRuntime || deleteBusy) {
+                  return;
+                }
+                onRequestDelete(runtime);
+              }}
+              disabled={!canDeleteRuntime || deleteBusy}
+              className={cn(
+                "inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors",
+                canDeleteRuntime && !deleteBusy
+                  ? "text-rose-300 hover:bg-rose-400/15 hover:text-rose-200"
+                  : "cursor-not-allowed text-slate-600",
+              )}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <span
+              className={cn(
+                "h-2.5 w-2.5 rounded-full",
+                runtime.status === "online" ? "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-slate-500",
+              )}
+            />
+          </span>
         </span>
       </div>
       <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
@@ -1089,7 +1327,7 @@ function RuntimeListItem({
         ) : null}
         <span>{runtime.snapshotName}</span>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -1100,14 +1338,41 @@ type ConnectionState = {
 };
 
 export function RuntimesPage() {
+  const queryClient = useQueryClient();
   const [scope, setScope] = useState<RuntimeScope>("mine");
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<string>("");
   const [usageWindow, setUsageWindow] = useState<UsageWindow>("30d");
   const [runtimeMode, setRuntimeMode] = useState<"local" | "cloud">("local");
+  const [cliUpdateExample, setCliUpdateExample] = useState<CliUpdateExample>("npm");
+  const deleteRuntimeDialog = useDialogState<RuntimeRow>();
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     status: "idle",
     latencyMs: null,
     message: null,
+  });
+  const deleteRuntimeMutation = useMutation({
+    mutationFn: async (runtime: RuntimeRow) => {
+      if (!runtime.accountId) {
+        throw new Error("This unmapped runtime cannot be deleted yet.");
+      }
+      await deleteAccount(runtime.accountId);
+      return runtime;
+    },
+    onSuccess: (runtime) => {
+      if (selectedRuntimeId === runtime.runtimeId) {
+        setSelectedRuntimeId("");
+      }
+      toast.success(`${runtime.name} deleted`);
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["sticky-sessions", "runtime-list"] });
+      void queryClient.invalidateQueries({ queryKey: ["request-logs", "runtime-usage"] });
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Failed to delete runtime."));
+    },
+    onSettled: () => {
+      deleteRuntimeDialog.hide();
+    },
   });
 
   const dashboardQuery = useDashboard();
@@ -1169,6 +1434,11 @@ export function RuntimesPage() {
     () => (selectedRuntime ? JSON.stringify(selectedRuntime.metadata, null, 2) : "{}"),
     [selectedRuntime],
   );
+  const selectedCliVersionLabel = selectedRuntime?.cliVersion ?? "auto-detected";
+  const selectedLatestCliVersion = selectedRuntime?.latestCliVersion ?? null;
+  const selectedCliUpdateCommand =
+    selectedRuntime?.cliUpdateCommand ?? CLI_UPDATE_EXAMPLES[cliUpdateExample].command;
+  const selectedCliUpdateScript = `${selectedCliUpdateCommand}\n${CLI_VERIFY_COMMAND}`;
 
   const dailySeries = useMemo(
     () =>
@@ -1260,8 +1530,9 @@ export function RuntimesPage() {
   }
 
   return (
-    <div className="animate-fade-in-up h-full w-full overflow-hidden bg-[linear-gradient(180deg,rgba(7,10,18,0.97)_0%,rgba(3,5,12,1)_100%)]">
-      <div className="grid h-[calc(100vh-98px)] gap-px bg-white/[0.06] xl:grid-cols-[340px_minmax(0,1fr)]">
+    <>
+      <div className="animate-fade-in-up h-full w-full overflow-hidden bg-[linear-gradient(180deg,rgba(7,10,18,0.97)_0%,rgba(3,5,12,1)_100%)]">
+        <div className="grid h-[calc(100vh-98px)] gap-px bg-white/[0.06] xl:grid-cols-[340px_minmax(0,1fr)]">
         <Card className={cn(panelSurfaceClass, "h-full rounded-none border-0 xl:border-r xl:border-white/[0.08]")}>
           <CardContent className="flex h-full flex-col space-y-3 p-3">
             <div className="flex items-center justify-between px-1 text-xs text-slate-400">
@@ -1293,6 +1564,8 @@ export function RuntimesPage() {
                     runtime={runtime}
                     selected={runtime.runtimeId === effectiveSelectedRuntimeId}
                     onClick={() => setSelectedRuntimeId(runtime.runtimeId)}
+                    onRequestDelete={(targetRuntime) => deleteRuntimeDialog.show(targetRuntime)}
+                    deleteBusy={deleteRuntimeMutation.isPending}
                   />
                 ))
               )}
@@ -1436,16 +1709,78 @@ export function RuntimesPage() {
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
-                <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
-                  <p className="text-xs font-semibold text-slate-300">CLI version</p>
-                  <p className="mt-1 text-sm text-slate-100">codex-cli (auto-detected)</p>
+                <div className="space-y-3 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-300">CLI version</p>
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "border px-2 py-0.5 text-[10px] font-medium",
+                        selectedRuntime.cliUpdateAvailable
+                          ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                          : "border-slate-500/40 bg-slate-500/15 text-slate-300",
+                      )}
+                    >
+                      {selectedRuntime.cliUpdateAvailable ? "Update available" : "Up to date"}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm text-slate-100">
+                    <span>{selectedCliVersionLabel}</span>
+                    {selectedLatestCliVersion ? (
+                      <>
+                        <span className="text-slate-500">→</span>
+                        <span className={selectedRuntime.cliUpdateAvailable ? "text-emerald-200" : "text-slate-300"}>
+                          {selectedLatestCliVersion}
+                          {selectedRuntime.cliUpdateAvailable ? " available" : ""}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
                   <p className="text-xs text-slate-500">
                     Snapshot {selectedRuntime.snapshotName} · source codex-auth session mapping
                   </p>
+                  {selectedRuntime.cliUpdateAvailable ? (
+                    <div className="space-y-3 rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-3">
+                      <p className="text-[11px] text-emerald-100">
+                        Update this runtime CLI with the multi-command guide, then verify the installed version.
+                      </p>
+                      {selectedRuntime.cliUpdateCommand ? null : (
+                        <Tabs
+                          value={cliUpdateExample}
+                          onValueChange={(value) => {
+                            if (value === "npm" || value === "pnpm" || value === "bun") {
+                              setCliUpdateExample(value);
+                            }
+                          }}
+                        >
+                          <TabsList className="h-7 bg-emerald-500/15 p-1">
+                            {Object.entries(CLI_UPDATE_EXAMPLES).map(([value, config]) => (
+                              <TabsTrigger key={value} value={value} className="h-5 px-2 text-[10px]">
+                                {config.label}
+                              </TabsTrigger>
+                            ))}
+                          </TabsList>
+                        </Tabs>
+                      )}
+                      <div className="space-y-1 text-[11px] text-emerald-100/90">
+                        <p>1. Run the update command for your install method.</p>
+                        <p>2. Restart the runtime session.</p>
+                        <p>3. Verify the version in terminal.</p>
+                      </div>
+                      <pre className="overflow-x-auto rounded-md border border-emerald-400/20 bg-black/30 p-2 text-[11px] leading-relaxed text-emerald-100">
+                        <code>{selectedCliUpdateScript}</code>
+                      </pre>
+                      <CopyButton value={selectedCliUpdateScript} label="Copy update commands" />
+                    </div>
+                  ) : null}
                 </div>
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                   <p className="text-xs font-semibold text-slate-300">Runtime source</p>
                   <p className="mt-1 text-sm text-slate-100">codex-auth session mapping</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Daemon {selectedRuntime.daemonId ?? selectedRuntime.snapshotName}
+                    {selectedRuntime.deviceLabel ? ` · Device ${selectedRuntime.deviceLabel}` : ""}
+                  </p>
                   <p className="text-xs text-slate-500">Cloud mode will be enabled in a later release.</p>
                 </div>
               </div>
@@ -1615,7 +1950,24 @@ export function RuntimesPage() {
             </CardContent>
           </Card>
         )}
+        </div>
       </div>
-    </div>
+      <ConfirmDialog
+        open={deleteRuntimeDialog.open}
+        title="Delete runtime?"
+        description={`Are you sure you want to delete this runtime${
+          deleteRuntimeDialog.data ? ` (${deleteRuntimeDialog.data.name})` : ""
+        }?`}
+        confirmLabel={deleteRuntimeMutation.isPending ? "Deleting..." : "Delete runtime"}
+        cancelLabel="Cancel"
+        onOpenChange={deleteRuntimeDialog.onOpenChange}
+        onConfirm={() => {
+          if (!deleteRuntimeDialog.data || deleteRuntimeMutation.isPending) {
+            return;
+          }
+          deleteRuntimeMutation.mutate(deleteRuntimeDialog.data);
+        }}
+      />
+    </>
   );
 }

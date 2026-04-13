@@ -1,4 +1,5 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 
@@ -30,6 +31,11 @@ describe("runtimes flow integration", () => {
                   activeSnapshotName: "runtime-live",
                   isActiveSnapshot: true,
                   hasLiveSession: true,
+                  cliVersion: "0.1.28",
+                  latestCliVersion: "0.1.32",
+                  cliUpdateAvailable: true,
+                  daemonId: "recodee",
+                  device: "recodee · codex-cli 0.1.28",
                 },
                 requestUsage: {
                   requestCount: 42,
@@ -153,5 +159,139 @@ describe("runtimes flow integration", () => {
     expect((await screen.findAllByText("runtime-live@example.com")).length).toBeGreaterThan(0);
     expect(screen.getByText("Live sessions")).toBeInTheDocument();
     expect(screen.getByText("Ship runtimes view from multica design")).toBeInTheDocument();
+    expect(screen.getByText("Update available")).toBeInTheDocument();
+    expect(screen.getByText("0.1.28")).toBeInTheDocument();
+    expect(screen.getByText("0.1.32 available")).toBeInTheDocument();
+    expect(screen.getByText("Daemon recodee · Device recodee · codex-cli 0.1.28")).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "pnpm" }));
+    expect(screen.getByText(/pnpm add -g @openai\/codex@latest/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy update commands" })).toBeInTheDocument();
+  });
+
+  it("deletes a runtime from the list after confirmation", async () => {
+    const nowIso = new Date().toISOString();
+    const deletedAccountIds = new Set<string>();
+
+    const baseAccounts = [
+      createAccountSummary({
+        accountId: "acc_runtime",
+        email: "runtime-live@example.com",
+        displayName: "runtime-live@example.com",
+        codexLiveSessionCount: 1,
+        codexTrackedSessionCount: 1,
+        codexSessionCount: 1,
+        codexCurrentTaskPreview: "Ship runtimes view from multica design",
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "runtime-live",
+          activeSnapshotName: "runtime-live",
+          isActiveSnapshot: true,
+          hasLiveSession: true,
+        },
+      }),
+      createAccountSummary({
+        accountId: "acc_openclaw",
+        email: "openclaw-live@example.com",
+        displayName: "openclaw-live@example.com",
+        codexLiveSessionCount: 1,
+        codexTrackedSessionCount: 1,
+        codexSessionCount: 1,
+        codexCurrentTaskPreview: "Monitor openclaw runtime health",
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "openclaw-recodee",
+          activeSnapshotName: "openclaw-recodee",
+          isActiveSnapshot: true,
+          hasLiveSession: true,
+        },
+      }),
+    ];
+
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: baseAccounts.filter(
+              (account) => !deletedAccountIds.has(account.accountId),
+            ),
+          }),
+        ),
+      ),
+      http.get("/api/sticky-sessions", ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("kind") !== "codex_session") {
+          return HttpResponse.json({ entries: [], stalePromptCacheCount: 0, total: 0, hasMore: false });
+        }
+        return HttpResponse.json({
+          entries: [
+            {
+              key: "session-runtime-1",
+              accountId: "acc_runtime",
+              displayName: "runtime-live@example.com",
+              kind: "codex_session",
+              createdAt: nowIso,
+              updatedAt: nowIso,
+              taskPreview: "Ship runtimes view from multica design",
+              taskUpdatedAt: nowIso,
+              isActive: true,
+              expiresAt: null,
+              isStale: false,
+            },
+            {
+              key: "session-openclaw-1",
+              accountId: "acc_openclaw",
+              displayName: "openclaw-live@example.com",
+              kind: "codex_session",
+              createdAt: nowIso,
+              updatedAt: nowIso,
+              taskPreview: "Monitor openclaw runtime health",
+              taskUpdatedAt: nowIso,
+              isActive: true,
+              expiresAt: null,
+              isStale: false,
+            },
+          ],
+          unmappedCliSessions: [],
+          stalePromptCacheCount: 0,
+          total: 2,
+          hasMore: false,
+        });
+      }),
+      http.delete("/api/accounts/:accountId", ({ params }) => {
+        deletedAccountIds.add(String(params.accountId));
+        return HttpResponse.json({ status: "deleted" });
+      }),
+      http.get("/api/request-logs", () =>
+        HttpResponse.json({
+          requests: [],
+          total: 0,
+          hasMore: false,
+        }),
+      ),
+      http.post("http://localhost:9000/store/customers/me", () =>
+        HttpResponse.json({ customer: {} }),
+      ),
+    );
+
+    window.history.pushState({}, "", "/runtimes");
+    renderWithProviders(<App />);
+    const user = userEvent.setup();
+
+    expect((await screen.findAllByText("Codex (runtime-live)")).length).toBeGreaterThan(0);
+
+    await user.click(
+      screen.getByRole("button", { name: "Delete runtime Codex (runtime-live)" }),
+    );
+
+    const deleteDialog = await screen.findByRole("alertdialog");
+    expect(within(deleteDialog).getByText("Delete runtime?")).toBeInTheDocument();
+    await user.click(within(deleteDialog).getByRole("button", { name: "Delete runtime" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Codex (runtime-live)")).not.toBeInTheDocument();
+    });
+    expect((await screen.findAllByText("Openclaw (openclaw-recodee)")).length).toBeGreaterThan(0);
   });
 });

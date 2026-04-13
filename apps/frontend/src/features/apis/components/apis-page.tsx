@@ -21,6 +21,7 @@ import {
 	useApiKeyUsage7Day,
 } from "@/features/apis/hooks/use-apis";
 import { useDialogState } from "@/hooks/use-dialog-state";
+import { ApiError } from "@/lib/api-client";
 import { getErrorMessageOrNull } from "@/utils/errors";
 
 export function ApisPage() {
@@ -82,6 +83,10 @@ export function ApisPage() {
 	const listError = getErrorMessageOrNull(apiKeysQuery.error);
 	const usage7DayError = getErrorMessageOrNull(usage7DayQuery.error);
 	const pageError = mutationError || (apiKeysQuery.data ? listError : null);
+	const isComingSoonState =
+		!apiKeysQuery.data &&
+		apiKeysQuery.error instanceof ApiError &&
+		apiKeysQuery.error.status === 404;
 
 	const handleCreate = async (payload: ApiKeyCreateRequest) => {
 		const created = await createMutation.mutateAsync(payload);
@@ -94,7 +99,7 @@ export function ApisPage() {
 	};
 
 	return (
-		<div className="animate-fade-in-up space-y-6">
+		<div className="animate-fade-in-up w-full space-y-6">
 			<div>
 				<h1 className="text-2xl font-semibold tracking-tight">APIs</h1>
 				<p className="mt-1 text-sm text-muted-foreground">
@@ -108,8 +113,22 @@ export function ApisPage() {
 
 			{apiKeysQuery.isPending && !apiKeysQuery.data ? (
 				<ApisSkeleton />
+			) : isComingSoonState ? (
+				<section className="w-full rounded-xl border border-cyan-400/20 bg-cyan-500/[0.08] p-6 sm:p-10">
+					<div className="mx-auto flex w-full max-w-4xl flex-col items-center justify-center gap-2 text-center">
+						<p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-300/85">
+							APIs
+						</p>
+						<h2 className="text-2xl font-semibold tracking-tight text-zinc-100">
+							Coming soon
+						</h2>
+						<p className="max-w-2xl text-sm text-zinc-300/80">
+							API key management is being prepared for this workspace.
+						</p>
+					</div>
+				</section>
 			) : !apiKeysQuery.data ? (
-				<div className="space-y-3 rounded-xl border bg-card p-4">
+				<div className="w-full space-y-3 rounded-xl border bg-card p-4">
 					<AlertMessage variant="error">
 						{listError ?? "Failed to load API keys"}
 					</AlertMessage>

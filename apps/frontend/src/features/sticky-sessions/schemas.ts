@@ -29,7 +29,13 @@ export const UnmappedCliSessionSchema = z.object({
   runtimeSessionCount: z.number().int().nonnegative().default(0),
   totalSessionCount: z.number().int().nonnegative().default(0),
   reason: z.string().min(1).default("No account matched this snapshot."),
-});
+  cliVersion: z.string().nullable().optional(),
+  latestCliVersion: z.string().nullable().optional(),
+  cliUpdateAvailable: z.boolean().optional(),
+  cliUpdateCommand: z.string().nullable().optional(),
+  daemonId: z.string().nullable().optional(),
+  device: z.string().nullable().optional(),
+}).passthrough();
 
 export const StickySessionsDeleteRequestSchema = z.object({
   sessions: z.array(StickySessionIdentifierSchema).min(1).max(500),

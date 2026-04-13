@@ -47,7 +47,13 @@ export const AccountCodexAuthSchema = z.object({
   runtimeReady: z.boolean().optional(),
   runtimeReadySource: z.enum(["validated_snapshot_email_match"]).nullable().optional(),
   isOmxBoosted: z.boolean().optional(),
-});
+  cliVersion: z.string().nullable().optional(),
+  latestCliVersion: z.string().nullable().optional(),
+  cliUpdateAvailable: z.boolean().optional(),
+  cliUpdateCommand: z.string().nullable().optional(),
+  daemonId: z.string().nullable().optional(),
+  device: z.string().nullable().optional(),
+}).passthrough();
 
 export const AccountAdditionalWindowSchema = z.object({
   usedPercent: z.number(),
