@@ -13,17 +13,17 @@ Resources
 Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage API keys, view everything in a dashboard.
 
 | ![dashboard](docs/screenshots/dashboard.jpg) | ![accounts](docs/screenshots/accounts.jpg) |
-|:---:|:---:|
+| :------------------------------------------: | :----------------------------------------: |
 
 <details>
 <summary>More screenshots</summary>
 
-| Settings | Login |
-|:---:|:---:|
+|                  Settings                  |                Login                 |
+| :----------------------------------------: | :----------------------------------: |
 | ![settings](docs/screenshots/settings.jpg) | ![login](docs/screenshots/login.jpg) |
 
-| Dashboard (dark) | Accounts (dark) | Settings (dark) |
-|:---:|:---:|:---:|
+|                    Dashboard (dark)                    |                   Accounts (dark)                    |                   Settings (dark)                    |
+| :----------------------------------------------------: | :--------------------------------------------------: | :--------------------------------------------------: |
 | ![dashboard-dark](docs/screenshots/dashboard-dark.jpg) | ![accounts-dark](docs/screenshots/accounts-dark.jpg) | ![settings-dark](docs/screenshots/settings-dark.jpg) |
 
 </details>
@@ -150,7 +150,7 @@ When you switch accounts, some already-running Codex sessions may still use the 
 
 Use the reconcile tool to keep one known-good session and restart only non-matching sessions:
 
-```bash
+````bash
 # dry-run first (safe default)
 uv run python -m app.tools.codex_session_reconcile \
   --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211
@@ -172,21 +172,24 @@ uv run python -m app.tools.codex_runtime_handoff list
 # resume from another runtime/snapshot and activate runtime pointers
 uv run python -m app.tools.codex_runtime_handoff resume <handoff-id> terminal-b backup \
   --activate-runtime
-```
+````
 
 The resume command returns a deterministic checkpoint prompt you can feed into the next Codex session.
 
 # apply restarts for mismatched sessions in this repo scope
+
 uv run python -m app.tools.codex_session_reconcile \
-  --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211 \
-  --apply
+ --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211 \
+ --apply
 
 # optional: include all local codex sessions (not only current repo)
+
 uv run python -m app.tools.codex_session_reconcile \
-  --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211 \
-  --scope all \
-  --apply
-```
+ --keep-session-id 019d53c2-6838-7f21-ad0a-086ee883c211 \
+ --scope all \
+ --apply
+
+````
 
 The keep session ID is shown in `codex` session status output (`Session: ...`).
 
@@ -243,7 +246,7 @@ base_url = "http://127.0.0.1:2455/backend-api/codex"
 wire_api = "responses"
 supports_websockets = true
 requires_openai_auth = true # required for codex app
-```
+````
 
 Optional: enable native upstream WebSockets for Codex streaming while keeping `codex-lb` pooling:
 
@@ -333,37 +336,49 @@ sqlite3 ~/.codex/state_5.sqlite \
     "openai": {
       "options": {
         "baseURL": "http://127.0.0.1:2455/v1",
-        "apiKey": "{env:CODEX_LB_API_KEY}"
+        "apiKey": "{env:CODEX_LB_API_KEY}",
       },
       "models": {
         "gpt-5.4": {
           "name": "GPT-5.4",
           "reasoning": true,
-          "options": { "reasoningEffort": "high", "reasoningSummary": "detailed" },
-          "limit": { "context": 1050000, "output": 128000 }
+          "options": {
+            "reasoningEffort": "high",
+            "reasoningSummary": "detailed",
+          },
+          "limit": { "context": 1050000, "output": 128000 },
         },
         "gpt-5.3-codex": {
           "name": "GPT-5.3 Codex",
           "reasoning": true,
-          "options": { "reasoningEffort": "high", "reasoningSummary": "detailed" },
-          "limit": { "context": 272000, "output": 65536 }
+          "options": {
+            "reasoningEffort": "high",
+            "reasoningSummary": "detailed",
+          },
+          "limit": { "context": 272000, "output": 65536 },
         },
         "gpt-5.1-codex-mini": {
           "name": "GPT-5.1 Codex Mini",
           "reasoning": true,
-          "options": { "reasoningEffort": "high", "reasoningSummary": "detailed" },
-          "limit": { "context": 272000, "output": 65536 }
+          "options": {
+            "reasoningEffort": "high",
+            "reasoningSummary": "detailed",
+          },
+          "limit": { "context": 272000, "output": 65536 },
         },
         "gpt-5.3-codex-spark": {
           "name": "GPT-5.3 Codex Spark",
           "reasoning": true,
-          "options": { "reasoningEffort": "xhigh", "reasoningSummary": "detailed" },
-          "limit": { "context": 128000, "output": 65536 }
-        }
-      }
-    }
+          "options": {
+            "reasoningEffort": "xhigh",
+            "reasoningSummary": "detailed",
+          },
+          "limit": { "context": 128000, "output": 65536 },
+        },
+      },
+    },
   },
-  "model": "openai/gpt-5.3-codex"
+  "model": "openai/gpt-5.3-codex",
 }
 ```
 
@@ -386,23 +401,23 @@ opencode
 {
   "agents": {
     "defaults": {
-      "model": { "primary": "codex-lb/gpt-5.3-codex" }
-    }
+      "model": { "primary": "codex-lb/gpt-5.3-codex" },
+    },
   },
   "models": {
     "mode": "merge",
     "providers": {
       "codex-lb": {
         "baseUrl": "http://127.0.0.1:2455/v1",
-        "apiKey": "${CODEX_LB_API_KEY}",   // or "dummy" if API key auth is disabled
+        "apiKey": "${CODEX_LB_API_KEY}", // or "dummy" if API key auth is disabled
         "api": "openai-completions",
         "models": [
           { "id": "gpt-5.3-codex", "name": "GPT-5.3 Codex" },
-          { "id": "gpt-5.3-codex-spark", "name": "GPT-5.3 Codex Spark" }
-        ]
-      }
-    }
-  }
+          { "id": "gpt-5.3-codex-spark", "name": "GPT-5.3 Codex Spark" },
+        ],
+      },
+    },
+  },
 }
 ```
 
@@ -451,10 +466,10 @@ SQLite is the default database backend; PostgreSQL is optional via `CODEX_LB_DAT
 
 ## Data
 
-| Environment | Path |
-|-------------|------|
-| Local / uvx | `~/.codex-lb/` |
-| Docker | `/var/lib/codex-lb/` |
+| Environment | Path                 |
+| ----------- | -------------------- |
+| Local / uvx | `~/.codex-lb/`       |
+| Docker      | `/var/lib/codex-lb/` |
 
 Backup this directory to preserve your data.
 
@@ -491,6 +506,7 @@ cd frontend && bun run build:watch             # optional: auto-rebuild app/stat
 ## Contributors ✨
 
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
 <!-- prettier-ignore-start -->
 <!-- markdownlint-disable -->
