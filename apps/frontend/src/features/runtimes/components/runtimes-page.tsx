@@ -30,6 +30,7 @@ import { listStickySessions } from "@/features/sticky-sessions/api";
 import { cn } from "@/lib/utils";
 import { hasActiveCliSessionSignal } from "@/utils/account-working";
 import { formatCompactNumber, formatLastUsageLabel } from "@/utils/formatters";
+import { resolveFallbackDailyUsageWeights } from "./runtime-daily-usage";
 import {
   normalizeRuntimeTaskPreview,
   resolveRuntimeTaskPreviews,
@@ -492,10 +493,10 @@ function buildDailyTokenSeries(
     }
     activityCounts[index] += 1;
   }
-  if (activityCounts.every((value) => value <= 0)) {
-    activityCounts[activityCounts.length - 1] = 1;
-  }
-  const weights = activityCounts.map((count) => Math.max(1, count));
+  const weights = resolveFallbackDailyUsageWeights(
+    activityCounts,
+    runtime.sessionCount,
+  );
   const inputByDay = distributeTotalAcrossDays(scaledInput, weights);
   const outputByDay = distributeTotalAcrossDays(scaledOutput, weights);
   const cacheReadByDay = distributeTotalAcrossDays(scaledCacheRead, weights);
