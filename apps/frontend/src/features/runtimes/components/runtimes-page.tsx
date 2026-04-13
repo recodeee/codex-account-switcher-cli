@@ -30,6 +30,10 @@ import { listStickySessions } from "@/features/sticky-sessions/api";
 import { cn } from "@/lib/utils";
 import { hasActiveCliSessionSignal } from "@/utils/account-working";
 import { formatCompactNumber, formatLastUsageLabel } from "@/utils/formatters";
+import {
+  normalizeRuntimeTaskPreview,
+  resolveRuntimeTaskPreviews,
+} from "./runtime-task-previews";
 
 type RuntimeScope = "mine" | "all";
 type UsageWindow = "7d" | "30d" | "90d";
@@ -47,6 +51,7 @@ type RuntimeRow = {
   trackedSessionCount: number;
   lastSeenAt: string | null;
   currentTask: string | null;
+  currentTasks: string[];
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;
@@ -185,26 +190,6 @@ function buildStickyStats(entries: Awaited<ReturnType<typeof listStickySessions>
   return stats;
 }
 
-function normalizeTaskPreview(value: string | null | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const normalized = trimmed.toLowerCase();
-  if (
-    normalized === "waiting for new task" ||
-    normalized === "done" ||
-    normalized === "completed" ||
-    normalized === "finished"
-  ) {
-    return null;
-  }
-  return trimmed;
-}
-
 function buildRuntimeRows(
   accounts: AccountSummary[] | undefined,
   sticky: Awaited<ReturnType<typeof listStickySessions>> | undefined,
@@ -221,25 +206,33 @@ function buildRuntimeRows(
     const stickyByAccount = stickyStats.get(account.accountId);
     const stickySessionCount = stickyByAccount?.activeCount ?? 0;
     const activeSignal = hasActiveCliSessionSignal(account, nowMs);
+    const liveSessionCount = Math.max(
+      stickySessionCount,
+      account.codexLiveSessionCount ?? 0,
+      activeSignal ? 1 : 0,
+    );
     const trackedSessionCount = Math.max(
       account.codexTrackedSessionCount ?? 0,
       account.codexSessionCount ?? 0,
       stickyByAccount?.totalCount ?? 0,
     );
     const sessionCount = Math.max(
-      stickySessionCount,
-      account.codexLiveSessionCount ?? 0,
+      liveSessionCount,
       trackedSessionCount,
-      activeSignal ? 1 : 0,
     );
     const status = sessionCount > 0 ? "online" : "offline";
     const snapshotName =
       account.codexAuth?.snapshotName ??
       account.codexAuth?.expectedSnapshotName ??
       account.email;
-    const previewFromAccount = normalizeTaskPreview(account.codexCurrentTaskPreview);
-    const previewFromSession = normalizeTaskPreview(account.codexSessionTaskPreviews?.[0]?.taskPreview);
-    const currentTask = previewFromAccount ?? previewFromSession;
+    const previewFromAccount = normalizeRuntimeTaskPreview(
+      account.codexCurrentTaskPreview,
+    );
+    const previewFromSession = normalizeRuntimeTaskPreview(
+      account.codexSessionTaskPreviews?.[0]?.taskPreview,
+    );
+    const currentTasks = resolveRuntimeTaskPreviews(account, liveSessionCount);
+    const currentTask = currentTasks[0] ?? null;
     const provider = resolveRuntimeProvider(
       account.codexAuth?.snapshotName,
       account.codexAuth?.expectedSnapshotName,
@@ -283,6 +276,7 @@ function buildRuntimeRows(
       trackedSessionCount,
       lastSeenAt,
       currentTask,
+      currentTasks,
       totalTokens,
       inputTokens,
       outputTokens,
@@ -317,6 +311,7 @@ function buildRuntimeRows(
       trackedSessionCount: entry.totalSessionCount,
       lastSeenAt: null,
       currentTask: entry.reason,
+      currentTasks: entry.reason ? [entry.reason] : [],
       totalTokens: 0,
       inputTokens: 0,
       outputTokens: 0,
@@ -799,12 +794,34 @@ function RuntimeListItem({
               side="top"
               align="end"
               sideOffset={10}
-              className="w-64 rounded-xl border border-white/[0.12] bg-[#101318] px-3 py-2.5 text-slate-100 shadow-xl"
+              className="w-72 rounded-xl border border-white/[0.12] bg-[#101318] px-3 py-2.5 text-slate-100 shadow-xl"
             >
-              <p className="mb-1 text-[11px] uppercase tracking-[0.1em] text-slate-400">Current task</p>
-              <p className="text-xs text-slate-200">
-                {runtime.currentTask ?? "No active task preview."}
+              <p className="mb-1 text-[11px] uppercase tracking-[0.1em] text-slate-400">
+                {runtime.currentTasks.length > 1
+                  ? "Current tasks"
+                  : "Current task"}
               </p>
+              {runtime.currentTasks.length > 0 ? (
+                <ul className="space-y-1 text-xs text-slate-200">
+                  {runtime.currentTasks.map((taskPreview, index) => (
+                    <li
+                      key={`${runtime.runtimeId}-task-${index}`}
+                      className="flex items-start gap-1.5"
+                    >
+                      {runtime.currentTasks.length > 1 ? (
+                        <span className="mt-0.5 inline-flex min-w-5 justify-end font-mono text-[10px] text-slate-400">
+                          {index + 1}.
+                        </span>
+                      ) : null}
+                      <span className="break-words">{taskPreview}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-slate-200">
+                  No active task preview.
+                </p>
+              )}
             </TooltipContent>
           </Tooltip>
           <span
@@ -1127,10 +1144,32 @@ export function RuntimesPage() {
                   <p className="mt-1 text-sm font-medium text-slate-100">{selectedRuntime.trackedSessionCount}</p>
                 </div>
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 md:col-span-2">
-                  <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Current task</p>
-                  <p className="mt-1 line-clamp-2 text-sm font-medium text-slate-100">
-                    {selectedRuntime.currentTask ?? "Waiting for new task"}
+                  <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">
+                    {selectedRuntime.currentTasks.length > 1
+                      ? "Current tasks"
+                      : "Current task"}
                   </p>
+                  {selectedRuntime.currentTasks.length > 0 ? (
+                    <ul className="mt-1 space-y-1">
+                      {selectedRuntime.currentTasks.map((taskPreview, index) => (
+                        <li
+                          key={`${selectedRuntime.runtimeId}-current-task-${index}`}
+                          className="flex items-start gap-1.5 text-sm font-medium text-slate-100"
+                        >
+                          {selectedRuntime.currentTasks.length > 1 ? (
+                            <span className="mt-0.5 inline-flex min-w-5 justify-end font-mono text-[11px] text-slate-400">
+                              {index + 1}.
+                            </span>
+                          ) : null}
+                          <span className="break-words">{taskPreview}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-sm font-medium text-slate-100">
+                      Waiting for new task
+                    </p>
+                  )}
                 </div>
               </div>
 
