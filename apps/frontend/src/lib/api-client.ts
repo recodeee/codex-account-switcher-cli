@@ -8,11 +8,12 @@ type RequestOptions = {
   headers?: HeadersInit;
   signal?: AbortSignal;
   credentials?: RequestCredentials;
+  timeoutMs?: number;
 };
 
 const JSON_CONTENT_TYPE = "application/json";
 const EMPTY_RESPONSE_STATUS = new Set([204, 205]);
-const REQUEST_TIMEOUT_MS = 15_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -143,11 +144,15 @@ async function request<T>(
 
   const abortController = new AbortController();
   const { signal: upstreamSignal } = options ?? {};
+  const timeoutMs =
+    typeof options?.timeoutMs === "number" && Number.isFinite(options.timeoutMs)
+      ? Math.max(1, Math.round(options.timeoutMs))
+      : DEFAULT_REQUEST_TIMEOUT_MS;
   let didTimeout = false;
   const timeoutId = setTimeout(() => {
     didTimeout = true;
     abortController.abort();
-  }, REQUEST_TIMEOUT_MS);
+  }, timeoutMs);
   const handleUpstreamAbort = () => {
     abortController.abort();
   };
@@ -173,7 +178,7 @@ async function request<T>(
       throw new ApiError({
         status: 0,
         code: "request_timeout",
-        message: `Request timed out after ${REQUEST_TIMEOUT_MS}ms`,
+        message: `Request timed out after ${timeoutMs}ms`,
         details: error,
       });
     }

@@ -10,6 +10,7 @@ import {
 
 const DASHBOARD_PATH = "/api/dashboard";
 const REQUEST_LOGS_PATH = "/api/request-logs";
+const DASHBOARD_OVERVIEW_TIMEOUT_MS = 45_000;
 
 export type RequestLogsListFilters = {
   limit?: number;
@@ -41,7 +42,9 @@ function appendMany(params: URLSearchParams, key: string, values?: string[]): vo
 }
 
 export function getDashboardOverview() {
-  return get(`${DASHBOARD_PATH}/overview`, DashboardOverviewSchema);
+  return get(`${DASHBOARD_PATH}/overview`, DashboardOverviewSchema, {
+    timeoutMs: DASHBOARD_OVERVIEW_TIMEOUT_MS,
+  });
 }
 
 export function getDashboardSystemMonitor() {

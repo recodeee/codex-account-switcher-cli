@@ -33,7 +33,10 @@ import type { RequestLog } from "@/features/dashboard/schemas";
 import { listStickySessions } from "@/features/sticky-sessions/api";
 import { useDialogState } from "@/hooks/use-dialog-state";
 import { cn } from "@/lib/utils";
-import { hasActiveCliSessionSignal } from "@/utils/account-working";
+import {
+  hasActiveCliSessionSignal,
+  hasRecentWorkingNowSignal,
+} from "@/utils/account-working";
 import { getErrorMessage } from "@/utils/errors";
 import { formatCompactNumber, formatLastUsageLabel } from "@/utils/formatters";
 import { toast } from "sonner";
@@ -367,7 +370,9 @@ function buildRuntimeRows(
 
     const stickyByAccount = stickyStats.get(account.accountId);
     const stickySessionCount = stickyByAccount?.activeCount ?? 0;
-    const activeSignal = hasActiveCliSessionSignal(account, nowMs);
+    const activeSignal =
+      hasActiveCliSessionSignal(account, nowMs) ||
+      hasRecentWorkingNowSignal(account, nowMs);
     const liveSessionCount = Math.max(
       stickySessionCount,
       account.codexLiveSessionCount ?? 0,
