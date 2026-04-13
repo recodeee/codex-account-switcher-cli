@@ -8,8 +8,10 @@ import {
   type To,
   useInRouterContext,
 } from "react-router-dom";
+import { markNavigationLoaderSuppressed } from "@/lib/navigation-loader";
 
 type NavigateOptions = { replace?: boolean };
+const NAV_LINK_LOADER_SUPPRESS_MS = 8_000;
 
 type SearchParamsInit =
   | URLSearchParams
@@ -208,6 +210,7 @@ export function useNavigate() {
     | null;
 
   return (to: To, options?: NavigateOptions) => {
+    markNavigationLoaderSuppressed();
     if (
       inRouterContext &&
       navigateWithRouterNavigator(navigationContext, to, options)
@@ -332,6 +335,8 @@ export function NavLink({ to, className, children, onClick }: NavLinkProps) {
         ) {
           return;
         }
+
+        markNavigationLoaderSuppressed(NAV_LINK_LOADER_SUPPRESS_MS);
 
         if (
           canUseRouterNavigation &&

@@ -439,7 +439,7 @@ export function AppSidebar() {
       <WorkspaceOnboardingDialog
         open={workspaceOnboardingOpen}
         onOpenChange={setWorkspaceOnboardingOpen}
-        createWorkspace={(name) => createMutation.mutateAsync({ name })}
+        createWorkspace={(name, signal) => createMutation.mutateAsync({ name, signal })}
         isCreatingWorkspace={createMutation.isPending}
         accounts={dashboardQuery.data?.accounts ?? []}
       />

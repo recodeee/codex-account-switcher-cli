@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { AlertMessage } from "@/components/alert-message";
 import { Button } from "@/components/ui/button";
+import { SpinnerBlock } from "@/components/ui/spinner";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import { buildReferralLink } from "@/features/referrals/utils";
 import { getErrorMessageOrNull } from "@/utils/errors";
@@ -104,7 +105,9 @@ export function ReferralsPage() {
             <div className="mt-3 overflow-hidden rounded-lg border border-white/10 bg-black/30">
               <div className="divide-y divide-white/10">
                 {dashboardQuery.isPending && rows.length === 0 ? (
-                  <div className="px-3 py-4 text-sm text-muted-foreground">Loading referral links…</div>
+                  <div className="px-3 py-4">
+                    <SpinnerBlock label="Loading referral links…" className="gap-2" />
+                  </div>
                 ) : rows.length === 0 ? (
                   <div className="px-3 py-4 text-sm text-muted-foreground">No users available.</div>
                 ) : (

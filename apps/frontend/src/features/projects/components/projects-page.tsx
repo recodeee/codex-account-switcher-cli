@@ -142,7 +142,7 @@ function CreateProjectDialog({
           "transition-all duration-300 ease-out",
           expanded
             ? "h-[86vh] max-w-4xl"
-            : "h-[58vh] min-h-[470px] max-w-[860px]",
+            : "h-[58vh] min-h-[470px] max-w-[980px]",
         )}
       >
         <DialogTitle className="sr-only">New project</DialogTitle>

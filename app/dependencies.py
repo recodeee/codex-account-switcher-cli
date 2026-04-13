@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_background_session, get_session
 from app.modules.accounts.repository import AccountsRepository
 from app.modules.accounts.service import AccountsService
+from app.modules.agents.repository import AgentsRepository
+from app.modules.agents.service import AgentsRepositoryPort, AgentsService
 from app.modules.api_keys.repository import ApiKeysRepository
 from app.modules.api_keys.service import ApiKeysService
 from app.modules.audit.repository import AuditRepository
@@ -57,6 +59,13 @@ class AccountsContext:
     session: AsyncSession
     repository: AccountsRepository
     service: AccountsService
+
+
+@dataclass(slots=True)
+class AgentsContext:
+    session: AsyncSession
+    repository: AgentsRepository
+    service: AgentsService
 
 
 @dataclass(slots=True)
@@ -180,6 +189,14 @@ def get_accounts_context(
         repository=repository,
         service=service,
     )
+
+
+def get_agents_context(
+    session: AsyncSession = Depends(get_session),
+) -> AgentsContext:
+    repository = AgentsRepository(session)
+    service = AgentsService(cast(AgentsRepositoryPort, repository))
+    return AgentsContext(session=session, repository=repository, service=service)
 
 
 def get_audit_context(

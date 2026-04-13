@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 
+import { isNavigationLoaderSuppressed } from "@/lib/navigation-loader";
 import { cn } from "@/lib/utils";
 
 const sizeClasses = {
@@ -22,6 +23,10 @@ type SpinnerBlockProps = {
 };
 
 export function SpinnerBlock({ label = "Loading...", className }: SpinnerBlockProps) {
+  if (isNavigationLoaderSuppressed()) {
+    return null;
+  }
+
   return (
     <div role="status" className={cn("flex flex-col items-center gap-3", className)}>
       <Spinner />

@@ -339,6 +339,52 @@ class SwitchboardWorkspace(Base):
     )
 
 
+class SwitchboardAgent(Base):
+    __tablename__ = "switchboard_agents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        default="idle",
+        server_default=text("'idle'"),
+        nullable=False,
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    visibility: Mapped[str] = mapped_column(
+        String(16),
+        default="workspace",
+        server_default=text("'workspace'"),
+        nullable=False,
+    )
+    runtime: Mapped[str] = mapped_column(
+        String(255),
+        default="Codex (recodee)",
+        server_default=text("'Codex (recodee)'"),
+        nullable=False,
+    )
+    instructions: Mapped[str] = mapped_column(
+        Text,
+        default="",
+        server_default=text("''"),
+        nullable=False,
+    )
+    max_concurrent_tasks: Mapped[int] = mapped_column(
+        Integer,
+        default=6,
+        server_default=text("6"),
+        nullable=False,
+    )
+    avatar_data_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class BusinessBillingAccount(Base):
     __tablename__ = "business_billing_accounts"
 

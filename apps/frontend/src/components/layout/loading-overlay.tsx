@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { isNavigationLoaderSuppressed } from "@/lib/navigation-loader";
 
 import { Spinner } from "@/components/ui/spinner";
 
@@ -13,7 +14,7 @@ export function LoadingOverlay({
   label = "Loading...",
   className,
 }: LoadingOverlayProps) {
-  if (!visible) {
+  if (!visible || isNavigationLoaderSuppressed()) {
     return null;
   }
 

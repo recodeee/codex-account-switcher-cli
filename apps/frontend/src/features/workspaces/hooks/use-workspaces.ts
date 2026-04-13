@@ -2,10 +2,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { createWorkspace, deleteWorkspace, listWorkspaces, selectWorkspace } from "@/features/workspaces/api";
+import { ApiError } from "@/lib/api-client";
 import type {
   WorkspaceCreateRequest,
   WorkspacesResponse,
 } from "@/features/workspaces/schemas";
+
+type WorkspaceCreateMutationInput = WorkspaceCreateRequest & {
+  signal?: AbortSignal;
+};
 
 export function useWorkspaces() {
   const queryClient = useQueryClient();
@@ -24,7 +29,8 @@ export function useWorkspaces() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (payload: WorkspaceCreateRequest) => createWorkspace(payload),
+    mutationFn: ({ signal, ...payload }: WorkspaceCreateMutationInput) =>
+      createWorkspace(payload, { signal }),
     onSuccess: (created) => {
       queryClient.setQueryData<WorkspacesResponse | undefined>(queryKey, (current) => {
         if (!current) {
@@ -41,6 +47,14 @@ export function useWorkspaces() {
       invalidate();
     },
     onError: (error: Error) => {
+      if (
+        error instanceof ApiError &&
+        error.code === "network_error" &&
+        /aborted/i.test(error.message)
+      ) {
+        toast.error("Create workspace request timed out. Please retry.");
+        return;
+      }
       toast.error(error.message || "Failed to create workspace");
     },
   });

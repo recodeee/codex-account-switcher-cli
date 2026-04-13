@@ -6,7 +6,7 @@ import {
   Loader2,
   Terminal,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -65,10 +65,13 @@ const SETUP_STEPS = [
 type WorkspaceOnboardingDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  createWorkspace: (name: string) => Promise<WorkspaceEntry>;
+  createWorkspace: (name: string, signal?: AbortSignal) => Promise<WorkspaceEntry>;
   isCreatingWorkspace: boolean;
   accounts: AccountSummary[];
 };
+
+const CREATE_WORKSPACE_ABORT_MS = 15_000;
+const CREATE_WORKSPACE_SLOW_HINT_MS = 4_000;
 
 function resolveHostPrefix() {
   if (typeof window === "undefined") {
@@ -156,22 +159,48 @@ export function WorkspaceOnboardingDialog({
 }: WorkspaceOnboardingDialogProps) {
   const [step, setStep] = useState(0);
   const [workspaceName, setWorkspaceName] = useState("");
+  const [showSlowCreateHint, setShowSlowCreateHint] = useState(false);
+  const createWorkspaceAbortRef = useRef<AbortController | null>(null);
 
   const hostPrefix = useMemo(() => resolveHostPrefix(), []);
   const slugPreview = useMemo(() => nameToSlug(workspaceName.trim()), [workspaceName]);
   const canCreate = workspaceName.trim().length > 0;
   const connectedRuntimes = useMemo(() => buildConnectedRuntimes(accounts), [accounts]);
 
+  useEffect(() => {
+    if (!isCreatingWorkspace) {
+      setShowSlowCreateHint(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowSlowCreateHint(true);
+    }, CREATE_WORKSPACE_SLOW_HINT_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [isCreatingWorkspace]);
+
   const handleCreateWorkspace = async () => {
     if (!canCreate || isCreatingWorkspace) {
       return;
     }
 
+    const abortController = new AbortController();
+    createWorkspaceAbortRef.current = abortController;
+    const timeoutId = window.setTimeout(() => {
+      abortController.abort();
+    }, CREATE_WORKSPACE_ABORT_MS);
+
     try {
-      await createWorkspace(workspaceName.trim());
+      await createWorkspace(workspaceName.trim(), abortController.signal);
       setStep(1);
     } catch {
       // error toast handled in mutation hook
+    } finally {
+      window.clearTimeout(timeoutId);
+      if (createWorkspaceAbortRef.current === abortController) {
+        createWorkspaceAbortRef.current = null;
+      }
     }
   };
 
@@ -190,8 +219,11 @@ export function WorkspaceOnboardingDialog({
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
+      createWorkspaceAbortRef.current?.abort();
+      createWorkspaceAbortRef.current = null;
       setStep(0);
       setWorkspaceName("");
+      setShowSlowCreateHint(false);
     }
     onOpenChange(nextOpen);
   };
@@ -297,6 +329,11 @@ export function WorkspaceOnboardingDialog({
                 >
                   {isCreatingWorkspace ? "Creating..." : "Create workspace"}
                 </Button>
+                {showSlowCreateHint ? (
+                  <p className="text-center text-xs text-slate-500">
+                    Still creating… if this keeps spinning, the local backend may be restarting.
+                  </p>
+                ) : null}
               </div>
             ) : null}
 

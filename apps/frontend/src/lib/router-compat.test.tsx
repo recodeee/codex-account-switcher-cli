@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NavLink, useNavigate, useSearchParams } from "@/lib/router-compat";
 
@@ -98,6 +98,24 @@ describe("NavLink", () => {
     const link = await screen.findByRole("link", { name: "Dashboard active" });
     expect(link).toHaveClass("active");
     expect(link).toHaveAttribute("href", "/dashboard");
+  });
+
+  it("applies extended loader suppression window for direct nav-link transitions", async () => {
+    const user = userEvent.setup();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <NavLink to="/accounts">Accounts</NavLink>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("link", { name: "Accounts" }));
+
+    const rawSuppressUntil = window.sessionStorage.getItem("recodee.navigation-loader.suppress-until");
+    expect(rawSuppressUntil).toBe(String(1_008_000));
+
+    nowSpy.mockRestore();
   });
 });
 

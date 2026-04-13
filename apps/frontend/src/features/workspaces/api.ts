@@ -13,9 +13,9 @@ export function listWorkspaces() {
   return get(WORKSPACES_BASE_PATH, WorkspacesResponseSchema);
 }
 
-export function createWorkspace(payload: unknown) {
+export function createWorkspace(payload: unknown, options?: { signal?: AbortSignal }) {
   const validated = WorkspaceCreateRequestSchema.parse(payload);
-  return post(WORKSPACES_BASE_PATH, WorkspaceEntrySchema, { body: validated });
+  return post(WORKSPACES_BASE_PATH, WorkspaceEntrySchema, { body: validated, signal: options?.signal });
 }
 
 export function selectWorkspace(workspaceId: string) {
