@@ -91,6 +91,7 @@ type HourlyDistributionEntry = {
   requestCount: number;
   totalTokens: number;
   hasTokenData: boolean;
+  isEstimated: boolean;
 };
 
 type DailyUsageTooltipProps = {
@@ -378,6 +379,7 @@ function buildHourlyDistribution(runtime: RuntimeRow, requestLogs: RequestLog[] 
     requestCount: 0,
     totalTokens: 0,
     hasTokenData: false,
+    isEstimated: false,
   }));
   const logTimestamps =
     safeRequestLogs.length > 0
@@ -412,12 +414,37 @@ function buildHourlyDistribution(runtime: RuntimeRow, requestLogs: RequestLog[] 
     buckets[new Date().getHours()].requestCount = runtime.sessionCount;
   }
 
+  const totalRequestCount = buckets.reduce((sum, entry) => sum + entry.requestCount, 0);
+  const totalLoggedTokens = buckets.reduce((sum, entry) => sum + entry.totalTokens, 0);
+  const hasAnyPositiveTokenLog = buckets.some((entry) => entry.totalTokens > 0);
+  const runtimeTokenEstimate = Math.max(
+    0,
+    Math.round(runtime.inputTokens + runtime.outputTokens + runtime.cacheReadTokens),
+  );
+  const shouldEstimateTokens =
+    totalRequestCount > 0 &&
+    runtimeTokenEstimate > 0 &&
+    (totalLoggedTokens <= 0 || !hasAnyPositiveTokenLog);
+
+  if (shouldEstimateTokens) {
+    const requestWeights = buckets.map((entry) => Math.max(0, entry.requestCount));
+    const estimatedTokensByHour = distributeTotalAcrossDays(runtimeTokenEstimate, requestWeights);
+    for (let hour = 0; hour < buckets.length; hour += 1) {
+      if (buckets[hour].requestCount <= 0) {
+        continue;
+      }
+      buckets[hour].totalTokens = Math.max(0, estimatedTokensByHour[hour] ?? 0);
+      buckets[hour].isEstimated = true;
+    }
+  }
+
   return buckets.map((entry, hour) => ({
     hour,
     label: `${String(hour).padStart(2, "0")}:00`,
     requestCount: entry.requestCount,
     totalTokens: entry.totalTokens,
     hasTokenData: entry.hasTokenData,
+    isEstimated: entry.isEstimated,
   })) satisfies HourlyDistributionEntry[];
 }
 
@@ -438,7 +465,11 @@ function HourlyUsageTooltip({ entry }: { entry: HourlyDistributionEntry }) {
           <span className="text-slate-400">Tokens spent</span>
           <span className="font-semibold text-slate-100">{formatCompactNumber(entry.totalTokens)}</span>
         </div>
-        {!entry.hasTokenData ? (
+        {entry.isEstimated ? (
+          <p className="pt-1 text-[10px] text-slate-500">
+            Estimated from runtime token totals and request distribution.
+          </p>
+        ) : !entry.hasTokenData ? (
           <p className="pt-1 text-[10px] text-slate-500">Estimated from runtime activity timestamps.</p>
         ) : null}
       </div>
@@ -484,7 +515,7 @@ function formatHourlyPeak(peak: HourlyDistributionEntry | null): string {
   if (!peak) {
     return "No peak yet";
   }
-  return `${peak.label} · ${formatCompactNumber(peak.totalTokens)} tokens`;
+  return `${peak.label} · ${peak.isEstimated ? "~" : ""}${formatCompactNumber(peak.totalTokens)} tokens`;
 }
 
 function formatHourlyTotalTokens(entries: HourlyDistributionEntry[]): number {
@@ -516,6 +547,7 @@ function HourlyDistributionChart({ entries }: { entries: HourlyDistributionEntry
   const totalTokens = formatHourlyTotalTokens(entries);
   const totalRequests = formatHourlyTotalRequests(entries);
   const tickLabels = buildHourlyTicks(entries);
+  const hasEstimatedTokens = entries.some((entry) => entry.isEstimated);
 
   return (
     <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
@@ -523,6 +555,7 @@ function HourlyDistributionChart({ entries }: { entries: HourlyDistributionEntry
         <p className="text-xs font-semibold text-slate-300">Hourly distribution</p>
         <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
           <span className="rounded-full border border-emerald-300/25 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+            {hasEstimatedTokens ? "~" : ""}
             {formatCompactNumber(totalTokens)} tokens
           </span>
           <span className="rounded-full border border-white/[0.12] bg-white/[0.04] px-2 py-0.5 text-slate-300">

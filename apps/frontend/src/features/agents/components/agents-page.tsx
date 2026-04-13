@@ -5,16 +5,19 @@ import {
   Bot,
   Camera,
   Circle,
+  Download,
   FileText,
   Globe,
   ListTodo,
   Lock,
+  MoreHorizontal,
   Plus,
   Save,
   Settings,
   Sparkle,
+  Trash2,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +30,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,7 +44,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAgents } from "@/features/agents/hooks/use-agents";
 import type { AgentEntry } from "@/features/agents/schemas";
@@ -46,6 +55,7 @@ import { hasActiveCliSessionSignal } from "@/utils/account-working";
 
 type AgentTab = "instructions" | "skills" | "tasks" | "settings";
 type AgentVisibility = "workspace" | "private";
+type SkillDialogTab = "create" | "import";
 
 type CreateAgentDraft = {
   name: string;
@@ -67,6 +77,15 @@ const DEFAULT_RUNTIME = "Codex (recodee)";
 const OPENCLAW_PROVIDER_MATCHER = /\bopenclaw\b|\bopencl\b|\boclaw\b/i;
 const DEFAULT_MAX_CONCURRENT_TASKS = 6;
 const MAX_AVATAR_BYTES = 1_000_000;
+const SKILL_ASSIGNMENTS_STORAGE_KEY = "recodee.agent-skills.v1";
+
+type AgentAssignedSkill = {
+  id: string;
+  name: string;
+  description: string;
+  source: "created" | "imported";
+  importUrl?: string;
+};
 const AGENT_INSTRUCTIONS_PLACEHOLDER = `Define this agent's role, expertise, and working style.
 
 Example:
@@ -89,6 +108,83 @@ function buildCreateDraft(runtime: string = DEFAULT_RUNTIME): CreateAgentDraft {
     runtime,
     avatarDataUrl: null,
   };
+}
+
+function generateId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `skill-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function readStoredAgentSkills(): Record<string, AgentAssignedSkill[]> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(SKILL_ASSIGNMENTS_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+    const records = parsed as Record<string, unknown>;
+    const normalized: Record<string, AgentAssignedSkill[]> = {};
+    for (const [agentId, skills] of Object.entries(records)) {
+      if (!Array.isArray(skills)) {
+        continue;
+      }
+      normalized[agentId] = skills
+        .map((skill): AgentAssignedSkill | null => {
+          if (!skill || typeof skill !== "object") {
+            return null;
+          }
+          const candidate = skill as Partial<AgentAssignedSkill>;
+          const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+          if (!name) {
+            return null;
+          }
+          return {
+            id: typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : generateId(),
+            name,
+            description: typeof candidate.description === "string" ? candidate.description : "",
+            source: candidate.source === "imported" ? "imported" : "created",
+            importUrl: typeof candidate.importUrl === "string" ? candidate.importUrl : undefined,
+          };
+        })
+        .filter((skill): skill is AgentAssignedSkill => Boolean(skill));
+    }
+    return normalized;
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredAgentSkills(skillsByAgentId: Record<string, AgentAssignedSkill[]>) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(SKILL_ASSIGNMENTS_STORAGE_KEY, JSON.stringify(skillsByAgentId));
+}
+
+function resolveImportedSkillName(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return "Imported skill";
+  }
+  try {
+    const parsed = new URL(trimmed);
+    const raw = parsed.pathname.split("/").filter(Boolean).pop() ?? parsed.hostname;
+    const normalized = raw.replace(/\.(md|mdx)$/i, "").replace(/[-_]+/g, " ").trim();
+    if (!normalized) {
+      return "Imported skill";
+    }
+    return normalized.replace(/\b\w/g, (token) => token.toUpperCase());
+  } catch {
+    return "Imported skill";
+  }
 }
 
 function resolveRuntimeProvider(...values: Array<string | null | undefined>): "codex" | "openclaw" {
@@ -177,11 +273,20 @@ export function AgentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState<CreateAgentDraft>(() => buildCreateDraft());
   const [agentDrafts, setAgentDrafts] = useState<Record<string, AgentEntry>>({});
+  const [skillsByAgentId, setSkillsByAgentId] = useState<Record<string, AgentAssignedSkill[]>>(
+    () => readStoredAgentSkills(),
+  );
+  const [addSkillOpen, setAddSkillOpen] = useState(false);
+  const [skillDialogTab, setSkillDialogTab] = useState<SkillDialogTab>("create");
+  const [skillNameDraft, setSkillNameDraft] = useState("");
+  const [skillDescriptionDraft, setSkillDescriptionDraft] = useState("");
+  const [skillImportUrlDraft, setSkillImportUrlDraft] = useState("");
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const createAvatarInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { agentsQuery, createMutation, updateMutation } = useAgents();
+  const { agentsQuery, createMutation, updateMutation, deleteMutation } = useAgents();
   const dashboardQuery = useDashboard();
 
   const runtimeOptions = useMemo(
@@ -219,6 +324,13 @@ export function AgentsPage() {
   const selectedAgentRuntimeOption = selectedAgent
     ? resolveRuntimeOption(selectedAgent.runtime, runtimeOptions)
     : null;
+  const selectedAgentSkills = selectedAgent ? (skillsByAgentId[selectedAgent.id] ?? []) : [];
+  const canCreateSkill = skillNameDraft.trim().length > 0;
+  const canImportSkill = skillImportUrlDraft.trim().length > 0;
+
+  useEffect(() => {
+    writeStoredAgentSkills(skillsByAgentId);
+  }, [skillsByAgentId]);
 
   const updateSelectedAgent = (updater: (agent: AgentEntry) => AgentEntry) => {
     if (!selectedAgent) {
@@ -319,7 +431,63 @@ export function AgentsPage() {
     updateSelectedAgent((agent) => ({ ...agent, avatarDataUrl: dataUrl }));
   };
 
-  const isBusy = createMutation.isPending || updateMutation.isPending;
+  const isBusy = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
+  const resetAddSkillDialog = () => {
+    setSkillDialogTab("create");
+    setSkillNameDraft("");
+    setSkillDescriptionDraft("");
+    setSkillImportUrlDraft("");
+  };
+  const handleCreateSkillAssignment = () => {
+    if (!selectedAgent || !canCreateSkill) {
+      return;
+    }
+    const nextSkill: AgentAssignedSkill = {
+      id: generateId(),
+      name: skillNameDraft.trim(),
+      description: skillDescriptionDraft.trim(),
+      source: "created",
+    };
+    setSkillsByAgentId((current) => ({
+      ...current,
+      [selectedAgent.id]: [...(current[selectedAgent.id] ?? []), nextSkill],
+    }));
+    toast.success(`Added skill: ${nextSkill.name}`);
+    setAddSkillOpen(false);
+    resetAddSkillDialog();
+  };
+  const handleImportSkillAssignment = () => {
+    if (!selectedAgent || !canImportSkill) {
+      return;
+    }
+    const importUrl = skillImportUrlDraft.trim();
+    const nextSkill: AgentAssignedSkill = {
+      id: generateId(),
+      name: resolveImportedSkillName(importUrl),
+      description: "Imported from URL",
+      source: "imported",
+      importUrl,
+    };
+    setSkillsByAgentId((current) => ({
+      ...current,
+      [selectedAgent.id]: [...(current[selectedAgent.id] ?? []), nextSkill],
+    }));
+    toast.success(`Imported skill: ${nextSkill.name}`);
+    setAddSkillOpen(false);
+    resetAddSkillDialog();
+  };
+  const handleRemoveSkillAssignment = (skillId: string) => {
+    if (!selectedAgent) {
+      return;
+    }
+    setSkillsByAgentId((current) => {
+      const currentSkills = current[selectedAgent.id] ?? [];
+      return {
+        ...current,
+        [selectedAgent.id]: currentSkills.filter((skill) => skill.id !== skillId),
+      };
+    });
+  };
 
   return (
     <div className="animate-fade-in-up h-full w-full overflow-hidden bg-[linear-gradient(180deg,rgba(7,10,18,0.97)_0%,rgba(3,5,12,1)_100%)]">
@@ -394,23 +562,45 @@ export function AgentsPage() {
             {selectedAgent ? (
               <>
                 <div className="border-b border-white/[0.08] px-4 pt-3 pb-2">
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
-                    <p className="text-base font-semibold text-slate-100">{selectedAgent.name}</p>
-                    <span className="inline-flex items-center gap-1 rounded border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-xs">
-                      <Circle
-                        className={cn(
-                          "h-2.5 w-2.5",
-                          selectedAgent.status === "idle"
-                            ? "fill-slate-500 text-slate-500"
-                            : "fill-emerald-400 text-emerald-400",
-                        )}
-                        aria-hidden="true"
-                      />
-                      {selectedAgent.status}
-                    </span>
-                    <span className="rounded border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-xs text-slate-400">
-                      {selectedAgentRuntimeOption?.label ?? selectedAgent.runtime}
-                    </span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                      <p className="text-base font-semibold text-slate-100">{selectedAgent.name}</p>
+                      <span className="inline-flex items-center gap-1 rounded border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-xs">
+                        <Circle
+                          className={cn(
+                            "h-2.5 w-2.5",
+                            selectedAgent.status === "idle"
+                              ? "fill-slate-500 text-slate-500"
+                              : "fill-emerald-400 text-emerald-400",
+                          )}
+                          aria-hidden="true"
+                        />
+                        {selectedAgent.status}
+                      </span>
+                      <span className="rounded border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-xs text-slate-400">
+                        {selectedAgentRuntimeOption?.label ?? selectedAgent.runtime}
+                      </span>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-slate-400 hover:bg-white/[0.06] hover:text-slate-100"
+                          aria-label="Agent actions"
+                          disabled={isBusy}
+                        >
+                          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem className="text-destructive" onClick={() => setConfirmArchiveOpen(true)}>
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          Archive Agent
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
 
                   <Tabs value={activeTab} onValueChange={(value) => setActiveTab((value as AgentTab) ?? "instructions")}>
@@ -493,17 +683,59 @@ export function AgentsPage() {
                           variant="outline"
                           size="sm"
                           className="h-8 shrink-0 gap-1.5 border-white/[0.12] bg-transparent px-3 text-xs"
+                          onClick={() => setAddSkillOpen(true)}
                         >
                           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                           Add Skill
                         </Button>
                       </div>
 
-                      <div className="flex min-h-[190px] flex-col items-center justify-center rounded-lg border border-dashed border-white/[0.12] bg-white/[0.01] px-6 py-10 text-center">
-                        <FileText className="h-8 w-8 text-slate-500/70" aria-hidden="true" />
-                        <p className="mt-3 text-sm text-slate-300">No skills assigned</p>
-                        <p className="mt-1 text-xs text-slate-500">Add skills from the workspace to this agent.</p>
-                      </div>
+                      {selectedAgentSkills.length === 0 ? (
+                        <div className="flex min-h-[190px] flex-col items-center justify-center rounded-lg border border-dashed border-white/[0.12] bg-white/[0.01] px-6 py-10 text-center">
+                          <FileText className="h-8 w-8 text-slate-500/70" aria-hidden="true" />
+                          <p className="mt-3 text-sm text-slate-300">No skills assigned</p>
+                          <p className="mt-1 text-xs text-slate-500">Add skills from the workspace to this agent.</p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-4 h-8 gap-1.5 border-white/[0.12] bg-transparent px-3 text-xs"
+                            onClick={() => setAddSkillOpen(true)}
+                          >
+                            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                            Add Skill
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {selectedAgentSkills.map((skill) => (
+                            <div
+                              key={skill.id}
+                              className="flex items-center gap-3 rounded-lg border border-white/[0.12] bg-white/[0.02] px-3 py-2.5"
+                            >
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.12] bg-white/[0.03]">
+                                <FileText className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-slate-100">{skill.name}</p>
+                                <p className="truncate text-xs text-slate-500">
+                                  {skill.description || (skill.source === "imported" ? "Imported skill" : "No description")}
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-slate-400 hover:bg-white/[0.06] hover:text-red-300"
+                                onClick={() => handleRemoveSkillAssignment(skill.id)}
+                                aria-label={`Remove skill ${skill.name}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : null}
 
@@ -951,6 +1183,165 @@ export function AgentsPage() {
             <Button type="button" onClick={() => void handleCreateAgent()} disabled={createDraft.name.trim().length === 0 || isBusy}>
               Create
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={confirmArchiveOpen}
+        onOpenChange={(open) => {
+          setConfirmArchiveOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-sm border border-white/[0.12] bg-[#0b1018] text-slate-100">
+          <DialogHeader>
+            <DialogTitle>Archive agent?</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              This will remove the selected agent from your active list.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setConfirmArchiveOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (!selectedAgent) {
+                  setConfirmArchiveOpen(false);
+                  return;
+                }
+                setConfirmArchiveOpen(false);
+                setAgentDrafts((current) => {
+                  if (!current[selectedAgent.id]) {
+                    return current;
+                  }
+                  const next = { ...current };
+                  delete next[selectedAgent.id];
+                  return next;
+                });
+                setSkillsByAgentId((current) => {
+                  if (!current[selectedAgent.id]) {
+                    return current;
+                  }
+                  const next = { ...current };
+                  delete next[selectedAgent.id];
+                  return next;
+                });
+                deleteMutation.mutate({ agentId: selectedAgent.id, agentName: selectedAgent.name });
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              Archive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={addSkillOpen}
+        onOpenChange={(open) => {
+          setAddSkillOpen(open);
+          if (!open) {
+            resetAddSkillDialog();
+          }
+        }}
+      >
+        <DialogContent className="w-[95vw] max-w-[430px] border-white/[0.12] bg-[#0b0f17] text-slate-100 sm:max-w-[430px]">
+          <DialogHeader>
+            <DialogTitle className="text-[26px] font-semibold leading-none tracking-tight text-slate-100">Add Skill</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              Create a new skill or import from ClawHub / Skills.sh.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Tabs value={skillDialogTab} onValueChange={(value) => setSkillDialogTab((value as SkillDialogTab) ?? "create")}>
+            <TabsList className="grid h-10 w-full grid-cols-2 rounded-lg border border-white/[0.08] bg-white/[0.03] p-1">
+              <TabsTrigger value="create" className="h-8 rounded-md text-sm data-[state=active]:bg-white/[0.1]">
+                <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                Create
+              </TabsTrigger>
+              <TabsTrigger value="import" className="h-8 rounded-md text-sm data-[state=active]:bg-white/[0.1]">
+                <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                Import
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="create" className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="add-skill-name" className="text-xs text-slate-400">
+                  Name
+                </Label>
+                <Input
+                  id="add-skill-name"
+                  value={skillNameDraft}
+                  onChange={(event) => setSkillNameDraft(event.target.value)}
+                  placeholder="e.g. Code Review, Bug Triage"
+                  className="border-white/[0.12] bg-white/[0.03] text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-skill-description" className="text-xs text-slate-400">
+                  Description
+                </Label>
+                <Input
+                  id="add-skill-description"
+                  value={skillDescriptionDraft}
+                  onChange={(event) => setSkillDescriptionDraft(event.target.value)}
+                  placeholder="Brief description of what this skill does"
+                  className="border-white/[0.12] bg-white/[0.03] text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="import" className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="import-skill-url" className="text-xs text-slate-400">
+                  Skill URL
+                </Label>
+                <Input
+                  id="import-skill-url"
+                  value={skillImportUrlDraft}
+                  onChange={(event) => setSkillImportUrlDraft(event.target.value)}
+                  placeholder="https://clawhub.ai/skills/..."
+                  className="border-white/[0.12] bg-white/[0.03] text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-9 px-4 text-sm text-slate-300 hover:bg-white/[0.06] hover:text-slate-100"
+              onClick={() => {
+                setAddSkillOpen(false);
+                resetAddSkillDialog();
+              }}
+            >
+              Cancel
+            </Button>
+            {skillDialogTab === "create" ? (
+              <Button
+                type="button"
+                className="h-9 px-4 text-sm"
+                disabled={!canCreateSkill}
+                onClick={handleCreateSkillAssignment}
+              >
+                Create
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="h-9 px-4 text-sm"
+                disabled={!canImportSkill}
+                onClick={handleImportSkillAssignment}
+              >
+                Import
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

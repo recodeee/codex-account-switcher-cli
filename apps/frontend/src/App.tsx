@@ -55,14 +55,19 @@ function AppLayout() {
               || isSkillsRoute
               || isAgentsRoute
               ? "max-w-none overflow-hidden p-0"
+              : isDashboardRoute
+                ? "px-0 py-8"
               : isProjectsRoute || isAccountsRoute || isPlansRoute || isBillingRoute
                 ? "px-2 py-5 sm:px-3 lg:px-4"
                 : "px-4 py-8 sm:px-6 lg:px-8",
-            isPlansRoute || isRuntimesRoute || isSkillsRoute || isAgentsRoute || isBillingRoute
+            isPlansRoute ||
+            isRuntimesRoute ||
+            isSkillsRoute ||
+            isAgentsRoute ||
+            isBillingRoute ||
+            isDashboardRoute
               ? "max-w-none"
-              : isDashboardRoute
-                ? "mx-auto max-w-[1800px]"
-                : isProjectsRoute || isAccountsRoute
+              : isProjectsRoute || isAccountsRoute
                   ? "mx-auto max-w-[1900px]"
                   : "mx-auto max-w-[1500px]",
           )}

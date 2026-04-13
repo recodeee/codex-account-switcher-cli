@@ -1545,6 +1545,8 @@ export function AccountCard(props: AccountCardProps) {
     hasExpiredRefreshTokenReason(account.deactivationReason);
   const status =
     usageLimitHit && effectiveStatus === "active" ? "limited" : effectiveStatus;
+  const useLocalBlockedByDisconnected =
+    status === "deactivated" || hasExpiredRefreshToken;
   const canUseLocally = canUseLocalAccount({
     status: account.status,
     primaryRemainingPercent: primaryRemaining,
@@ -1566,14 +1568,22 @@ export function AccountCard(props: AccountCardProps) {
     codexSessionCount: account.codexSessionCount,
   });
   const useLocalButtonDisabled =
-    !canUseLocally || useLocalBusy || useLocalBlockedByWeeklyQuota;
+    useLocalBlockedByDisconnected ||
+    !canUseLocally ||
+    useLocalBusy ||
+    useLocalBlockedByWeeklyQuota;
   const useLocalButtonShowsSuccess = isActiveSnapshot || useLocalBusy;
-  const shouldShowCurrentUseLabel = isActiveSnapshot;
-  const resolvedPrimaryActionLabel = shouldShowCurrentUseLabel
-    ? "Currently used"
-    : primaryActionLabel;
+  const shouldShowCurrentUseLabel =
+    isActiveSnapshot && !useLocalBlockedByDisconnected;
+  const resolvedPrimaryActionLabel = useLocalBlockedByDisconnected
+    ? "Token needs refresh"
+    : shouldShowCurrentUseLabel
+      ? "Currently used"
+      : primaryActionLabel;
   const useLocalButtonDisabledReason = useLocalBlockedByWeeklyQuota
     ? "Weekly quota shown as 0%."
+    : useLocalBlockedByDisconnected
+      ? "Token needs refresh. Re-auth to use this account again."
     : useLocalDisabledReason;
   const handleUnlock = () => {
     if (onAction) {

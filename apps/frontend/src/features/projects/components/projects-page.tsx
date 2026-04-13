@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronRight, Folder, FolderKanban, Maximize2, Minimize2, Minus, Plus, X } from "lucide-react";
+import { ChevronRight, Folder, Maximize2, Minimize2, Minus, Plus, X } from "lucide-react";
 
 import { AlertMessage } from "@/components/alert-message";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -138,28 +138,28 @@ function CreateProjectDialog({
       <DialogContent
         showCloseButton={false}
         className={cn(
-          "flex flex-col gap-0 overflow-hidden border border-white/10 bg-[#0a0d15]/95 p-0 text-foreground shadow-2xl backdrop-blur-xl",
-          "transition-all duration-300 ease-out",
+          "flex flex-col gap-0 overflow-hidden border border-white/10 bg-[#0a0d15] p-0 text-foreground shadow-2xl",
+          "!top-1/2 !left-1/2 !-translate-x-1/2 !transition-all !duration-300 !ease-out",
           expanded
-            ? "h-[86vh] max-w-4xl"
-            : "h-[58vh] min-h-[470px] max-w-[980px]",
+            ? "!h-[82vh] !w-full !max-w-5xl !-translate-y-1/2"
+            : "!h-96 !w-full !max-w-4xl !-translate-y-1/2",
         )}
       >
         <DialogTitle className="sr-only">New project</DialogTitle>
         <DialogDescription className="sr-only">Create a reusable project context for Codex tasks.</DialogDescription>
 
-        <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground/85">MY</span>
+        <div className="flex items-center justify-between border-b border-white/5 px-5 pb-2 pt-3">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">MY</span>
             <ChevronRight className="size-3 text-muted-foreground/50" />
-            <span className="text-[1.55rem] font-semibold tracking-tight text-white">New project</span>
+            <span className="font-medium text-white">New project</span>
           </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => setExpanded((current) => !current)}
               aria-label={expanded ? "Collapse project modal" : "Expand project modal"}
-              className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-sm p-1.5 text-muted-foreground/75 transition-colors hover:bg-white/10 hover:text-white"
               title={expanded ? "Collapse" : "Expand"}
             >
               {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
@@ -168,7 +168,7 @@ function CreateProjectDialog({
               type="button"
               onClick={() => onOpenChange(false)}
               aria-label="Close"
-              className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-sm p-1.5 text-muted-foreground/75 transition-colors hover:bg-white/10 hover:text-white"
               title="Close"
             >
               <X className="size-4" />
@@ -176,41 +176,44 @@ function CreateProjectDialog({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col px-6 py-5">
-          <div className="space-y-4">
-            <Folder className="h-6 w-6 text-amber-300" />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="space-y-3 px-5 pb-2 pt-4">
+            <Folder className="h-5 w-5 text-amber-300" />
             <input
               value={draft.name}
               onChange={(event) => {
                 onDraftChange((current) => ({ ...current, name: event.target.value }));
               }}
               placeholder="Project title"
-              className="w-full border-0 bg-transparent p-0 text-[2.2rem] font-semibold leading-tight tracking-tight text-white placeholder:text-white/45 focus-visible:outline-none"
+              className="w-full border-0 bg-transparent p-0 text-[2.6rem] font-semibold leading-tight tracking-tight text-white placeholder:text-white/45 focus-visible:outline-none"
               disabled={disabled}
             />
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-5">
             <Textarea
               value={draft.description}
               onChange={(event) => {
                 onDraftChange((current) => ({ ...current, description: event.target.value }));
               }}
               placeholder="Add description..."
-              className="min-h-28 resize-none border-0 bg-transparent px-0 text-2xl text-muted-foreground shadow-none outline-none placeholder:text-muted-foreground/80 focus-visible:ring-0"
+              className="min-h-full resize-none border-0 bg-transparent px-0 text-2xl text-muted-foreground shadow-none outline-none placeholder:text-muted-foreground/80 focus-visible:ring-0"
               disabled={disabled}
               maxLength={512}
             />
           </div>
 
-          <div className="mt-auto flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
+          <div className="mt-auto flex flex-wrap items-end justify-between gap-3 border-t border-white/10 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3 py-1 text-[0.95rem] text-white/85">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-2.5 py-1 text-sm text-white/85">
                 <span className="size-2 rounded-full bg-zinc-300" />
                 Planned
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3 py-1 text-[0.95rem] text-white/85">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-2.5 py-1 text-sm text-white/85">
                 <Minus className="size-3.5" />
                 No priority
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3 py-1 text-[0.95rem] text-white/85">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-2.5 py-1 text-sm text-white/85">
                 Lead
               </span>
             </div>
@@ -220,7 +223,7 @@ function CreateProjectDialog({
               size="sm"
               onClick={onSubmit}
               disabled={submitDisabled}
-              className="h-10 rounded-xl bg-white/20 px-5 text-[1.05rem] font-semibold text-white hover:bg-white/30"
+              className="h-9 rounded-lg bg-white/20 px-4 text-sm font-semibold text-white hover:bg-white/30"
             >
               {submitting ? "Creating…" : "Create Project"}
             </Button>
@@ -451,7 +454,7 @@ export function ProjectsPage() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/65 px-5">
         <div className="flex items-center gap-2">
-          <FolderKanban className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Folder className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h1 className="text-sm font-medium">Projects</h1>
           {!projectsQuery.isLoading && entries.length > 0 ? (
             <span className="text-xs text-muted-foreground tabular-nums">{entries.length}</span>
@@ -485,7 +488,7 @@ export function ProjectsPage() {
             </div>
           ) : entries.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12 text-center">
-              <FolderKanban className="h-10 w-10 text-muted-foreground/35" />
+              <Folder className="h-10 w-10 text-muted-foreground/35" />
               <p className="text-sm text-muted-foreground">No projects yet</p>
               <Button
                 type="button"

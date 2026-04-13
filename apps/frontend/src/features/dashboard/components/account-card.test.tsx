@@ -633,6 +633,10 @@ describe("AccountCard", () => {
 
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
     expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Token needs refresh" }),
+    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Currently used" })).toBeNull();
     expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
   });
 
@@ -715,6 +719,9 @@ describe("AccountCard", () => {
 
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
     expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Token needs refresh" }),
+    ).toBeDisabled();
     expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
   });
 
@@ -792,7 +799,9 @@ describe("AccountCard", () => {
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
     expect(screen.queryByText("Active")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Token needs refresh" }),
+    ).toBeDisabled();
   });
 
   it("calls useLocal action when use this account button is clicked", async () => {

@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,6 +35,7 @@ class FileReaderMock {
 describe("AgentsPage", () => {
   const createMutateAsync = vi.fn();
   const updateMutateAsync = vi.fn();
+  const deleteMutate = vi.fn();
 
   beforeEach(() => {
     if (!HTMLElement.prototype.hasPointerCapture) {
@@ -51,6 +52,7 @@ describe("AgentsPage", () => {
 
     createMutateAsync.mockReset();
     updateMutateAsync.mockReset();
+    deleteMutate.mockReset();
 
     createMutateAsync.mockResolvedValue({
       id: "agent-created",
@@ -142,7 +144,7 @@ describe("AgentsPage", () => {
         isPending: false,
       },
       deleteMutation: {
-        mutate: vi.fn(),
+        mutate: deleteMutate,
         isPending: false,
       },
     } as unknown as ReturnType<typeof useAgents>);
@@ -166,7 +168,7 @@ describe("AgentsPage", () => {
 
     await user.click(screen.getByRole("tab", { name: "Skills" }));
     expect(screen.getByText("No skills assigned")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add Skill" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Add Skill" }).length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("tab", { name: "Tasks" }));
     expect(screen.getByText("Task Queue")).toBeInTheDocument();
@@ -179,6 +181,26 @@ describe("AgentsPage", () => {
     expect(screen.getByPlaceholderText("What does this agent do?")).toBeInTheDocument();
     expect(screen.getByRole("spinbutton")).toHaveValue(6);
     expect(screen.getByRole("button", { name: "Save Changes" })).toBeInTheDocument();
+  });
+
+  it("opens Add Skill dialog and creates a skill assignment from create tab", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderWithProviders(<AgentsPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Skills" }));
+    await user.click(screen.getAllByRole("button", { name: "Add Skill" })[0]);
+
+    const dialog = screen.getByRole("dialog", { name: "Add Skill" });
+    expect(dialog).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Name"), "Bug Triage");
+    await user.type(screen.getByLabelText("Description"), "Prioritizes production incidents");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Bug Triage")).toBeInTheDocument();
+      expect(screen.getByText("Prioritizes production incidents")).toBeInTheDocument();
+    });
   });
 
   it("creates a new agent from popup", async () => {
@@ -235,6 +257,22 @@ describe("AgentsPage", () => {
           }),
         }),
       );
+    });
+  });
+
+  it("shows archive action in three-dot menu and archives selected agent", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderWithProviders(<AgentsPage />);
+
+    await user.click(screen.getByRole("button", { name: "Agent actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Archive Agent" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Archive agent?" });
+    await user.click(within(dialog).getByRole("button", { name: "Archive" }));
+
+    expect(deleteMutate).toHaveBeenCalledWith({
+      agentId: "agent-master",
+      agentName: "Master Agent",
     });
   });
 });
