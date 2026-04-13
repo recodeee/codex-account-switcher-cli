@@ -23,7 +23,12 @@ describe("SkillsPage", () => {
     expect(screen.getByRole("heading", { name: "Skills" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Code review")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "SKILL.md" })).toBeInTheDocument();
-    expect(screen.getByText("No content yet")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("Write markdown content..."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Delete skill" }),
+    ).toBeInTheDocument();
   });
 
   it("creates a skill via Add Skill dialog, adds a file, and edits content", async () => {
@@ -97,5 +102,30 @@ describe("SkillsPage", () => {
     const textboxes = screen.getAllByRole("textbox");
     const editor = textboxes[textboxes.length - 1] as HTMLTextAreaElement;
     expect(editor.value).toContain("# Skill");
+  });
+
+  it("deletes a selected skill via the confirmation dialog", async () => {
+    const user = userEvent.setup({ delay: null });
+
+    renderWithProviders(<SkillsPage />);
+
+    await user.click(screen.getByRole("button", { name: "Add Skill" }));
+    await user.type(
+      screen.getByPlaceholderText("e.g. Code Review, Bug Triage"),
+      "Delete me",
+    );
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(screen.getByDisplayValue("Delete me")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Delete skill" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Delete skill?" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(screen.queryByDisplayValue("Delete me")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Code review")).toBeInTheDocument();
   });
 });
