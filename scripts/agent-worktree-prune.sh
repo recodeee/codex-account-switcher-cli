@@ -1,32 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_BRANCH="dev"
+BASE_BRANCH="${MUSAFETY_BASE_BRANCH:-}"
+BASE_BRANCH_EXPLICIT=0
 DRY_RUN=0
-QUIET=0
-declare -a SKIP_PATHS=()
+FORCE_DIRTY=0
+DELETE_BRANCHES=0
+DELETE_REMOTE_BRANCHES=0
+TARGET_BRANCH=""
+
+if [[ -n "$BASE_BRANCH" ]]; then
+  BASE_BRANCH_EXPLICIT=1
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base)
       BASE_BRANCH="${2:-}"
+      BASE_BRANCH_EXPLICIT=1
       shift 2
       ;;
     --dry-run)
       DRY_RUN=1
       shift
       ;;
-    --quiet)
-      QUIET=1
+    --force-dirty)
+      FORCE_DIRTY=1
       shift
       ;;
-    --skip-path)
-      SKIP_PATHS+=("$(cd "${2:-.}" && pwd -P)")
+    --delete-branches)
+      DELETE_BRANCHES=1
+      shift
+      ;;
+    --delete-remote-branches)
+      DELETE_REMOTE_BRANCHES=1
+      shift
+      ;;
+    --branch)
+      TARGET_BRANCH="${2:-}"
       shift 2
       ;;
     *)
       echo "[agent-worktree-prune] Unknown argument: $1" >&2
-      echo "Usage: $0 [--base <branch>] [--dry-run] [--quiet] [--skip-path <path>]" >&2
+      echo "Usage: $0 [--base <branch>] [--dry-run] [--force-dirty] [--delete-branches] [--delete-remote-branches] [--branch <agent/...>]" >&2
       exit 1
       ;;
   esac
@@ -38,120 +54,213 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 repo_root="$(git rev-parse --show-toplevel)"
-repo_root="$(cd "$repo_root" && pwd -P)"
-current_worktree="$(pwd -P)"
+current_pwd="$(pwd -P)"
+worktree_root="${repo_root}/.omx/agent-worktrees"
 
-log() {
-  if [[ "$QUIET" -eq 0 ]]; then
-    echo "$@"
+resolve_base_branch() {
+  local configured=""
+  local current=""
+
+  configured="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
+  if [[ -n "$configured" ]] && git -C "$repo_root" show-ref --verify --quiet "refs/heads/${configured}"; then
+    printf '%s' "$configured"
+    return 0
   fi
-}
 
-is_skip_path() {
-  local candidate="$1"
-  [[ "$candidate" == "$current_worktree" ]] && return 0
-  for skip in "${SKIP_PATHS[@]}"; do
-    [[ "$candidate" == "$skip" ]] && return 0
+  current="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [[ -n "$current" && "$current" != "HEAD" ]] && git -C "$repo_root" show-ref --verify --quiet "refs/heads/${current}"; then
+    printf '%s' "$current"
+    return 0
+  fi
+
+  for fallback in main dev; do
+    if git -C "$repo_root" show-ref --verify --quiet "refs/heads/${fallback}"; then
+      printf '%s' "$fallback"
+      return 0
+    fi
   done
-  return 1
+
+  printf '%s' ""
 }
 
-is_clean_worktree() {
-  local wt="$1"
-  git -C "$wt" diff --quiet && git -C "$wt" diff --cached --quiet
-}
+if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 && -z "$BASE_BRANCH" ]]; then
+  echo "[agent-worktree-prune] --base requires a non-empty branch name." >&2
+  exit 1
+fi
 
-target_ref="$BASE_BRANCH"
-if git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
-  git -C "$repo_root" fetch origin "$BASE_BRANCH" --quiet || true
-  target_ref="origin/${BASE_BRANCH}"
-elif ! git -C "$repo_root" show-ref --verify --quiet "refs/heads/${BASE_BRANCH}"; then
+if [[ -n "$TARGET_BRANCH" && "$TARGET_BRANCH" != agent/* ]]; then
+  echo "[agent-worktree-prune] --branch must reference an agent/* branch: ${TARGET_BRANCH}" >&2
+  exit 1
+fi
+
+if [[ "$BASE_BRANCH_EXPLICIT" -eq 0 ]]; then
+  BASE_BRANCH="$(resolve_base_branch)"
+fi
+
+if [[ -z "$BASE_BRANCH" ]]; then
+  echo "[agent-worktree-prune] Unable to infer base branch. Pass --base <branch>." >&2
+  exit 1
+fi
+
+if ! git -C "$repo_root" show-ref --verify --quiet "refs/heads/${BASE_BRANCH}"; then
   echo "[agent-worktree-prune] Base branch not found: ${BASE_BRANCH}" >&2
   exit 1
 fi
 
-declare -a entries=()
-mapfile -t entries < <(
-  git -C "$repo_root" worktree list --porcelain | awk '
-    $1 == "worktree" { wt = $2; br = "" }
-    $1 == "branch" { br = $2 }
-    $0 == "" { printf "%s\t%s\n", wt, br; wt = ""; br = "" }
-    END { if (wt != "") printf "%s\t%s\n", wt, br }
-  '
-)
+run_cmd() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[agent-worktree-prune] [dry-run] $*"
+    return 0
+  fi
+  "$@"
+}
+
+branch_has_worktree() {
+  local branch="$1"
+  git -C "$repo_root" worktree list --porcelain | grep -q "^branch refs/heads/${branch}$"
+}
+
+is_clean_worktree() {
+  local wt="$1"
+  git -C "$wt" diff --quiet -- . ":(exclude).omx/state/agent-file-locks.json" \
+    && git -C "$wt" diff --cached --quiet -- . ":(exclude).omx/state/agent-file-locks.json" \
+    && [[ -z "$(git -C "$wt" ls-files --others --exclude-standard)" ]]
+}
 
 removed_worktrees=0
-deleted_branches=0
-skipped=0
+removed_branches=0
+skipped_active=0
+skipped_dirty=0
 
-for entry in "${entries[@]}"; do
-  IFS=$'\t' read -r worktree_path branch_ref <<< "$entry"
-  worktree_path="$(cd "$worktree_path" && pwd -P)"
+process_entry() {
+  local wt="$1"
+  local branch_ref="$2"
 
-  [[ "$worktree_path" != */.omx/agent-worktrees/* ]] && continue
+  [[ -z "$wt" ]] && return
+  [[ "$wt" != "${worktree_root}"/* ]] && return
 
-  if is_skip_path "$worktree_path"; then
-    skipped=$((skipped + 1))
-    continue
+  local branch=""
+  if [[ -n "$branch_ref" ]]; then
+    branch="${branch_ref#refs/heads/}"
   fi
 
-  if ! is_clean_worktree "$worktree_path"; then
-    log "[agent-worktree-prune] Skip dirty worktree: ${worktree_path}"
-    skipped=$((skipped + 1))
-    continue
+  if [[ -n "$TARGET_BRANCH" && "$branch" != "$TARGET_BRANCH" ]]; then
+    return
   fi
 
-  branch_name=""
-  if [[ -n "$branch_ref" && "$branch_ref" == refs/heads/* ]]; then
-    branch_name="${branch_ref#refs/heads/}"
+  if [[ "$wt" == "$current_pwd" ]]; then
+    skipped_active=$((skipped_active + 1))
+    echo "[agent-worktree-prune] Skipping active cwd worktree: ${wt}"
+    return
   fi
 
-  if [[ -z "$branch_name" ]]; then
-    if [[ "$worktree_path" == */.omx/agent-worktrees/__integrate-* ]]; then
-      log "[agent-worktree-prune] Removing stale detached integration worktree: ${worktree_path}"
-      if [[ "$DRY_RUN" -eq 0 ]]; then
-        git -C "$repo_root" worktree remove "$worktree_path" --force >/dev/null 2>&1 || true
+  local remove_reason=""
+
+  if [[ -z "$branch_ref" ]]; then
+    remove_reason="detached-worktree"
+  elif ! git -C "$repo_root" show-ref --verify --quiet "refs/heads/${branch}"; then
+    remove_reason="missing-branch"
+  elif [[ "$branch" == agent/* ]]; then
+    if git -C "$repo_root" merge-base --is-ancestor "$branch" "$BASE_BRANCH"; then
+      if [[ "$DELETE_BRANCHES" -eq 1 ]]; then
+        remove_reason="merged-agent-branch"
       fi
-      removed_worktrees=$((removed_worktrees + 1))
-      continue
     fi
-    skipped=$((skipped + 1))
-    continue
+  elif [[ "$branch" == __agent_integrate_* || "$branch" == __source-probe-* ]]; then
+    remove_reason="temporary-worktree"
   fi
 
-  case "$branch_name" in
-    agent/*|__agent_integrate_*)
-      ;;
-    *)
-      skipped=$((skipped + 1))
-      continue
-      ;;
-  esac
-
-  if git -C "$repo_root" show-ref --verify --quiet "refs/heads/${branch_name}"; then
-    if ! git -C "$repo_root" merge-base --is-ancestor "$branch_name" "$target_ref"; then
-      log "[agent-worktree-prune] Skip unmerged branch worktree: ${branch_name}"
-      skipped=$((skipped + 1))
-      continue
-    fi
+  if [[ -z "$remove_reason" ]]; then
+    return
   fi
 
-  log "[agent-worktree-prune] Removing merged worktree: ${worktree_path}"
-  if [[ "$DRY_RUN" -eq 0 ]]; then
-    git -C "$repo_root" worktree remove "$worktree_path" --force >/dev/null 2>&1 || true
+  if [[ "$FORCE_DIRTY" -ne 1 ]] && ! is_clean_worktree "$wt"; then
+    skipped_dirty=$((skipped_dirty + 1))
+    echo "[agent-worktree-prune] Skipping dirty worktree (${remove_reason}): ${wt}"
+    return
   fi
+
+  echo "[agent-worktree-prune] Removing worktree (${remove_reason}): ${wt}"
+  run_cmd git -C "$repo_root" worktree remove "$wt" --force
   removed_worktrees=$((removed_worktrees + 1))
 
-  if git -C "$repo_root" show-ref --verify --quiet "refs/heads/${branch_name}"; then
-    if git -C "$repo_root" worktree list --porcelain | grep -Fq "branch refs/heads/${branch_name}"; then
+  if [[ -z "$branch" ]]; then
+    return
+  fi
+
+  if git -C "$repo_root" show-ref --verify --quiet "refs/heads/${branch}" && ! branch_has_worktree "$branch"; then
+    if [[ "$branch" == agent/* && "$DELETE_BRANCHES" -eq 1 ]]; then
+      if run_cmd git -C "$repo_root" branch -d "$branch" >/dev/null 2>&1; then
+        removed_branches=$((removed_branches + 1))
+        echo "[agent-worktree-prune] Deleted merged branch: ${branch}"
+        if [[ "$DELETE_REMOTE_BRANCHES" -eq 1 ]]; then
+          if git -C "$repo_root" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            run_cmd git -C "$repo_root" push origin --delete "$branch" >/dev/null 2>&1 || true
+            echo "[agent-worktree-prune] Deleted merged remote branch: ${branch}"
+          fi
+        fi
+      fi
+    elif [[ "$branch" == __agent_integrate_* || "$branch" == __source-probe-* ]]; then
+      run_cmd git -C "$repo_root" branch -D "$branch" >/dev/null 2>&1 || true
+      removed_branches=$((removed_branches + 1))
+      echo "[agent-worktree-prune] Deleted temporary branch: ${branch}"
+    fi
+  fi
+}
+
+current_wt=""
+current_branch_ref=""
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+  if [[ -z "$line" ]]; then
+    process_entry "$current_wt" "$current_branch_ref"
+    current_wt=""
+    current_branch_ref=""
+    continue
+  fi
+
+  case "$line" in
+    worktree\ *)
+      current_wt="${line#worktree }"
+      ;;
+    branch\ *)
+      current_branch_ref="${line#branch }"
+      ;;
+  esac
+done < <(git -C "$repo_root" worktree list --porcelain)
+
+process_entry "$current_wt" "$current_branch_ref"
+
+if [[ "$DELETE_BRANCHES" -eq 1 ]]; then
+  while IFS= read -r branch; do
+    [[ -z "$branch" ]] && continue
+    if [[ -n "$TARGET_BRANCH" && "$branch" != "$TARGET_BRANCH" ]]; then
       continue
     fi
-    if [[ "$DRY_RUN" -eq 0 ]]; then
-      git -C "$repo_root" branch -d "$branch_name" >/dev/null 2>&1 || true
+    if branch_has_worktree "$branch"; then
+      continue
     fi
-    deleted_branches=$((deleted_branches + 1))
-    log "[agent-worktree-prune] Deleted local merged branch: ${branch_name}"
-  fi
-done
+    if git -C "$repo_root" merge-base --is-ancestor "$branch" "$BASE_BRANCH"; then
+      if run_cmd git -C "$repo_root" branch -d "$branch" >/dev/null 2>&1; then
+        removed_branches=$((removed_branches + 1))
+        echo "[agent-worktree-prune] Deleted stale merged branch: ${branch}"
+        if [[ "$DELETE_REMOTE_BRANCHES" -eq 1 ]]; then
+          if git -C "$repo_root" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            run_cmd git -C "$repo_root" push origin --delete "$branch" >/dev/null 2>&1 || true
+            echo "[agent-worktree-prune] Deleted stale merged remote branch: ${branch}"
+          fi
+        fi
+      fi
+    fi
+  done < <(git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads/agent)
+fi
 
-log "[agent-worktree-prune] Summary: removed_worktrees=${removed_worktrees}, deleted_branches=${deleted_branches}, skipped=${skipped}"
+run_cmd git -C "$repo_root" worktree prune
+
+echo "[agent-worktree-prune] Summary: base=${BASE_BRANCH}, removed_worktrees=${removed_worktrees}, removed_branches=${removed_branches}, skipped_active=${skipped_active}, skipped_dirty=${skipped_dirty}"
+if [[ "$skipped_active" -gt 0 ]]; then
+  echo "[agent-worktree-prune] Tip: leave active agent worktree directories, then run this command again for full cleanup." >&2
+fi
+if [[ "$skipped_dirty" -gt 0 ]]; then
+  echo "[agent-worktree-prune] Tip: dirty worktrees were preserved. Clean/finish them first, or pass --force-dirty to remove anyway." >&2
+fi

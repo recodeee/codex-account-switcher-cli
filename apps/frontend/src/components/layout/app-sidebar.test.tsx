@@ -1,15 +1,11 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { renderWithProviders } from "@/test/utils";
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "recodee.com.sidebar.collapsed";
-
-vi.mock("@/features/dashboard/components/system-monitor-card", () => ({
-  SystemMonitorCard: () => <div data-testid="sidebar-system-monitor">System Monitor</div>,
-}));
 
 describe("AppSidebar", () => {
   beforeEach(() => {
@@ -22,7 +18,6 @@ describe("AppSidebar", () => {
     const sidebar = screen.getByLabelText("Primary sidebar");
     expect(sidebar).toHaveClass("w-72");
     expect(screen.getByRole("button", { name: "Collapse navigation menu" })).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-system-monitor")).toHaveTextContent("System Monitor");
   });
 
   it("collapses and persists the preference when toggled", async () => {

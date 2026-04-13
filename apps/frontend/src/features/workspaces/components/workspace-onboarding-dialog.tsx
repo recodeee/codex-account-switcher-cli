@@ -200,13 +200,17 @@ export function WorkspaceOnboardingDialog({
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         showCloseButton
-        className="top-0 left-0 h-screen max-h-screen w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 bg-[linear-gradient(180deg,rgba(3,6,16,0.98)_0%,rgba(2,4,12,1)_100%)] p-6 text-slate-100 sm:p-10"
+        className="relative top-0 left-0 h-screen max-h-screen w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-none border-0 bg-[#02040c] p-6 text-slate-100 sm:max-w-none sm:p-10"
       >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(47,64,110,0.26),transparent_50%)]"
+        />
         <DialogTitle className="sr-only">Workspace onboarding</DialogTitle>
         <DialogDescription className="sr-only">
           Create a workspace, connect runtimes, and optionally create your first agent.
         </DialogDescription>
-        <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-3xl flex-col">
           <div className="flex items-center justify-center gap-2 pb-6 sm:pb-10">
             {STEPS.map((label, index) => {
               const completed = index < step;
@@ -218,8 +222,8 @@ export function WorkspaceOnboardingDialog({
                       className={cn(
                         "inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold",
                         completed || active
-                          ? "border-white/25 bg-white text-slate-900"
-                          : "border-white/12 bg-white/[0.05] text-slate-400",
+                          ? "border-white/30 bg-slate-200 text-slate-950"
+                          : "border-white/10 bg-white/[0.03] text-slate-500",
                       )}
                     >
                       {completed ? <Check className="h-3.5 w-3.5" /> : index + 1}
@@ -234,7 +238,7 @@ export function WorkspaceOnboardingDialog({
                     </span>
                   </div>
                   {index < STEPS.length - 1 ? (
-                    <span className={cn("h-px w-8 sm:w-10", index < step ? "bg-white/60" : "bg-white/14")} />
+                    <span className={cn("h-px w-8 sm:w-10", index < step ? "bg-white/40" : "bg-white/10")} />
                   ) : null}
                 </div>
               );
@@ -251,7 +255,7 @@ export function WorkspaceOnboardingDialog({
                   </p>
                 </div>
 
-                <Card className="border-white/[0.1] bg-white/[0.03] shadow-[0_20px_40px_rgba(0,0,0,0.28)]">
+                <Card className="border-white/[0.08] bg-black/45 shadow-[0_30px_60px_rgba(0,0,0,0.45)]">
                   <CardContent className="space-y-4 pt-6">
                     <div className="space-y-1.5">
                       <Label htmlFor="workspace-onboarding-name" className="text-xs text-slate-300">
@@ -268,14 +272,14 @@ export function WorkspaceOnboardingDialog({
                           }
                         }}
                         placeholder="My Team"
-                        className="h-10 border-white/[0.18] bg-white/[0.04] text-base text-white placeholder:text-slate-500"
+                        className="h-10 border-white/[0.14] bg-black/40 text-base text-slate-100 placeholder:text-slate-600"
                       />
                     </div>
 
                     <div className="space-y-1.5">
                       <Label className="text-xs text-slate-400">Workspace URL</Label>
-                      <div className="flex h-10 items-center gap-2 rounded-md border border-white/[0.1] bg-white/[0.03] px-3 text-sm text-slate-300">
-                        <span className="text-slate-500">{hostPrefix}/</span>
+                      <div className="flex h-10 items-center gap-2 rounded-md border border-white/[0.08] bg-black/35 px-3 text-sm text-slate-300">
+                        <span className="text-slate-600">{hostPrefix}/</span>
                         <span className="font-medium text-slate-200">{slugPreview}</span>
                       </div>
                     </div>
@@ -289,7 +293,7 @@ export function WorkspaceOnboardingDialog({
                     void handleCreateWorkspace();
                   }}
                   disabled={!canCreate || isCreatingWorkspace}
-                  className="h-11 w-full"
+                  className="h-11 w-full border border-white/[0.12] bg-white/[0.08] text-slate-100 hover:bg-white/[0.14]"
                 >
                   {isCreatingWorkspace ? "Creating..." : "Create workspace"}
                 </Button>
@@ -301,20 +305,20 @@ export function WorkspaceOnboardingDialog({
                 <div className="space-y-2 text-center">
                   <h2 className="text-4xl font-semibold tracking-tight">Connect a Runtime</h2>
                   <p className="text-sm text-slate-400">
-                    Install the CLI and run <code className="rounded bg-white/[0.08] px-1.5 py-0.5">recodee setup</code>{" "}
+                    Install the CLI and run <code className="rounded bg-white/[0.1] px-1.5 py-0.5 text-slate-100">recodee setup</code>{" "}
                     to connect your machine.
                   </p>
                 </div>
 
-                <Card className="border-white/[0.1] bg-white/[0.03]">
+                <Card className="border-white/[0.08] bg-black/45">
                   <CardContent className="space-y-3 pt-6">
                     {SETUP_STEPS.map((entry, index) => (
                       <div key={entry.label} className="space-y-1.5">
                         <p className="text-xs text-slate-400">
                           {index + 1}. {entry.label}
                         </p>
-                        <div className="flex items-start gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 font-mono text-sm text-slate-200">
-                          <Terminal className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        <div className="flex items-start gap-2 rounded-lg border border-white/[0.08] bg-black/35 px-3 py-2.5 font-mono text-sm text-slate-200">
+                          <Terminal className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
                           <code className="min-w-0 flex-1 break-all">{entry.command}</code>
                           <CopyButton value={entry.command} />
                         </div>
@@ -344,7 +348,7 @@ export function WorkspaceOnboardingDialog({
                   </div>
 
                   {connectedRuntimes.length > 0 ? (
-                    <Card className="border-white/[0.1] bg-white/[0.03]">
+                    <Card className="border-white/[0.08] bg-black/45">
                       <CardContent className="divide-y divide-white/[0.07] pt-0">
                         {connectedRuntimes.map((runtime) => (
                           <div key={runtime.id} className="flex items-center gap-3 py-3 first:pt-4 last:pb-4">
@@ -370,7 +374,12 @@ export function WorkspaceOnboardingDialog({
                   ) : null}
                 </div>
 
-                <Button type="button" size="lg" className="h-11 w-full" onClick={handleRuntimeNext}>
+                <Button
+                  type="button"
+                  size="lg"
+                  className="h-11 w-full border border-white/[0.12] bg-white/[0.08] text-slate-100 hover:bg-white/[0.14]"
+                  onClick={handleRuntimeNext}
+                >
                   {connectedRuntimes.length > 0 ? "Continue" : "Skip for now"}
                 </Button>
               </div>
@@ -393,9 +402,9 @@ export function WorkspaceOnboardingDialog({
                         key={template.id}
                         type="button"
                         onClick={() => finishOnboarding(template)}
-                        className="rounded-2xl border border-white/[0.12] bg-white/[0.03] px-4 py-4 text-left transition-colors hover:border-white/[0.22] hover:bg-white/[0.07]"
+                        className="rounded-2xl border border-white/[0.1] bg-black/40 px-4 py-4 text-left transition-colors hover:border-white/[0.2] hover:bg-white/[0.06]"
                       >
-                        <span className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.1] bg-white/[0.04] text-slate-400">
+                        <span className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] bg-black/45 text-slate-500">
                           <Icon className="h-4 w-4" aria-hidden="true" />
                         </span>
                         <p className="text-base font-semibold text-slate-100">{template.label}</p>

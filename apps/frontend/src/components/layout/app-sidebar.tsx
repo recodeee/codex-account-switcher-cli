@@ -11,17 +11,13 @@ import {
   KeyRound,
   LayoutDashboard,
   Link2,
-  Loader2,
   MonitorSmartphone,
   PanelsTopLeft,
   Plus,
   Share2,
-  Search,
   Server,
   Settings2,
   Sparkles,
-  SquarePen,
-  Trash2,
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -29,7 +25,6 @@ import { NavLink } from "@/lib/router-compat";
 
 import { CodexLogo } from "@/components/brand/codex-logo";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
-import { SystemMonitorCard } from "@/features/dashboard/components/system-monitor-card";
 import { WorkspaceOnboardingDialog } from "@/features/workspaces/components/workspace-onboarding-dialog";
 import { useWorkspaces } from "@/features/workspaces/hooks/use-workspaces";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +38,15 @@ type SidebarNavEntry = {
   badge?: string;
   children?: SidebarNavEntry[];
 };
+
+function workspaceMonogram(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return "W";
+  }
+  const first = trimmed[0];
+  return first ? first.toUpperCase() : "W";
+}
 
 const WORKSPACE_LINKS: SidebarNavEntry[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -98,7 +102,7 @@ export function AppSidebar() {
   const [switchboardOpen, setSwitchboardOpen] = useState(false);
   const [workspaceOnboardingOpen, setWorkspaceOnboardingOpen] = useState(false);
   const dashboardQuery = useDashboard();
-  const { workspacesQuery, createMutation, selectMutation, deleteMutation } = useWorkspaces();
+  const { workspacesQuery, createMutation, selectMutation } = useWorkspaces();
 
   const accountCountLabel = useMemo(() => {
     const count =
@@ -148,17 +152,10 @@ export function AppSidebar() {
   };
 
   const handleSelectWorkspace = (workspaceId: string) => {
-    if (selectMutation.isPending || deleteMutation.isPending) {
+    if (selectMutation.isPending) {
       return;
     }
     selectMutation.mutate(workspaceId);
-  };
-
-  const handleDeleteWorkspace = (workspaceId: string, workspaceName: string) => {
-    if (selectMutation.isPending || deleteMutation.isPending) {
-      return;
-    }
-    deleteMutation.mutate({ workspaceId, workspaceName });
   };
 
   const renderNavLink = (item: SidebarNavEntry, compact = false) => {
@@ -316,16 +313,19 @@ export function AppSidebar() {
                 aria-label="Toggle switchboards panel"
                 className="list-none cursor-pointer [&::-webkit-details-marker]:hidden"
               >
-                <div className="relative overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-br from-white/[0.08] via-white/[0.03] to-transparent px-3 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-all duration-200 group-hover:border-white/[0.2] group-open:from-white/[0.1] group-open:via-white/[0.05]">
+                <div className="relative overflow-hidden rounded-2xl border border-white/[0.12] bg-[linear-gradient(145deg,rgba(255,255,255,0.08),rgba(18,22,35,0.75))] px-3 py-3 shadow-[0_14px_34px_rgba(0,0,0,0.36)] transition-all duration-200 group-hover:border-white/[0.24] group-open:border-white/[0.22] group-open:shadow-[0_16px_38px_rgba(0,0,0,0.42)]">
                   <span
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent"
+                    className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/55 to-transparent"
                   />
                   <div className="flex items-center gap-3">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.14] bg-white/[0.05] text-sm font-semibold tracking-wide text-slate-200">
+                      {workspaceMonogram(activeWorkspace?.name ?? "Workspace")}
+                    </span>
                     <div className="min-w-0 flex-1">
                       <p
                         aria-label="Active workspace name"
-                        className="truncate text-sm font-semibold tracking-tight text-white"
+                        className="truncate text-sm font-semibold tracking-tight text-slate-100"
                       >
                         {activeWorkspace?.name ?? "Workspace"}
                       </p>
@@ -344,40 +344,49 @@ export function AppSidebar() {
                 </div>
               </summary>
 
-              <div className="mt-2 overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-b from-black/25 to-black/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <div className="mt-2 overflow-hidden rounded-2xl border border-white/[0.12] bg-[linear-gradient(180deg,rgba(11,14,24,0.96),rgba(4,6,12,0.96))] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_14px_30px_rgba(0,0,0,0.34)]">
                 <p className="px-3 pt-3 pb-1 text-[11px] uppercase tracking-[0.14em] text-slate-400">
                   Switchboards
                 </p>
                 <div className="space-y-2 px-2 pb-2">
                   {workspaces.map((workspace) => {
                     const isSelected = workspace.isActive;
-                    const isDeleting =
-                      deleteMutation.isPending
-                      && deleteMutation.variables?.workspaceId === workspace.id;
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={workspace.id}
+                        onClick={() => handleSelectWorkspace(workspace.id)}
+                        aria-label={`Select workspace ${workspace.name}`}
                         className={cn(
-                          "flex items-center gap-2 rounded-xl border px-2.5 py-2.5 transition-colors",
+                          "relative flex w-full items-center gap-3 rounded-xl border px-2.5 py-2.5 text-left transition-all",
                           isSelected
-                            ? "border-white/[0.2] bg-white/[0.08]"
-                            : "border-white/[0.12] bg-white/[0.04] hover:border-white/[0.22] hover:bg-white/[0.08]",
+                            ? "border-emerald-300/35 bg-[linear-gradient(135deg,rgba(67,56,202,0.12),rgba(16,185,129,0.1))] shadow-[0_8px_18px_rgba(16,185,129,0.12)]"
+                            : "border-white/[0.12] bg-white/[0.03] hover:border-white/[0.24] hover:bg-white/[0.07]",
                         )}
+                        disabled={selectMutation.isPending}
                       >
-                        <button
-                          type="button"
-                          onClick={() => handleSelectWorkspace(workspace.id)}
-                          aria-label={`Select workspace ${workspace.name}`}
-                          className="min-w-0 flex flex-1 items-center text-left"
-                          disabled={selectMutation.isPending || deleteMutation.isPending}
+                        {isSelected ? (
+                          <span
+                            aria-hidden="true"
+                            className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-emerald-300/80"
+                          />
+                        ) : null}
+                        <span
+                          className={cn(
+                            "inline-flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold",
+                            isSelected
+                              ? "border-emerald-200/45 bg-emerald-200/10 text-emerald-100"
+                              : "border-white/[0.12] bg-white/[0.03] text-slate-300",
+                          )}
                         >
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-white">
-                              {workspace.name}
-                            </p>
-                            <p className="truncate text-xs text-slate-400">{workspace.label}</p>
-                          </div>
-                        </button>
+                          {workspaceMonogram(workspace.name)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">
+                            {workspace.name}
+                          </p>
+                          <p className="truncate text-xs text-slate-400">{workspace.label}</p>
+                        </div>
                         {isSelected ? (
                           <span className="flex h-6 w-6 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/12">
                             <Check
@@ -385,25 +394,8 @@ export function AppSidebar() {
                               aria-hidden="true"
                             />
                           </span>
-                        ) : (
-                          <button
-                            type="button"
-                            aria-label={`Delete workspace ${workspace.name}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleDeleteWorkspace(workspace.id, workspace.name);
-                            }}
-                            disabled={selectMutation.isPending || deleteMutation.isPending}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/[0.12] bg-white/[0.04] text-slate-400 transition-colors hover:border-red-400/45 hover:bg-red-500/10 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {isDeleting ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                            )}
-                          </button>
-                        )}
-                      </div>
+                        ) : null}
+                      </button>
                     );
                   })}
                 </div>
@@ -412,7 +404,7 @@ export function AppSidebar() {
                     type="button"
                     onClick={() => setWorkspaceOnboardingOpen(true)}
                     variant="ghost"
-                    className="h-10 w-full justify-start gap-2 border border-white/[0.08] bg-white/[0.02] px-3 text-slate-200 hover:bg-white/[0.06] hover:text-white"
+                    className="h-10 w-full justify-start gap-2 border border-white/[0.1] bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] px-3 text-slate-200 hover:border-white/[0.22] hover:bg-[linear-gradient(135deg,rgba(255,255,255,0.1),rgba(255,255,255,0.04))] hover:text-white"
                     aria-label="Create workspace onboarding"
                   >
                     <Plus className="h-4 w-4" aria-hidden="true" />
@@ -430,33 +422,6 @@ export function AppSidebar() {
           </nav>
         ) : (
           <nav aria-label="Sidebar" className="space-y-4">
-            <div className="space-y-1.5">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between rounded-xl border border-white/[0.06] px-3 py-2.5 text-left text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
-              >
-                <span className="flex items-center gap-3">
-                  <Search className="h-4 w-4" aria-hidden="true" />
-                  Search...
-                </span>
-                <kbd className="inline-flex h-5 items-center rounded border border-white/10 bg-white/[0.04] px-1.5 text-[10px] text-slate-500">
-                  ⌘ K
-                </kbd>
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center justify-between rounded-xl border border-white/[0.06] px-3 py-2.5 text-left text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
-              >
-                <span className="flex items-center gap-3">
-                  <SquarePen className="h-4 w-4" aria-hidden="true" />
-                  New Issue
-                </span>
-                <kbd className="inline-flex h-5 items-center rounded border border-white/10 bg-white/[0.04] px-1.5 text-[10px] text-slate-500">
-                  C
-                </kbd>
-              </button>
-            </div>
-
             <div className="space-y-1">
               <p className="px-1 text-[11px] uppercase tracking-[0.12em] text-slate-500">Workspace</p>
               {WORKSPACE_LINKS.map((item) => renderNavLink(item))}
@@ -469,23 +434,6 @@ export function AppSidebar() {
           </nav>
         )}
 
-        {collapsed ? (
-          <div className="mt-auto flex items-center justify-center">
-            <span
-              className="h-2 w-2 rounded-full bg-emerald-300/90"
-              aria-hidden="true"
-            />
-            <span className="sr-only">System Monitor</span>
-          </div>
-        ) : (
-          <div className="mt-auto">
-            <SystemMonitorCard
-              placement="inline"
-              className="w-full min-w-0"
-              defaultCollapsed={false}
-            />
-          </div>
-        )}
       </div>
 
       <WorkspaceOnboardingDialog

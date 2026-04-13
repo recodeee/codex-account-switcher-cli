@@ -70,12 +70,16 @@ openspec/plan/*
 # multiagent-safety:START
 scripts/agent-branch-start.sh
 scripts/agent-branch-finish.sh
+scripts/codex-agent.sh
+scripts/review-bot-watch.sh
 scripts/agent-worktree-prune.sh
 scripts/agent-file-locks.py
 scripts/install-agent-git-hooks.sh
 scripts/openspec/init-plan-workspace.sh
 .githooks/pre-commit
-.codex/skills/musafety/SKILL.md
-.claude/commands/musafety.md
+.githooks/pre-push
+oh-my-codex/
+.codex/skills/guardex/SKILL.md
+.claude/commands/guardex.md
 .omx/state/agent-file-locks.json
 # multiagent-safety:END
