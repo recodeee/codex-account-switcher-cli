@@ -291,9 +291,17 @@ class Device(Base):
 
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_projects_workspace_name"),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("switchboard_workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     project_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     sandbox_mode: Mapped[str] = mapped_column(

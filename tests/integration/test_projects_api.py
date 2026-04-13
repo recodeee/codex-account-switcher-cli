@@ -209,3 +209,54 @@ async def test_projects_api_recovers_when_projects_table_missing(async_client):
     )
     assert created.status_code == 200
     assert created.json()["name"] == "recovered-project"
+
+
+@pytest.mark.asyncio
+async def test_projects_api_scopes_entries_by_active_workspace(async_client):
+    default_workspaces = await async_client.get("/api/workspaces")
+    assert default_workspaces.status_code == 200
+    default_workspace = next(entry for entry in default_workspaces.json()["entries"] if entry["isActive"])
+
+    created_default = await async_client.post(
+        "/api/projects",
+        json={"name": "shared-name", "description": "Default workspace project"},
+    )
+    assert created_default.status_code == 200
+    default_project_id = created_default.json()["id"]
+
+    created_workspace = await async_client.post("/api/workspaces", json={"name": "Other Team"})
+    assert created_workspace.status_code == 200
+    created_workspace_payload = created_workspace.json()
+    assert created_workspace_payload["isActive"] is True
+
+    listed_other_before = await async_client.get("/api/projects")
+    assert listed_other_before.status_code == 200
+    assert listed_other_before.json() == {"entries": []}
+
+    created_other = await async_client.post(
+        "/api/projects",
+        json={"name": "shared-name", "description": "Other workspace project"},
+    )
+    assert created_other.status_code == 200
+    other_project_id = created_other.json()["id"]
+
+    listed_other = await async_client.get("/api/projects")
+    assert listed_other.status_code == 200
+    listed_other_entries = listed_other.json()["entries"]
+    assert len(listed_other_entries) == 1
+    assert listed_other_entries[0]["id"] == other_project_id
+    assert listed_other_entries[0]["name"] == "shared-name"
+
+    switch_back = await async_client.post(f"/api/workspaces/{default_workspace['id']}/select")
+    assert switch_back.status_code == 200
+
+    listed_default = await async_client.get("/api/projects")
+    assert listed_default.status_code == 200
+    listed_default_entries = listed_default.json()["entries"]
+    assert len(listed_default_entries) == 1
+    assert listed_default_entries[0]["id"] == default_project_id
+    assert listed_default_entries[0]["name"] == "shared-name"
+
+    delete_other_while_default_active = await async_client.delete(f"/api/projects/{other_project_id}")
+    assert delete_other_while_default_active.status_code == 404
+    assert delete_other_while_default_active.json()["error"]["code"] == "project_not_found"

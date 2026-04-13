@@ -26,6 +26,7 @@ import { SpinnerBlock } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useProjects } from "@/features/projects/hooks/use-projects";
 import type { ProjectEntry, ProjectSandboxMode } from "@/features/projects/schemas";
+import { useWorkspaces } from "@/features/workspaces/hooks/use-workspaces";
 import { useDialogState } from "@/hooks/use-dialog-state";
 import { cn } from "@/lib/utils";
 import { getErrorMessageOrNull } from "@/utils/errors";
@@ -111,6 +112,7 @@ type CreateProjectDialogProps = {
   onSubmit: () => void;
   disabled: boolean;
   submitting: boolean;
+  workspaceName: string;
 };
 
 function CreateProjectDialog({
@@ -121,6 +123,7 @@ function CreateProjectDialog({
   onSubmit,
   disabled,
   submitting,
+  workspaceName,
 }: CreateProjectDialogProps) {
   const [expanded, setExpanded] = useState(false);
   const submitDisabled = disabled || draft.name.trim().length === 0;
@@ -150,7 +153,8 @@ function CreateProjectDialog({
 
         <div className="flex items-center justify-between border-b border-white/5 px-5 pb-2 pt-3">
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-muted-foreground">MY</span>
+            <Folder className="size-3.5 text-amber-300" />
+            <span className="text-muted-foreground">{workspaceName}</span>
             <ChevronRight className="size-3 text-muted-foreground/50" />
             <span className="font-medium text-white">New project</span>
           </div>
@@ -361,12 +365,19 @@ function ProjectDialog({
 }
 
 export function ProjectsPage() {
+  const { workspacesQuery } = useWorkspaces();
+  const activeWorkspace = useMemo(
+    () => (workspacesQuery.data?.entries ?? []).find((entry) => entry.isActive) ?? null,
+    [workspacesQuery.data?.entries],
+  );
+  const activeWorkspaceId = activeWorkspace?.id ?? null;
+  const activeWorkspaceName = activeWorkspace?.name ?? "Workspace";
   const [createOpen, setCreateOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState<ProjectDraft>(() => getEmptyProjectDraft());
   const [editOpen, setEditOpen] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<ProjectDraft>(() => getEmptyProjectDraft());
-  const { projectsQuery, createMutation, updateMutation, deleteMutation } = useProjects();
+  const { projectsQuery, createMutation, updateMutation, deleteMutation } = useProjects(activeWorkspaceId);
   const deleteDialog = useDialogState<{ id: string; name: string }>();
 
   const mutationError = useMemo(
@@ -585,6 +596,7 @@ export function ProjectsPage() {
         }}
         disabled={busy}
         submitting={createMutation.isPending}
+        workspaceName={activeWorkspaceName}
       />
 
       <ProjectDialog

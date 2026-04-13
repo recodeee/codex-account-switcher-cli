@@ -280,10 +280,12 @@ describe("runtimes flow integration", () => {
     const user = userEvent.setup();
 
     expect((await screen.findAllByText("Codex (runtime-live)")).length).toBeGreaterThan(0);
-
-    await user.click(
-      screen.getByRole("button", { name: "Delete runtime Codex (runtime-live)" }),
-    );
+    const deleteButtons = screen.getAllByRole("button", {
+      name: "Delete runtime Codex (runtime-live)",
+    });
+    expect(deleteButtons).toHaveLength(1);
+    expect(deleteButtons[0]).toBeEnabled();
+    await user.click(deleteButtons[0]);
 
     const deleteDialog = await screen.findByRole("alertdialog");
     expect(within(deleteDialog).getByText("Delete runtime?")).toBeInTheDocument();

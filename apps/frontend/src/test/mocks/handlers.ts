@@ -199,6 +199,7 @@ type MockState = {
 	}>;
 	projects: Array<{
 		id: string;
+		workspaceId: string;
 		name: string;
 		description: string | null;
 		projectPath: string | null;
@@ -323,6 +324,10 @@ type MockState = {
 		phone: string | null;
 	};
 };
+
+function getActiveWorkspaceId(state: MockState): string | null {
+	return state.workspaces.find((entry) => entry.isActive)?.id ?? state.workspaces[0]?.id ?? null;
+}
 
 function createInitialState(): MockState {
 	return {
@@ -1854,7 +1859,23 @@ export const handlers = [
 	}),
 
 	http.get("/api/projects", () => {
-		return HttpResponse.json({ entries: state.projects });
+		const activeWorkspaceId = getActiveWorkspaceId(state);
+		const entries =
+			activeWorkspaceId === null
+				? []
+				: state.projects.filter((entry) => entry.workspaceId === activeWorkspaceId);
+		return HttpResponse.json({
+			entries: entries.map((entry) => ({
+				id: entry.id,
+				name: entry.name,
+				description: entry.description,
+				projectPath: entry.projectPath,
+				sandboxMode: entry.sandboxMode,
+				gitBranch: entry.gitBranch,
+				createdAt: entry.createdAt,
+				updatedAt: entry.updatedAt,
+			})),
+		});
 	}),
 
 	http.post("/api/projects", async ({ request }) => {
@@ -1933,7 +1954,25 @@ export const handlers = [
 				{ status: 400 },
 			);
 		}
-		if (state.projects.some((entry) => entry.name === name)) {
+		const activeWorkspaceId = getActiveWorkspaceId(state);
+		if (!activeWorkspaceId) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "workspace_not_found",
+						message: "Workspace not found",
+					},
+				},
+				{ status: 404 },
+			);
+		}
+		if (
+			state.projects.some(
+				(entry) =>
+					entry.workspaceId === activeWorkspaceId
+					&& entry.name === name,
+			)
+		) {
 			return HttpResponse.json(
 				{
 					error: {
@@ -1948,6 +1987,7 @@ export const handlers = [
 		const now = new Date().toISOString();
 		const created = {
 			id: `project_${state.projects.length + 1}`,
+			workspaceId: activeWorkspaceId,
 			name,
 			description: description || null,
 			projectPath: projectPathResult.value,
@@ -1957,7 +1997,16 @@ export const handlers = [
 			updatedAt: now,
 		};
 		state.projects = [...state.projects, created];
-		return HttpResponse.json(created);
+		return HttpResponse.json({
+			id: created.id,
+			name: created.name,
+			description: created.description,
+			projectPath: created.projectPath,
+			sandboxMode: created.sandboxMode,
+			gitBranch: created.gitBranch,
+			createdAt: created.createdAt,
+			updatedAt: created.updatedAt,
+		});
 	}),
 
 	http.put("/api/projects/:projectId", async ({ params, request }) => {
@@ -1970,7 +2019,13 @@ export const handlers = [
 		const projectPathResult = normalizeProjectPath(payload?.projectPath);
 		const sandboxModeResult = normalizeProjectSandboxMode(payload?.sandboxMode);
 		const gitBranchResult = normalizeProjectGitBranch(payload?.gitBranch);
-		const current = state.projects.find((entry) => entry.id === projectId);
+		const activeWorkspaceId = getActiveWorkspaceId(state);
+		const current =
+			activeWorkspaceId === null
+				? undefined
+				: state.projects.find(
+						(entry) => entry.id === projectId && entry.workspaceId === activeWorkspaceId,
+					);
 
 		if (!current) {
 			return HttpResponse.json(
@@ -2052,7 +2107,10 @@ export const handlers = [
 		}
 		if (
 			state.projects.some(
-				(entry) => entry.id !== projectId && entry.name === name,
+				(entry) =>
+					entry.id !== projectId
+					&& entry.workspaceId === current.workspaceId
+					&& entry.name === name,
 			)
 		) {
 			return HttpResponse.json(
@@ -2078,12 +2136,24 @@ export const handlers = [
 		state.projects = state.projects.map((entry) =>
 			entry.id === projectId ? updated : entry,
 		);
-		return HttpResponse.json(updated);
+		return HttpResponse.json({
+			id: updated.id,
+			name: updated.name,
+			description: updated.description,
+			projectPath: updated.projectPath,
+			sandboxMode: updated.sandboxMode,
+			gitBranch: updated.gitBranch,
+			createdAt: updated.createdAt,
+			updatedAt: updated.updatedAt,
+		});
 	}),
 
 	http.delete("/api/projects/:projectId", ({ params }) => {
 		const projectId = String(params.projectId);
-		const exists = state.projects.some((entry) => entry.id === projectId);
+		const activeWorkspaceId = getActiveWorkspaceId(state);
+		const exists = state.projects.some(
+			(entry) => entry.id === projectId && entry.workspaceId === activeWorkspaceId,
+		);
 		if (!exists) {
 			return HttpResponse.json(
 				{
@@ -2095,7 +2165,9 @@ export const handlers = [
 				{ status: 404 },
 			);
 		}
-		state.projects = state.projects.filter((entry) => entry.id !== projectId);
+		state.projects = state.projects.filter(
+			(entry) => !(entry.id === projectId && entry.workspaceId === activeWorkspaceId),
+		);
 		return HttpResponse.json({ status: "deleted" });
 	}),
 

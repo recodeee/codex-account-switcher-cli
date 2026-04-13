@@ -47,6 +47,7 @@ describe("projects flow integration", () => {
 
     await user.click(screen.getByRole("button", { name: "New project" }));
     const createDialog = await screen.findByRole("dialog", { name: "New project" });
+    expect(within(createDialog).getByText("recodee.com")).toBeInTheDocument();
     await user.type(within(createDialog).getByPlaceholderText("Project title"), "recodee-core");
     await user.type(
       within(createDialog).getByPlaceholderText("Add description..."),

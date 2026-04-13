@@ -1189,23 +1189,15 @@ function RuntimeListItem({
   runtime,
   selected,
   onClick,
-  onRequestDelete,
-  deleteBusy,
 }: {
   runtime: RuntimeRow;
   selected: boolean;
   onClick: () => void;
-  onRequestDelete: (runtime: RuntimeRow) => void;
-  deleteBusy: boolean;
 }) {
   const olderSessionPreviewCount = Math.max(
     0,
     runtime.currentTasks.length - runtime.sessionCount,
   );
-  const canDeleteRuntime = Boolean(runtime.accountId);
-  const deleteButtonTitle = canDeleteRuntime
-    ? `Delete ${runtime.name}`
-    : "This runtime is unmapped and cannot be deleted from here yet.";
 
   return (
     <div
@@ -1286,36 +1278,12 @@ function RuntimeListItem({
               ) : null}
             </TooltipContent>
           </Tooltip>
-          <span className="inline-flex flex-col items-center gap-1.5">
-            <button
-              type="button"
-              aria-label={`Delete runtime ${runtime.name}`}
-              title={deleteButtonTitle}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (!canDeleteRuntime || deleteBusy) {
-                  return;
-                }
-                onRequestDelete(runtime);
-              }}
-              disabled={!canDeleteRuntime || deleteBusy}
-              className={cn(
-                "inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors",
-                canDeleteRuntime && !deleteBusy
-                  ? "text-rose-300 hover:bg-rose-400/15 hover:text-rose-200"
-                  : "cursor-not-allowed text-slate-600",
-              )}
-            >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-            <span
-              className={cn(
-                "h-2.5 w-2.5 rounded-full",
-                runtime.status === "online" ? "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-slate-500",
-              )}
-            />
-          </span>
+          <span
+            className={cn(
+              "h-2.5 w-2.5 rounded-full",
+              runtime.status === "online" ? "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-slate-500",
+            )}
+          />
         </span>
       </div>
       <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
@@ -1410,6 +1378,12 @@ export function RuntimesPage() {
       ? selectedRuntimeId
       : scopedRows[0]?.runtimeId ?? "";
   const selectedRuntime = scopedRows.find((runtime) => runtime.runtimeId === effectiveSelectedRuntimeId) ?? null;
+  const canDeleteSelectedRuntime = Boolean(selectedRuntime?.accountId);
+  const selectedRuntimeDeleteTitle = selectedRuntime
+    ? selectedRuntime.accountId
+      ? `Delete ${selectedRuntime.name}`
+      : "This runtime is unmapped and cannot be deleted from here yet."
+    : "Delete runtime";
   const selectedRuntimeOlderTaskCount = selectedRuntime
     ? Math.max(0, selectedRuntime.currentTasks.length - selectedRuntime.sessionCount)
     : 0;
@@ -1569,8 +1543,6 @@ export function RuntimesPage() {
                     runtime={runtime}
                     selected={runtime.runtimeId === effectiveSelectedRuntimeId}
                     onClick={() => setSelectedRuntimeId(runtime.runtimeId)}
-                    onRequestDelete={(targetRuntime) => deleteRuntimeDialog.show(targetRuntime)}
-                    deleteBusy={deleteRuntimeMutation.isPending}
                   />
                 ))
               )}
@@ -1615,7 +1587,29 @@ export function RuntimesPage() {
                   </div>
                 </div>
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
-                  <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Status</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Status</p>
+                    <button
+                      type="button"
+                      aria-label={`Delete runtime ${selectedRuntime.name}`}
+                      title={selectedRuntimeDeleteTitle}
+                      onClick={() => {
+                        if (!canDeleteSelectedRuntime || deleteRuntimeMutation.isPending) {
+                          return;
+                        }
+                        deleteRuntimeDialog.show(selectedRuntime);
+                      }}
+                      disabled={!canDeleteSelectedRuntime || deleteRuntimeMutation.isPending}
+                      className={cn(
+                        "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors",
+                        canDeleteSelectedRuntime && !deleteRuntimeMutation.isPending
+                          ? "text-rose-300 hover:bg-rose-400/15 hover:text-rose-200"
+                          : "cursor-not-allowed text-slate-600",
+                      )}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <Badge
                       variant="secondary"

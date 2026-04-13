@@ -4,11 +4,12 @@ import { toast } from "sonner";
 import { createProject, deleteProject, listProjects, updateProject } from "@/features/projects/api";
 import type { ProjectCreateRequest, ProjectUpdateRequest } from "@/features/projects/schemas";
 
-export function useProjects() {
+export function useProjects(activeWorkspaceId: string | null = null) {
   const queryClient = useQueryClient();
+  const queryKey = ["projects", "list", activeWorkspaceId ?? "no-workspace"] as const;
 
   const projectsQuery = useQuery({
-    queryKey: ["projects", "list"],
+    queryKey,
     queryFn: listProjects,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
