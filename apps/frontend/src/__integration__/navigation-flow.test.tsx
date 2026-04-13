@@ -19,23 +19,19 @@ describe("navigation flow integration", () => {
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-system-monitor")).toHaveTextContent("System Monitor");
 
-    await user.click(screen.getByRole("link", { name: "Accounts" }));
-
-    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-system-monitor")).toHaveTextContent("System Monitor");
-    expect(window.location.pathname).toBe("/accounts");
-
-    await user.click(screen.getByRole("link", { name: "Referrals" }));
-    expect(await screen.findByRole("heading", { name: "Referrals" })).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/referrals");
-
-    await user.click(screen.getByRole("link", { name: "Billing" }));
-    expect(await screen.findByRole("heading", { name: "Billing" })).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/billing");
-
-    await user.click(screen.getByRole("link", { name: /Projects/i }));
+    await user.click(screen.getByRole("link", { name: "Projects" }));
     expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/projects");
+
+    await user.click(screen.getByRole("link", { name: "Runtimes" }));
+    expect(await screen.findByText("Manage Codex agent runtimes.")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/runtimes");
+
+    await user.click(screen.getByRole("link", { name: "Skills" }));
+    expect(await screen.findByRole("heading", { name: "Skills" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/skills");
+
+    expect(screen.getByTestId("sidebar-system-monitor")).toHaveTextContent("System Monitor");
   });
 
   it("switches route content from the account dropdown menu", async () => {
@@ -49,7 +45,7 @@ describe("navigation flow integration", () => {
     await user.click(screen.getByRole("button", { name: "Open account menu" }));
     await user.click(await screen.findByRole("menuitem", { name: "Accounts" }));
 
-    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("Search accounts...")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/accounts");
 
     await user.click(screen.getByRole("button", { name: "Open account menu" }));

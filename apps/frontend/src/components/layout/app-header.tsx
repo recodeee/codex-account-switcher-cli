@@ -21,13 +21,141 @@ export type AppHeaderProps = {
   onLogout: () => void;
   showLogout?: boolean;
   sidebarAware?: boolean;
+  pagePath?: string;
   className?: string;
 };
+
+type HeaderCopy = {
+  title: string;
+  description: string;
+};
+
+const DEFAULT_HEADER_COPY: HeaderCopy = {
+  title: "May your tokens last forever.",
+  description: "Live account switchboard. Medicine for your codex accounts.",
+};
+
+const HEADER_COPY_BY_PREFIX: Array<{ prefix: string; copy: HeaderCopy }> = [
+  {
+    prefix: "/runtimes",
+    copy: {
+      title: "Manage Codex agent runtimes.",
+      description: "View active codex-auth sessions, inspect status, and test runtime connectivity.",
+    },
+  },
+  {
+    prefix: "/dashboard",
+    copy: {
+      title: "Watch account health in one place.",
+      description: "Track live usage, routing, and current account capacity.",
+    },
+  },
+  {
+    prefix: "/accounts",
+    copy: {
+      title: "Manage your Codex account stack.",
+      description: "Switch snapshots, review account health, and keep access aligned.",
+    },
+  },
+  {
+    prefix: "/sessions",
+    copy: {
+      title: "Track active coding sessions.",
+      description: "Review live sessions, task progress, and runtime attribution.",
+    },
+  },
+  {
+    prefix: "/devices",
+    copy: {
+      title: "Monitor connected devices.",
+      description: "Inspect activity, connectivity, and per-device runtime health.",
+    },
+  },
+  {
+    prefix: "/apis",
+    copy: {
+      title: "Control API keys and access.",
+      description: "Create, rotate, and audit keys across your environment.",
+    },
+  },
+  {
+    prefix: "/billing",
+    copy: {
+      title: "Understand token spend and limits.",
+      description: "Review billing activity, usage trends, and quota posture.",
+    },
+  },
+  {
+    prefix: "/projects/plans",
+    copy: {
+      title: "Plan project execution clearly.",
+      description: "Coordinate project plans, milestones, and rollout readiness.",
+    },
+  },
+  {
+    prefix: "/projects",
+    copy: {
+      title: "Manage projects and delivery flow.",
+      description: "Organize project workspaces, progress, and lifecycle status.",
+    },
+  },
+  {
+    prefix: "/agents",
+    copy: {
+      title: "Configure workspace agents.",
+      description: "Manage agent instructions, skills, tasks, and runtime defaults.",
+    },
+  },
+  {
+    prefix: "/referrals",
+    copy: {
+      title: "Track referral performance.",
+      description: "Review referral activity and growth impact in one view.",
+    },
+  },
+  {
+    prefix: "/storage",
+    copy: {
+      title: "Review storage usage.",
+      description: "Check allocation, retention, and storage health signals.",
+    },
+  },
+  {
+    prefix: "/settings",
+    copy: {
+      title: "Tune workspace behavior.",
+      description: "Configure routing, defaults, and account-level preferences.",
+    },
+  },
+  {
+    prefix: "/skills",
+    copy: {
+      title: "Manage reusable skills.",
+      description: "Create, organize, and edit skill files for your runtime workflows.",
+    },
+  },
+];
+
+function resolveHeaderCopy(pagePath: string | undefined): HeaderCopy {
+  if (!pagePath) {
+    return DEFAULT_HEADER_COPY;
+  }
+
+  const normalizedPath = pagePath.toLowerCase();
+  for (const entry of HEADER_COPY_BY_PREFIX) {
+    if (normalizedPath === entry.prefix || normalizedPath.startsWith(`${entry.prefix}/`)) {
+      return entry.copy;
+    }
+  }
+
+  return DEFAULT_HEADER_COPY;
+}
 
 export function AppHeader({
   onLogout,
   showLogout = true,
   sidebarAware = false,
+  pagePath,
   className,
 }: AppHeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -35,23 +163,24 @@ export function AppHeader({
   const blurred = usePrivacyStore((s) => s.blurred);
   const togglePrivacy = usePrivacyStore((s) => s.toggle);
   const PrivacyIcon = blurred ? EyeOff : Eye;
+  const headerCopy = resolveHeaderCopy(pagePath);
 
   return (
     <header
       className={cn(
-        "sticky top-0 z-20 border-b border-white/[0.08] bg-background/55 px-4 py-2.5 shadow-[0_1px_12px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-[1.8] supports-[backdrop-filter]:bg-background/45 dark:shadow-[0_1px_12px_rgba(0,0,0,0.25)]",
+        "sticky top-0 z-20 border-b border-white/[0.08] bg-background/55 px-2 py-2.5 shadow-[0_1px_12px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-[1.8] supports-[backdrop-filter]:bg-background/45 dark:shadow-[0_1px_12px_rgba(0,0,0,0.25)] sm:px-3",
         className,
       )}
     >
-      <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-4">
+      <div className="flex w-full items-center justify-between gap-3">
         {/* Brand */}
-        <div className="flex min-w-0 flex-1 items-center gap-3.5">
+        <div className="flex min-w-0 flex-1 items-start gap-3.5">
           <div className="min-w-0 space-y-0.5">
             <p className="truncate text-sm font-semibold tracking-tight">
-              May your tokens last forever.
+              {headerCopy.title}
             </p>
             <p className="hidden truncate text-[11px] text-muted-foreground md:block">
-              Live account switchboard. Medicine for you codex accounts.
+              {headerCopy.description}
             </p>
           </div>
         </div>

@@ -797,12 +797,7 @@ export function PlansPage() {
 
   return (
     <section className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Plans</h1>
-        <p className="text-sm text-muted-foreground">
-          Visualize OpenSpec plan workspaces from <code>openspec/plan</code>.
-        </p>
-      </div>
+      <h1 className="sr-only">Plans</h1>
 
       {listError ? (
         <AlertMessage variant="error">Couldn’t load plans: {listError}</AlertMessage>
@@ -817,7 +812,7 @@ export function PlansPage() {
           description="Create a plan workspace under openspec/plan to visualize it here."
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(30rem,36rem)_minmax(0,1fr)]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(32rem,40rem)_minmax(0,1fr)]">
           <div className="rounded-xl border border-border/60 bg-card/60 p-3">
             <Table>
               <TableHeader>

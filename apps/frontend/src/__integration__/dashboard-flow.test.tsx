@@ -369,7 +369,7 @@ describe("dashboard flow integration", () => {
     expect(useButton).toBeEnabled();
 
     await user.click(useButton);
-    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("Search accounts...")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/accounts");
     expect(window.location.search).toContain("selected=acc_no_snapshot");
   });

@@ -56,4 +56,40 @@ describe("AppSidebar", () => {
       expect(screen.queryByText(/Weekly Remaining/i)).not.toBeInTheDocument();
     });
   });
+
+  it("creates and selects switchboard workspaces", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderWithProviders(<AppSidebar />);
+
+    await user.click(screen.getByLabelText("Toggle switchboards panel"));
+    await user.click(screen.getByRole("button", { name: "Create workspace onboarding" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Create a new workspace" })).toBeInTheDocument();
+    });
+
+    const input = screen.getByLabelText("Workspace Name");
+    await user.type(input, "My Team");
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Connect a Runtime" })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: "Skip for now" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Create Your First Agent" })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: "Skip for now" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Active workspace name")).toHaveTextContent("My Team");
+      expect(screen.getByLabelText("Select workspace My Team")).toBeInTheDocument();
+    });
+    await user.click(screen.getByLabelText("Select workspace recodee.com"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Active workspace name")).toHaveTextContent("recodee.com");
+    });
+  });
 });

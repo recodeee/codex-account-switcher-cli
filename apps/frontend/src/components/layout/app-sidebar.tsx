@@ -1,20 +1,25 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  BarChart3,
+  Bot,
   Check,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
   CreditCard,
+  FolderTree,
   HardDrive,
   KeyRound,
   LayoutDashboard,
   Link2,
   MonitorSmartphone,
   PanelsTopLeft,
-  FolderTree,
-  Settings2,
+  Plus,
   Share2,
+  Search,
+  Server,
+  Settings2,
+  Sparkles,
+  SquarePen,
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -23,24 +28,45 @@ import { NavLink } from "@/lib/router-compat";
 import { CodexLogo } from "@/components/brand/codex-logo";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import { SystemMonitorCard } from "@/features/dashboard/components/system-monitor-card";
-import { NAV_ITEMS } from "@/components/layout/nav-items";
+import { WorkspaceOnboardingDialog } from "@/features/workspaces/components/workspace-onboarding-dialog";
+import { useWorkspaces } from "@/features/workspaces/hooks/use-workspaces";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const NAV_ICONS: Record<string, LucideIcon> = {
-  "/dashboard": LayoutDashboard,
-  "/accounts": Users,
-  "/referrals": Share2,
-  "/projects": PanelsTopLeft,
-  "/projects/plans": FolderTree,
-  "/billing": CreditCard,
-  "/apis": KeyRound,
-  "/devices": MonitorSmartphone,
-  "/storage": HardDrive,
-  "/sessions": Link2,
-  "/settings": Settings2,
+type SidebarNavEntry = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  badge?: string;
+  children?: SidebarNavEntry[];
 };
+
+const WORKSPACE_LINKS: SidebarNavEntry[] = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/accounts", label: "Accounts", icon: Users },
+  { to: "/referrals", label: "Referrals", icon: Share2 },
+  {
+    to: "/projects",
+    label: "Projects",
+    icon: PanelsTopLeft,
+    children: [{ to: "/projects/plans", label: "Plans", icon: FolderTree }],
+  },
+  { to: "/agents", label: "Agents", icon: Bot },
+];
+
+const CONFIGURE_LINKS: SidebarNavEntry[] = [
+  { to: "/billing", label: "Billing", icon: CreditCard },
+  { to: "/apis", label: "APIs", icon: KeyRound },
+  { to: "/devices", label: "Devices", icon: MonitorSmartphone },
+  { to: "/storage", label: "Storage", icon: HardDrive, badge: "Soon" },
+  { to: "/runtimes", label: "Runtimes", icon: Server },
+  { to: "/skills", label: "Skills", icon: Sparkles },
+  { to: "/sessions", label: "Sessions", icon: Link2 },
+  { to: "/settings", label: "Settings", icon: Settings2 },
+];
+
+const COLLAPSED_LINKS: SidebarNavEntry[] = [...WORKSPACE_LINKS, ...CONFIGURE_LINKS];
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "recodee.com.sidebar.collapsed";
 
@@ -68,7 +94,9 @@ export function AppSidebar() {
     readSidebarCollapsedPreference(),
   );
   const [switchboardOpen, setSwitchboardOpen] = useState(false);
+  const [workspaceOnboardingOpen, setWorkspaceOnboardingOpen] = useState(false);
   const dashboardQuery = useDashboard();
+  const { workspacesQuery, createMutation, selectMutation } = useWorkspaces();
 
   const accountCountLabel = useMemo(() => {
     const count =
@@ -77,6 +105,28 @@ export function AppSidebar() {
       0;
     return String(count);
   }, [dashboardQuery.data]);
+
+  const hasRuntimeIndicator = useMemo(
+    () =>
+      (dashboardQuery.data?.accounts ?? []).some(
+        (account) =>
+          Math.max(
+            account.codexLiveSessionCount ?? 0,
+            account.codexTrackedSessionCount ?? 0,
+            account.codexSessionCount ?? 0,
+          ) > 0,
+      ),
+    [dashboardQuery.data?.accounts],
+  );
+
+  const workspaces = useMemo(
+    () => workspacesQuery.data?.entries ?? [],
+    [workspacesQuery.data?.entries],
+  );
+  const activeWorkspace = useMemo(
+    () => workspaces.find((workspace) => workspace.isActive) ?? workspaces[0] ?? null,
+    [workspaces],
+  );
 
   const toggleCollapsed = () => {
     setCollapsed((previous) => {
@@ -95,6 +145,82 @@ export function AppSidebar() {
     setSwitchboardOpen(true);
   };
 
+  const handleSelectWorkspace = (workspaceId: string) => {
+    if (selectMutation.isPending) {
+      return;
+    }
+    selectMutation.mutate(workspaceId);
+  };
+
+  const renderNavLink = (item: SidebarNavEntry, compact = false) => {
+    const Icon = item.icon;
+    const showRuntimeDot = item.label === "Runtimes" && hasRuntimeIndicator;
+
+    return (
+      <div key={`${item.label}-${compact ? "compact" : "full"}`} className={compact ? "" : "space-y-1"}>
+        <NavLink to={item.to}>
+          {({ isActive }) => (
+            <span
+              className={cn(
+                "group flex items-center gap-3 rounded-xl border border-transparent text-sm font-medium transition-colors",
+                compact ? "justify-center px-2 py-2.5" : "justify-between px-3 py-2.5",
+                isActive
+                  ? "border-white/[0.1] bg-white/[0.08] text-white"
+                  : "text-slate-300 hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white",
+              )}
+            >
+              <span className="flex items-center gap-3">
+                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {!compact ? <span>{item.label}</span> : null}
+              </span>
+              {!compact ? (
+                <span className="ml-auto flex items-center gap-2">
+                  {showRuntimeDot ? (
+                    <span className="h-1.5 w-1.5 rounded-full bg-red-400" aria-hidden="true" />
+                  ) : null}
+                  {item.badge ? (
+                    <Badge
+                      variant="secondary"
+                      className="border border-white/10 bg-white/5 px-1.5 py-0 text-[10px] text-slate-400"
+                    >
+                      {item.badge}
+                    </Badge>
+                  ) : null}
+                </span>
+              ) : null}
+            </span>
+          )}
+        </NavLink>
+        {!compact && item.children?.length ? (
+          <div className="ml-6 space-y-1 border-l border-white/[0.08] pl-3">
+            {item.children.map((child) => {
+              const ChildIcon = child.icon;
+              return (
+                <NavLink key={child.to} to={child.to}>
+                  {({ isActive }) => (
+                    <span
+                      className={cn(
+                        "flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+                        isActive
+                          ? "bg-white/[0.08] text-white"
+                          : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <ChildIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                        {child.label}
+                      </span>
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <aside
       aria-label="Primary sidebar"
@@ -106,7 +232,7 @@ export function AppSidebar() {
       <div
         className={cn(
           "sticky top-0 flex h-screen flex-col pt-5 pb-20",
-          collapsed ? "gap-4 px-2" : "gap-7 px-4",
+          collapsed ? "gap-4 px-2" : "gap-5 px-4",
         )}
       >
         {collapsed ? (
@@ -177,7 +303,10 @@ export function AppSidebar() {
                 setSwitchboardOpen(event.currentTarget.open);
               }}
             >
-              <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden">
+              <summary
+                aria-label="Toggle switchboards panel"
+                className="list-none cursor-pointer [&::-webkit-details-marker]:hidden"
+              >
                 <div className="relative overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-br from-white/[0.08] via-white/[0.03] to-transparent px-3 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-all duration-200 group-hover:border-white/[0.2] group-open:from-white/[0.1] group-open:via-white/[0.05]">
                   <span
                     aria-hidden="true"
@@ -185,10 +314,15 @@ export function AppSidebar() {
                   />
                   <div className="flex items-center gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold tracking-tight text-white">
-                        recodee.com
+                      <p
+                        aria-label="Active workspace name"
+                        className="truncate text-sm font-semibold tracking-tight text-white"
+                      >
+                        {activeWorkspace?.name ?? "Workspace"}
                       </p>
-                      <p className="truncate text-xs text-slate-400">Team</p>
+                      <p className="truncate text-xs text-slate-400">
+                        {activeWorkspace?.label ?? "Team"}
+                      </p>
                     </div>
                     <span className="inline-flex h-5 items-center rounded-full border border-emerald-300/30 bg-emerald-300/10 px-1.5 text-[10px] font-medium text-emerald-200">
                       Live
@@ -205,98 +339,102 @@ export function AppSidebar() {
                 <p className="px-3 pt-3 pb-1 text-[11px] uppercase tracking-[0.14em] text-slate-400">
                   Switchboards
                 </p>
-                <div className="px-2 pb-2">
-                  <div className="flex items-center gap-3 rounded-xl border border-white/[0.12] bg-white/[0.04] px-2.5 py-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">
-                        recodee.com
-                      </p>
-                      <p className="truncate text-xs text-slate-400">Team</p>
-                    </div>
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/12">
-                      <Check
-                        className="h-3.5 w-3.5 text-emerald-200"
-                        aria-hidden="true"
-                      />
-                    </span>
-                  </div>
+                <div className="space-y-2 px-2 pb-2">
+                  {workspaces.map((workspace) => {
+                    const isSelected = workspace.isActive;
+                    return (
+                      <button
+                        type="button"
+                        key={workspace.id}
+                        onClick={() => handleSelectWorkspace(workspace.id)}
+                        aria-label={`Select workspace ${workspace.name}`}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-xl border px-2.5 py-2.5 text-left transition-colors",
+                          isSelected
+                            ? "border-white/[0.2] bg-white/[0.08]"
+                            : "border-white/[0.12] bg-white/[0.04] hover:border-white/[0.22] hover:bg-white/[0.08]",
+                        )}
+                        disabled={selectMutation.isPending}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">
+                            {workspace.name}
+                          </p>
+                          <p className="truncate text-xs text-slate-400">{workspace.label}</p>
+                        </div>
+                        {isSelected ? (
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/12">
+                            <Check
+                              className="h-3.5 w-3.5 text-emerald-200"
+                              aria-hidden="true"
+                            />
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="space-y-2 border-t border-white/[0.08] px-3 py-3">
+                  <Button
+                    type="button"
+                    onClick={() => setWorkspaceOnboardingOpen(true)}
+                    variant="ghost"
+                    className="h-10 w-full justify-start gap-2 border border-white/[0.08] bg-white/[0.02] px-3 text-slate-200 hover:bg-white/[0.06] hover:text-white"
+                    aria-label="Create workspace onboarding"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    Create workspace
+                  </Button>
                 </div>
               </div>
             </details>
           </div>
         )}
 
-        <nav aria-label="Sidebar" className="space-y-1.5">
-          {NAV_ITEMS.map((item) => {
-            const Icon = NAV_ICONS[item.to] ?? BarChart3;
-            return (
-              <div key={item.to} className="space-y-1">
-                <NavLink to={item.to}>
-                  {({ isActive }) => (
-                    <span
-                      className={cn(
-                        "flex items-center rounded-2xl px-3.5 py-3 text-sm font-medium transition-all duration-200",
-                        collapsed ? "justify-center px-2.5" : "justify-between",
-                        isActive
-                          ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
-                          : "text-slate-300 hover:bg-white/[0.05] hover:text-white",
-                      )}
-                    >
-                      <span className="flex items-center gap-3">
-                        <Icon className="h-4 w-4" aria-hidden="true" />
-                        <span className={collapsed ? "sr-only" : undefined}>
-                          {item.label}
-                        </span>
-                      </span>
-                      {item.isComingSoon && !collapsed ? (
-                        <Badge
-                          variant="secondary"
-                          className="border border-white/10 bg-white/5 px-1.5 py-0 text-[10px] text-slate-400"
-                        >
-                          Soon
-                        </Badge>
-                      ) : null}
-                    </span>
-                  )}
-                </NavLink>
-                {!collapsed && item.children?.length ? (
-                  <div className="ml-6 space-y-1 border-l border-white/[0.08] pl-3">
-                    {item.children.map((child) => {
-                      const ChildIcon = NAV_ICONS[child.to] ?? BarChart3;
-                      return (
-                        <NavLink key={child.to} to={child.to}>
-                          {({ isActive }) => (
-                            <span
-                              className={cn(
-                                "flex items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium transition-all duration-200",
-                                isActive
-                                  ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
-                                  : "text-slate-400 hover:bg-white/[0.05] hover:text-white",
-                              )}
-                            >
-                              <span className="flex items-center gap-2.5">
-                                <ChildIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                                <span>{child.label}</span>
-                              </span>
-                              {child.isComingSoon ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="border border-white/10 bg-white/5 px-1.5 py-0 text-[10px] text-slate-400"
-                                >
-                                  Soon
-                                </Badge>
-                              ) : null}
-                            </span>
-                          )}
-                        </NavLink>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </nav>
+        {collapsed ? (
+          <nav aria-label="Sidebar" className="space-y-1">
+            {COLLAPSED_LINKS.map((item) => renderNavLink(item, true))}
+          </nav>
+        ) : (
+          <nav aria-label="Sidebar" className="space-y-4">
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-xl border border-white/[0.06] px-3 py-2.5 text-left text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
+              >
+                <span className="flex items-center gap-3">
+                  <Search className="h-4 w-4" aria-hidden="true" />
+                  Search...
+                </span>
+                <kbd className="inline-flex h-5 items-center rounded border border-white/10 bg-white/[0.04] px-1.5 text-[10px] text-slate-500">
+                  ⌘ K
+                </kbd>
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-xl border border-white/[0.06] px-3 py-2.5 text-left text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
+              >
+                <span className="flex items-center gap-3">
+                  <SquarePen className="h-4 w-4" aria-hidden="true" />
+                  New Issue
+                </span>
+                <kbd className="inline-flex h-5 items-center rounded border border-white/10 bg-white/[0.04] px-1.5 text-[10px] text-slate-500">
+                  C
+                </kbd>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <p className="px-1 text-[11px] uppercase tracking-[0.12em] text-slate-500">Workspace</p>
+              {WORKSPACE_LINKS.map((item) => renderNavLink(item))}
+            </div>
+
+            <div className="space-y-1">
+              <p className="px-1 text-[11px] uppercase tracking-[0.12em] text-slate-500">Configure</p>
+              {CONFIGURE_LINKS.map((item) => renderNavLink(item))}
+            </div>
+          </nav>
+        )}
 
         {collapsed ? (
           <div className="mt-auto flex items-center justify-center">
@@ -316,6 +454,14 @@ export function AppSidebar() {
           </div>
         )}
       </div>
+
+      <WorkspaceOnboardingDialog
+        open={workspaceOnboardingOpen}
+        onOpenChange={setWorkspaceOnboardingOpen}
+        createWorkspace={(name) => createMutation.mutateAsync({ name })}
+        isCreatingWorkspace={createMutation.isPending}
+        accounts={dashboardQuery.data?.accounts ?? []}
+      />
     </aside>
   );
 }

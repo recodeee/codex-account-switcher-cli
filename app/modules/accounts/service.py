@@ -38,12 +38,16 @@ from app.modules.accounts.codex_live_usage import (
     read_live_codex_process_session_attribution,
     terminate_live_codex_processes_for_snapshot,
 )
+from app.modules.accounts.codex_runtime_usage import (
+    read_local_codex_runtime_usage_summary_by_snapshot,
+)
 from app.modules.accounts.live_usage_overrides import (
     apply_local_live_usage_overrides,
     remember_terminated_cli_session_snapshots,
 )
 from app.modules.accounts.live_usage_persistence import persist_live_usage_overrides
 from app.modules.accounts.mappers import build_account_summaries, build_account_usage_trends
+from app.modules.accounts.request_usage_fallback import merge_request_usage_with_runtime_fallback
 from app.modules.accounts.repository import AccountsRepository
 from app.modules.accounts.task_preview_overlay import overlay_live_codex_task_previews
 from app.modules.accounts.schemas import (
@@ -68,6 +72,8 @@ from app.modules.usage.updater import AdditionalUsageRepositoryPort, UsageUpdate
 
 _SPARKLINE_DAYS = 7
 _DETAIL_BUCKET_SECONDS = 3600  # 1h → 168 points
+
+
 class InvalidAuthJsonError(Exception):
     pass
 
@@ -131,7 +137,9 @@ class AccountsService:
             account_id: AccountRequestUsage(
                 request_count=row.request_count,
                 total_tokens=row.total_tokens,
+                output_tokens=row.output_tokens,
                 cached_input_tokens=row.cached_input_tokens,
+                cache_write_tokens=0,
                 total_cost_usd=row.total_cost_usd,
             )
             for account_id, row in request_usage_rows.items()
@@ -185,6 +193,13 @@ class AccountsService:
             )
             for account in accounts
         }
+        runtime_usage_by_snapshot = read_local_codex_runtime_usage_summary_by_snapshot(now=now, days=90)
+        request_usage_by_account = merge_request_usage_with_runtime_fallback(
+            request_usage_by_account=request_usage_by_account,
+            snapshot_names_by_account=snapshot_names_by_account,
+            runtime_usage_by_snapshot=runtime_usage_by_snapshot,
+            account_ids=account_ids,
+        )
         codex_auth_by_account = {
             account.id: self._build_codex_auth_status(
                 account=account,

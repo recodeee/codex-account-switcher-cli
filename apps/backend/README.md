@@ -12,7 +12,7 @@ commerce backend boundary for codex-lb.
 ## Quick start
 
 ```bash
-cd backend/apps/backend
+cd apps/backend
 cp .env.template .env
 pnpm install
 pnpm dev
@@ -31,4 +31,6 @@ Default local port: `9000`
 
 - `scripts/dev-singleton.js` keeps one local Medusa dev process alive and
   records the selected port in the shared `.dev-ports.json`.
+- `pnpm dev` now exits early with a clear error when no DB URL is configured
+  in env or `.env`, instead of waiting for Knex startup timeouts.
 - Supabase SQL artifacts for the commerce layer live in `supabase/`.

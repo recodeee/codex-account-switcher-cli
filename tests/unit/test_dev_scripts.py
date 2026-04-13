@@ -15,6 +15,9 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEV_ALL_SCRIPT = REPO_ROOT / "scripts" / "dev-all.sh"
 DEV_LOGS_SCRIPT = REPO_ROOT / "scripts" / "dev-logs.sh"
+BACKEND_DEV_SINGLETON_SCRIPT = (
+    REPO_ROOT / "apps" / "backend" / "scripts" / "dev-singleton.js"
+)
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -126,6 +129,36 @@ def test_dev_logs_watch_streams_requested_target(tmp_path: Path) -> None:
     finally:
         proc.terminate()
         proc.wait(timeout=5)
+
+
+def test_backend_dev_singleton_fails_fast_without_database_config(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    backend_scripts = project / "apps" / "backend" / "scripts"
+    backend_scripts.mkdir(parents=True)
+
+    shutil.copy2(
+        BACKEND_DEV_SINGLETON_SCRIPT,
+        backend_scripts / "dev-singleton.js",
+    )
+
+    env = os.environ.copy()
+    for key in ("SUPABASE_DB_URL", "DATABASE_URL"):
+        env.pop(key, None)
+
+    proc = subprocess.run(
+        ["node", "./apps/backend/scripts/dev-singleton.js"],
+        cwd=project,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    assert "Missing database configuration for Medusa backend." in proc.stdout
+    assert "Configure SUPABASE_DB_URL or DATABASE_URL before starting." in proc.stdout
+    assert not (project / "apps" / "backend" / ".medusa" / "dev-singleton.lock").exists()
 
 
 def test_dev_all_reports_urls_without_streaming_service_noise(tmp_path: Path) -> None:

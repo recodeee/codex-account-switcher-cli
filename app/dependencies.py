@@ -48,6 +48,8 @@ from app.modules.settings.service import SettingsService
 from app.modules.sticky_sessions.service import StickySessionsService
 from app.modules.usage.repository import AdditionalUsageRepository, UsageRepository
 from app.modules.usage.service import UsageService
+from app.modules.workspaces.repository import WorkspacesRepository
+from app.modules.workspaces.service import WorkspacesRepositoryPort, WorkspacesService
 
 
 @dataclass(slots=True)
@@ -157,6 +159,13 @@ class StickySessionsContext:
     repository: StickySessionsRepository
     settings_repository: SettingsRepository
     service: StickySessionsService
+
+
+@dataclass(slots=True)
+class WorkspacesContext:
+    session: AsyncSession
+    repository: WorkspacesRepository
+    service: WorkspacesService
 
 
 def get_accounts_context(
@@ -335,5 +344,17 @@ def get_sticky_sessions_context(
         session=session,
         repository=repository,
         settings_repository=settings_repository,
+        service=service,
+    )
+
+
+def get_workspaces_context(
+    session: AsyncSession = Depends(get_session),
+) -> WorkspacesContext:
+    repository = WorkspacesRepository(session)
+    service = WorkspacesService(cast(WorkspacesRepositoryPort, repository))
+    return WorkspacesContext(
+        session=session,
+        repository=repository,
         service=service,
     )

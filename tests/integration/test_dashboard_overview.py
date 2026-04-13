@@ -152,6 +152,33 @@ def _write_rollout_without_usage(path: Path, *, timestamp: datetime) -> None:
     os.utime(path, (ts, ts))
 
 
+def _write_rollout_total_token_usage(
+    path: Path,
+    *,
+    timestamp: datetime,
+    input_tokens: int,
+    output_tokens: int,
+    cached_input_tokens: int = 0,
+) -> None:
+    payload = {
+        "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "info": {
+                "total_token_usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cached_input_tokens": cached_input_tokens,
+                }
+            },
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ts = timestamp.timestamp()
+    os.utime(path, (ts, ts))
+
+
 def _write_rollout_with_user_task(path: Path, *, timestamp: datetime, task: str) -> None:
     payload = {
         "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
@@ -281,6 +308,77 @@ async def test_dashboard_overview_combines_data(async_client, db_setup):
     # At least one trend point should have non-zero request count
     request_values = [p["v"] for p in trends["requests"]]
     assert any(v > 0 for v in request_values)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_overview_uses_runtime_token_usage_fallback_when_request_logs_lag(
+    async_client,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    now = utcnow().replace(microsecond=0)
+    account_id = generate_unique_account_id("acc_runtime_fallback", "runtime-fallback@example.com")
+
+    async with SessionLocal() as session:
+        accounts_repo = AccountsRepository(session)
+        usage_repo = UsageRepository(session)
+        await accounts_repo.upsert(_make_account(account_id, "runtime-fallback@example.com"))
+        await usage_repo.add_entry(
+            account_id,
+            12.0,
+            window="primary",
+            window_minutes=300,
+            recorded_at=now - timedelta(minutes=2),
+        )
+        await usage_repo.add_entry(
+            account_id,
+            28.0,
+            window="secondary",
+            window_minutes=10080,
+            recorded_at=now - timedelta(minutes=2),
+        )
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    _write_auth_snapshot(
+        accounts_dir / "runtime-fallback.json",
+        email="runtime-fallback@example.com",
+        account_id="acc_runtime_fallback",
+    )
+    (tmp_path / "current").write_text("runtime-fallback")
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    sessions_root = tmp_path / "sessions"
+    day_dir = sessions_root / f"{now.year:04d}" / f"{now.month:02d}" / f"{now.day:02d}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    _write_rollout_total_token_usage(
+        day_dir / "rollout-runtime-usage.jsonl",
+        timestamp=(now - timedelta(seconds=30)).replace(tzinfo=timezone.utc),
+        input_tokens=4_500,
+        output_tokens=1_200,
+        cached_input_tokens=900,
+    )
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    response = await async_client.get("/api/dashboard/overview")
+    assert response.status_code == 200
+    payload = response.json()
+    account = next(item for item in payload["accounts"] if item["accountId"] == account_id)
+    assert account["requestUsage"] is not None
+    assert account["requestUsage"]["requestCount"] == 1
+    assert account["requestUsage"]["totalTokens"] == 5_700
+    assert account["requestUsage"]["outputTokens"] == 1_200
+    assert account["requestUsage"]["cachedInputTokens"] == 900
+    # Runtime fallback uses local Codex token usage, so cost remains from request logs only.
+    assert account["requestUsage"]["totalCostUsd"] == 0.0
 
 
 @pytest.mark.asyncio

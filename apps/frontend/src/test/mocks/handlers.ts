@@ -20,6 +20,7 @@ import {
 	createDashboardSettings,
 	createDefaultAccounts,
 	createDefaultApiKeys,
+	createDefaultWorkspaces,
 	createDefaultRequestLogs,
 	createOauthCompleteResponse,
 	createOauthStartResponse,
@@ -93,6 +94,13 @@ const ProjectUpdatePayloadSchema = z
 		projectPath: z.string().nullable().optional(),
 		sandboxMode: z.string().optional(),
 		gitBranch: z.string().nullable().optional(),
+	})
+	.passthrough();
+
+const WorkspaceCreatePayloadSchema = z
+	.object({
+		name: z.string().optional(),
+		label: z.string().nullable().optional(),
 	})
 	.passthrough();
 
@@ -196,6 +204,15 @@ type MockState = {
 		projectPath: string | null;
 		sandboxMode: "read-only" | "workspace-write" | "danger-full-access";
 		gitBranch: string | null;
+		createdAt: string;
+		updatedAt: string;
+	}>;
+	workspaces: Array<{
+		id: string;
+		name: string;
+		slug: string;
+		label: string;
+		isActive: boolean;
 		createdAt: string;
 		updatedAt: string;
 	}>;
@@ -317,6 +334,7 @@ function createInitialState(): MockState {
 		firewallEntries: [],
 		devices: [],
 		projects: [],
+		workspaces: createDefaultWorkspaces(),
 		openSpecPlans: createDefaultOpenSpecPlans(),
 		billingAccounts: createDefaultBillingAccounts(),
 		stickySessions: [],
@@ -815,6 +833,52 @@ function normalizeProjectGitBranch(
 		};
 	}
 	return { ok: true, value: normalized };
+}
+
+function normalizeWorkspaceName(
+	value: unknown,
+): { ok: true; value: string } | { ok: false; code: "invalid_workspace_name"; message: string } {
+	const normalized = String(value ?? "").trim();
+	if (!normalized) {
+		return {
+			ok: false,
+			code: "invalid_workspace_name",
+			message: "Workspace name is required",
+		};
+	}
+	if (normalized.length > 128) {
+		return {
+			ok: false,
+			code: "invalid_workspace_name",
+			message: "Workspace name must be 128 characters or fewer",
+		};
+	}
+	return { ok: true, value: normalized };
+}
+
+function normalizeWorkspaceLabel(
+	value: unknown,
+): { ok: true; value: string } | { ok: false; code: "invalid_workspace_label"; message: string } {
+	if (value == null) {
+		return { ok: true, value: "Team" };
+	}
+	const normalized = String(value).trim();
+	if (!normalized) {
+		return { ok: true, value: "Team" };
+	}
+	if (normalized.length > 64) {
+		return {
+			ok: false,
+			code: "invalid_workspace_label",
+			message: "Workspace label must be 64 characters or fewer",
+		};
+	}
+	return { ok: true, value: normalized };
+}
+
+function slugifyWorkspaceName(name: string): string {
+	const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+	return slug || "workspace";
 }
 
 function filterRequestLogs(
@@ -1670,6 +1734,94 @@ export const handlers = [
 			);
 		}
 		return HttpResponse.json(plan.runtime);
+	}),
+
+	http.get("/api/workspaces", () => {
+		return HttpResponse.json({ entries: state.workspaces });
+	}),
+
+	http.post("/api/workspaces", async ({ request }) => {
+		const payload = await parseJsonBody(request, WorkspaceCreatePayloadSchema);
+		const nameResult = normalizeWorkspaceName(payload?.name);
+		if (!nameResult.ok) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: nameResult.code,
+						message: nameResult.message,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		const labelResult = normalizeWorkspaceLabel(payload?.label);
+		if (!labelResult.ok) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: labelResult.code,
+						message: labelResult.message,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+
+		if (state.workspaces.some((entry) => entry.name === nameResult.value)) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "workspace_name_exists",
+						message: "Workspace name already exists",
+					},
+				},
+				{ status: 409 },
+			);
+		}
+
+		const baseSlug = slugifyWorkspaceName(nameResult.value);
+		let slugCandidate = baseSlug;
+		let suffix = 1;
+		while (state.workspaces.some((entry) => entry.slug === slugCandidate)) {
+			suffix += 1;
+			slugCandidate = `${baseSlug}-${suffix}`;
+		}
+
+		const now = new Date().toISOString();
+		const created = {
+			id: `workspace_${state.workspaces.length + 1}`,
+			name: nameResult.value,
+			slug: slugCandidate,
+			label: labelResult.value,
+			isActive: true,
+			createdAt: now,
+			updatedAt: now,
+		};
+		state.workspaces = state.workspaces.map((entry) => ({ ...entry, isActive: false }));
+		state.workspaces = [...state.workspaces, created];
+		return HttpResponse.json(created);
+	}),
+
+	http.post("/api/workspaces/:workspaceId/select", ({ params }) => {
+		const workspaceId = String(params.workspaceId);
+		const exists = state.workspaces.some((entry) => entry.id === workspaceId);
+		if (!exists) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "workspace_not_found",
+						message: "Workspace not found",
+					},
+				},
+				{ status: 404 },
+			);
+		}
+		state.workspaces = state.workspaces.map((entry) => ({
+			...entry,
+			isActive: entry.id === workspaceId,
+			updatedAt: entry.id === workspaceId ? new Date().toISOString() : entry.updatedAt,
+		}));
+		return HttpResponse.json({ activeWorkspaceId: workspaceId });
 	}),
 
 	http.get("/api/projects", () => {

@@ -312,6 +312,33 @@ class Project(Base):
     )
 
 
+class SwitchboardWorkspace(Base):
+    __tablename__ = "switchboard_workspaces"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    slug: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    label: Mapped[str] = mapped_column(
+        String(64),
+        default="Team",
+        server_default=text("'Team'"),
+        nullable=False,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=false(),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class BusinessBillingAccount(Base):
     __tablename__ = "business_billing_accounts"
 

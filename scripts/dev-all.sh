@@ -506,6 +506,15 @@ fi
 medusa_port="$DEFAULT_MEDUSA_PORT"
 frontend_medusa_port="$medusa_port"
 backend_needs_wait=false
+backend_supabase_db_url="${SUPABASE_DB_URL:-${MEDUSA_SUPABASE_DB_URL:-}}"
+backend_database_url="${DATABASE_URL:-${MEDUSA_DATABASE_URL:-}}"
+backend_db_schema="${DB_SCHEMA:-${MEDUSA_DB_SCHEMA:-}}"
+backend_pgsslmode="${PGSSLMODE:-${MEDUSA_PGSSLMODE:-}}"
+backend_jwt_secret="${JWT_SECRET:-${MEDUSA_JWT_SECRET:-}}"
+backend_cookie_secret="${COOKIE_SECRET:-${MEDUSA_COOKIE_SECRET:-}}"
+backend_store_cors="${STORE_CORS:-${MEDUSA_STORE_CORS:-}}"
+backend_admin_cors="${ADMIN_CORS:-${MEDUSA_ADMIN_CORS:-}}"
+backend_auth_cors="${AUTH_CORS:-${MEDUSA_AUTH_CORS:-}}"
 mark_log_session "backend" "$BACKEND_LOG_FILE"
 existing_medusa_pid="$(read_medusa_launcher_pid || true)"
 if [[ -n "$existing_medusa_pid" ]] && is_pid_alive "$existing_medusa_pid"; then
@@ -517,6 +526,15 @@ else
   echo "[dev] Starting commerce backend"
   (
     cd "$MEDUSA_BACKEND_DIR"
+    if [[ -n "$backend_supabase_db_url" ]]; then export SUPABASE_DB_URL="$backend_supabase_db_url"; fi
+    if [[ -n "$backend_database_url" ]]; then export DATABASE_URL="$backend_database_url"; fi
+    if [[ -n "$backend_db_schema" ]]; then export DB_SCHEMA="$backend_db_schema"; fi
+    if [[ -n "$backend_pgsslmode" ]]; then export PGSSLMODE="$backend_pgsslmode"; fi
+    if [[ -n "$backend_jwt_secret" ]]; then export JWT_SECRET="$backend_jwt_secret"; fi
+    if [[ -n "$backend_cookie_secret" ]]; then export COOKIE_SECRET="$backend_cookie_secret"; fi
+    if [[ -n "$backend_store_cors" ]]; then export STORE_CORS="$backend_store_cors"; fi
+    if [[ -n "$backend_admin_cors" ]]; then export ADMIN_CORS="$backend_admin_cors"; fi
+    if [[ -n "$backend_auth_cors" ]]; then export AUTH_CORS="$backend_auth_cors"; fi
     MEDUSA_PORT="$medusa_port" PORT="$medusa_port" bun run dev
   ) >>"$BACKEND_LOG_FILE" 2>&1 &
   backend_pid="$!"

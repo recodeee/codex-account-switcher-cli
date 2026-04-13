@@ -43,6 +43,8 @@ import {
 } from "@/features/dashboard/schemas";
 import type { DashboardSettings } from "@/features/settings/schemas";
 import { DashboardSettingsSchema } from "@/features/settings/schemas";
+import type { WorkspaceEntry } from "@/features/workspaces/schemas";
+import { WorkspaceEntrySchema } from "@/features/workspaces/schemas";
 
 // Backward-compatible type aliases
 export type RequestLogEntry = RequestLog;
@@ -63,6 +65,7 @@ export type {
 	ApiKeyCreateResponse,
 	ApiKeyTrendsResponse,
 	ApiKeyUsage7DayResponse,
+	WorkspaceEntry,
 };
 
 const BASE_TIME = new Date("2026-01-01T12:00:00Z");
@@ -373,6 +376,25 @@ export function createDashboardSettings(
 		apiKeyAuthEnabled: true,
 		...overrides,
 	});
+}
+
+export function createWorkspaceEntry(
+	overrides: Partial<WorkspaceEntry> = {},
+): WorkspaceEntry {
+	return WorkspaceEntrySchema.parse({
+		id: "ws_recodee",
+		name: "recodee.com",
+		slug: "recodee-com",
+		label: "Team",
+		isActive: true,
+		createdAt: offsetIso(-120),
+		updatedAt: offsetIso(-5),
+		...overrides,
+	});
+}
+
+export function createDefaultWorkspaces(): WorkspaceEntry[] {
+	return [createWorkspaceEntry()];
 }
 
 export function createOauthStartResponse(

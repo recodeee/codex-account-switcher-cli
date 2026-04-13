@@ -15,7 +15,7 @@ describe("accounts flow integration", () => {
     window.history.pushState({}, "", "/accounts");
     renderWithProviders(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("Search accounts...")).toBeInTheDocument();
     expect((await screen.findAllByText("primary@example.com")).length).toBeGreaterThan(0);
     expect(screen.getByText("secondary@example.com")).toBeInTheDocument();
 
@@ -42,7 +42,7 @@ describe("accounts flow integration", () => {
     window.history.pushState({}, "", "/accounts");
     renderWithProviders(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("Search accounts...")).toBeInTheDocument();
     const buttons = await screen.findAllByRole("button", { name: "Use this" });
     const enabledButton = buttons.find((button) => !button.hasAttribute("disabled"));
     expect(enabledButton).toBeDefined();
@@ -93,7 +93,7 @@ describe("accounts flow integration", () => {
     window.history.pushState({}, "", "/accounts");
     renderWithProviders(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("Search accounts...")).toBeInTheDocument();
     expect(
       await screen.findByText("No codex-auth snapshot is linked to this account yet."),
     ).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe("accounts flow integration", () => {
     window.history.pushState({}, "", "/accounts");
     renderWithProviders(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("Search accounts...")).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Re-authenticate" }));
 
     expect(await screen.findByRole("heading", { name: "Add account with OAuth" })).toBeInTheDocument();

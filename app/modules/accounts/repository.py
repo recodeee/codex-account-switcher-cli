@@ -36,6 +36,7 @@ def _not_deleted_account_clause():
 class AccountRequestUsageSummary:
     request_count: int
     total_tokens: int
+    output_tokens: int
     cached_input_tokens: int
     total_cost_usd: float
 
@@ -111,6 +112,7 @@ class AccountsRepository:
             return_row = AccountRequestUsageSummary(
                 request_count=int(request_count or 0),
                 total_tokens=input_sum + output_sum,
+                output_tokens=output_sum,
                 cached_input_tokens=cached_sum,
                 total_cost_usd=round(float(total_cost_usd or 0.0), 6),
             )

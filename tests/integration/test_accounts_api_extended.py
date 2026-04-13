@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from sqlalchemy import update
@@ -66,6 +68,33 @@ def _iso_utc(epoch_seconds: int) -> str:
             "Z",
         )
     )
+
+
+def _write_rollout_total_token_usage(
+    path: Path,
+    *,
+    timestamp: datetime,
+    input_tokens: int,
+    output_tokens: int,
+    cached_input_tokens: int = 0,
+) -> None:
+    payload = {
+        "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "info": {
+                "total_token_usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cached_input_tokens": cached_input_tokens,
+                }
+            },
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    ts = timestamp.timestamp()
+    os.utime(path, (ts, ts))
 
 
 @pytest.mark.asyncio
@@ -464,6 +493,59 @@ async def test_accounts_list_request_usage_uses_persisted_cost(async_client, db_
     request_usage = accounts["acc_persisted_cost"]["requestUsage"]
     assert request_usage is not None
     assert request_usage["totalCostUsd"] == pytest.approx(12.345678, abs=1e-6)
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_uses_runtime_token_usage_fallback_when_request_logs_lag(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    now = utcnow().replace(microsecond=0)
+    account_id = generate_unique_account_id("acc_runtime_fallback", "runtime-fallback@example.com")
+
+    async with SessionLocal() as session:
+        accounts_repo = AccountsRepository(session)
+        await accounts_repo.upsert(_make_account(account_id, "runtime-fallback@example.com"))
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    (accounts_dir / "runtime-fallback.json").write_text(
+        json.dumps(_make_auth_json("acc_runtime_fallback", "runtime-fallback@example.com")),
+        encoding="utf-8",
+    )
+    (tmp_path / "current").write_text("runtime-fallback", encoding="utf-8")
+    monkeypatch.setenv("CODEX_LB_CODEX_AUTH_AUTO_IMPORT_ON_ACCOUNTS_LIST", "true")
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    sessions_root = tmp_path / "sessions"
+    day_dir = sessions_root / f"{now.year:04d}" / f"{now.month:02d}" / f"{now.day:02d}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    _write_rollout_total_token_usage(
+        day_dir / "rollout-runtime-usage.jsonl",
+        timestamp=(now - timedelta(seconds=45)).replace(tzinfo=timezone.utc),
+        input_tokens=2_100,
+        output_tokens=300,
+        cached_input_tokens=400,
+    )
+    monkeypatch.setenv("CODEX_SESSIONS_DIR", str(sessions_root))
+    monkeypatch.setenv("CODEX_AUTH_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+
+    from app.core.config.settings import get_settings
+
+    get_settings.cache_clear()
+
+    response = await async_client.get("/api/accounts")
+    assert response.status_code == 200
+    payload = response.json()
+    accounts = {item["accountId"]: item for item in payload["accounts"]}
+    request_usage = accounts[account_id]["requestUsage"]
+    assert request_usage is not None
+    assert request_usage["requestCount"] == 1
+    assert request_usage["totalTokens"] == 2_400
+    assert request_usage["outputTokens"] == 300
+    assert request_usage["cachedInputTokens"] == 400
+    assert request_usage["totalCostUsd"] == 0.0
 
 
 @pytest.mark.asyncio

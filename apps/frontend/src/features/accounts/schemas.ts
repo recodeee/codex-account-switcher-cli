@@ -18,7 +18,9 @@ export const AccountUsageSchema = z.object({
 export const AccountRequestUsageSchema = z.object({
   requestCount: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative().optional(),
   cachedInputTokens: z.number().int().nonnegative(),
+  cacheWriteTokens: z.number().int().nonnegative().optional(),
   totalCostUsd: z.number().nonnegative(),
 });
 

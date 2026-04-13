@@ -1,4 +1,4 @@
-import { Migration20260408122749 } from "./Migration20260408122749"
+import { Migration20260408122749 } from "../../migrations/Migration20260408122749"
 
 describe("Migration20260408122749", () => {
   const originalDbSchema = process.env.DB_SCHEMA

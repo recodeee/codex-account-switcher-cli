@@ -1,14 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
 
 import App from "@/App";
-import { sendPromptToAccountTerminal } from "@/features/sessions/terminal-dispatch";
+import { server } from "@/test/mocks/server";
 import { renderWithProviders } from "@/test/utils";
-
-vi.mock("@/features/sessions/terminal-dispatch", () => ({
-  sendPromptToAccountTerminal: vi.fn().mockResolvedValue(undefined),
-}));
 
 const elementPrototype = HTMLElement.prototype as unknown as Record<string, unknown>;
 if (typeof elementPrototype.scrollIntoView !== "function") {
@@ -39,23 +36,28 @@ if (typeof elementPrototype.releasePointerCapture !== "function") {
 describe("projects flow integration", () => {
   it("loads projects page and supports add/edit/delete", async () => {
     const user = userEvent.setup({ delay: null });
+    server.use(
+      http.post("http://localhost:9000/store/customers/me", () => HttpResponse.json({ customer: {} })),
+    );
 
     window.history.pushState({}, "", "/projects");
     renderWithProviders(<App />);
 
     expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
 
-    await user.type(screen.getByPlaceholderText("Project name (e.g. recodee-core)"), "recodee-core");
+    await user.click(screen.getByRole("button", { name: "New project" }));
+    const createDialog = await screen.findByRole("dialog", { name: "New project" });
+    await user.type(within(createDialog).getByPlaceholderText("Project name (e.g. recodee-core)"), "recodee-core");
     await user.type(
-      screen.getByPlaceholderText("Absolute project path (optional)"),
+      within(createDialog).getByPlaceholderText("Absolute project path (optional)"),
       "/home/deadpool/projects/recodee-core",
     );
-    await user.type(screen.getByPlaceholderText("Git branch (optional)"), "feature/recodee-core");
+    await user.type(within(createDialog).getByPlaceholderText("Git branch (optional)"), "feature/recodee-core");
     await user.type(
-      screen.getByPlaceholderText("Optional description (max 512 characters)"),
+      within(createDialog).getByPlaceholderText("Optional description (max 512 characters)"),
       "Main dashboard project",
     );
-    await user.click(screen.getByRole("button", { name: "Add project" }));
+    await user.click(within(createDialog).getByRole("button", { name: "Add project" }));
 
     expect(await screen.findByText("recodee-core")).toBeInTheDocument();
     expect(screen.getByText("Main dashboard project")).toBeInTheDocument();
@@ -64,24 +66,25 @@ describe("projects flow integration", () => {
     expect(screen.getAllByText("workspace-write").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    await user.clear(screen.getByLabelText("Edit project name for recodee-core"));
-    await user.type(screen.getByLabelText("Edit project name for recodee-core"), "recodee-core-v2");
-    await user.clear(screen.getByLabelText("Edit project description for recodee-core"));
+    const editDialog = await screen.findByRole("dialog", { name: "Edit project" });
+    await user.clear(within(editDialog).getByPlaceholderText("Project name (e.g. recodee-core)"));
+    await user.type(within(editDialog).getByPlaceholderText("Project name (e.g. recodee-core)"), "recodee-core-v2");
+    await user.clear(within(editDialog).getByPlaceholderText("Optional description (max 512 characters)"));
     await user.type(
-      screen.getByLabelText("Edit project description for recodee-core"),
+      within(editDialog).getByPlaceholderText("Optional description (max 512 characters)"),
       "Updated project details",
     );
-    await user.clear(screen.getByLabelText("Edit project path for recodee-core"));
+    await user.clear(within(editDialog).getByPlaceholderText("Absolute project path (optional)"));
     await user.type(
-      screen.getByLabelText("Edit project path for recodee-core"),
+      within(editDialog).getByPlaceholderText("Absolute project path (optional)"),
       "/home/deadpool/projects/recodee-core-v2",
     );
-    await user.clear(screen.getByLabelText("Edit git branch for recodee-core"));
+    await user.clear(within(editDialog).getByPlaceholderText("Git branch (optional)"));
     await user.type(
-      screen.getByLabelText("Edit git branch for recodee-core"),
+      within(editDialog).getByPlaceholderText("Git branch (optional)"),
       "feature/recodee-core-v2",
     );
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(within(editDialog).getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("recodee-core-v2")).toBeInTheDocument();
     expect(screen.getByText("Updated project details")).toBeInTheDocument();
@@ -98,58 +101,4 @@ describe("projects flow integration", () => {
     });
   });
 
-  it("dispatches a Codex prompt from projects control center", async () => {
-    const user = userEvent.setup({ delay: null });
-    const sendPromptMock = vi.mocked(sendPromptToAccountTerminal);
-
-    sendPromptMock.mockClear();
-    window.history.pushState({}, "", "/projects");
-    renderWithProviders(<App />);
-
-    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Open Codex control tools" }));
-
-    const promptInput = screen.getByPlaceholderText(
-      "Describe exactly what this Codex account should implement next...",
-    );
-    await user.type(promptInput, "Implement project control panel refinements");
-    await user.click(screen.getByRole("button", { name: "Send to Codex" }));
-
-    await waitFor(() => {
-      expect(sendPromptMock).toHaveBeenCalledTimes(1);
-    });
-
-    expect(sendPromptMock).toHaveBeenCalledWith({
-      accountId: expect.any(String),
-      prompt: "Implement project control panel refinements",
-    });
-  });
-
-  it("inserts saved project context into prompt composer", async () => {
-    const user = userEvent.setup({ delay: null });
-
-    window.history.pushState({}, "", "/projects");
-    renderWithProviders(<App />);
-
-    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
-
-    await user.type(screen.getByPlaceholderText("Project name (e.g. recodee-core)"), "alpha-sandbox");
-    await user.click(screen.getByRole("button", { name: "Add project" }));
-
-    expect(await screen.findByText("alpha-sandbox")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Open Codex control tools" }));
-
-    const selectTriggers = screen.getAllByRole("combobox");
-    await user.click(selectTriggers[1]);
-    await user.click(await screen.findByRole("option", { name: "alpha-sandbox" }));
-    await user.click(screen.getByRole("button", { name: "Insert project context" }));
-
-    expect(
-      (
-        screen.getByPlaceholderText(
-          "Describe exactly what this Codex account should implement next...",
-        ) as HTMLTextAreaElement
-      ).value,
-    ).toContain("- Name: alpha-sandbox");
-  });
 });

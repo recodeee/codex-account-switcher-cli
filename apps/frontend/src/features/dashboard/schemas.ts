@@ -104,6 +104,8 @@ export const RequestLogSchema = z.object({
   status: z.string(),
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
+  inputTokens: z.number().nullable().optional(),
+  outputTokens: z.number().nullable().optional(),
   tokens: z.number().nullable(),
   cachedInputTokens: z.number().nullable(),
   reasoningEffort: z.string().nullable(),

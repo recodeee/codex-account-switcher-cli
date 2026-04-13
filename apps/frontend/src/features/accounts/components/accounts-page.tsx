@@ -128,21 +128,13 @@ export function AccountsPage() {
     getErrorMessageOrNull(repairSnapshotMutation.error);
 
   return (
-    <div className="animate-fade-in-up space-y-6">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Accounts</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage imported accounts and authentication flows.
-        </p>
-      </div>
-
+    <div className="animate-fade-in-up space-y-4">
       {mutationError ? <AlertMessage variant="error">{mutationError}</AlertMessage> : null}
 
       {!accountsQuery.data ? (
         <AccountsSkeleton />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <div className="grid gap-4 lg:grid-cols-[24rem_minmax(0,1fr)]">
           <div className="rounded-xl border bg-card p-4">
             <AccountList
               accounts={accounts}

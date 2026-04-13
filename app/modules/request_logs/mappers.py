@@ -40,6 +40,8 @@ def to_request_log_entry(log: RequestLog, *, api_key_name: str | None = None) ->
         status=log_status(log),
         error_code=log.error_code,
         error_message=log.error_message,
+        input_tokens=log.input_tokens,
+        output_tokens=log.output_tokens if log.output_tokens is not None else log.reasoning_tokens,
         tokens=total_tokens_from_log(log_like),
         cached_input_tokens=cached_input_tokens_from_log(log_like),
         cost_usd=cost_from_log(log_like, precision=6),

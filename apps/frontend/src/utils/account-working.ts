@@ -1013,7 +1013,14 @@ export function isAccountWorkingNow(
     return true;
   }
 
-  if (hasRecentSessionTaskPreview && hasActiveCliSessionSignal) {
+  // Keep session-row preview fallback constrained to explicit startup gaps.
+  // Without this gate, stale/foreign preview rows can surface accounts with
+  // zero live/tracked sessions in "Working now".
+  if (
+    hasRecentSessionTaskPreview &&
+    hasActiveCliSessionSignal &&
+    hasNoLiveTelemetryOverride
+  ) {
     return true;
   }
 

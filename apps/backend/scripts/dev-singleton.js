@@ -7,10 +7,25 @@ const { spawn, execSync } = require("node:child_process")
 
 const preferredPort = Number.parseInt(process.env.MEDUSA_PORT || process.env.PORT || "9000", 10)
 const projectRoot = path.resolve(__dirname, "..", "..", "..")
+const backendRoot = path.resolve(__dirname, "..")
 const portRegistryFile = path.join(projectRoot, ".dev-ports.json")
 const lockDir = path.resolve(__dirname, "..", ".medusa")
 const lockFile = path.join(lockDir, "dev-singleton.lock")
 const logFile = path.join(lockDir, "backend-dev.log")
+const backendEnvFile = path.join(backendRoot, ".env")
+const localMedusaBin = path.join(
+  backendRoot,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "medusa.cmd" : "medusa"
+)
+const localMedusaCliScript = path.join(
+  backendRoot,
+  "node_modules",
+  "@medusajs",
+  "cli",
+  "cli.js"
+)
 
 const isPidAlive = (pid) => {
   if (!Number.isInteger(pid) || pid <= 0) {
@@ -85,6 +100,96 @@ const getPidCommand = (pid) => {
 const isBackendMedusaProcess = (command) =>
   (command.includes("/backend/apps/backend") || command.includes("/apps/backend")) &&
   (command.includes("medusa") || command.includes("node"))
+
+const resolveMedusaLaunch = () => {
+  if (fs.existsSync(localMedusaCliScript)) {
+    return {
+      command: process.execPath,
+      args: [localMedusaCliScript, "develop"],
+      descriptor: `${process.execPath} ${localMedusaCliScript} develop`,
+    }
+  }
+
+  if (fs.existsSync(localMedusaBin)) {
+    return {
+      command: localMedusaBin,
+      args: ["develop"],
+      descriptor: `${localMedusaBin} develop`,
+    }
+  }
+
+  return {
+    command: "medusa",
+    args: ["develop"],
+    descriptor: "medusa develop",
+  }
+}
+
+const readTrimmedEnv = (name) => {
+  const value = process.env[name]
+  if (typeof value !== "string") {
+    return ""
+  }
+  return value.trim()
+}
+
+const hasDbUrlInBackendEnvFile = () => {
+  if (!fs.existsSync(backendEnvFile)) {
+    return false
+  }
+
+  try {
+    const contents = fs.readFileSync(backendEnvFile, "utf8")
+    for (const line of contents.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue
+      }
+
+      const match = trimmed.match(/^(?:export\s+)?(SUPABASE_DB_URL|DATABASE_URL)\s*=\s*(.+)$/)
+      if (!match) {
+        continue
+      }
+
+      const value = match[2].trim()
+      if (!value) {
+        continue
+      }
+      if (
+        (value.startsWith('"') && value.endsWith('"') && value.slice(1, -1).trim()) ||
+        (value.startsWith("'") && value.endsWith("'") && value.slice(1, -1).trim())
+      ) {
+        return true
+      }
+      if (!value.startsWith("#")) {
+        return true
+      }
+    }
+  } catch {
+    return false
+  }
+
+  return false
+}
+
+const ensureDatabaseConfigPresent = () => {
+  const runtimeSupabaseDbUrl = readTrimmedEnv("SUPABASE_DB_URL")
+  const runtimeDatabaseUrl = readTrimmedEnv("DATABASE_URL")
+
+  if (runtimeSupabaseDbUrl || runtimeDatabaseUrl || hasDbUrlInBackendEnvFile()) {
+    return true
+  }
+
+  console.error("[backend:dev] Missing database configuration for Medusa backend.")
+  console.error("[backend:dev] Configure SUPABASE_DB_URL or DATABASE_URL before starting.")
+  console.error(
+    "[backend:dev] Accepted locations: apps/backend/.env, or shell env passed into `bun run dev`."
+  )
+  console.error(
+    "[backend:dev] Example local value: DATABASE_URL=postgresql://codex_lb:codex_lb@127.0.0.1:5432/codex_lb"
+  )
+  return false
+}
 
 const acquireLock = () => {
   fs.mkdirSync(lockDir, { recursive: true })
@@ -292,6 +397,11 @@ const main = async () => {
     process.exit(code)
   }
 
+  if (!ensureDatabaseConfigPresent()) {
+    cleanupAndExit(1)
+    return
+  }
+
   process.on("exit", () => releaseLock())
   process.on("SIGINT", () => cleanupAndExit(0))
   process.on("SIGTERM", () => cleanupAndExit(0))
@@ -316,9 +426,10 @@ const main = async () => {
     backend: selectedPort,
   })
   const logStream = fs.createWriteStream(logFile, { flags: "a" })
+  const medusaLaunch = resolveMedusaLaunch()
 
-  const child = spawn("medusa", ["develop"], {
-    cwd: path.resolve(__dirname, ".."),
+  const child = spawn(medusaLaunch.command, medusaLaunch.args, {
+    cwd: backendRoot,
     stdio: ["inherit", "pipe", "pipe"],
     env: {
       ...process.env,
@@ -362,7 +473,16 @@ const main = async () => {
 
   child.on("error", (error) => {
     logStream.end()
-    console.error("[backend:dev] Failed to start medusa develop:", error)
+    if (error && error.code === "ENOENT") {
+      console.error(
+        `[backend:dev] Failed to start Medusa CLI (${medusaLaunch.descriptor}).`
+      )
+      console.error(
+        "[backend:dev] Ensure backend dependencies are installed (run `cd apps/backend && bun install`)."
+      )
+    } else {
+      console.error("[backend:dev] Failed to start medusa develop:", error)
+    }
     cleanupAndExit(1)
   })
 }

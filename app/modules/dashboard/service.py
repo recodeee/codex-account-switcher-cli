@@ -13,9 +13,11 @@ from app.modules.accounts.codex_auth_switcher import (
     build_snapshot_index,
     resolve_snapshot_names_for_account,
 )
+from app.modules.accounts.codex_runtime_usage import read_local_codex_runtime_usage_summary_by_snapshot
 from app.modules.accounts.live_usage_overrides import apply_local_live_usage_overrides
 from app.modules.accounts.live_usage_persistence import persist_live_usage_overrides
 from app.modules.accounts.mappers import build_account_summaries
+from app.modules.accounts.request_usage_fallback import merge_request_usage_with_runtime_fallback
 from app.modules.accounts.schemas import (
     AccountLiveQuotaDebug,
     AccountRequestUsage,
@@ -59,6 +61,7 @@ class DashboardService:
             account_id: AccountRequestUsage(
                 request_count=row.request_count,
                 total_tokens=row.total_tokens,
+                output_tokens=row.output_tokens,
                 cached_input_tokens=row.cached_input_tokens,
                 total_cost_usd=row.total_cost_usd,
             )
@@ -100,6 +103,13 @@ class DashboardService:
             )
             for account in accounts
         }
+        runtime_usage_by_snapshot = read_local_codex_runtime_usage_summary_by_snapshot(now=now, days=90)
+        request_usage_by_account = merge_request_usage_with_runtime_fallback(
+            request_usage_by_account=request_usage_by_account,
+            snapshot_names_by_account=snapshot_names_by_account,
+            runtime_usage_by_snapshot=runtime_usage_by_snapshot,
+            account_ids=account_ids,
+        )
         codex_auth_by_account = {
             account.id: build_codex_auth_status(account=account, snapshot_index=snapshot_index)
             for account in accounts

@@ -20,14 +20,14 @@ export function LoadingOverlay({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm",
+        "fixed inset-0 z-50 flex items-center justify-center bg-[#020308]/85 backdrop-blur-sm",
         className,
       )}
       role="status"
       aria-live="polite"
       aria-label={label}
     >
-      <div className="flex items-center gap-2.5 rounded-xl border bg-card px-5 py-3.5 text-sm shadow-lg">
+      <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#020308] px-5 py-3.5 text-sm text-slate-100 shadow-lg">
         <Spinner size="sm" />
         <span className="font-medium">{label}</span>
       </div>
