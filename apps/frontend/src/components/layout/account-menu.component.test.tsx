@@ -52,7 +52,7 @@ describe("AccountMenu component", () => {
     expect(screen.getAllByText("nagy.viktordp@gmail.com").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("shows the backend-authenticated Medusa admin account instead of local credentials", async () => {
+  it("keeps menu focused on profile/theme/privacy/logout while still showing backend-authenticated identity details", async () => {
     const user = userEvent.setup({ delay: null });
 
     useMedusaAdminAuthStore.setState({
@@ -87,7 +87,9 @@ describe("AccountMenu component", () => {
 
     await user.click(trigger);
 
-    expect(screen.getByRole("menuitem", { name: "Sign out Medusa admin" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Sign out Medusa admin" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Accounts" })).not.toBeInTheDocument();
     expect(screen.getByText("Logged in account")).toBeInTheDocument();
     expect(screen.getAllByText("admin@recodee.com").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Last Medusa admin login")).toBeInTheDocument();

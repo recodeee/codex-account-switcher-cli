@@ -25,6 +25,7 @@ async def test_agents_api_crud_and_avatar_upload(async_client):
             "runtime": "Openclaw (openclaw-main)",
             "instructions": "",
             "maxConcurrentTasks": 8,
+            "avatarDataUrl": "data:image/png;base64,aGVsbG8=",
         },
     )
     assert created.status_code == 200
@@ -32,7 +33,7 @@ async def test_agents_api_crud_and_avatar_upload(async_client):
     assert created_payload["name"] == "DPQ"
     assert created_payload["visibility"] == "private"
     assert created_payload["runtime"] == "Openclaw (openclaw-main)"
-    assert created_payload["avatarDataUrl"] is None
+    assert created_payload["avatarDataUrl"] == "data:image/png;base64,aGVsbG8="
 
     updated = await async_client.put(
         f"/api/agents/{created_payload['id']}",

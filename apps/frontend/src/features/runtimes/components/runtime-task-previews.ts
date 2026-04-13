@@ -117,5 +117,5 @@ export function resolveRuntimeTaskPreviews(
     taskPreviews.push(WAITING_FOR_RUNTIME_TASK_LABEL);
   }
 
-  return taskPreviews.slice(0, liveSessionCount);
+  return taskPreviews;
 }

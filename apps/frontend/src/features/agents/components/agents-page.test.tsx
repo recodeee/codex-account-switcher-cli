@@ -187,7 +187,12 @@ describe("AgentsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Create agent" }));
 
-    expect(screen.getByRole("dialog", { name: "Create Agent" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Create Agent" });
+    expect(dialog).toBeInTheDocument();
+
+    const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput).toBeTruthy();
+    await user.upload(fileInput, new File(["hello"], "new-avatar.png", { type: "image/png" }));
 
     await user.type(screen.getByPlaceholderText("e.g. Deep Research Agent"), "Deep Research Agent");
     await user.type(screen.getByPlaceholderText("What does this agent do?"), "Investigates and synthesizes docs");
@@ -202,6 +207,7 @@ describe("AgentsPage", () => {
         expect.objectContaining({
           name: "Deep Research Agent",
           runtime: "Openclaw (openclaw-main)",
+          avatarDataUrl: "data:image/png;base64,aGVsbG8=",
         }),
       );
     });

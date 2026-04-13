@@ -52,6 +52,7 @@ type CreateAgentDraft = {
   description: string;
   visibility: AgentVisibility;
   runtime: string;
+  avatarDataUrl: string | null;
 };
 
 type RuntimeOption = {
@@ -86,6 +87,7 @@ function buildCreateDraft(runtime: string = DEFAULT_RUNTIME): CreateAgentDraft {
     description: "",
     visibility: "workspace",
     runtime,
+    avatarDataUrl: null,
   };
 }
 
@@ -177,6 +179,7 @@ export function AgentsPage() {
   const [agentDrafts, setAgentDrafts] = useState<Record<string, AgentEntry>>({});
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const createAvatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const { agentsQuery, createMutation, updateMutation } = useAgents();
   const dashboardQuery = useDashboard();
@@ -265,7 +268,7 @@ export function AgentsPage() {
       runtime: createDraft.runtime,
       instructions: "",
       maxConcurrentTasks: DEFAULT_MAX_CONCURRENT_TASKS,
-      avatarDataUrl: null,
+      avatarDataUrl: createDraft.avatarDataUrl,
     });
 
     setSelectedAgentId(created.id);
@@ -274,27 +277,18 @@ export function AgentsPage() {
     setCreateDraft(buildCreateDraft(defaultRuntime));
   };
 
-  const handleAvatarSelection = async (file: File | null) => {
-    if (!selectedAgent || !file) {
-      return;
-    }
-
+  const readAvatarDataUrl = async (file: File): Promise<string> => {
     if (!file.type.startsWith("image/")) {
-      toast.error("Avatar must be an image file");
-      return;
+      throw new Error("Avatar must be an image file");
     }
-
     if (file.size <= 0) {
-      toast.error("Avatar image is empty");
-      return;
+      throw new Error("Avatar image is empty");
     }
-
     if (file.size > MAX_AVATAR_BYTES) {
-      toast.error("Avatar image must be 1MB or smaller");
-      return;
+      throw new Error("Avatar image must be 1MB or smaller");
     }
 
-    const dataUrl = await new Promise<string>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(new Error("Failed to read avatar image"));
       reader.onload = () => {
@@ -307,6 +301,20 @@ export function AgentsPage() {
       };
       reader.readAsDataURL(file);
     });
+  };
+
+  const handleAvatarSelection = async (file: File | null) => {
+    if (!selectedAgent || !file) {
+      return;
+    }
+
+    let dataUrl = "";
+    try {
+      dataUrl = await readAvatarDataUrl(file);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to read avatar image");
+      return;
+    }
 
     updateSelectedAgent((agent) => ({ ...agent, avatarDataUrl: dataUrl }));
   };
@@ -759,6 +767,62 @@ export function AgentsPage() {
           </DialogHeader>
 
           <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-400">Avatar</Label>
+              <div className="flex items-center gap-4 rounded-lg border border-white/[0.1] bg-white/[0.02] px-3 py-3">
+                <button
+                  type="button"
+                  className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/[0.12] bg-white/[0.03] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+                  onClick={() => {
+                    createAvatarInputRef.current?.click();
+                  }}
+                >
+                  {createDraft.avatarDataUrl ? (
+                    <img src={createDraft.avatarDataUrl} alt="New agent avatar" className="h-full w-full object-cover" />
+                  ) : (
+                    <Bot className="h-6 w-6" aria-hidden="true" />
+                  )}
+                </button>
+                <div className="min-w-0">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 text-xs text-slate-300 transition-colors hover:text-slate-100"
+                    onClick={() => {
+                      createAvatarInputRef.current?.click();
+                    }}
+                  >
+                    <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+                    Click to upload avatar
+                  </button>
+                  <p className="mt-1 text-[11px] text-slate-500">PNG, JPG, WEBP or GIF · max 1MB</p>
+                </div>
+                <input
+                  ref={createAvatarInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(event) => {
+                    const input = event.currentTarget;
+                    const file = input.files?.[0] ?? null;
+                    if (!file) {
+                      input.value = "";
+                      return;
+                    }
+                    void readAvatarDataUrl(file)
+                      .then((avatarDataUrl) => {
+                        setCreateDraft((current) => ({ ...current, avatarDataUrl }));
+                      })
+                      .catch((error: unknown) => {
+                        toast.error(error instanceof Error ? error.message : "Failed to read avatar image");
+                      })
+                      .finally(() => {
+                        input.value = "";
+                      });
+                  }}
+                />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-400">Name</Label>
               <Input

@@ -1640,6 +1640,12 @@ export function AccountCard(props: AccountCardProps) {
   const snapshotName = account.codexAuth?.snapshotName?.trim() ?? null;
   const hasResolvedSnapshot = Boolean(snapshotName);
   const showMissingSnapshotLockOverlay = !hasResolvedSnapshot;
+  const showTokenRefreshLockOverlay = hasExpiredRefreshToken && hasResolvedSnapshot;
+  const showLockedAccountOverlay =
+    showMissingSnapshotLockOverlay || showTokenRefreshLockOverlay;
+  const lockOverlayMessage = showTokenRefreshLockOverlay
+    ? "Token needs to be refreshed to use this again."
+    : null;
   const expectedSnapshotName =
     account.codexAuth?.expectedSnapshotName?.trim() ?? null;
   const hasSnapshotMismatch = Boolean(
@@ -2126,7 +2132,7 @@ export function AccountCard(props: AccountCardProps) {
     <div className="relative">
       <div
         className={cn(
-          (showUsageLimitGraceOverlay || showMissingSnapshotLockOverlay) &&
+          (showUsageLimitGraceOverlay || showLockedAccountOverlay) &&
             "blur-[1.5px] saturate-[0.82]",
         )}
       >
@@ -2843,7 +2849,7 @@ export function AccountCard(props: AccountCardProps) {
           </div>
         </div>
       ) : null}
-      {showMissingSnapshotLockOverlay ? (
+      {showLockedAccountOverlay ? (
         <div className="absolute inset-0 z-30 flex items-center justify-center px-4">
           <div
             className="pointer-events-none absolute inset-0 bg-black/45 backdrop-blur-[1.5px]"
@@ -2856,6 +2862,11 @@ export function AccountCard(props: AccountCardProps) {
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
               Locked account
             </p>
+            {lockOverlayMessage ? (
+              <p className="text-center text-[11px] text-zinc-200/85">
+                {lockOverlayMessage}
+              </p>
+            ) : null}
             <p
               className={cn(
                 "max-w-full truncate font-mono text-xs text-zinc-200/90",

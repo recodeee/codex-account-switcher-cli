@@ -1,30 +1,16 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
 import {
   Eye,
   EyeOff,
-  Bot,
-  CreditCard,
-  FolderTree,
-  Home,
-  KeyRound,
-  LayoutDashboard,
-  Link2,
   LogOut,
-  MonitorSmartphone,
   Moon,
-  Sparkles,
-  Settings2,
   Sun,
   UserRound,
-  Users,
 } from "lucide-react";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { flattenNavItems, NAV_ITEMS } from "@/components/layout/nav-items";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -39,23 +25,8 @@ import { getDashboardOverview } from "@/features/dashboard/api";
 import { useMedusaAdminAuthStore } from "@/features/medusa-auth/hooks/use-medusa-admin-auth";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { useThemeStore } from "@/hooks/use-theme";
-import { useNavigate } from "@/lib/router-compat";
 import { cn } from "@/lib/utils";
 import { hasActiveCliSessionSignal } from "@/utils/account-working";
-
-const NAV_ICONS: Record<string, LucideIcon> = {
-  "/dashboard": LayoutDashboard,
-  "/accounts": Users,
-  "/agents": Bot,
-  "/billing": CreditCard,
-  "/apis": KeyRound,
-  "/devices": MonitorSmartphone,
-  "/storage": Home,
-  "/sessions": Link2,
-  "/skills": Sparkles,
-  "/projects/plans": FolderTree,
-  "/settings": Settings2,
-};
 
 function accountMenuPriorityScore(account: AccountSummary): number {
   let score = 0;
@@ -99,15 +70,12 @@ export function AccountMenu({
 }: AccountMenuProps) {
   const theme = useThemeStore((state) => state.theme);
   const setTheme = useThemeStore((state) => state.setTheme);
-  const navigate = useNavigate();
   const blurred = usePrivacyStore((state) => state.blurred);
   const togglePrivacy = usePrivacyStore((state) => state.toggle);
   const medusaUser = useMedusaAdminAuthStore((state) => state.user);
   const medusaLastAuthenticatedEmail = useMedusaAdminAuthStore(
     (state) => state.lastAuthenticatedEmail,
   );
-  const medusaLogout = useMedusaAdminAuthStore((state) => state.logout);
-  const navItems = useMemo(() => flattenNavItems(NAV_ITEMS), []);
 
   const overviewQuery = useQuery({
     queryKey: ["dashboard", "overview"],
@@ -196,46 +164,6 @@ export function AccountMenu({
           )}
           {blurred ? "Show sensitive values" : "Hide sensitive values"}
         </DropdownMenuItem>
-
-        <DropdownMenuSeparator />
-
-        {medusaAdminEmail ? (
-          <>
-            <DropdownMenuItem
-              onSelect={() => {
-                medusaLogout();
-              }}
-            >
-              <KeyRound className="h-4 w-4" aria-hidden="true" />
-              Sign out Medusa admin
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        ) : null}
-
-        {navItems.map((item) => {
-          const Icon = NAV_ICONS[item.to] ?? Home;
-          return (
-            <DropdownMenuItem
-              key={item.to}
-              className="flex w-full items-center gap-2"
-              onSelect={() => {
-                navigate(item.to);
-              }}
-            >
-                <Icon className="h-4 w-4" aria-hidden="true" />
-                <span className={item.depth > 0 ? "pl-4" : undefined}>{item.label}</span>
-                {item.isComingSoon ? (
-                  <Badge
-                    variant="secondary"
-                    className="ml-auto border border-border/60 bg-muted px-1.5 py-0 text-[10px] text-muted-foreground"
-                  >
-                    Soon
-                  </Badge>
-                ) : null}
-            </DropdownMenuItem>
-          );
-        })}
 
         {showLogout ? (
           <>

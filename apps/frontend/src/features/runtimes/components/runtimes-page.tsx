@@ -85,6 +85,14 @@ type ActivityHeatmapRow = {
   levels: number[];
 };
 
+type HourlyDistributionEntry = {
+  hour: number;
+  label: string;
+  requestCount: number;
+  totalTokens: number;
+  hasTokenData: boolean;
+};
+
 type DailyUsageTooltipProps = {
   active?: boolean;
   payload?: Array<{ payload?: DailyTokenPoint }>;
@@ -366,27 +374,217 @@ function resolveLogTokenBreakdown(log: RequestLog) {
 
 function buildHourlyDistribution(runtime: RuntimeRow, requestLogs: RequestLog[] | null | undefined) {
   const safeRequestLogs = toSafeRequestLogs(requestLogs);
-  const buckets = new Array<number>(24).fill(0);
+  const buckets = Array.from({ length: 24 }, () => ({
+    requestCount: 0,
+    totalTokens: 0,
+    hasTokenData: false,
+  }));
   const logTimestamps =
     safeRequestLogs.length > 0
       ? safeRequestLogs.map((log) => log.requestedAt)
       : runtime.activityTimestamps;
 
-  for (const timestamp of logTimestamps) {
-    const parsed = Date.parse(timestamp);
-    if (!Number.isFinite(parsed)) {
-      continue;
+  if (safeRequestLogs.length > 0) {
+    for (const log of safeRequestLogs) {
+      const parsed = Date.parse(log.requestedAt);
+      if (!Number.isFinite(parsed)) {
+        continue;
+      }
+      const hour = new Date(parsed).getHours();
+      const breakdown = resolveLogTokenBreakdown(log);
+      const totalTokens = breakdown.input + breakdown.output + breakdown.cacheRead;
+      buckets[hour].requestCount += 1;
+      buckets[hour].totalTokens += totalTokens;
+      buckets[hour].hasTokenData = true;
     }
-    const hour = new Date(parsed).getHours();
-    buckets[hour] += 1;
+  } else {
+    for (const timestamp of logTimestamps) {
+      const parsed = Date.parse(timestamp);
+      if (!Number.isFinite(parsed)) {
+        continue;
+      }
+      const hour = new Date(parsed).getHours();
+      buckets[hour].requestCount += 1;
+    }
   }
+
   if (logTimestamps.length === 0 && runtime.sessionCount > 0) {
-    buckets[new Date().getHours()] = runtime.sessionCount;
+    buckets[new Date().getHours()].requestCount = runtime.sessionCount;
   }
-  return buckets.map((count, hour) => ({
+
+  return buckets.map((entry, hour) => ({
     hour,
-    count,
-  }));
+    label: `${String(hour).padStart(2, "0")}:00`,
+    requestCount: entry.requestCount,
+    totalTokens: entry.totalTokens,
+    hasTokenData: entry.hasTokenData,
+  })) satisfies HourlyDistributionEntry[];
+}
+
+function getHourlyMagnitude(entry: HourlyDistributionEntry): number {
+  return entry.totalTokens > 0 ? entry.totalTokens : entry.requestCount;
+}
+
+function HourlyUsageTooltip({ entry }: { entry: HourlyDistributionEntry }) {
+  return (
+    <div className="min-w-[170px] rounded-lg border border-emerald-300/20 bg-[#080d14]/95 px-3 py-2.5 text-xs text-slate-200 shadow-2xl shadow-black/60">
+      <p className="mb-2 text-sm font-semibold text-emerald-200">{entry.label}</p>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-5">
+          <span className="text-slate-400">Requests</span>
+          <span className="font-semibold text-slate-100">{entry.requestCount}</span>
+        </div>
+        <div className="flex items-center justify-between gap-5">
+          <span className="text-slate-400">Tokens spent</span>
+          <span className="font-semibold text-slate-100">{formatCompactNumber(entry.totalTokens)}</span>
+        </div>
+        {!entry.hasTokenData ? (
+          <p className="pt-1 text-[10px] text-slate-500">Estimated from runtime activity timestamps.</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function resolveBarHeightPx(magnitude: number, maxMagnitude: number): number {
+  if (magnitude <= 0 || maxMagnitude <= 0) {
+    return 0;
+  }
+  return Math.max(10, Math.round((magnitude / maxMagnitude) * 100));
+}
+
+function resolveBarOpacity(magnitude: number, maxMagnitude: number): number {
+  if (magnitude <= 0 || maxMagnitude <= 0) {
+    return 0.2;
+  }
+  const ratio = Math.min(1, magnitude / maxMagnitude);
+  return 0.42 + ratio * 0.58;
+}
+
+function resolvePeakHourlyEntry(entries: HourlyDistributionEntry[]) {
+  if (entries.length === 0) {
+    return null;
+  }
+  let peak = entries[0];
+  let peakMagnitude = getHourlyMagnitude(peak);
+  for (const entry of entries) {
+    const magnitude = getHourlyMagnitude(entry);
+    if (magnitude > peakMagnitude) {
+      peak = entry;
+      peakMagnitude = magnitude;
+    }
+  }
+  if (peakMagnitude <= 0) {
+    return null;
+  }
+  return peak;
+}
+
+function formatHourlyPeak(peak: HourlyDistributionEntry | null): string {
+  if (!peak) {
+    return "No peak yet";
+  }
+  return `${peak.label} · ${formatCompactNumber(peak.totalTokens)} tokens`;
+}
+
+function formatHourlyTotalTokens(entries: HourlyDistributionEntry[]): number {
+  return entries.reduce((sum, entry) => sum + entry.totalTokens, 0);
+}
+
+function formatHourlyTotalRequests(entries: HourlyDistributionEntry[]): number {
+  return entries.reduce((sum, entry) => sum + entry.requestCount, 0);
+}
+
+function buildHourlyTicks(entries: HourlyDistributionEntry[]): string[] {
+  const base = ["00:00", "03:00", "06:00", "09:00", "12:00", "15:00", "18:00", "21:00"];
+  if (entries.length !== 24) {
+    return base;
+  }
+  return base;
+}
+
+function getHourlyMaxMagnitude(entries: HourlyDistributionEntry[]): number {
+  if (entries.length === 0) {
+    return 1;
+  }
+  return Math.max(...entries.map((entry) => getHourlyMagnitude(entry)), 1);
+}
+
+function HourlyDistributionChart({ entries }: { entries: HourlyDistributionEntry[] }) {
+  const maxMagnitude = getHourlyMaxMagnitude(entries);
+  const peak = resolvePeakHourlyEntry(entries);
+  const totalTokens = formatHourlyTotalTokens(entries);
+  const totalRequests = formatHourlyTotalRequests(entries);
+  const tickLabels = buildHourlyTicks(entries);
+
+  return (
+    <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-300">Hourly distribution</p>
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+          <span className="rounded-full border border-emerald-300/25 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+            {formatCompactNumber(totalTokens)} tokens
+          </span>
+          <span className="rounded-full border border-white/[0.12] bg-white/[0.04] px-2 py-0.5 text-slate-300">
+            {totalRequests} requests
+          </span>
+          <span className="rounded-full border border-white/[0.12] bg-white/[0.03] px-2 py-0.5 text-slate-400">
+            Peak {formatHourlyPeak(peak)}
+          </span>
+        </div>
+      </div>
+
+      <div className="relative h-36 overflow-hidden rounded-md border border-white/[0.06] bg-[#050a11]/70 px-2">
+        <div className="absolute inset-0 grid grid-rows-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="border-b border-emerald-500/10" />
+          ))}
+        </div>
+        <div className="absolute inset-x-2 bottom-4 top-2 flex items-end gap-1">
+          {entries.map((entry) => {
+            const magnitude = getHourlyMagnitude(entry);
+            const heightPx = resolveBarHeightPx(magnitude, maxMagnitude);
+            const opacity = resolveBarOpacity(magnitude, maxMagnitude);
+
+            return (
+              <div key={entry.hour} className="flex min-w-0 flex-1 items-end justify-center">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      role="img"
+                      aria-label={`${entry.label}: ${entry.requestCount} requests, ${entry.totalTokens} tokens`}
+                      className="group flex h-full w-full cursor-default items-end justify-center"
+                    >
+                      <div
+                        className={cn(
+                          "w-full rounded-t-md border border-transparent transition-all duration-150",
+                          heightPx > 0
+                            ? "bg-gradient-to-t from-emerald-600 via-emerald-500 to-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.28)] group-hover:border-emerald-200/40 group-hover:shadow-[0_0_18px_rgba(16,185,129,0.5)]"
+                            : "bg-white/[0.05]",
+                        )}
+                        style={{
+                          height: heightPx,
+                          opacity,
+                        }}
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={10} className="border border-emerald-300/20 bg-[#080d14] p-0 text-slate-100">
+                    <HourlyUsageTooltip entry={entry} />
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            );
+          })}
+        </div>
+        <div className="absolute inset-x-2 bottom-0 flex items-center justify-between text-[10px] text-slate-500">
+          {tickLabels.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function buildDailyTokenSeries(
@@ -759,6 +957,11 @@ function RuntimeListItem({
   selected: boolean;
   onClick: () => void;
 }) {
+  const olderSessionPreviewCount = Math.max(
+    0,
+    runtime.currentTasks.length - runtime.sessionCount,
+  );
+
   return (
     <button
       type="button"
@@ -799,8 +1002,8 @@ function RuntimeListItem({
             >
               <p className="mb-1 text-[11px] uppercase tracking-[0.1em] text-slate-400">
                 {runtime.currentTasks.length > 1
-                  ? "Current tasks"
-                  : "Current task"}
+                  ? "Session tasks"
+                  : "Session task"}
               </p>
               {runtime.currentTasks.length > 0 ? (
                 <ul className="space-y-1 text-xs text-slate-200">
@@ -823,6 +1026,12 @@ function RuntimeListItem({
                   No active task preview.
                 </p>
               )}
+              {olderSessionPreviewCount > 0 ? (
+                <p className="mt-2 text-[10px] text-slate-400">
+                  Includes {olderSessionPreviewCount} older session
+                  {olderSessionPreviewCount === 1 ? " preview." : " previews."}
+                </p>
+              ) : null}
             </TooltipContent>
           </Tooltip>
           <span
@@ -837,6 +1046,14 @@ function RuntimeListItem({
         <Badge variant="secondary" className="h-5 border-white/10 bg-white/[0.04] px-1.5 py-0 text-[10px] text-slate-300">
           {runtime.sessionCount} live
         </Badge>
+        {olderSessionPreviewCount > 0 ? (
+          <Badge
+            variant="secondary"
+            className="h-5 border-emerald-400/25 bg-emerald-500/10 px-1.5 py-0 text-[10px] text-emerald-200"
+          >
+            +{olderSessionPreviewCount} older
+          </Badge>
+        ) : null}
         <span>{runtime.snapshotName}</span>
       </div>
     </button>
@@ -890,6 +1107,9 @@ export function RuntimesPage() {
       ? selectedRuntimeId
       : scopedRows[0]?.runtimeId ?? "";
   const selectedRuntime = scopedRows.find((runtime) => runtime.runtimeId === effectiveSelectedRuntimeId) ?? null;
+  const selectedRuntimeOlderTaskCount = selectedRuntime
+    ? Math.max(0, selectedRuntime.currentTasks.length - selectedRuntime.sessionCount)
+    : 0;
 
   const usageWindowDays = resolveWindowDays(usageWindow);
   const selectedAccountRequestLogsQuery = useQuery({
@@ -1147,9 +1367,17 @@ export function RuntimesPage() {
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 md:col-span-2">
                   <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">
                     {selectedRuntime.currentTasks.length > 1
-                      ? "Current tasks"
-                      : "Current task"}
+                      ? "Session tasks"
+                      : "Session task"}
                   </p>
+                  {selectedRuntimeOlderTaskCount > 0 ? (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Includes {selectedRuntimeOlderTaskCount} older session
+                      {selectedRuntimeOlderTaskCount === 1
+                        ? " preview."
+                        : " previews."}
+                    </p>
+                  ) : null}
                   {selectedRuntime.currentTasks.length > 0 ? (
                     <ul className="mt-1 space-y-1">
                       {selectedRuntime.currentTasks.map((taskPreview, index) => (
@@ -1262,45 +1490,7 @@ export function RuntimesPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
-                    <p className="mb-2 text-xs font-semibold text-slate-300">Hourly distribution</p>
-                    <div className="relative h-36">
-                      <div className="absolute inset-0 grid grid-rows-4">
-                        {Array.from({ length: 4 }).map((_, index) => (
-                          <div key={index} className="border-b border-emerald-500/10" />
-                        ))}
-                      </div>
-                      <div className="absolute inset-x-0 bottom-4 top-0 flex items-end gap-1">
-                      {hourlyDistribution.map((entry) => {
-                        const max = Math.max(...hourlyDistribution.map((item) => item.count), 1);
-                        const height = entry.count > 0 ? Math.max(8, Math.round((entry.count / max) * 100)) : 0;
-                        return (
-                            <div key={entry.hour} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
-                            <div
-                              className={cn(
-                                  "w-full rounded-sm transition-colors",
-                                  entry.count > 0
-                                    ? "bg-gradient-to-t from-emerald-500 via-emerald-400 to-green-300 shadow-[0_0_14px_rgba(16,185,129,0.32)]"
-                                    : "bg-white/[0.06]",
-                              )}
-                              style={{ height }}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between text-[10px] text-slate-500">
-                        <span>00:00</span>
-                        <span>03:00</span>
-                        <span>06:00</span>
-                        <span>09:00</span>
-                        <span>12:00</span>
-                        <span>15:00</span>
-                        <span>18:00</span>
-                        <span>21:00</span>
-                      </div>
-                    </div>
-                  </div>
+                  <HourlyDistributionChart entries={hourlyDistribution} />
                 </div>
 
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
@@ -1313,16 +1503,8 @@ export function RuntimesPage() {
                         <AreaChart data={dailySeries} margin={{ top: 8, right: 8, bottom: 2, left: 2 }}>
                           <defs>
                             <linearGradient id="daily-usage-fill" x1="0" y1="0" x2="0" y2="1">
-                              <stop
-                                offset="0%"
-                                stopColor={dailyMaxTick >= 1_000_000 ? "#0b0f15" : "#10b981"}
-                                stopOpacity={dailyMaxTick >= 1_000_000 ? 0.96 : 0.32}
-                              />
-                              <stop
-                                offset="100%"
-                                stopColor={dailyMaxTick >= 1_000_000 ? "#06090f" : "#10b981"}
-                                stopOpacity={dailyMaxTick >= 1_000_000 ? 0.08 : 0.04}
-                              />
+                              <stop offset="0%" stopColor="#10b981" stopOpacity={0.32} />
+                              <stop offset="100%" stopColor="#10b981" stopOpacity={0.04} />
                             </linearGradient>
                           </defs>
                           <CartesianGrid vertical={false} stroke="rgba(148,163,184,0.13)" />
@@ -1349,8 +1531,8 @@ export function RuntimesPage() {
                           <Area
                             type="monotone"
                             dataKey="total"
-                            stroke={dailyMaxTick >= 1_000_000 ? "#111827" : "#34d399"}
-                            strokeWidth={dailyMaxTick >= 1_000_000 ? 1.3 : 1.8}
+                            stroke="#34d399"
+                            strokeWidth={1.8}
                             fill="url(#daily-usage-fill)"
                             dot={false}
                             activeDot={{ r: 4, fill: "#02060d", stroke: "#000000", strokeWidth: 1.2 }}

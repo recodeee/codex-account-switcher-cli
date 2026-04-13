@@ -681,6 +681,11 @@ describe("AccountCard", () => {
 
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
     expect(screen.getByText("Expired refresh token")).toBeInTheDocument();
+    expect(screen.getByText("Locked account")).toBeInTheDocument();
+    expect(
+      screen.getByText("Token needs to be refreshed to use this again."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unlock" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Re-auth" })).toBeInTheDocument();
   });
 

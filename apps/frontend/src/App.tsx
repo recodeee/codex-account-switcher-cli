@@ -34,6 +34,7 @@ function AppLayout() {
   const isAgentsRoute = location.pathname === "/agents";
   const isRuntimesRoute = location.pathname === "/runtimes";
   const isSkillsRoute = location.pathname === "/skills";
+  const isBillingRoute = location.pathname === "/billing";
 
   return (
     <div className="flex min-h-screen bg-background pb-10">
@@ -54,10 +55,10 @@ function AppLayout() {
               || isSkillsRoute
               || isAgentsRoute
               ? "max-w-none overflow-hidden p-0"
-              : isProjectsRoute || isAccountsRoute || isPlansRoute
+              : isProjectsRoute || isAccountsRoute || isPlansRoute || isBillingRoute
                 ? "px-2 py-5 sm:px-3 lg:px-4"
                 : "px-4 py-8 sm:px-6 lg:px-8",
-            isPlansRoute || isRuntimesRoute || isSkillsRoute || isAgentsRoute
+            isPlansRoute || isRuntimesRoute || isSkillsRoute || isAgentsRoute || isBillingRoute
               ? "max-w-none"
               : isDashboardRoute
                 ? "mx-auto max-w-[1800px]"

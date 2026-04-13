@@ -23,6 +23,35 @@ describe("normalizeRuntimeTaskPreview", () => {
 });
 
 describe("resolveRuntimeTaskPreviews", () => {
+  it("keeps older session previews even when live session count is lower", () => {
+    const account = createAccountSummary({
+      codexCurrentTaskPreview: null,
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "session-a",
+          taskPreview: "Newest live task",
+          taskUpdatedAt: "2026-04-13T17:40:00.000Z",
+        },
+        {
+          sessionKey: "session-b",
+          taskPreview: "Older tracked task",
+          taskUpdatedAt: "2026-04-13T17:30:00.000Z",
+        },
+        {
+          sessionKey: "session-c",
+          taskPreview: "Oldest tracked task",
+          taskUpdatedAt: "2026-04-13T17:20:00.000Z",
+        },
+      ],
+    });
+
+    expect(resolveRuntimeTaskPreviews(account, 1)).toEqual([
+      "Newest live task",
+      "Older tracked task",
+      "Oldest tracked task",
+    ]);
+  });
+
   it("returns one preview per live session when multiple session previews exist", () => {
     const account = createAccountSummary({
       codexCurrentTaskPreview: "Merge dev branch cleanup",
