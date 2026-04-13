@@ -47,22 +47,16 @@ describe("projects flow integration", () => {
 
     await user.click(screen.getByRole("button", { name: "New project" }));
     const createDialog = await screen.findByRole("dialog", { name: "New project" });
-    await user.type(within(createDialog).getByPlaceholderText("Project name (e.g. recodee-core)"), "recodee-core");
+    await user.type(within(createDialog).getByPlaceholderText("Project title"), "recodee-core");
     await user.type(
-      within(createDialog).getByPlaceholderText("Absolute project path (optional)"),
-      "/home/deadpool/projects/recodee-core",
-    );
-    await user.type(within(createDialog).getByPlaceholderText("Git branch (optional)"), "feature/recodee-core");
-    await user.type(
-      within(createDialog).getByPlaceholderText("Optional description (max 512 characters)"),
+      within(createDialog).getByPlaceholderText("Add description..."),
       "Main dashboard project",
     );
-    await user.click(within(createDialog).getByRole("button", { name: "Add project" }));
+    await user.click(within(createDialog).getByRole("button", { name: "Create Project" }));
 
     expect(await screen.findByText("recodee-core")).toBeInTheDocument();
     expect(screen.getByText("Main dashboard project")).toBeInTheDocument();
-    expect(screen.getByText("/home/deadpool/projects/recodee-core")).toBeInTheDocument();
-    expect(screen.getByText("feature/recodee-core")).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
     expect(screen.getAllByText("workspace-write").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));

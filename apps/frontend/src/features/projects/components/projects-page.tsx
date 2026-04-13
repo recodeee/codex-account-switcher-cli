@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FolderKanban, Plus } from "lucide-react";
+import { ChevronRight, Folder, FolderKanban, Maximize2, Minimize2, Minus, Plus, X } from "lucide-react";
 
 import { AlertMessage } from "@/components/alert-message";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -102,6 +102,134 @@ type ProjectDialogProps = {
   onSubmit: () => void;
   disabled: boolean;
 };
+
+type CreateProjectDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  draft: ProjectDraft;
+  onDraftChange: (updater: (current: ProjectDraft) => ProjectDraft) => void;
+  onSubmit: () => void;
+  disabled: boolean;
+  submitting: boolean;
+};
+
+function CreateProjectDialog({
+  open,
+  onOpenChange,
+  draft,
+  onDraftChange,
+  onSubmit,
+  disabled,
+  submitting,
+}: CreateProjectDialogProps) {
+  const [expanded, setExpanded] = useState(false);
+  const submitDisabled = disabled || draft.name.trim().length === 0;
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setExpanded(false);
+        }
+        onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className={cn(
+          "flex flex-col gap-0 overflow-hidden border border-white/10 bg-[#0a0d15]/95 p-0 text-foreground shadow-2xl backdrop-blur-xl",
+          "transition-all duration-300 ease-out",
+          expanded
+            ? "h-[86vh] max-w-4xl"
+            : "h-[58vh] min-h-[470px] max-w-[860px]",
+        )}
+      >
+        <DialogTitle className="sr-only">New project</DialogTitle>
+        <DialogDescription className="sr-only">Create a reusable project context for Codex tasks.</DialogDescription>
+
+        <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground/85">MY</span>
+            <ChevronRight className="size-3 text-muted-foreground/50" />
+            <span className="text-[1.55rem] font-semibold tracking-tight text-white">New project</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setExpanded((current) => !current)}
+              aria-label={expanded ? "Collapse project modal" : "Expand project modal"}
+              className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
+              title={expanded ? "Collapse" : "Expand"}
+            >
+              {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              aria-label="Close"
+              className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
+              title="Close"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col px-6 py-5">
+          <div className="space-y-4">
+            <Folder className="h-6 w-6 text-amber-300" />
+            <input
+              value={draft.name}
+              onChange={(event) => {
+                onDraftChange((current) => ({ ...current, name: event.target.value }));
+              }}
+              placeholder="Project title"
+              className="w-full border-0 bg-transparent p-0 text-[2.2rem] font-semibold leading-tight tracking-tight text-white placeholder:text-white/45 focus-visible:outline-none"
+              disabled={disabled}
+            />
+            <Textarea
+              value={draft.description}
+              onChange={(event) => {
+                onDraftChange((current) => ({ ...current, description: event.target.value }));
+              }}
+              placeholder="Add description..."
+              className="min-h-28 resize-none border-0 bg-transparent px-0 text-2xl text-muted-foreground shadow-none outline-none placeholder:text-muted-foreground/80 focus-visible:ring-0"
+              disabled={disabled}
+              maxLength={512}
+            />
+          </div>
+
+          <div className="mt-auto flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3 py-1 text-[0.95rem] text-white/85">
+                <span className="size-2 rounded-full bg-zinc-300" />
+                Planned
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3 py-1 text-[0.95rem] text-white/85">
+                <Minus className="size-3.5" />
+                No priority
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3 py-1 text-[0.95rem] text-white/85">
+                Lead
+              </span>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              onClick={onSubmit}
+              disabled={submitDisabled}
+              className="h-10 rounded-xl bg-white/20 px-5 text-[1.05rem] font-semibold text-white hover:bg-white/30"
+            >
+              {submitting ? "Creating…" : "Create Project"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function ProjectDialog({
   open,
@@ -437,7 +565,7 @@ export function ProjectsPage() {
         </section>
       </div>
 
-      <ProjectDialog
+      <CreateProjectDialog
         open={createOpen}
         onOpenChange={(open) => {
           setCreateOpen(open);
@@ -445,9 +573,6 @@ export function ProjectsPage() {
             setCreateDraft(getEmptyProjectDraft());
           }
         }}
-        title="New project"
-        description="Create a reusable project context for Codex tasks."
-        submitLabel={createMutation.isPending ? "Creating…" : "Add project"}
         draft={createDraft}
         onDraftChange={(updater) => {
           setCreateDraft((current) => updater(current));
@@ -456,6 +581,7 @@ export function ProjectsPage() {
           void handleAdd();
         }}
         disabled={busy}
+        submitting={createMutation.isPending}
       />
 
       <ProjectDialog
