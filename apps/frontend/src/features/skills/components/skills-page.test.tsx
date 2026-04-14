@@ -23,6 +23,7 @@ describe("SkillsPage", () => {
     expect(screen.getByRole("heading", { name: "Skills" })).toBeInTheDocument();
     expect(screen.getByText("No skills yet")).toBeInTheDocument();
     expect(screen.getByText("Select a skill to view details")).toBeInTheDocument();
+    expect(screen.queryByText("Files")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Create Skill" })).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Delete skill" })).not.toBeInTheDocument();
   });
@@ -45,6 +46,7 @@ describe("SkillsPage", () => {
 
     expect(screen.getByDisplayValue("Deploy to staging")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Pipeline and verification")).toBeInTheDocument();
+    expect(screen.getByText("Files")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Create file" }));
     await user.click(screen.getByRole("button", { name: "new-file.md" }));
@@ -124,5 +126,6 @@ describe("SkillsPage", () => {
     expect(screen.queryByDisplayValue("Delete me")).not.toBeInTheDocument();
     expect(screen.getByText("No skills yet")).toBeInTheDocument();
     expect(screen.getByText("Select a skill to view details")).toBeInTheDocument();
+    expect(screen.queryByText("Files")).not.toBeInTheDocument();
   });
 });

@@ -891,6 +891,7 @@ export function SkillsPage() {
 
   const panelSurfaceClass =
     "overflow-hidden border-white/[0.08] bg-[linear-gradient(180deg,rgba(7,10,18,0.97)_0%,rgba(3,5,12,1)_100%)] py-0 text-slate-100";
+  const hasSkills = skills.length > 0;
 
   useEffect(() => {
     writeStoredSkills(skills);
@@ -1049,7 +1050,14 @@ export function SkillsPage() {
     <>
       <div className="animate-fade-in-up h-full w-full overflow-hidden bg-[linear-gradient(180deg,rgba(7,10,18,0.97)_0%,rgba(3,5,12,1)_100%)]">
         <h1 className="sr-only">Skills</h1>
-        <div className="grid h-[calc(100vh-98px)] gap-px bg-white/[0.06] xl:grid-cols-[260px_200px_minmax(0,1fr)]">
+        <div
+          className={cn(
+            "grid h-[calc(100vh-98px)] gap-px bg-white/[0.06]",
+            hasSkills
+              ? "xl:grid-cols-[260px_200px_minmax(0,1fr)]"
+              : "xl:grid-cols-[260px_minmax(0,1fr)]",
+          )}
+        >
           <Card
             className={cn(
               panelSurfaceClass,
@@ -1129,68 +1137,70 @@ export function SkillsPage() {
             </CardContent>
           </Card>
 
-          <Card
-            className={cn(
-              panelSurfaceClass,
-              "h-full rounded-none border-0 xl:border-r xl:border-white/[0.08]",
-            )}
-          >
-            <CardContent className="flex h-full flex-col p-0">
-              <div className="flex h-12 items-center justify-between border-b border-white/[0.08] px-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Files
-                </p>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-slate-400 hover:bg-white/[0.06] hover:text-slate-100"
-                  onClick={createFile}
-                  aria-label="Create file"
-                  disabled={!selectedSkill}
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                </Button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto px-1 py-1">
-                {selectedSkill ? (
-                  selectedSkill.files.map((file) => {
-                    const selected = file.path === selectedFilePath;
-                    return (
-                      <button
-                        key={file.path}
-                        type="button"
-                        onClick={() => {
-                          if (!selectedSkill) {
-                            return;
-                          }
-                          setIsMarkdownPreview(false);
-                          setSelectedFileBySkillId((current) => ({
-                            ...current,
-                            [selectedSkill.id]: file.path,
-                          }));
-                        }}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                          selected
-                            ? "bg-white/[0.08] text-slate-100"
-                            : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
-                        )}
-                      >
-                        <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                        <span className="truncate">{file.path}</span>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <p className="px-2 py-3 text-xs text-slate-500">
-                    Select or create a skill to manage files.
+          {hasSkills ? (
+            <Card
+              className={cn(
+                panelSurfaceClass,
+                "h-full rounded-none border-0 xl:border-r xl:border-white/[0.08]",
+              )}
+            >
+              <CardContent className="flex h-full flex-col p-0">
+                <div className="flex h-12 items-center justify-between border-b border-white/[0.08] px-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Files
                   </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-slate-400 hover:bg-white/[0.06] hover:text-slate-100"
+                    onClick={createFile}
+                    aria-label="Create file"
+                    disabled={!selectedSkill}
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-1 py-1">
+                  {selectedSkill ? (
+                    selectedSkill.files.map((file) => {
+                      const selected = file.path === selectedFilePath;
+                      return (
+                        <button
+                          key={file.path}
+                          type="button"
+                          onClick={() => {
+                            if (!selectedSkill) {
+                              return;
+                            }
+                            setIsMarkdownPreview(false);
+                            setSelectedFileBySkillId((current) => ({
+                              ...current,
+                              [selectedSkill.id]: file.path,
+                            }));
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                            selected
+                              ? "bg-white/[0.08] text-slate-100"
+                              : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
+                          )}
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span className="truncate">{file.path}</span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <p className="px-2 py-3 text-xs text-slate-500">
+                      Select or create a skill to manage files.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card className={cn(panelSurfaceClass, "h-full rounded-none border-0")}> 
             {selectedSkill ? (
