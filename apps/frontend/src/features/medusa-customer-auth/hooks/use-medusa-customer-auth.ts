@@ -11,7 +11,27 @@ import { getMedusaRuntimeConfig } from "@/lib/medusa/config";
 
 const MEDUSA_CUSTOMER_TOKEN_STORAGE_KEY = "codex-lb-medusa-customer-token";
 
+function isMissingPublishableKeyError(error: unknown): boolean {
+  if (!(error instanceof MedusaClientError)) {
+    return false;
+  }
+
+  const body = error.body.trim().toLowerCase();
+  if (!body) {
+    return false;
+  }
+
+  return (
+    body.includes("x-publishable-api-key")
+    || body.includes("publishable api key required")
+  );
+}
+
 function getErrorMessage(error: unknown): string {
+  if (isMissingPublishableKeyError(error)) {
+    return "Missing Medusa publishable key. Set NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY (or MEDUSA_PUBLISHABLE_KEY in dev env), restart frontend, then try again.";
+  }
+
   if (error instanceof MedusaClientError && error.body) {
     try {
       const parsed = JSON.parse(error.body) as { message?: string };

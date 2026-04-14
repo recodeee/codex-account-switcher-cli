@@ -51,6 +51,7 @@ wait_for_medusa="${WAIT_FOR_MEDUSA_BACKEND:-false}"
 medusa_port="${MEDUSA_BACKEND_PORT:-9000}"
 medusa_dir="${repo_root}/apps/backend"
 medusa_pid=""
+medusa_publishable_key="${NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY:-${MEDUSA_PUBLISHABLE_KEY:-}}"
 
 if [ -z "${API_PROXY_TARGET:-}" ]; then
   export API_PROXY_TARGET="http://localhost:${backend_port}"
@@ -122,6 +123,12 @@ if normalize_bool "$start_medusa_backend"; then
       fi
     fi
   fi
+fi
+
+if [ -z "${medusa_publishable_key}" ]; then
+  echo "[codex-lb] Warning: Medusa publishable key is missing. Set NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY (or MEDUSA_PUBLISHABLE_KEY) to avoid x-publishable-api-key auth errors." >&2
+else
+  export NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY="${medusa_publishable_key}"
 fi
 
 cd "$frontend_dir"

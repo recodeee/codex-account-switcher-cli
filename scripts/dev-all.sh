@@ -394,11 +394,18 @@ wait_for_url_from_log() {
 
 start_frontend_dev_server() {
   local medusa_port="$1"
+  local medusa_publishable_key="${NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY:-${MEDUSA_PUBLISHABLE_KEY:-}}"
 
   mark_log_session "frontend" "$FRONTEND_LOG_FILE"
   echo "[dev] Starting frontend on http://localhost:${DEFAULT_FRONTEND_PORT}"
+  if [[ -z "$medusa_publishable_key" ]]; then
+    echo "[dev] Warning: Medusa publishable key is missing. Set NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY (or MEDUSA_PUBLISHABLE_KEY) to avoid x-publishable-api-key auth errors." >&2
+  fi
   (
     cd "$FRONTEND_DIR"
+    if [[ -n "$medusa_publishable_key" ]]; then
+      export NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY="$medusa_publishable_key"
+    fi
     START_APP_BACKEND=false \
     START_MEDUSA_BACKEND=false \
     API_PROXY_TARGET="http://localhost:${APP_PORT}" \

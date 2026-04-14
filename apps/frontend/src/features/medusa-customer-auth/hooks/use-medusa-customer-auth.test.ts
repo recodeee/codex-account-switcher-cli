@@ -97,6 +97,30 @@ describe("useMedusaCustomerAuthStore", () => {
     expect(next.loading).toBe(false);
   });
 
+  it("shows explicit publishable key guidance when store requests fail due missing key header", async () => {
+    vi.mocked(loginMedusaCustomer).mockResolvedValue("jwt-token");
+    vi.mocked(getLoggedInMedusaCustomer).mockRejectedValue(
+      new MedusaClientError(
+        "Medusa request failed with status 400",
+        400,
+        JSON.stringify({
+          message:
+            "Publishable API key required in the request header: x-publishable-api-key.",
+        }),
+      ),
+    );
+
+    await expect(
+      useMedusaCustomerAuthStore
+        .getState()
+        .login("customer@example.com", "supersecret"),
+    ).rejects.toBeInstanceOf(MedusaClientError);
+
+    const next = useMedusaCustomerAuthStore.getState();
+    expect(next.error).toMatch(/Missing Medusa publishable key/i);
+    expect(next.error).toMatch(/NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY/i);
+  });
+
   it("clears auth state on logout", () => {
     useMedusaCustomerAuthStore.setState({
       token: "jwt-token",
