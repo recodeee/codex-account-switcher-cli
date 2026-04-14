@@ -443,6 +443,7 @@ describe("plans flow integration", () => {
     window.history.pushState({}, "", "/projects/plans");
     renderWithProviders(<App />);
 
+    expect(await screen.findByRole("button", { name: /copy team execution prompt/i })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /copy starter prompt/i })).toBeInTheDocument();
   });
 });

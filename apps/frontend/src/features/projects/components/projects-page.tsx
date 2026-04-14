@@ -213,7 +213,11 @@ function CreateProjectDialog({
                 onDraftChange((current) => ({ ...current, githubRepoUrl: event.target.value }));
               }}
               placeholder="https://github.com/owner/repo"
+<<<<<<< Updated upstream
               className="w-full border-0 bg-transparent p-0 text-sm text-indigo-200/90 placeholder:text-indigo-200/45 focus-visible:outline-none"
+=======
+              className="w-full border-0 bg-transparent p-0 text-sm text-emerald-200/90 placeholder:text-emerald-200/45 focus-visible:outline-none"
+>>>>>>> Stashed changes
               disabled={disabled}
             />
             <input
@@ -595,8 +599,13 @@ export function ProjectsPage() {
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-auto">
+<<<<<<< Updated upstream
               <div className="min-w-[1620px]">
                 <div className="sticky top-0 z-[1] grid h-9 grid-cols-[minmax(220px,1.4fr)_minmax(210px,1.2fr)_minmax(230px,1.2fr)_minmax(220px,1.5fr)_150px_170px_180px_110px_220px] items-center gap-3 border-b border-border/65 bg-background/95 px-5 text-[11px] uppercase tracking-[0.08em] text-muted-foreground backdrop-blur-sm">
+=======
+              <div className="min-w-[1580px]">
+                <div className="sticky top-0 z-[1] grid h-9 grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.15fr)_minmax(220px,1.15fr)_minmax(220px,1.6fr)_150px_170px_180px_110px_220px] items-center gap-3 border-b border-border/65 bg-background/95 px-5 text-[11px] uppercase tracking-[0.08em] text-muted-foreground backdrop-blur-sm">
+>>>>>>> Stashed changes
                   <span>Name</span>
                   <span>URL</span>
                   <span>GitHub</span>
@@ -611,7 +620,11 @@ export function ProjectsPage() {
                 {entries.map((entry) => (
                   <div
                     key={entry.id}
+<<<<<<< Updated upstream
                     className="group/row grid min-h-12 grid-cols-[minmax(220px,1.4fr)_minmax(210px,1.2fr)_minmax(230px,1.2fr)_minmax(220px,1.5fr)_150px_170px_180px_110px_220px] items-center gap-3 border-b border-border/45 px-5 py-2 text-sm transition-colors hover:bg-accent/35"
+=======
+                    className="group/row grid min-h-12 grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.15fr)_minmax(220px,1.15fr)_minmax(220px,1.6fr)_150px_170px_180px_110px_220px] items-center gap-3 border-b border-border/45 px-5 py-2 text-sm transition-colors hover:bg-accent/35"
+>>>>>>> Stashed changes
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium">{entry.name}</p>
@@ -639,7 +652,11 @@ export function ProjectsPage() {
                           href={entry.githubRepoUrl}
                           target="_blank"
                           rel="noreferrer"
+<<<<<<< Updated upstream
                           className="text-indigo-300 underline-offset-2 hover:text-indigo-200 hover:underline"
+=======
+                          className="text-emerald-300 underline-offset-2 hover:text-emerald-200 hover:underline"
+>>>>>>> Stashed changes
                         >
                           {entry.githubRepoUrl}
                         </a>

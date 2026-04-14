@@ -31,6 +31,10 @@
     "node_modules",
     ".medusa/server",
     ".medusa/admin",
-    ".cache"
+    ".cache",
+    ".omx",
+    "**/.omx/**",
+    "../.omx/**",
+    "../../.omx/**"
   ]
 }

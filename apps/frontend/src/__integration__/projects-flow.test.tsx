@@ -55,7 +55,11 @@ describe("projects flow integration", () => {
     );
     await user.type(
       within(createDialog).getByPlaceholderText("https://github.com/owner/repo"),
+<<<<<<< Updated upstream
       "github.com/webu-pro/recodee-core",
+=======
+      "github.com/webu-pro/recodee",
+>>>>>>> Stashed changes
     );
     await user.type(
       within(createDialog).getByPlaceholderText("/absolute/path/to/project"),
@@ -70,7 +74,11 @@ describe("projects flow integration", () => {
     expect(await screen.findByText("recodee-core")).toBeInTheDocument();
     expect(screen.getByText("Main dashboard project")).toBeInTheDocument();
     expect(screen.getByText("https://recodee.com/")).toBeInTheDocument();
+<<<<<<< Updated upstream
     expect(screen.getByText("https://github.com/webu-pro/recodee-core")).toBeInTheDocument();
+=======
+    expect(screen.getByText("https://github.com/webu-pro/recodee")).toBeInTheDocument();
+>>>>>>> Stashed changes
     expect(screen.getByText("/home/deadpool/projects/recodee-core")).toBeInTheDocument();
     expect(screen.getByTestId("project-plan-count-project_1")).toHaveTextContent("0 plans");
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
@@ -88,7 +96,11 @@ describe("projects flow integration", () => {
     await user.clear(within(editDialog).getByPlaceholderText("https://github.com/owner/repo (optional)"));
     await user.type(
       within(editDialog).getByPlaceholderText("https://github.com/owner/repo (optional)"),
+<<<<<<< Updated upstream
       "https://github.com/webu-pro/recodee-core-v2",
+=======
+      "github.com/webu-pro/recodee-v2",
+>>>>>>> Stashed changes
     );
     await user.clear(within(editDialog).getByPlaceholderText("Optional description (max 512 characters)"));
     await user.type(
@@ -110,7 +122,11 @@ describe("projects flow integration", () => {
     expect(await screen.findByText("recodee-core-v2")).toBeInTheDocument();
     expect(screen.getByText("Updated project details")).toBeInTheDocument();
     expect(screen.getByText("https://recodee.dev/")).toBeInTheDocument();
+<<<<<<< Updated upstream
     expect(screen.getByText("https://github.com/webu-pro/recodee-core-v2")).toBeInTheDocument();
+=======
+    expect(screen.getByText("https://github.com/webu-pro/recodee-v2")).toBeInTheDocument();
+>>>>>>> Stashed changes
     expect(screen.getByText("/home/deadpool/projects/recodee-core-v2")).toBeInTheDocument();
     expect(screen.getByText("feature/recodee-core-v2")).toBeInTheDocument();
     expect(screen.queryByText("recodee-core")).not.toBeInTheDocument();
@@ -135,6 +151,7 @@ describe("projects flow integration", () => {
               name: "marvahome",
               description: "linked project",
               projectUrl: "https://marvahome.com",
+              githubRepoUrl: "https://github.com/webu-pro/marvahome",
               projectPath: "/home/deadpool/Documents/szaloniroda/marva",
               sandboxMode: "workspace-write",
               gitBranch: null,

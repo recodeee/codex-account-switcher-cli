@@ -129,16 +129,23 @@ def is_codex_session() -> bool:
 
 
 def ensure_protected_branch_edit_allowed(file_path: str) -> str | None:
-    """Block agent edits on protected branches unless explicit override is set."""
+    """Block Codex edits on non-agent branches and all edits on protected branches."""
     if os.environ.get(PROTECTED_BRANCH_EDIT_OVERRIDE_ENV) == "1":
         return None
     repo_root = find_repo_root(file_path)
     branch = current_branch(repo_root)
-    if branch not in PROTECTED_BRANCHES:
+    if branch.startswith("agent/"):
+        return None
+
+    if branch in PROTECTED_BRANCHES:
+        blocked_scope = f"protected branch '{branch}'"
+    elif is_codex_session():
+        blocked_scope = f"non-agent branch '{branch or 'HEAD'}'"
+    else:
         return None
 
     return (
-        f"BLOCKED: Agent edit attempted on protected branch '{branch}'.\n"
+        f"BLOCKED: Agent edit attempted on {blocked_scope}.\n"
         "Agent edits must run from isolated agent/* branches.\n"
         "Create a sandbox branch/worktree first:\n"
         '  bash scripts/agent-branch-start.sh "<task>" "<agent-name>"\n'

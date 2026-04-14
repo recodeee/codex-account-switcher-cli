@@ -687,6 +687,7 @@ export function buildPlanStarterPrompt(
   return lines.join("\n");
 }
 
+<<<<<<< Updated upstream
 type PlanLaunchSuggestion = {
   id: "ralph" | "team";
   title: string;
@@ -711,6 +712,69 @@ export function buildPlanLaunchSuggestions(planDetail: OpenSpecPlanDetail): Plan
       command: `$team execute ${plannerPlanPath}`,
     },
   ];
+=======
+export function buildPlanTeamExecutionPrompt(
+  planDetail: OpenSpecPlanDetail,
+  displayStatus: string,
+  summaryLines: string[],
+): string {
+  const planPath = `openspec/plan/${planDetail.slug}`;
+  const remainingRoles = planDetail.roles.filter((role) => role.doneCheckpoints < role.totalCheckpoints);
+  const currentCheckpoint = planDetail.currentCheckpoint;
+  const recommendedWorkerCount = Math.max(3, Math.min(6, remainingRoles.length || 1));
+  const starterCommand = `$team ${recommendedWorkerCount}:executor "Execute OpenSpec plan ${planDetail.slug} from ${planPath} with master-agent coordination and verification lane."`;
+
+  const lines = [
+    starterCommand,
+    "",
+    "Run this from your Master Agent session to start coordinated team execution for this plan.",
+    `Repository: /home/deadpool/Documents/recodee`,
+    `Plan workspace: ${planPath}`,
+    "",
+    "Team execution contract:",
+    "- Keep one implementation lane and one verification lane active in parallel.",
+    "- Use the plan checkpoint files as source of truth (do not restart planning).",
+    "- Track progress by updating role tasks/checkpoints as work completes.",
+    "",
+    `Plan: ${planDetail.title}`,
+    `Slug: ${planDetail.slug}`,
+    `Status: ${displayStatus}`,
+    `Overall progress: ${roleCompletionLabel(planDetail.overallProgress.doneCheckpoints, planDetail.overallProgress.totalCheckpoints)} checkpoints complete (${planDetail.overallProgress.percentComplete}%)`,
+  ];
+
+  if (currentCheckpoint) {
+    lines.push(
+      `Current checkpoint: ${formatRoleLabel(currentCheckpoint.role)} · ${currentCheckpoint.checkpointId} · ${formatCheckpointState(currentCheckpoint.state)}`,
+      `Current checkpoint note: ${currentCheckpoint.message || "No checkpoint message provided."}`,
+      `Current checkpoint time: ${currentCheckpoint.timestamp}`,
+    );
+  } else {
+    lines.push("Current checkpoint: none recorded.");
+  }
+
+  if (remainingRoles.length > 0) {
+    lines.push("Remaining role checkpoints:");
+    lines.push(
+      ...remainingRoles.map(
+        (role) =>
+          `- ${formatRoleLabel(role.role)} ${roleCompletionLabel(role.doneCheckpoints, role.totalCheckpoints)}`,
+      ),
+    );
+  }
+
+  if (summaryLines.length > 0) {
+    lines.push("Plan summary:");
+    lines.push(...summaryLines.map((line) => `- ${line}`));
+  }
+
+  lines.push(
+    "",
+    "Use bundled prompt cards from this plan when delegating waves to teammates.",
+    "After team lanes converge, run final verification before shutdown.",
+  );
+
+  return lines.join("\n");
+>>>>>>> Stashed changes
 }
 
 export function PlansPage() {
@@ -806,7 +870,14 @@ export function PlansPage() {
     planDetail && selectedEntryDisplayStatus
       ? buildPlanStarterPrompt(planDetail, selectedEntryDisplayStatus, summaryLines)
       : "";
+<<<<<<< Updated upstream
   const launchSuggestions = planDetail ? buildPlanLaunchSuggestions(planDetail) : [];
+=======
+  const teamExecutionPrompt =
+    planDetail && selectedEntryDisplayStatus
+      ? buildPlanTeamExecutionPrompt(planDetail, selectedEntryDisplayStatus, summaryLines)
+      : "";
+>>>>>>> Stashed changes
   const executorRole = planDetail?.roles.find((role) => role.role.trim().toLowerCase() === "executor") ?? null;
   const executorCheckpointStatusMap = parseCheckpointStatusMap(executorRole?.tasksMarkdown ?? "");
   if (
@@ -1056,7 +1127,10 @@ export function PlansPage() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="shrink-0">
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      {teamExecutionPrompt ? (
+                        <CopyButton value={teamExecutionPrompt} label="Copy team execution prompt" />
+                      ) : null}
                       {starterPrompt ? <CopyButton value={starterPrompt} label="Copy starter prompt" /> : null}
                     </div>
                   </div>

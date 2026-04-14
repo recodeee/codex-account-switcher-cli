@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+<<<<<<< Updated upstream
   buildPlanLaunchSuggestions,
   buildPlanStarterPrompt,
+=======
+  buildPlanStarterPrompt,
+  buildPlanTeamExecutionPrompt,
+>>>>>>> Stashed changes
 } from "@/features/plans/components/plans-page";
 import type { OpenSpecPlanDetail } from "@/features/plans/schemas";
 
@@ -92,6 +97,7 @@ describe("buildPlanStarterPrompt", () => {
   });
 });
 
+<<<<<<< Updated upstream
 describe("buildPlanLaunchSuggestions", () => {
   it("builds copy-ready ralph and team launch commands for planner plan execution", () => {
     const suggestions = buildPlanLaunchSuggestions(planDetail);
@@ -105,5 +111,20 @@ describe("buildPlanLaunchSuggestions", () => {
     expect(suggestions[1]?.command).toBe(
       "$team execute openspec/plan/plans-live-execution-observer/planner/plan.md",
     );
+=======
+describe("buildPlanTeamExecutionPrompt", () => {
+  it("includes a team command and master-agent guidance", () => {
+    const prompt = buildPlanTeamExecutionPrompt(planDetail, "Approved", [
+      "Plan Summary: plans-live-execution-observer",
+      "Mode: ralplan",
+      "Status: approved",
+    ]);
+
+    expect(prompt.startsWith("$team 3:executor \"Execute OpenSpec plan plans-live-execution-observer")).toBe(true);
+    expect(prompt).toContain("Run this from your Master Agent session");
+    expect(prompt).toContain("Repository: /home/deadpool/Documents/recodee");
+    expect(prompt).toContain("Remaining role checkpoints:");
+    expect(prompt).toContain("- Executor 0/1");
+>>>>>>> Stashed changes
   });
 });
