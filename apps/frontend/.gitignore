@@ -26,6 +26,7 @@ public/version.json
 *.njsproj
 *.sln
 *.sw?
+.env
 
 # Test results
 test-results

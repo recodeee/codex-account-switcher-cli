@@ -560,6 +560,118 @@ exit 1
         blocker.wait(timeout=5)
 
 
+def test_dev_all_restarts_stale_backend_launcher_when_port_is_not_listening(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    (project / "scripts").mkdir(parents=True)
+    (project / "apps" / "backend" / ".medusa").mkdir(parents=True)
+    (project / "apps" / "frontend" / "scripts").mkdir(parents=True)
+    (project / "logs").mkdir()
+
+    shutil.copy2(DEV_ALL_SCRIPT, project / "scripts" / "dev-all.sh")
+
+    _write_executable(
+        project / "scripts" / "run-server-dev.sh",
+        """#!/bin/sh
+set -eu
+port="${APP_BACKEND_PORT:-2455}"
+echo "[stub] App URL -> http://localhost:${port}"
+exec python3 -m http.server "${port}" --bind 127.0.0.1
+""",
+    )
+    _write_rust_runtime_dev_stub(project)
+
+    _write_executable(
+        project / "apps" / "backend" / "dev-stub.sh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+port="${MEDUSA_PORT:-9000}"
+echo "info:    Admin URL → http://localhost:${port}/app"
+python3 -m http.server "${port}" --bind 127.0.0.1 &
+server_pid=$!
+sleep 1
+kill "${server_pid}" >/dev/null 2>&1 || true
+wait "${server_pid}" || true
+""",
+    )
+
+    _write_executable(
+        project / "apps" / "frontend" / "scripts" / "run-frontend-dev.sh",
+        """#!/bin/sh
+set -eu
+port="${NEXT_DEV_PORT:-5174}"
+echo "[codex-lb] Frontend dev server: http://localhost:${port}"
+exec python3 -m http.server "${port}" --bind 127.0.0.1
+""",
+    )
+
+    stubs = project / "stubs"
+    stubs.mkdir()
+    _write_executable(
+        stubs / "bun",
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${{1:-}}" == "run" && "${{2:-}}" == "dev" && "$PWD" == "{project / 'apps' / 'backend'}" ]]; then
+  shift 2
+  exec bash ./dev-stub.sh "$@"
+fi
+echo "unsupported bun invocation: $*" >&2
+exit 1
+""",
+    )
+
+    stale_launcher = subprocess.Popen(
+        ["python3", "-c", "import time; time.sleep(60)"],
+        cwd=project,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+
+    lock_file = project / "apps" / "backend" / ".medusa" / "dev-singleton.lock"
+    lock_file.write_text(
+        '{\n  "pid": %d,\n  "startedAt": "2026-04-14T16:46:31.067Z"\n}\n' % stale_launcher.pid,
+        encoding="utf-8",
+    )
+    (project / ".dev-ports.json").write_text(
+        '{\n  "backend": 39013,\n  "updatedAt": "2026-04-14T16:46:31.071Z"\n}\n',
+        encoding="utf-8",
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{stubs}:{env['PATH']}"
+    env["APP_BACKEND_PORT"] = "32461"
+    env["MEDUSA_BACKEND_PORT"] = "39013"
+    env["FRONTEND_PORT"] = "35179"
+    env["RUST_RUNTIME_PORT"] = "38095"
+
+    proc = subprocess.Popen(
+        ["bash", "./scripts/dev-all.sh"],
+        cwd=project,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+    try:
+        output = _read_until(proc, "[dev] Ready")
+        output += _read_until(proc, "bun run logs -watch frontend")
+        stdout, _ = proc.communicate(timeout=5)
+        output += stdout
+
+        assert "Found stale commerce backend launcher pid" in output
+        assert "Reusing commerce backend on http://localhost:39013/app" not in output
+        assert "http://localhost:39013/app" in output
+        assert stale_launcher.poll() is not None
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            proc.wait(timeout=5)
+        if stale_launcher.poll() is None:
+            stale_launcher.terminate()
+            stale_launcher.wait(timeout=5)
+
+
 def test_dev_all_reuses_existing_app_api_when_health_probe_matches(tmp_path: Path) -> None:
     project = tmp_path / "project"
     (project / "scripts").mkdir(parents=True)

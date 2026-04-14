@@ -15,6 +15,7 @@ APP_PORT="${APP_BACKEND_PORT:-2455}"
 DEFAULT_MEDUSA_PORT="${MEDUSA_BACKEND_PORT:-9000}"
 DEFAULT_FRONTEND_PORT="${FRONTEND_PORT:-5174}"
 DEFAULT_RUST_RUNTIME_PORT="${RUST_RUNTIME_PORT:-8099}"
+BACKEND_READY_TIMEOUT_SECONDS="${BACKEND_READY_TIMEOUT_SECONDS:-90}"
 RUNTIME_LAYER_RAW="${RUNTIME_LAYER:-python}"
 START_RUST_RUNTIME_RAW="${START_RUST_RUNTIME:-}"
 
@@ -46,6 +47,60 @@ bool_from_env() {
     0|false|no|off) printf 'false\n' ;;
     *) return 1 ;;
   esac
+}
+
+read_env_value_from_file() {
+  local file="$1"
+  local key="$2"
+  [[ -f "$file" ]] || return 1
+
+  python3 - "$file" "$key" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+key = sys.argv[2]
+value = ""
+
+for raw in path.read_text(encoding="utf-8").splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    lhs, rhs = line.split("=", 1)
+    if lhs.strip() != key:
+        continue
+    value = rhs.strip()
+
+if not value:
+    raise SystemExit(1)
+
+if len(value) >= 2 and ((value[0] == value[-1] == '"') or (value[0] == value[-1] == "'")):
+    value = value[1:-1]
+
+print(value)
+PY
+}
+
+resolve_medusa_publishable_key() {
+  local key="${NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY:-${MEDUSA_PUBLISHABLE_KEY:-}}"
+  local file
+  local env_key
+  if [[ -n "$key" ]]; then
+    printf '%s\n' "$key"
+    return 0
+  fi
+
+  for file in "$FRONTEND_DIR/.env.local" "$FRONTEND_DIR/.env"; do
+    for env_key in NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY MEDUSA_PUBLISHABLE_KEY; do
+      key="$(read_env_value_from_file "$file" "$env_key" || true)"
+      if [[ -n "$key" ]]; then
+        printf '%s\n' "$key"
+        return 0
+      fi
+    done
+  done
+
+  return 1
 }
 
 require_cmd() {
@@ -82,7 +137,44 @@ is_pid_alive() {
   local pid="${1:-}"
   [[ -n "$pid" ]] || return 1
   [[ "$pid" -gt 1 ]] 2>/dev/null || return 1
-  kill -0 "$pid" 2>/dev/null
+  kill -0 "$pid" 2>/dev/null || return 1
+  if [[ -r "/proc/${pid}/status" ]] && grep -q '^State:[[:space:]]*Z' "/proc/${pid}/status" 2>/dev/null; then
+    return 1
+  fi
+  return 0
+}
+
+terminate_pid() {
+  local pid="${1:-}"
+  local label="${2:-process}"
+  local attempts=25
+  [[ -n "$pid" ]] || return 0
+
+  if ! is_pid_alive "$pid"; then
+    return 0
+  fi
+
+  kill "$pid" >/dev/null 2>&1 || true
+  while (( attempts > 0 )); do
+    if ! is_pid_alive "$pid"; then
+      return 0
+    fi
+    attempts=$((attempts - 1))
+    sleep 0.2
+  done
+
+  kill -9 "$pid" >/dev/null 2>&1 || true
+  attempts=10
+  while (( attempts > 0 )); do
+    if ! is_pid_alive "$pid"; then
+      return 0
+    fi
+    attempts=$((attempts - 1))
+    sleep 0.2
+  done
+
+  echo "[dev] Unable to stop ${label} pid ${pid}." >&2
+  return 1
 }
 
 spawn_pid_watcher() {
@@ -394,7 +486,8 @@ wait_for_url_from_log() {
 
 start_frontend_dev_server() {
   local medusa_port="$1"
-  local medusa_publishable_key="${NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY:-${MEDUSA_PUBLISHABLE_KEY:-}}"
+  local medusa_publishable_key
+  medusa_publishable_key="$(resolve_medusa_publishable_key || true)"
 
   mark_log_session "frontend" "$FRONTEND_LOG_FILE"
   echo "[dev] Starting frontend on http://localhost:${DEFAULT_FRONTEND_PORT}"
@@ -524,12 +617,21 @@ backend_admin_cors="${ADMIN_CORS:-${MEDUSA_ADMIN_CORS:-}}"
 backend_auth_cors="${AUTH_CORS:-${MEDUSA_AUTH_CORS:-}}"
 mark_log_session "backend" "$BACKEND_LOG_FILE"
 existing_medusa_pid="$(read_medusa_launcher_pid || true)"
+reuse_existing_backend=false
 if [[ -n "$existing_medusa_pid" ]] && is_pid_alive "$existing_medusa_pid"; then
   medusa_port="$(read_port_registry_value backend || true)"
   medusa_port="${medusa_port:-$DEFAULT_MEDUSA_PORT}"
-  echo "[dev] Reusing commerce backend on http://localhost:${medusa_port}/app"
-  spawn_pid_watcher "$existing_medusa_pid" backend_pid
-else
+  if port_in_use "$medusa_port"; then
+    echo "[dev] Reusing commerce backend on http://localhost:${medusa_port}/app"
+    spawn_pid_watcher "$existing_medusa_pid" backend_pid
+    reuse_existing_backend=true
+  else
+    echo "[dev] Found stale commerce backend launcher pid ${existing_medusa_pid} (port ${medusa_port} is not listening). Restarting backend launcher."
+    terminate_pid "$existing_medusa_pid" "commerce backend launcher"
+  fi
+fi
+
+if [[ "$reuse_existing_backend" != "true" ]]; then
   echo "[dev] Starting commerce backend"
   (
     cd "$MEDUSA_BACKEND_DIR"
@@ -559,7 +661,7 @@ fi
 start_frontend_dev_server "$frontend_medusa_port"
 
 if [[ "$backend_needs_wait" == "true" ]]; then
-  medusa_port="$(wait_for_backend_port "$medusa_port" 35 "commerce backend" "$backend_pid" "$BACKEND_LOG_FILE")"
+  medusa_port="$(wait_for_backend_port "$medusa_port" "$BACKEND_READY_TIMEOUT_SECONDS" "commerce backend" "$backend_pid" "$BACKEND_LOG_FILE")"
   if [[ "$medusa_port" != "$frontend_medusa_port" ]]; then
     echo "[dev] Backend port resolved to ${medusa_port}. Restarting frontend with updated backend URL."
     if is_pid_alive "$frontend_pid"; then
