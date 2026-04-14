@@ -1,83 +1,85 @@
-import { Suspense, lazy } from "react";
-import { Settings } from "lucide-react";
+import { FolderGit2, KeyRound, Palette, Settings2, UserRound, Users } from "lucide-react";
 
-import { AlertMessage } from "@/components/alert-message";
-import { LoadingOverlay } from "@/components/layout/loading-overlay";
-import { ApiKeysSection } from "@/features/api-keys/components/api-keys-section";
-import { FirewallSection } from "@/features/firewall/components/firewall-section";
-import { buildSettingsUpdateRequest } from "@/features/settings/payload";
-import { AppearanceSettings } from "@/features/settings/components/appearance-settings";
-import { ImportSettings } from "@/features/settings/components/import-settings";
-import { MedusaConnectionSettings } from "@/features/settings/components/medusa-connection-settings";
-import { PasswordSettings } from "@/features/settings/components/password-settings";
-import { RoutingSettings } from "@/features/settings/components/routing-settings";
-import { SettingsSkeleton } from "@/features/settings/components/settings-skeleton";
-import { StickySessionsSection } from "@/features/sticky-sessions/components/sticky-sessions-section";
-import { useSettings } from "@/features/settings/hooks/use-settings";
-import type { SettingsUpdateRequest } from "@/features/settings/schemas";
-import { getErrorMessageOrNull } from "@/utils/errors";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AccountTab } from "@/features/settings/components/account-tab";
+import { AppearanceTab } from "@/features/settings/components/appearance-tab";
+import { MembersTab } from "@/features/settings/components/members-tab";
+import { RepositoriesTab } from "@/features/settings/components/repositories-tab";
+import { TokensTab } from "@/features/settings/components/tokens-tab";
+import { WorkspaceTab } from "@/features/settings/components/workspace-tab";
+import { useWorkspaces } from "@/features/workspaces/hooks/use-workspaces";
 
-const TotpSettings = lazy(() =>
-  import("@/features/settings/components/totp-settings").then((m) => ({ default: m.TotpSettings })),
-);
+const ACCOUNT_TABS = [
+  { value: "profile", label: "Profile", icon: UserRound },
+  { value: "appearance", label: "Appearance", icon: Palette },
+  { value: "tokens", label: "API Tokens", icon: KeyRound },
+] as const;
+
+const WORKSPACE_TABS = [
+  { value: "workspace", label: "General", icon: Settings2 },
+  { value: "repositories", label: "Repositories", icon: FolderGit2 },
+  { value: "members", label: "Members", icon: Users },
+] as const;
 
 export function SettingsPage() {
-  const { settingsQuery, updateSettingsMutation } = useSettings();
-
-  const settings = settingsQuery.data;
-  const busy = updateSettingsMutation.isPending;
-  const error = getErrorMessageOrNull(settingsQuery.error) || getErrorMessageOrNull(updateSettingsMutation.error);
-
-  const handleSave = async (payload: SettingsUpdateRequest) => {
-    await updateSettingsMutation.mutateAsync(payload);
-  };
+  const { workspacesQuery } = useWorkspaces();
+  const entries = workspacesQuery.data?.entries ?? [];
+  const activeWorkspace = entries.find((entry) => entry.isActive) ?? entries[0] ?? null;
+  const activeWorkspaceId = activeWorkspace?.id ?? "workspace-none";
+  const workspaceLabel = activeWorkspace?.name?.trim() || "Workspace";
 
   return (
-    <div className="animate-fade-in-up space-y-6">
-      {/* Page header */}
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <Settings className="h-5 w-5 text-primary" />
-          Settings
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">Configure routing, auth, API key management, and firewall.</p>
-      </div>
+    <div className="animate-fade-in-up">
+      <Tabs
+        defaultValue="profile"
+        orientation="vertical"
+        className="min-h-[calc(100vh-11rem)] overflow-hidden rounded-2xl border border-white/[0.08] bg-[linear-gradient(180deg,rgba(7,10,18,0.98)_0%,rgba(3,5,12,1)_100%)]"
+      >
+        <div className="w-56 shrink-0 border-r border-white/[0.08] bg-black/20 p-4">
+          <h1 className="mb-4 px-2 text-sm font-semibold text-foreground">Settings</h1>
 
-      {!settings ? (
-        <SettingsSkeleton />
-      ) : (
-        <>
-          {error ? <AlertMessage variant="error">{error}</AlertMessage> : null}
+          <TabsList variant="line" className="w-full flex-col items-stretch gap-0.5">
+            <span className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground">My Account</span>
+            {ACCOUNT_TABS.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value} className="h-8 text-sm">
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+              </TabsTrigger>
+            ))}
 
-          <div className="space-y-4">
-            <AppearanceSettings />
-            <MedusaConnectionSettings />
-            <RoutingSettings
-              key={`${settings.openaiCacheAffinityMaxAgeSeconds}-${settings.stickyReallocationBudgetThresholdPct}`}
-              settings={settings}
-              busy={busy}
-              onSave={handleSave}
-            />
-            <ImportSettings settings={settings} busy={busy} onSave={handleSave} />
-            <PasswordSettings disabled={busy} />
-            <Suspense fallback={null}>
-              <TotpSettings settings={settings} disabled={busy} onSave={handleSave} />
-            </Suspense>
+            <span className="truncate px-2 pb-1 pt-4 text-xs font-medium text-muted-foreground">{workspaceLabel}</span>
+            {WORKSPACE_TABS.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value} className="h-8 text-sm">
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
-            <ApiKeysSection
-              apiKeyAuthEnabled={settings.apiKeyAuthEnabled}
-              disabled={busy}
-              onApiKeyAuthEnabledChange={(enabled) =>
-                void handleSave(buildSettingsUpdateRequest(settings, { apiKeyAuthEnabled: enabled }))
-              }
-            />
-            <FirewallSection />
-            <StickySessionsSection />
+        <div className="min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-4xl p-6">
+            <TabsContent value="profile">
+              <AccountTab />
+            </TabsContent>
+            <TabsContent value="appearance">
+              <AppearanceTab />
+            </TabsContent>
+            <TabsContent value="tokens">
+              <TokensTab />
+            </TabsContent>
+            <TabsContent value="workspace">
+              <WorkspaceTab key={`workspace-${activeWorkspaceId}`} />
+            </TabsContent>
+            <TabsContent value="repositories">
+              <RepositoriesTab key={`repositories-${activeWorkspaceId}`} />
+            </TabsContent>
+            <TabsContent value="members">
+              <MembersTab key={`members-${activeWorkspaceId}`} />
+            </TabsContent>
           </div>
-
-          <LoadingOverlay visible={!!settings && busy} label="Saving settings..." />
-        </>
-      )}
+        </div>
+      </Tabs>
     </div>
   );
 }

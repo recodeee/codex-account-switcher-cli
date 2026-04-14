@@ -47,6 +47,7 @@ describe("firewall flow integration", () => {
     window.history.pushState({}, "", "/settings");
     renderWithProviders(<App />);
 
+    await user.click(await screen.findByRole("tab", { name: "General" }));
     const firewallHeading = await screen.findByRole("heading", { name: "Firewall" });
     expect(firewallHeading).toBeInTheDocument();
 

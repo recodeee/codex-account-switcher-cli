@@ -6,104 +6,70 @@ import App from "@/App";
 import { renderWithProviders } from "@/test/utils";
 
 function getParentRow(cell: HTMLElement): HTMLElement {
-  const row = cell.closest("tr");
+  const row = cell.closest("[data-slot='card-content']");
   if (!row) throw new Error("Expected element to be inside a table row");
   return row;
-}
-
-async function openRowActions(user: ReturnType<typeof userEvent.setup>, row: HTMLElement) {
-  const actionsButton = within(row).getByRole("button", { name: "Actions" });
-  await user.click(actionsButton);
 }
 
 describe("api keys flow integration", () => {
   it("creates, shows plain key dialog, edits, and deletes an api key", async () => {
     const user = userEvent.setup();
     const createdName = "Integration Key";
-    const updatedName = "Integration Key Updated";
 
     window.history.pushState({}, "", "/settings");
     renderWithProviders(<App />);
 
-    const createButton = await screen.findByRole("button", { name: "Create key" });
+    const tokensTab = await screen.findByRole("tab", { name: "API Tokens" });
+    await user.click(tokensTab);
+
+    const createButton = await screen.findByRole("button", { name: "Create" });
     expect(createButton).toBeInTheDocument();
     await user.click(createButton);
-    await user.type(screen.getByLabelText("Name"), createdName);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.type(screen.getByPlaceholderText("Token name (e.g. My CLI)"), createdName);
+    await user.click(screen.getByRole("button", { name: /^Create$/ }));
 
-    const createdDialog = await screen.findByRole("dialog", { name: "API key created" });
+    const createdDialog = await screen.findByRole("alertdialog", { name: "Token created" });
     expect(screen.getByText(/sk-test-generated/i)).toBeInTheDocument();
-    const closeCandidates = within(createdDialog).getAllByRole("button", {
-      name: "Close",
-    });
-    const closeButton =
-      closeCandidates.find((element) => element.getAttribute("data-slot") === "button") ??
-      closeCandidates[0];
-    await user.click(closeButton);
+    await user.click(within(createdDialog).getByRole("button", { name: "Done" }));
 
     const createdRow = getParentRow(await screen.findByText(createdName));
-
-    await openRowActions(user, createdRow);
-    await user.click(await screen.findByRole("menuitem", { name: /Edit/ }));
-    const nameInput = await screen.findByLabelText("Name");
-    await user.clear(nameInput);
-    await user.type(nameInput, updatedName);
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    const updatedRow = getParentRow(await screen.findByText(updatedName));
-
-    await openRowActions(user, updatedRow);
-    await user.click(await screen.findByRole("menuitem", { name: /Delete/ }));
-    const confirmTitle = await screen.findByText("Delete API key");
-    const confirmDialog = confirmTitle.closest("[role='alertdialog']");
-    expect(confirmDialog).not.toBeNull();
-    if (!confirmDialog) throw new Error("Expected confirm dialog");
-    await user.click(
-      within(confirmDialog as HTMLElement).getByRole("button", { name: "Delete" }),
-    );
+    await user.click(within(createdRow).getByRole("button", { name: `Delete ${createdName}` }));
+    const confirmDialog = await screen.findByRole("alertdialog", { name: "Delete API token" });
+    await user.click(within(confirmDialog).getByRole("button", { name: "Delete" }));
 
     await waitFor(() => {
-      expect(screen.queryByText(updatedName)).not.toBeInTheDocument();
+      expect(screen.queryByText(createdName)).not.toBeInTheDocument();
     });
   });
 
   it("displays the current api key list on settings", async () => {
+    const user = userEvent.setup();
+
     window.history.pushState({}, "", "/settings");
     renderWithProviders(<App />);
 
-    expect(await screen.findByRole("columnheader", { name: "Name" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Prefix" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Models" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Usage" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Expiry" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("tab", { name: "API Tokens" }));
 
-    const defaultKeyRow = getParentRow(screen.getByText("Default key"));
-    expect(within(defaultKeyRow).getByText("sk-test")).toBeInTheDocument();
-    expect(within(defaultKeyRow).getByText("gpt-5.1")).toBeInTheDocument();
-    expect(within(defaultKeyRow).getByText("Tokens: 125K/1M weekly")).toBeInTheDocument();
-    expect(within(defaultKeyRow).getByText("Active")).toBeInTheDocument();
+    const defaultKeyRow = getParentRow(await screen.findByText("Default key"));
+    expect(within(defaultKeyRow).getByText(/sk-test\.\.\./i)).toBeInTheDocument();
+    expect(within(defaultKeyRow).getByRole("button", { name: "Delete Default key" })).toBeInTheDocument();
 
     const readOnlyRow = getParentRow(screen.getByText("Read only key"));
-    expect(within(readOnlyRow).getByText("sk-second")).toBeInTheDocument();
-    expect(within(readOnlyRow).getByText("gpt-4o-mini")).toBeInTheDocument();
-    expect(within(readOnlyRow).getByText("No Usage")).toBeInTheDocument();
-    expect(within(readOnlyRow).getByText("Never")).toBeInTheDocument();
-    expect(within(readOnlyRow).getByText("Disabled")).toBeInTheDocument();
+    expect(within(readOnlyRow).getByText(/sk-second\.\.\./i)).toBeInTheDocument();
+    expect(within(readOnlyRow).getByRole("button", { name: "Delete Read only key" })).toBeInTheDocument();
   });
 
-  it("shows usage bars when editing a key with limits", async () => {
+  it("shows token creation dialog with copy action", async () => {
     const user = userEvent.setup({ delay: null });
 
     window.history.pushState({}, "", "/settings");
     renderWithProviders(<App />);
 
-    expect(await screen.findByText("Default key")).toBeInTheDocument();
-    const defaultKeyRow = getParentRow(screen.getByText("Default key"));
-    await openRowActions(user, defaultKeyRow);
-    await user.click(await screen.findByRole("menuitem", { name: /Edit/ }));
+    await user.click(await screen.findByRole("tab", { name: "API Tokens" }));
+    await user.type(await screen.findByPlaceholderText("Token name (e.g. My CLI)"), "Copy Check Token");
+    await user.click(screen.getByRole("button", { name: /^Create$/ }));
 
-    // Edit dialog should show current usage section
-    expect(await screen.findByText("Current usage")).toBeInTheDocument();
+    const dialog = await screen.findByRole("alertdialog", { name: "Token created" });
+    expect(within(dialog).getByRole("button", { name: "Copy" })).toBeInTheDocument();
   });
 });
