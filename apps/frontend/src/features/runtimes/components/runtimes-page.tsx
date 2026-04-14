@@ -43,6 +43,9 @@ import { formatCompactNumber, formatLastUsageLabel } from "@/utils/formatters";
 import { toast } from "sonner";
 import { resolveFallbackDailyUsageWeights } from "./runtime-daily-usage";
 import {
+  syncRecentOnlineRuntimeIds,
+} from "./runtime-presence-cache";
+import {
   normalizeRuntimeTaskPreview,
   resolveRuntimeTaskPreviews,
 } from "./runtime-task-previews";
@@ -1384,12 +1387,21 @@ export function RuntimesPage() {
     () => buildRuntimeRows(dashboardQuery.data?.accounts, stickyQuery.data),
     [dashboardQuery.data?.accounts, stickyQuery.data],
   );
+  const recentOnlineRuntimeIds = useMemo(
+    () => syncRecentOnlineRuntimeIds(runtimeRows),
+    [runtimeRows],
+  );
+
   const scopedRows = useMemo(() => {
     if (scope === "mine") {
-      return runtimeRows.filter((runtime) => runtime.status === "online");
+      return runtimeRows.filter(
+        (runtime) =>
+          runtime.status === "online"
+          || recentOnlineRuntimeIds.has(runtime.runtimeId),
+      );
     }
     return runtimeRows;
-  }, [runtimeRows, scope]);
+  }, [recentOnlineRuntimeIds, runtimeRows, scope]);
   const effectiveSelectedRuntimeId =
     selectedRuntimeId && scopedRows.some((runtime) => runtime.runtimeId === selectedRuntimeId)
       ? selectedRuntimeId

@@ -13,6 +13,7 @@ import { ApisPage } from "@/features/apis/components/apis-page";
 import { BillingPage } from "@/features/billing/components/billing-page";
 import { DashboardPage } from "@/features/dashboard/components/dashboard-page";
 import { DevicesPage } from "@/features/devices/components/devices-page";
+import { IssuesPage } from "@/features/issues/components/issues-page";
 import { ProjectsPage } from "@/features/projects/components/projects-page";
 import { PlansPage } from "@/features/plans/components/plans-page";
 import { ReferralsPage } from "@/features/referrals/components/referrals-page";
@@ -31,6 +32,7 @@ function AppLayout() {
   const isProjectsRoute = location.pathname === "/projects";
   const isAccountsRoute = location.pathname === "/accounts";
   const isPlansRoute = location.pathname === "/projects/plans";
+  const isIssuesRoute = location.pathname === "/issues";
   const isAgentsRoute = location.pathname === "/agents";
   const isRuntimesRoute = location.pathname === "/runtimes";
   const isSkillsRoute = location.pathname === "/skills";
@@ -58,7 +60,7 @@ function AppLayout() {
               ? "max-w-none overflow-hidden p-0"
               : isDashboardRoute
                 ? "px-0 py-8"
-              : isProjectsRoute || isAccountsRoute || isPlansRoute || isBillingRoute || isApisRoute
+              : isProjectsRoute || isAccountsRoute || isPlansRoute || isBillingRoute || isApisRoute || isIssuesRoute
                 ? "px-2 py-5 sm:px-3 lg:px-4"
                 : "px-4 py-8 sm:px-6 lg:px-8",
             isPlansRoute ||
@@ -67,6 +69,7 @@ function AppLayout() {
             isAgentsRoute ||
             isApisRoute ||
             isBillingRoute ||
+            isIssuesRoute ||
             isDashboardRoute
               ? "max-w-none"
               : isProjectsRoute || isAccountsRoute
@@ -91,6 +94,7 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/issues" element={<IssuesPage />} />
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/referrals" element={<ReferralsPage />} />

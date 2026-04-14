@@ -18,10 +18,17 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
   const isProjectsRoute = pathname === "/projects";
   const isAccountsRoute = pathname === "/accounts";
   const isAgentsRoute = pathname === "/agents";
+  const isIssuesRoute = pathname === "/issues";
   const isRuntimesRoute = pathname === "/runtimes";
   const isSkillsRoute = pathname === "/skills";
   const isSettingsRoute = pathname === "/settings";
-  const isFullBleedRoute = isPlansRoute || isRuntimesRoute || isSkillsRoute || isAgentsRoute || isSettingsRoute;
+  const isFullBleedRoute =
+    isPlansRoute
+    || isRuntimesRoute
+    || isSkillsRoute
+    || isAgentsRoute
+    || isSettingsRoute
+    || isIssuesRoute;
 
   return (
     <AuthGate>
@@ -45,9 +52,9 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
                 ? "max-w-none overflow-hidden p-0"
                 : isSettingsRoute
                   ? "max-w-none px-0 py-5"
-                : isProjectsRoute || isAccountsRoute || isPlansRoute
+                : isProjectsRoute || isAccountsRoute || isPlansRoute || isIssuesRoute
                   ? "px-2 py-5 sm:px-3 lg:px-4"
-                  : "px-4 py-8 sm:px-6 lg:px-8",
+                : "px-4 py-8 sm:px-6 lg:px-8",
               !isFullBleedRoute
                 ? isProjectsRoute || isAccountsRoute
                   ? "mx-auto max-w-[1900px]"
