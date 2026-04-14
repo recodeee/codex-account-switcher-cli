@@ -20,6 +20,7 @@ from app.modules.source_control.schemas import (
     SourceControlChangedFile,
     SourceControlCommitPreview,
     SourceControlCreatePullRequestResponse,
+    SourceControlDeleteBranchResponse,
     SourceControlMergePullRequestResponse,
     SourceControlMergePreviewEntry,
     SourceControlPullRequestPreview,
@@ -394,6 +395,62 @@ class SourceControlService:
             branch=target_branch,
             pull_request_number=pr_number,
             message="Pull request merged.",
+        )
+
+    def delete_branch(
+        self,
+        *,
+        project_path: str | None,
+        branch: str,
+    ) -> SourceControlDeleteBranchResponse:
+        target_branch = branch.strip()
+        if not target_branch:
+            raise SourceControlError("Branch is required.", code="source_control_git_failed")
+
+        repo_root = self._resolve_repository_root(project_path)
+        all_branches = self._list_local_branches(repo_root)
+        if target_branch not in all_branches:
+            raise SourceControlError(f"Branch not found: {target_branch}", code="source_control_git_failed")
+
+        active_branch = self._resolve_active_branch(repo_root)
+        if target_branch == active_branch:
+            raise SourceControlError(
+                f"Cannot delete active branch: {target_branch}",
+                code="source_control_git_failed",
+            )
+
+        base_branch = self._resolve_base_branch(
+            repo_root=repo_root,
+            active_branch=active_branch,
+            all_branches=all_branches,
+        )
+        if target_branch == base_branch:
+            raise SourceControlError(
+                f"Cannot delete base branch: {target_branch}",
+                code="source_control_git_failed",
+            )
+
+        if not _BOT_BRANCH_PATTERN.search(target_branch):
+            raise SourceControlError(
+                "Only agent/runtime branches can be deleted from this panel.",
+                code="source_control_git_failed",
+            )
+
+        matching_worktree = next(
+            (entry for entry in self._list_worktrees(repo_root=repo_root) if entry.branch == target_branch),
+            None,
+        )
+        if matching_worktree:
+            raise SourceControlError(
+                f"Cannot delete branch checked out in worktree: {matching_worktree.path}",
+                code="source_control_git_failed",
+            )
+
+        self._run_git(["branch", "-D", target_branch], cwd=repo_root, allow_failure=False)
+        return SourceControlDeleteBranchResponse(
+            status="deleted",
+            branch=target_branch,
+            message="Branch deleted.",
         )
 
     def _resolve_repository_hint(self, project_path: str | None) -> Path:

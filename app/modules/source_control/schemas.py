@@ -133,3 +133,14 @@ class SourceControlMergePullRequestResponse(DashboardModel):
     branch: str
     pull_request_number: int | None = None
     message: str
+
+
+class SourceControlDeleteBranchRequest(DashboardModel):
+    project_id: str | None = None
+    branch: str
+
+
+class SourceControlDeleteBranchResponse(DashboardModel):
+    status: Literal["deleted"]
+    branch: str
+    message: str

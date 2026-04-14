@@ -81,6 +81,7 @@ type RuntimeOption = {
 
 const DEFAULT_RUNTIME = "Codex (recodee)";
 const OPENCLAW_PROVIDER_MATCHER = /\bopenclaw\b|\bopencl\b|\boclaw\b/i;
+const RUNTIME_VALUE_SEPARATOR = "::runtime-source::";
 const DEFAULT_MAX_CONCURRENT_TASKS = 6;
 const MAX_AVATAR_BYTES = 1_000_000;
 const SKILL_ASSIGNMENTS_STORAGE_KEY = "recodee.agent-skills.v1";
@@ -214,6 +215,18 @@ function getRuntimeDisplayName(provider: RuntimeOption["provider"]) {
   return provider === "openclaw" ? "Openclaw" : "Codex";
 }
 
+function encodeRuntimeValue(label: string, source: string): string {
+  return `${label}${RUNTIME_VALUE_SEPARATOR}${source}`;
+}
+
+function decodeRuntimeLabel(value: string): string {
+  const separatorIndex = value.indexOf(RUNTIME_VALUE_SEPARATOR);
+  if (separatorIndex < 0) {
+    return value;
+  }
+  return value.slice(0, separatorIndex);
+}
+
 function buildRuntimeOptions(
   accounts: AccountSummary[] | undefined,
   unmappedCliSessions: UnmappedCliSession[] | undefined,
@@ -256,11 +269,21 @@ function buildRuntimeOptions(
           account.codexTrackedSessionCount ?? 0,
           account.codexSessionCount ?? 0,
         ) > 0 || hasActiveCliSessionSignal(account, nowMs);
+      const runtimeLabel = `${providerName} (${snapshotName})`;
+      const subtitleParts = [`${account.email} · cli`];
+      const cliVersion = account.codexAuth?.cliVersion?.trim();
+      if (cliVersion) {
+        subtitleParts.push(cliVersion.startsWith("v") ? cliVersion : `v${cliVersion}`);
+      }
+      const daemonId = account.codexAuth?.daemonId?.trim();
+      if (daemonId) {
+        subtitleParts.push(`daemon ${daemonId}`);
+      }
 
       return {
-        value: `${providerName} (${snapshotName})`,
-        label: `${providerName} (${snapshotName})`,
-        subtitle: `${account.email} · cli`,
+        value: encodeRuntimeValue(runtimeLabel, `account:${account.accountId}`),
+        label: runtimeLabel,
+        subtitle: subtitleParts.join(" · "),
         provider,
         online,
       } satisfies RuntimeOption;
@@ -268,26 +291,29 @@ function buildRuntimeOptions(
 
   const unmappedOptions = (unmappedCliSessions ?? [])
     .filter((session) => session.totalSessionCount > 0)
-    .map((session) => {
+    .map((session, index) => {
       const provider = resolveRuntimeProvider(session.snapshotName, session.reason);
       const providerName = getRuntimeDisplayName(provider);
+      const runtimeLabel = `${providerName} (${session.snapshotName})`;
+      const subtitleParts = ["unmapped snapshot · cli"];
+      const cliVersion = session.cliVersion?.trim();
+      if (cliVersion) {
+        subtitleParts.push(cliVersion.startsWith("v") ? cliVersion : `v${cliVersion}`);
+      }
+      const daemonId = session.daemonId?.trim();
+      if (daemonId) {
+        subtitleParts.push(`daemon ${daemonId}`);
+      }
       return {
-        value: `${providerName} (${session.snapshotName})`,
-        label: `${providerName} (${session.snapshotName})`,
-        subtitle: "unmapped snapshot · cli",
+        value: encodeRuntimeValue(runtimeLabel, `unmapped:${session.snapshotName}:${index}`),
+        label: runtimeLabel,
+        subtitle: subtitleParts.join(" · "),
         provider,
         online: true,
       } satisfies RuntimeOption;
     });
 
-  const dedupedOptions = [...accountOptions, ...unmappedOptions].reduce<RuntimeOption[]>((acc, option) => {
-    if (!acc.some((existing) => existing.value === option.value)) {
-      acc.push(option);
-    }
-    return acc;
-  }, []);
-
-  const options = dedupedOptions
+  const options = [...accountOptions, ...unmappedOptions]
     .sort((left, right) => {
       if (left.online !== right.online) {
         return left.online ? -1 : 1;
@@ -301,7 +327,7 @@ function buildRuntimeOptions(
 
   return [
     {
-      value: DEFAULT_RUNTIME,
+      value: encodeRuntimeValue(DEFAULT_RUNTIME, "default"),
       label: DEFAULT_RUNTIME,
       subtitle: "default · codex-cli",
       provider: "codex",
@@ -315,11 +341,12 @@ function resolveRuntimeOption(runtime: string, options: RuntimeOption[]): Runtim
   if (matched) {
     return matched;
   }
+  const runtimeLabel = decodeRuntimeLabel(runtime);
   return {
     value: runtime,
-    label: runtime,
+    label: runtimeLabel,
     subtitle: "saved runtime",
-    provider: resolveRuntimeProvider(runtime),
+    provider: resolveRuntimeProvider(runtimeLabel),
     online: false,
   };
 }
@@ -516,7 +543,7 @@ export function AgentsPage() {
         status: agent.status,
         description: agent.description,
         visibility: agent.visibility,
-        runtime: agent.runtime,
+        runtime: decodeRuntimeLabel(agent.runtime),
         instructions: agent.instructions,
         maxConcurrentTasks: agent.maxConcurrentTasks,
         avatarDataUrl: agent.avatarDataUrl,
@@ -544,7 +571,7 @@ export function AgentsPage() {
       name,
       description: createDraft.description.trim() || null,
       visibility: createDraft.visibility,
-      runtime: createDraft.runtime,
+      runtime: decodeRuntimeLabel(createDraft.runtime),
       instructions: "",
       maxConcurrentTasks: DEFAULT_MAX_CONCURRENT_TASKS,
       avatarDataUrl: createDraft.avatarDataUrl,

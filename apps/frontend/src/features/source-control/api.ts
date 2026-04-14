@@ -3,6 +3,7 @@ import { get, post } from "@/lib/api-client";
 import {
   SourceControlBranchDetailsResponseSchema,
   SourceControlCreatePullRequestResponseSchema,
+  SourceControlDeleteBranchResponseSchema,
   SourceControlMergePullRequestResponseSchema,
   SourceControlPreviewResponseSchema,
 } from "@/features/source-control/schemas";
@@ -11,6 +12,7 @@ const SOURCE_CONTROL_PREVIEW_PATH = "/api/source-control/preview";
 const SOURCE_CONTROL_BRANCH_DETAILS_PATH = "/api/source-control/branch-details";
 const SOURCE_CONTROL_CREATE_PULL_REQUEST_PATH = "/api/source-control/pr/create";
 const SOURCE_CONTROL_MERGE_PULL_REQUEST_PATH = "/api/source-control/pr/merge";
+const SOURCE_CONTROL_DELETE_BRANCH_PATH = "/api/source-control/branch/delete";
 
 type SourceControlPreviewOptions = {
   projectId?: string | null;
@@ -40,6 +42,11 @@ type SourceControlMergePullRequestInput = {
   baseBranch?: string | null;
   deleteBranch?: boolean;
   squash?: boolean;
+};
+
+type SourceControlDeleteBranchInput = {
+  projectId?: string | null;
+  branch: string;
 };
 
 export function getSourceControlPreview(options: SourceControlPreviewOptions = {}) {
@@ -102,6 +109,19 @@ export function mergeSourceControlPullRequest(input: SourceControlMergePullReque
         baseBranch: input.baseBranch ?? null,
         deleteBranch: input.deleteBranch ?? true,
         squash: Boolean(input.squash),
+      },
+    },
+  );
+}
+
+export function deleteSourceControlBranch(input: SourceControlDeleteBranchInput) {
+  return post(
+    SOURCE_CONTROL_DELETE_BRANCH_PATH,
+    SourceControlDeleteBranchResponseSchema,
+    {
+      body: {
+        projectId: input.projectId ?? null,
+        branch: input.branch,
       },
     },
   );

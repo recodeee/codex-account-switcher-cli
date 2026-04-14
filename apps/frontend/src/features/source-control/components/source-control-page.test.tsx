@@ -8,6 +8,7 @@ import { SourceControlPage } from "./source-control-page";
 
 describe("SourceControlPage", () => {
   it("renders branch-focused source control preview with PR actions", async () => {
+    const user = userEvent.setup();
     renderWithProviders(<SourceControlPage />);
 
     await waitFor(() => {
@@ -19,6 +20,7 @@ describe("SourceControlPage", () => {
 
     expect(screen.getByText("Master Agent")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Merge PR (gh)" })).toBeInTheDocument();
+<<<<<<< Updated upstream
     const snapshotLines = await screen.findAllByText(/snapshot:\s*demo-source-control/i);
     expect(snapshotLines.length).toBeGreaterThan(0);
     expect(screen.getByText(/working now/i)).toBeInTheDocument();
@@ -44,5 +46,13 @@ describe("SourceControlPage", () => {
     });
 
     expect(screen.queryByText("Current changes (agent/fix-auth-refresh)")).not.toBeInTheDocument();
+=======
+    expect(screen.getByRole("button", { name: "Delete branch" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /agent\/fix-auth-refresh/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Delete branch" })).toBeEnabled();
+    });
+>>>>>>> Stashed changes
   });
 });

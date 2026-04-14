@@ -1143,7 +1143,7 @@ function findApiKey(keyId: string): ApiKey | undefined {
 	return state.apiKeys.find((item) => item.id === keyId);
 }
 
-const sourceControlBranches = [
+let sourceControlBranches = [
 	{ name: "agent/demo-source-control", isActive: true, ahead: 3, behind: 0, mergedIntoBase: false, mergeState: "ready" },
 	{ name: "agent/fix-auth-refresh", isActive: false, ahead: 0, behind: 0, mergedIntoBase: true, mergeState: "merged" },
 	{ name: "gx/runtime-guardrails", isActive: false, ahead: 2, behind: 1, mergedIntoBase: false, mergeState: "diverged" },
@@ -1424,6 +1424,74 @@ export const handlers = [
 			branch,
 			pullRequestNumber: matched.number,
 			message: "Pull request merged.",
+		});
+	}),
+
+	http.post("/api/source-control/branch/delete", async ({ request }) => {
+		const payload = await request.json();
+		const parsed = z.object({
+			projectId: z.string().nullable().optional(),
+			branch: z.string().min(1),
+		}).safeParse(payload);
+		if (!parsed.success) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "invalid_source_control_delete_payload",
+						message: "Invalid delete branch payload",
+					},
+				},
+				{ status: 400 },
+			);
+		}
+
+		const branch = parsed.data.branch.trim();
+		const baseBranch = "dev";
+		const activeBranch = "agent/demo-source-control";
+		if (branch === activeBranch) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "source_control_git_failed",
+						message: `Cannot delete active branch: ${branch}`,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+		if (branch === baseBranch) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "source_control_git_failed",
+						message: `Cannot delete base branch: ${branch}`,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+
+		const exists = sourceControlBranches.some((entry) => entry.name === branch);
+		if (!exists) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "source_control_git_failed",
+						message: `Branch not found: ${branch}`,
+					},
+				},
+				{ status: 400 },
+			);
+		}
+
+		sourceControlBranches = sourceControlBranches.filter((entry) => entry.name !== branch);
+		sourceControlPullRequests = sourceControlPullRequests.filter((entry) => entry.headBranch !== branch);
+		delete sourceControlChangesByBranch[branch];
+
+		return HttpResponse.json({
+			status: "deleted",
+			branch,
+			message: "Branch deleted.",
 		});
 	}),
 

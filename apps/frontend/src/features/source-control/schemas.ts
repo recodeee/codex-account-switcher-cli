@@ -113,6 +113,12 @@ export const SourceControlMergePullRequestResponseSchema = z.object({
   message: z.string().min(1),
 });
 
+export const SourceControlDeleteBranchResponseSchema = z.object({
+  status: z.literal("deleted"),
+  branch: z.string().min(1),
+  message: z.string().min(1),
+});
+
 export type SourceControlPreviewResponse = z.infer<typeof SourceControlPreviewResponseSchema>;
 export type SourceControlMergeState = z.infer<typeof SourceControlMergeStateSchema>;
 export type SourceControlBranchDetailsResponse = z.infer<typeof SourceControlBranchDetailsResponseSchema>;

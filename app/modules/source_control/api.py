@@ -9,6 +9,8 @@ from app.modules.source_control.schemas import (
     SourceControlBranchDetailsResponse,
     SourceControlCreatePullRequestRequest,
     SourceControlCreatePullRequestResponse,
+    SourceControlDeleteBranchRequest,
+    SourceControlDeleteBranchResponse,
     SourceControlMergePullRequestRequest,
     SourceControlMergePullRequestResponse,
     SourceControlPreviewResponse,
@@ -163,6 +165,33 @@ async def merge_source_control_pull_request(
             base_branch=payload.base_branch,
             delete_branch=payload.delete_branch,
             squash=payload.squash,
+        )
+    except SourceControlError as exc:
+        raise DashboardBadRequestError(str(exc), code=exc.code) from exc
+
+
+@router.post("/branch/delete", response_model=SourceControlDeleteBranchResponse)
+async def delete_source_control_branch(
+    payload: SourceControlDeleteBranchRequest = Body(...),
+    projects_context: ProjectsContext = Depends(get_projects_context),
+) -> SourceControlDeleteBranchResponse:
+    project_path: str | None = None
+    if payload.project_id:
+        project = await projects_context.service.get_project(payload.project_id)
+        if project is None:
+            raise DashboardNotFoundError("Project not found", code="project_not_found")
+        project_path = project.project_path
+        if not project_path:
+            raise DashboardBadRequestError(
+                "Project path is required before deleting a branch.",
+                code="project_path_required",
+            )
+
+    service = SourceControlService()
+    try:
+        return service.delete_branch(
+            project_path=project_path,
+            branch=payload.branch,
         )
     except SourceControlError as exc:
         raise DashboardBadRequestError(str(exc), code=exc.code) from exc

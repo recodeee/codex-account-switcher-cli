@@ -392,4 +392,59 @@ describe("AgentsPage", () => {
 
     expect(await screen.findByText("Openclaw (openclaw-recodee)")).toBeInTheDocument();
   });
+
+  it("shows all codex cli runtimes in Create Agent runtime list", async () => {
+    const user = userEvent.setup({ delay: null });
+    vi.mocked(useDashboard).mockReturnValue({
+      data: {
+        accounts: [
+          {
+            accountId: "acc-codex-1",
+            email: "first@workspace.local",
+            displayName: "Codex First",
+            planType: "pro",
+            status: "active",
+            codexAuth: {
+              hasSnapshot: true,
+              snapshotName: "recodee",
+            },
+            codexLiveSessionCount: 1,
+            codexTrackedSessionCount: 1,
+            codexSessionCount: 1,
+          },
+          {
+            accountId: "acc-codex-2",
+            email: "second@workspace.local",
+            displayName: "Codex Second",
+            planType: "pro",
+            status: "active",
+            codexAuth: {
+              hasSnapshot: true,
+              snapshotName: "recodee",
+            },
+            codexLiveSessionCount: 1,
+            codexTrackedSessionCount: 1,
+            codexSessionCount: 1,
+          },
+        ],
+      },
+    } as ReturnType<typeof useDashboard>);
+    vi.mocked(listStickySessions).mockResolvedValue({
+      entries: [],
+      unmappedCliSessions: [],
+      stalePromptCacheCount: 0,
+      total: 0,
+      hasMore: false,
+    });
+
+    renderWithProviders(<AgentsPage />);
+
+    await user.click(screen.getByRole("button", { name: "Create agent" }));
+    await user.click(screen.getByRole("combobox"));
+
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getAllByText("Codex (recodee)").length).toBeGreaterThanOrEqual(2);
+    expect(within(listbox).getByText("first@workspace.local · cli")).toBeInTheDocument();
+    expect(within(listbox).getByText("second@workspace.local · cli")).toBeInTheDocument();
+  });
 });
