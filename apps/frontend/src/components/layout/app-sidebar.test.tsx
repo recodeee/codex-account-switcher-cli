@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -50,6 +50,27 @@ describe("AppSidebar", () => {
       expect(screen.queryByText(/5h Remaining/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/Weekly Remaining/i)).not.toBeInTheDocument();
     });
+  });
+
+  it("shows manager links with the requested ordering", () => {
+    renderWithProviders(<AppSidebar />);
+
+    expect(screen.getByText("Manager")).toBeInTheDocument();
+
+    const nav = screen.getByRole("navigation", { name: "Sidebar" });
+    const labels = within(nav)
+      .getAllByRole("link")
+      .map((link) => link.textContent?.trim() ?? "");
+
+    const storageIndex = labels.findIndex((label) => label.startsWith("Storage"));
+    const accountsIndex = labels.findIndex((label) => label === "Accounts");
+    const sessionsIndex = labels.findIndex((label) => label === "Sessions");
+    const referralsIndex = labels.findIndex((label) => label === "Referrals");
+
+    expect(storageIndex).toBeGreaterThanOrEqual(0);
+    expect(accountsIndex).toBeGreaterThan(storageIndex);
+    expect(sessionsIndex).toBeGreaterThan(accountsIndex);
+    expect(referralsIndex).toBeGreaterThan(sessionsIndex);
   });
 
   it("creates and selects switchboard workspaces", async () => {

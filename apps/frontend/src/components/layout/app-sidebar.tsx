@@ -47,8 +47,6 @@ function workspaceMonogram(name: string): string {
 
 const WORKSPACE_LINKS: SidebarNavEntry[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/accounts", label: "Accounts", icon: Users },
-  { to: "/referrals", label: "Referrals", icon: Share2 },
   {
     to: "/projects",
     label: "Projects",
@@ -58,15 +56,20 @@ const WORKSPACE_LINKS: SidebarNavEntry[] = [
   { to: "/agents", label: "Agents", icon: Bot },
 ];
 
-const CONFIGURE_LINKS: SidebarNavEntry[] = [
+const MANAGER_LINKS: SidebarNavEntry[] = [
   { to: "/storage", label: "Storage", icon: HardDrive, badge: "Soon" },
+  { to: "/accounts", label: "Accounts", icon: Users },
+  { to: "/sessions", label: "Sessions", icon: Link2 },
+  { to: "/referrals", label: "Referrals", icon: Share2 },
+];
+
+const CONFIGURE_LINKS: SidebarNavEntry[] = [
   { to: "/runtimes", label: "Runtimes", icon: Server },
   { to: "/skills", label: "Skills", icon: Sparkles },
-  { to: "/sessions", label: "Sessions", icon: Link2 },
   { to: "/settings", label: "Settings", icon: Settings2 },
 ];
 
-const COLLAPSED_LINKS: SidebarNavEntry[] = [...WORKSPACE_LINKS, ...CONFIGURE_LINKS];
+const COLLAPSED_LINKS: SidebarNavEntry[] = [...WORKSPACE_LINKS, ...MANAGER_LINKS, ...CONFIGURE_LINKS];
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "recodee.com.sidebar.collapsed";
 
@@ -419,6 +422,11 @@ export function AppSidebar() {
             <div className="space-y-1">
               <p className="px-1 text-[11px] uppercase tracking-[0.12em] text-slate-500">Workspace</p>
               {WORKSPACE_LINKS.map((item) => renderNavLink(item))}
+            </div>
+
+            <div className="space-y-1">
+              <p className="px-1 text-[11px] uppercase tracking-[0.12em] text-slate-500">Manager</p>
+              {MANAGER_LINKS.map((item) => renderNavLink(item))}
             </div>
 
             <div className="space-y-1">

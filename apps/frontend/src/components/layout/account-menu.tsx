@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { getDashboardOverview } from "@/features/dashboard/api";
+import { useMedusaCustomerAuthStore } from "@/features/medusa-customer-auth/hooks/use-medusa-customer-auth";
 import { useMedusaAdminAuthStore } from "@/features/medusa-auth/hooks/use-medusa-admin-auth";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { useThemeStore } from "@/hooks/use-theme";
@@ -72,6 +73,7 @@ export function AccountMenu({
   const setTheme = useThemeStore((state) => state.setTheme);
   const blurred = usePrivacyStore((state) => state.blurred);
   const togglePrivacy = usePrivacyStore((state) => state.toggle);
+  const medusaCustomer = useMedusaCustomerAuthStore((state) => state.customer);
   const medusaUser = useMedusaAdminAuthStore((state) => state.user);
   const medusaLastAuthenticatedEmail = useMedusaAdminAuthStore(
     (state) => state.lastAuthenticatedEmail,
@@ -89,9 +91,10 @@ export function AccountMenu({
     () => resolveMenuAccountEmail(overviewQuery.data?.accounts ?? []),
     [overviewQuery.data?.accounts],
   );
+  const medusaCustomerEmail = medusaCustomer?.email ?? null;
   const medusaAdminEmail = medusaUser?.email ?? null;
-  const dashboardLoginEmail = medusaAdminEmail ?? medusaLastAuthenticatedEmail ?? null;
-  const displayedLoginEmail = dashboardLoginEmail ?? loggedInEmail;
+  const dashboardLoginEmail = medusaCustomerEmail ?? medusaAdminEmail ?? null;
+  const displayedLoginEmail = dashboardLoginEmail;
   const normalizedLoggedInEmail = loggedInEmail?.trim().toLowerCase() ?? null;
   const normalizedDisplayedLoginEmail =
     displayedLoginEmail?.trim().toLowerCase() ?? null;
