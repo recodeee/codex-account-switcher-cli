@@ -850,15 +850,7 @@ function normalizeProjectUrl(
 
 function normalizeProjectGithubRepoUrl(
 	value: unknown,
-<<<<<<< Updated upstream
-): { ok: true; value: string | null } | {
-	ok: false;
-	code: "invalid_project_github_repo_url";
-	message: string;
-} {
-=======
 ): { ok: true; value: string | null } | { ok: false; code: "invalid_project_github_repo_url"; message: string } {
->>>>>>> Stashed changes
 	if (value == null) {
 		return { ok: true, value: null };
 	}
@@ -873,12 +865,6 @@ function normalizeProjectGithubRepoUrl(
 			message: "GitHub repo URL must be 2048 characters or fewer",
 		};
 	}
-<<<<<<< Updated upstream
-	const withScheme = /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
-	let url: URL;
-	try {
-		url = new URL(withScheme);
-=======
 
 	const scpMatch = /^(?:ssh:\/\/)?git@([^:]+):(.+)$/i.exec(normalized);
 	const normalizedCandidate = scpMatch
@@ -906,7 +892,6 @@ function normalizeProjectGithubRepoUrl(
 			};
 		}
 		return { ok: true, value: `https://github.com/${pathMatch[1]}/${pathMatch[2]}` };
->>>>>>> Stashed changes
 	} catch {
 		return {
 			ok: false,
@@ -914,34 +899,6 @@ function normalizeProjectGithubRepoUrl(
 			message: "GitHub repo URL must be a valid github.com URL",
 		};
 	}
-<<<<<<< Updated upstream
-	if (url.protocol !== "http:" && url.protocol !== "https:") {
-		return {
-			ok: false,
-			code: "invalid_project_github_repo_url",
-			message: "GitHub repo URL must be a valid github.com URL",
-		};
-	}
-	if (!["github.com", "www.github.com"].includes(url.hostname.toLowerCase())) {
-		return {
-			ok: false,
-			code: "invalid_project_github_repo_url",
-			message: "GitHub repo URL must use github.com",
-		};
-	}
-	const parts = url.pathname.split("/").filter(Boolean);
-	if (parts.length < 2) {
-		return {
-			ok: false,
-			code: "invalid_project_github_repo_url",
-			message: "GitHub repo URL must include owner and repository",
-		};
-	}
-	const owner = parts[0];
-	const repo = parts[1].replace(/\.git$/i, "");
-	return { ok: true, value: `https://github.com/${owner}/${repo}` };
-=======
->>>>>>> Stashed changes
 }
 
 function normalizeProjectSandboxMode(

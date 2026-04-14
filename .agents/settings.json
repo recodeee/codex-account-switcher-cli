@@ -8,7 +8,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill_activation.py"
+            "command": "python3 .agents/hooks/skill_activation.py"
           }
         ]
       }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill_guard.py"
+            "command": "python3 .agents/hooks/skill_guard.py"
           }
         ]
       }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post_edit_tracker.py"
+            "command": "python3 .agents/hooks/post_edit_tracker.py"
           }
         ]
       },
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill_tracker.py"
+            "command": "python3 .agents/hooks/skill_tracker.py"
           }
         ]
       }
