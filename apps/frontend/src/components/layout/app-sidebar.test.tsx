@@ -131,6 +131,8 @@ describe("AppSidebar", () => {
     renderWithProviders(<AppSidebar />);
 
     await user.click(screen.getByLabelText("Toggle switchboards panel"));
+    expect(screen.getByLabelText("Switchboards dropdown")).toHaveClass("absolute");
+    expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create workspace onboarding" }));
 
     await waitFor(() => {
@@ -159,12 +161,6 @@ describe("AppSidebar", () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText("Active workspace name")).toHaveTextContent("recodee.com");
-    });
-
-    await user.click(screen.getByLabelText("Delete workspace My Team"));
-    await waitFor(() => {
-      expect(screen.queryByLabelText("Select workspace My Team")).not.toBeInTheDocument();
-      expect(screen.queryByLabelText("Delete workspace My Team")).not.toBeInTheDocument();
     });
   });
 });

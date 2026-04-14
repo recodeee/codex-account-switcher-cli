@@ -312,7 +312,7 @@ export function AppSidebar() {
             </div>
 
             <details
-              className="group min-w-0 w-full"
+              className="group relative min-w-0 w-full"
               open={switchboardOpen}
               onToggle={(event) => {
                 setSwitchboardOpen(event.currentTarget.open);
@@ -353,7 +353,10 @@ export function AppSidebar() {
                 </div>
               </summary>
 
-              <div className="mt-2 overflow-hidden rounded-2xl border border-white/[0.12] bg-[linear-gradient(180deg,rgba(11,14,24,0.96),rgba(4,6,12,0.96))] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_14px_30px_rgba(0,0,0,0.34)]">
+              <div
+                aria-label="Switchboards dropdown"
+                className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-white/[0.12] bg-[linear-gradient(180deg,rgba(11,14,24,0.96),rgba(4,6,12,0.96))] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_14px_30px_rgba(0,0,0,0.34)]"
+              >
                 <p className="px-3 pt-3 pb-1 text-[11px] uppercase tracking-[0.14em] text-slate-400">
                   Switchboards
                 </p>
