@@ -8,17 +8,28 @@ import {
 
 const OPEN_SPEC_PLANS_PATH = "/api/projects/plans";
 
-export function listOpenSpecPlans() {
-  return get(OPEN_SPEC_PLANS_PATH, OpenSpecPlansResponseSchema);
+function withProjectFilter(path: string, projectId: string | null | undefined): string {
+  if (!projectId) {
+    return path;
+  }
+  const query = new URLSearchParams({ projectId });
+  return `${path}?${query.toString()}`;
 }
 
-export function getOpenSpecPlan(planSlug: string) {
-  return get(`${OPEN_SPEC_PLANS_PATH}/${encodeURIComponent(planSlug)}`, OpenSpecPlanDetailSchema);
+export function listOpenSpecPlans(projectId: string | null = null) {
+  return get(withProjectFilter(OPEN_SPEC_PLANS_PATH, projectId), OpenSpecPlansResponseSchema);
 }
 
-export function getOpenSpecPlanRuntime(planSlug: string) {
+export function getOpenSpecPlan(planSlug: string, projectId: string | null = null) {
   return get(
-    `${OPEN_SPEC_PLANS_PATH}/${encodeURIComponent(planSlug)}/runtime`,
+    withProjectFilter(`${OPEN_SPEC_PLANS_PATH}/${encodeURIComponent(planSlug)}`, projectId),
+    OpenSpecPlanDetailSchema,
+  );
+}
+
+export function getOpenSpecPlanRuntime(planSlug: string, projectId: string | null = null) {
+  return get(
+    withProjectFilter(`${OPEN_SPEC_PLANS_PATH}/${encodeURIComponent(planSlug)}/runtime`, projectId),
     OpenSpecPlanRuntimeSchema,
   );
 }

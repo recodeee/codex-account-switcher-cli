@@ -333,6 +333,27 @@ function getActiveWorkspaceId(state: MockState): string | null {
 	return state.workspaces.find((entry) => entry.isActive)?.id ?? state.workspaces[0]?.id ?? null;
 }
 
+function resolveProjectScopedPlans(
+	state: MockState,
+	projectId: string | null,
+): MockState["openSpecPlans"] {
+	if (!projectId) {
+		return state.openSpecPlans;
+	}
+
+	const activeWorkspaceId = getActiveWorkspaceId(state);
+	const project = state.projects.find(
+		(entry) => entry.id === projectId && (activeWorkspaceId === null || entry.workspaceId === activeWorkspaceId),
+	);
+	if (!project?.projectPath) {
+		return [];
+	}
+
+	return state.openSpecPlans.filter(
+		(plan) => Boolean(plan.projectPath) && plan.projectPath === project.projectPath,
+	);
+}
+
 function createInitialState(): MockState {
 	return {
 		accounts: createDefaultAccounts(),
@@ -1942,9 +1963,13 @@ export const handlers = [
 		return HttpResponse.json({ status: "deleted" });
 	}),
 
-	http.get("/api/projects/plans", () => {
+	http.get("/api/projects/plans", ({ request }) => {
+		const url = new URL(request.url);
+		const projectId = url.searchParams.get("projectId");
+		const plans = resolveProjectScopedPlans(state, projectId);
+
 		return HttpResponse.json({
-			entries: state.openSpecPlans.map((plan) => ({
+			entries: plans.map((plan) => ({
 				slug: plan.slug,
 				title: plan.title,
 				status: plan.status,
@@ -1962,9 +1987,12 @@ export const handlers = [
 		});
 	}),
 
-	http.get("/api/projects/plans/:planSlug", ({ params }) => {
+	http.get("/api/projects/plans/:planSlug", ({ params, request }) => {
+		const url = new URL(request.url);
+		const projectId = url.searchParams.get("projectId");
+		const plans = resolveProjectScopedPlans(state, projectId);
 		const planSlug = String(params.planSlug);
-		const plan = state.openSpecPlans.find((entry) => entry.slug === planSlug);
+		const plan = plans.find((entry) => entry.slug === planSlug);
 		if (!plan) {
 			return HttpResponse.json(
 				{
@@ -1998,9 +2026,12 @@ export const handlers = [
 			});
 		}),
 
-	http.get("/api/projects/plans/:planSlug/runtime", ({ params }) => {
+	http.get("/api/projects/plans/:planSlug/runtime", ({ params, request }) => {
+		const url = new URL(request.url);
+		const projectId = url.searchParams.get("projectId");
+		const plans = resolveProjectScopedPlans(state, projectId);
 		const planSlug = String(params.planSlug);
-		const plan = state.openSpecPlans.find((entry) => entry.slug === planSlug);
+		const plan = plans.find((entry) => entry.slug === planSlug);
 		if (!plan) {
 			return HttpResponse.json(
 				{

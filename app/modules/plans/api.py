@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Query
 
 from app.core.auth.dependencies import set_dashboard_error_format, validate_dashboard_session
 from app.core.exceptions import DashboardNotFoundError, DashboardServiceUnavailableError
+from app.dependencies import ProjectsContext, get_projects_context
 from app.modules.plans.schemas import (
     OpenSpecPlanDetail,
     OpenSpecPlanRuntime,
@@ -28,8 +31,29 @@ router = APIRouter(
 )
 
 
-def get_plans_service() -> OpenSpecPlansService:
-    return OpenSpecPlansService()
+async def get_plans_service(
+    project_id: str | None = Query(default=None, alias="projectId"),
+    projects: ProjectsContext = Depends(get_projects_context),
+) -> OpenSpecPlansService:
+    if not project_id:
+        return OpenSpecPlansService()
+
+    project = await projects.service.get_project(project_id)
+    if project is None:
+        raise DashboardNotFoundError("Project not found", code="project_not_found")
+
+    if not project.project_path:
+        missing_root = Path("/__missing_project_path__")
+        return OpenSpecPlansService(
+            plans_root=missing_root / "openspec" / "plan",
+            omx_root=missing_root / ".omx",
+        )
+
+    project_root = Path(project.project_path).expanduser()
+    return OpenSpecPlansService(
+        plans_root=project_root / "openspec" / "plan",
+        omx_root=project_root / ".omx",
+    )
 
 
 @router.get("", response_model=OpenSpecPlansResponse)

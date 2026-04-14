@@ -187,6 +187,49 @@ async def test_plans_api_returns_not_found_for_missing_plan(async_client):
 
 
 @pytest.mark.asyncio
+async def test_plans_api_scopes_entries_to_project_id(async_client, tmp_path):
+    project_root = tmp_path / "scoped-project"
+    slug = f"project-scoped-plan-{uuid4().hex[:8]}"
+    plan_dir = project_root / "openspec" / "plan" / slug
+    plan_dir.mkdir(parents=True, exist_ok=False)
+    (plan_dir / "summary.md").write_text(
+        "\n".join(
+            [
+                f"# Plan Summary: {slug}",
+                "",
+                "- **Mode:** ralplan",
+                "- **Status:** draft",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    create_project = await async_client.post(
+        "/api/projects",
+        json={
+            "name": f"plans-scope-{uuid4().hex[:6]}",
+            "projectPath": str(project_root),
+            "sandboxMode": "workspace-write",
+        },
+    )
+    assert create_project.status_code == 200
+    project_id = create_project.json()["id"]
+
+    scoped_list = await async_client.get(f"/api/projects/plans?projectId={project_id}")
+    assert scoped_list.status_code == 200
+    assert [entry["slug"] for entry in scoped_list.json()["entries"]] == [slug]
+
+    scoped_detail = await async_client.get(f"/api/projects/plans/{slug}?projectId={project_id}")
+    assert scoped_detail.status_code == 200
+    assert scoped_detail.json()["slug"] == slug
+
+    missing_project = await async_client.get("/api/projects/plans?projectId=missing-project-id")
+    assert missing_project.status_code == 404
+    assert missing_project.json()["error"]["code"] == "project_not_found"
+
+
+@pytest.mark.asyncio
 async def test_plans_api_rejects_path_traversal_slug(async_client, app_instance, tmp_path):
     plans_root_parent = tmp_path / "plans-root"
     plans_root = plans_root_parent / "plan"

@@ -32,37 +32,46 @@ function sortPlansNewestFirst<T extends { slug: string; createdAt: string; updat
   });
 }
 
-export function useOpenSpecPlans(selectedSlug: string | null) {
+type UseOpenSpecPlansOptions = {
+  projectId: string | null;
+  showCompleted: boolean;
+};
+
+export function useOpenSpecPlans(selectedSlug: string | null, options: UseOpenSpecPlansOptions) {
+  const { projectId, showCompleted } = options;
   const plansQuery = useQuery({
-    queryKey: ["projects", "plans", "list"],
-    queryFn: listOpenSpecPlans,
+    queryKey: ["projects", "plans", "list", projectId ?? "current"],
+    queryFn: () => listOpenSpecPlans(projectId),
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
 
-  const effectiveSelectedSlug = useMemo(() => {
+  const sortedEntries = useMemo(() => {
     const entries = plansQuery.data?.entries ?? [];
-    const sortedEntries = sortPlansNewestFirst(entries);
-    const firstInteractiveEntry = sortedEntries.find((entry) => !isPlanFinished(entry.roles)) ?? null;
+    return sortPlansNewestFirst(entries);
+  }, [plansQuery.data?.entries]);
 
-    if (sortedEntries.length === 0) {
+  const visibleEntries = useMemo(
+    () => (showCompleted ? sortedEntries : sortedEntries.filter((entry) => !isPlanFinished(entry.roles))),
+    [showCompleted, sortedEntries],
+  );
+
+  const effectiveSelectedSlug = useMemo(() => {
+    if (visibleEntries.length === 0) {
       return null;
     }
 
-    if (
-      selectedSlug &&
-      sortedEntries.some((entry) => entry.slug === selectedSlug && !isPlanFinished(entry.roles))
-    ) {
+    if (selectedSlug && visibleEntries.some((entry) => entry.slug === selectedSlug)) {
       return selectedSlug;
     }
 
-    return firstInteractiveEntry?.slug ?? sortedEntries[0].slug;
-  }, [plansQuery.data?.entries, selectedSlug]);
+    return visibleEntries[0].slug;
+  }, [selectedSlug, visibleEntries]);
 
   const planDetailQuery = useQuery({
-    queryKey: ["projects", "plans", "detail", effectiveSelectedSlug],
-    queryFn: () => getOpenSpecPlan(effectiveSelectedSlug ?? ""),
+    queryKey: ["projects", "plans", "detail", projectId ?? "current", effectiveSelectedSlug],
+    queryFn: () => getOpenSpecPlan(effectiveSelectedSlug ?? "", projectId),
     enabled: Boolean(effectiveSelectedSlug),
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
@@ -73,5 +82,7 @@ export function useOpenSpecPlans(selectedSlug: string | null) {
     plansQuery,
     planDetailQuery,
     effectiveSelectedSlug,
+    allEntries: sortedEntries,
+    entries: visibleEntries,
   };
 }

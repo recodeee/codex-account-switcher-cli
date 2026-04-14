@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Maximize2,
   Circle,
@@ -31,7 +31,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SpinnerBlock } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -40,9 +48,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { listProjects } from "@/features/projects/api";
 import { useOpenSpecPlans } from "@/features/plans/hooks/use-open-spec-plans";
 import type { OpenSpecPlanDetail } from "@/features/plans/schemas";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import { getErrorMessageOrNull } from "@/utils/errors";
 import { formatTimeLong } from "@/utils/formatters";
 
@@ -52,11 +62,6 @@ function roleCompletionLabel(done: number, total: number): string {
 
 function isFinishedProgress(progress: { doneCheckpoints: number; totalCheckpoints: number }): boolean {
   return progress.totalCheckpoints > 0 && progress.doneCheckpoints >= progress.totalCheckpoints;
-}
-
-function parseTimestampMs(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function toStatusLabel(status: string): string {
@@ -684,30 +689,42 @@ export function buildPlanStarterPrompt(
 
 export function PlansPage() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [showCompletedPlans, setShowCompletedPlans] = useState(false);
   const [collapsedStepRows, setCollapsedStepRows] = useState<Record<string, boolean>>({});
   const [collapsedPromptCards, setCollapsedPromptCards] = useState<Record<string, boolean>>({});
   const [zoomedPromptKey, setZoomedPromptKey] = useState<string | null>(null);
-  const { plansQuery, planDetailQuery, effectiveSelectedSlug } = useOpenSpecPlans(selectedSlug);
+  const projectsQuery = useQuery({
+    queryKey: ["projects", "list", "plans-page"],
+    queryFn: listProjects,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+  const projectEntries = useMemo(
+    () => (projectsQuery.data?.entries ?? []).filter((entry) => Boolean(entry.projectPath)),
+    [projectsQuery.data?.entries],
+  );
+  const effectiveProjectId = useMemo(() => {
+    if (projectEntries.length === 0) {
+      return null;
+    }
+    if (selectedProjectId && projectEntries.some((entry) => entry.id === selectedProjectId)) {
+      return selectedProjectId;
+    }
+    return projectEntries[0].id;
+  }, [projectEntries, selectedProjectId]);
+  const { plansQuery, planDetailQuery, effectiveSelectedSlug, allEntries, entries } = useOpenSpecPlans(selectedSlug, {
+    projectId: effectiveProjectId,
+    showCompleted: showCompletedPlans,
+  });
 
-  const entries = plansQuery.data?.entries ?? [];
+  const projectsError = getErrorMessageOrNull(projectsQuery.error);
   const listError = getErrorMessageOrNull(plansQuery.error);
   const detailError = getErrorMessageOrNull(planDetailQuery.error);
   const planDetail = planDetailQuery.data;
 
   const selectedEntry = entries.find((entry) => entry.slug === effectiveSelectedSlug) ?? null;
-  const sortedEntries = [...entries].sort((left, right) => {
-    const createdDelta = parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt);
-    if (createdDelta !== 0) {
-      return createdDelta;
-    }
-
-    const updatedDelta = parseTimestampMs(right.updatedAt) - parseTimestampMs(left.updatedAt);
-    if (updatedDelta !== 0) {
-      return updatedDelta;
-    }
-
-    return left.slug.localeCompare(right.slug);
-  });
 
   const selectedEntryDisplayStatus = selectedEntry
     ? getDisplayStatus(selectedEntry.status, selectedEntry.overallProgress)
@@ -802,14 +819,66 @@ export function PlansPage() {
       {listError ? (
         <AlertMessage variant="error">Couldn’t load plans: {listError}</AlertMessage>
       ) : null}
+      {projectsError ? (
+        <AlertMessage variant="error">Couldn’t load projects: {projectsError}</AlertMessage>
+      ) : null}
+
+      <div className="rounded-xl border border-border/60 bg-card/60 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-[14rem] flex-1 space-y-1.5">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Project</p>
+            <Select
+              value={effectiveProjectId ?? "__current_repository__"}
+              onValueChange={(value) => {
+                setSelectedSlug(null);
+                setSelectedProjectId(value === "__current_repository__" ? null : value);
+              }}
+              disabled={projectsQuery.isLoading}
+            >
+              <SelectTrigger className="h-9 bg-background/60 text-sm" data-testid="plans-project-select">
+                <SelectValue placeholder="Select a project" />
+              </SelectTrigger>
+              <SelectContent>
+                {projectEntries.length === 0 ? (
+                  <SelectItem value="__current_repository__">Current repository</SelectItem>
+                ) : (
+                  projectEntries.map((entry) => (
+                    <SelectItem key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+            <Switch
+              checked={showCompletedPlans}
+              onCheckedChange={(checked) => {
+                setSelectedSlug(null);
+                setShowCompletedPlans(checked);
+              }}
+              aria-label="Show completed plans"
+            />
+            Show completed plans
+          </label>
+        </div>
+      </div>
 
       {plansQuery.isLoading ? (
         <SpinnerBlock label="Loading plans…" />
-      ) : entries.length === 0 ? (
+      ) : allEntries.length === 0 ? (
         <EmptyState
           icon={FolderTree}
           title="No plans found"
           description="Create a plan workspace under openspec/plan to visualize it here."
+        />
+      ) : entries.length === 0 ? (
+        <EmptyState
+          icon={FolderTree}
+          title="No in-progress plans"
+          description='This project only has completed plans right now. Enable "Show completed plans" to view them.'
         />
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(32rem,40rem)_minmax(0,1fr)]">
@@ -823,10 +892,9 @@ export function PlansPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedEntries.map((entry) => {
+                {entries.map((entry) => {
                   const createdAt = formatTimeLong(entry.createdAt);
                   const updatedAt = formatTimeLong(entry.updatedAt);
-                  const isFinished = isFinishedProgress(entry.overallProgress);
                   const statusBadge = resolvePlanStatusBadge(entry.status, entry.overallProgress);
                   const rowInitialPrompt = parseInitialPrompt(entry.summaryMarkdown);
                   const rowAttachmentCount =
@@ -841,13 +909,10 @@ export function PlansPage() {
                       key={entry.slug}
                       data-testid={`plan-row-${entry.slug}`}
                       className={cn(
-                        isFinished ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                        "cursor-pointer",
                         entry.slug === effectiveSelectedSlug ? "bg-muted/50" : undefined,
                       )}
                       onClick={() => {
-                        if (isFinished) {
-                          return;
-                        }
                         setSelectedSlug(entry.slug);
                       }}
                     >

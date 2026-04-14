@@ -1,11 +1,46 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import App from "@/App";
 import { server } from "@/test/mocks/server";
 import { renderWithProviders } from "@/test/utils";
+
+const elementPrototype = HTMLElement.prototype as HTMLElement & {
+  scrollIntoView?: () => void;
+  hasPointerCapture?: (pointerId: number) => boolean;
+  setPointerCapture?: (pointerId: number) => void;
+  releasePointerCapture?: (pointerId: number) => void;
+};
+
+if (typeof elementPrototype.scrollIntoView !== "function") {
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: vi.fn(),
+  });
+}
+
+if (typeof elementPrototype.hasPointerCapture !== "function") {
+  Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+    configurable: true,
+    value: () => false,
+  });
+}
+
+if (typeof elementPrototype.setPointerCapture !== "function") {
+  Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+    configurable: true,
+    value: () => undefined,
+  });
+}
+
+if (typeof elementPrototype.releasePointerCapture !== "function") {
+  Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
+    configurable: true,
+    value: () => undefined,
+  });
+}
 
 describe("plans flow integration", () => {
   it("renders plan progress percent, checkpoint resume card, and designer role", async () => {
@@ -218,6 +253,181 @@ describe("plans flow integration", () => {
     expect(await screen.findByText("No checkpoint activity recorded yet.")).toBeInTheDocument();
     expect(await screen.findByTestId("plan-step-timeline")).toHaveTextContent("Plan steps");
     expect(screen.queryByTestId("plan-runtime-observer")).not.toBeInTheDocument();
+  });
+
+  it("filters plans by selected project and hides completed plans by default", async () => {
+    const user = userEvent.setup();
+    const projectEntries = [
+      {
+        id: "project-alpha",
+        name: "Project Alpha",
+        description: null,
+        projectUrl: null,
+        projectPath: "/workspace/project-alpha",
+        sandboxMode: "workspace-write",
+        gitBranch: "dev",
+        createdAt: "2026-04-08T08:00:00Z",
+        updatedAt: "2026-04-08T08:00:00Z",
+      },
+      {
+        id: "project-beta",
+        name: "Project Beta",
+        description: null,
+        projectUrl: null,
+        projectPath: "/workspace/project-beta",
+        sandboxMode: "workspace-write",
+        gitBranch: "dev",
+        createdAt: "2026-04-08T08:00:00Z",
+        updatedAt: "2026-04-08T08:00:00Z",
+      },
+    ];
+
+    const planListByProject: Record<string, unknown[]> = {
+      "project-alpha": [
+        {
+          slug: "alpha-inprogress",
+          title: "alpha-inprogress",
+          status: "running",
+          createdAt: "2026-04-08T09:20:00Z",
+          updatedAt: "2026-04-08T10:20:00Z",
+          summaryMarkdown: "# Plan Summary: alpha-inprogress",
+          roles: [{ role: "executor", totalCheckpoints: 2, doneCheckpoints: 1 }],
+          overallProgress: { totalCheckpoints: 2, doneCheckpoints: 1, percentComplete: 50 },
+          currentCheckpoint: null,
+        },
+        {
+          slug: "alpha-completed",
+          title: "alpha-completed",
+          status: "completed",
+          createdAt: "2026-04-07T09:20:00Z",
+          updatedAt: "2026-04-07T10:20:00Z",
+          summaryMarkdown: "# Plan Summary: alpha-completed",
+          roles: [{ role: "executor", totalCheckpoints: 1, doneCheckpoints: 1 }],
+          overallProgress: { totalCheckpoints: 1, doneCheckpoints: 1, percentComplete: 100 },
+          currentCheckpoint: null,
+        },
+      ],
+      "project-beta": [
+        {
+          slug: "beta-inprogress",
+          title: "beta-inprogress",
+          status: "draft",
+          createdAt: "2026-04-09T09:20:00Z",
+          updatedAt: "2026-04-09T10:20:00Z",
+          summaryMarkdown: "# Plan Summary: beta-inprogress",
+          roles: [{ role: "executor", totalCheckpoints: 3, doneCheckpoints: 1 }],
+          overallProgress: { totalCheckpoints: 3, doneCheckpoints: 1, percentComplete: 33 },
+          currentCheckpoint: null,
+        },
+      ],
+    };
+
+    const planDetailBySlug = {
+      "alpha-inprogress": {
+        slug: "alpha-inprogress",
+        title: "alpha-inprogress",
+        status: "running",
+        createdAt: "2026-04-08T09:20:00Z",
+        updatedAt: "2026-04-08T10:20:00Z",
+        summaryMarkdown: "# Plan Summary: alpha-inprogress",
+        checkpointsMarkdown: "# Plan Checkpoints: alpha-inprogress",
+        roles: [
+          {
+            role: "executor",
+            totalCheckpoints: 2,
+            doneCheckpoints: 1,
+            tasksMarkdown: "# executor tasks",
+            checkpointsMarkdown: null,
+          },
+        ],
+        overallProgress: { totalCheckpoints: 2, doneCheckpoints: 1, percentComplete: 50 },
+        currentCheckpoint: null,
+        promptBundles: [],
+      },
+      "beta-inprogress": {
+        slug: "beta-inprogress",
+        title: "beta-inprogress",
+        status: "draft",
+        createdAt: "2026-04-09T09:20:00Z",
+        updatedAt: "2026-04-09T10:20:00Z",
+        summaryMarkdown: "# Plan Summary: beta-inprogress",
+        checkpointsMarkdown: "# Plan Checkpoints: beta-inprogress",
+        roles: [
+          {
+            role: "executor",
+            totalCheckpoints: 3,
+            doneCheckpoints: 1,
+            tasksMarkdown: "# executor tasks",
+            checkpointsMarkdown: null,
+          },
+        ],
+        overallProgress: { totalCheckpoints: 3, doneCheckpoints: 1, percentComplete: 33 },
+        currentCheckpoint: null,
+        promptBundles: [],
+      },
+    } satisfies Record<string, unknown>;
+
+    server.use(
+      http.get("/api/projects", () => HttpResponse.json({ entries: projectEntries })),
+      http.get("/api/projects/plans", ({ request }) => {
+        const url = new URL(request.url);
+        const projectId = url.searchParams.get("projectId") ?? "project-alpha";
+        return HttpResponse.json({
+          entries: planListByProject[projectId] ?? [],
+        });
+      }),
+      http.get("/api/projects/plans/:planSlug", ({ params }) => {
+        const planSlug = String(params.planSlug);
+        const detail = planDetailBySlug[planSlug as keyof typeof planDetailBySlug];
+        if (!detail) {
+          return HttpResponse.json(
+            {
+              error: {
+                code: "plan_not_found",
+                message: "Plan not found",
+              },
+            },
+            { status: 404 },
+          );
+        }
+        return HttpResponse.json(detail);
+      }),
+      http.get("/api/projects/plans/:planSlug/runtime", () =>
+        HttpResponse.json({
+          available: false,
+          sessionId: null,
+          correlationConfidence: null,
+          mode: null,
+          phase: null,
+          active: false,
+          updatedAt: null,
+          agents: [],
+          events: [],
+          lastCheckpoint: null,
+          lastError: null,
+          canResume: false,
+          partial: false,
+          staleAfterSeconds: 30,
+          reasons: ["correlation_unresolved"],
+          unavailableReason: "correlation_unresolved",
+        }),
+      ),
+    );
+
+    window.history.pushState({}, "", "/projects/plans");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Plans" })).toBeInTheDocument();
+    expect(await screen.findByTestId("plan-row-alpha-inprogress")).toBeInTheDocument();
+    expect(screen.queryByTestId("plan-row-alpha-completed")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("plans-project-select"));
+    await user.click(await screen.findByRole("option", { name: "Project Beta" }));
+
+    expect(await screen.findByTestId("plan-row-beta-inprogress")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId("plan-row-alpha-inprogress")).not.toBeInTheDocument();
+    });
   });
 
   it("shows a copy starter prompt action for the selected plan", async () => {
