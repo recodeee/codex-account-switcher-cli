@@ -95,14 +95,7 @@ function generateId() {
 }
 
 function buildDefaultSkills(): SkillRecord[] {
-  return [
-    {
-      id: generateId(),
-      name: "Code review",
-      description: "",
-      files: [{ path: DEFAULT_FILE_PATH, content: "" }],
-    },
-  ];
+  return [];
 }
 
 function normalizeSkills(value: unknown): SkillRecord[] {
@@ -179,7 +172,7 @@ function readStoredSkills(): SkillRecord[] {
     }
     const parsed = JSON.parse(raw) as unknown;
     const normalized = normalizeSkills(parsed);
-    return normalized.length > 0 ? normalized : buildDefaultSkills();
+    return normalized;
   } catch {
     return buildDefaultSkills();
   }
@@ -1079,35 +1072,59 @@ export function SkillsPage() {
               </div>
 
               <div className="flex-1 overflow-y-auto">
-                {skills.map((skill) => {
-                  const selected = skill.id === selectedSkill?.id;
-                  return (
-                    <button
-                      key={skill.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSkillId(skill.id);
-                        setIsMarkdownPreview(false);
-                      }}
-                      className={cn(
-                        "flex w-full items-center gap-3 border-b border-white/[0.06] px-3 py-3 text-left transition-colors",
-                        selected ? "bg-white/[0.08]" : "hover:bg-white/[0.04]",
-                      )}
-                    >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.03]">
-                        <Sparkles className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                {skills.length === 0 ? (
+                  <div className="flex h-full items-center justify-center p-4">
+                    <div className="w-full max-w-[210px] text-center">
+                      <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.03]">
+                        <Sparkles className="h-5 w-5 text-slate-500" aria-hidden="true" />
                       </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-slate-100">
-                          {skill.name}
+                      <p className="mt-3 text-sm font-medium text-slate-200">No skills yet</p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                        Skills define reusable instructions for agents.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-4 h-8 rounded-md border-white/[0.14] bg-white/[0.03] px-3 text-xs text-slate-200 hover:bg-white/[0.08]"
+                        onClick={() => setIsAddSkillDialogOpen(true)}
+                      >
+                        <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                        Create Skill
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  skills.map((skill) => {
+                    const selected = skill.id === selectedSkill?.id;
+                    return (
+                      <button
+                        key={skill.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSkillId(skill.id);
+                          setIsMarkdownPreview(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-3 border-b border-white/[0.06] px-3 py-3 text-left transition-colors",
+                          selected ? "bg-white/[0.08]" : "hover:bg-white/[0.04]",
+                        )}
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.03]">
+                          <Sparkles className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </span>
-                        <span className="mt-0.5 block truncate text-xs text-slate-400">
-                          {skill.description || "No description"}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-slate-100">
+                            {skill.name}
+                          </span>
+                          <span className="mt-0.5 block truncate text-xs text-slate-400">
+                            {skill.description || "No description"}
+                          </span>
                         </span>
-                      </span>
-                    </button>
-                  );
-                })}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1137,146 +1154,175 @@ export function SkillsPage() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-1 py-1">
-                {(selectedSkill?.files ?? []).map((file) => {
-                  const selected = file.path === selectedFilePath;
-                  return (
-                    <button
-                      key={file.path}
-                      type="button"
-                      onClick={() => {
-                        if (!selectedSkill) {
-                          return;
-                        }
-                        setIsMarkdownPreview(false);
-                        setSelectedFileBySkillId((current) => ({
-                          ...current,
-                          [selectedSkill.id]: file.path,
-                        }));
-                      }}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                        selected
-                          ? "bg-white/[0.08] text-slate-100"
-                          : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
-                      )}
-                    >
-                      <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span className="truncate">{file.path}</span>
-                    </button>
-                  );
-                })}
+                {selectedSkill ? (
+                  selectedSkill.files.map((file) => {
+                    const selected = file.path === selectedFilePath;
+                    return (
+                      <button
+                        key={file.path}
+                        type="button"
+                        onClick={() => {
+                          if (!selectedSkill) {
+                            return;
+                          }
+                          setIsMarkdownPreview(false);
+                          setSelectedFileBySkillId((current) => ({
+                            ...current,
+                            [selectedSkill.id]: file.path,
+                          }));
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                          selected
+                            ? "bg-white/[0.08] text-slate-100"
+                            : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
+                        )}
+                      >
+                        <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{file.path}</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="px-2 py-3 text-xs text-slate-500">
+                    Select or create a skill to manage files.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
 
           <Card className={cn(panelSurfaceClass, "h-full rounded-none border-0")}> 
-            <CardContent className="flex h-full flex-col p-0">
-              <div className="flex items-center gap-2 border-b border-white/[0.08] px-4 py-2">
-                <Input
-                  value={selectedSkill?.name ?? ""}
-                  onChange={(event) => {
-                    updateSelectedSkill((skill) => ({
-                      ...skill,
-                      name: event.target.value,
-                    }));
-                  }}
-                  disabled={!selectedSkill}
-                  className="h-8 max-w-[320px] border-white/[0.12] bg-white/[0.03] text-sm text-slate-100 placeholder:text-slate-500"
-                  placeholder="Skill name"
-                />
-                <Input
-                  value={selectedSkill?.description ?? ""}
-                  onChange={(event) => {
-                    updateSelectedSkill((skill) => ({
-                      ...skill,
-                      description: event.target.value,
-                    }));
-                  }}
-                  disabled={!selectedSkill}
-                  className="h-8 flex-1 border-white/[0.12] bg-white/[0.03] text-sm text-slate-100 placeholder:text-slate-500"
-                  placeholder="Description"
-                />
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 text-slate-400 hover:bg-white/[0.06] hover:text-red-300"
-                  aria-label="Delete skill"
-                  disabled={!selectedSkill}
-                  onClick={() => setIsDeleteSkillDialogOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </div>
-
-              <div className="flex h-10 items-center justify-between border-b border-white/[0.08] px-4 text-xs text-slate-400">
-                <div className="flex min-w-0 items-center">
-                  <Link className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span className="truncate">
-                    {selectedFile?.path ?? DEFAULT_FILE_PATH}
-                  </span>
-                </div>
-                {selectedFileIsMarkdown ? (
+            {selectedSkill ? (
+              <CardContent className="flex h-full flex-col p-0">
+                <div className="flex items-center gap-2 border-b border-white/[0.08] px-4 py-2">
+                  <Input
+                    value={selectedSkill.name}
+                    onChange={(event) => {
+                      updateSelectedSkill((skill) => ({
+                        ...skill,
+                        name: event.target.value,
+                      }));
+                    }}
+                    className="h-8 max-w-[320px] border-white/[0.12] bg-white/[0.03] text-sm text-slate-100 placeholder:text-slate-500"
+                    placeholder="Skill name"
+                  />
+                  <Input
+                    value={selectedSkill.description}
+                    onChange={(event) => {
+                      updateSelectedSkill((skill) => ({
+                        ...skill,
+                        description: event.target.value,
+                      }));
+                    }}
+                    className="h-8 flex-1 border-white/[0.12] bg-white/[0.03] text-sm text-slate-100 placeholder:text-slate-500"
+                    placeholder="Description"
+                  />
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
-                    className="h-7 w-7 text-slate-400 hover:bg-white/[0.06] hover:text-slate-100"
-                    onClick={() => setIsMarkdownPreview((value) => !value)}
-                    aria-label={isMarkdownPreview ? "Edit markdown" : "Preview markdown"}
-                    disabled={!selectedFile}
+                    className="h-8 w-8 text-slate-400 hover:bg-white/[0.06] hover:text-red-300"
+                    aria-label="Delete skill"
+                    onClick={() => setIsDeleteSkillDialogOpen(true)}
                   >
-                    {isMarkdownPreview ? (
-                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                    ) : (
-                      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </Button>
-                ) : null}
-              </div>
+                </div>
 
-              <div className="relative flex-1 overflow-hidden p-4">
-                {isMarkdownPreview && selectedFileIsMarkdown ? (
-                  selectedFile?.content ? (
-                    <pre className="h-full overflow-auto whitespace-pre-wrap break-words font-mono text-sm leading-6 text-slate-200">
-                      {selectedFile.content}
-                    </pre>
+                <div className="flex h-10 items-center justify-between border-b border-white/[0.08] px-4 text-xs text-slate-400">
+                  <div className="flex min-w-0 items-center">
+                    <Link className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">
+                      {selectedFile?.path ?? DEFAULT_FILE_PATH}
+                    </span>
+                  </div>
+                  {selectedFileIsMarkdown ? (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-slate-400 hover:bg-white/[0.06] hover:text-slate-100"
+                      onClick={() => setIsMarkdownPreview((value) => !value)}
+                      aria-label={isMarkdownPreview ? "Edit markdown" : "Preview markdown"}
+                      disabled={!selectedFile}
+                    >
+                      {isMarkdownPreview ? (
+                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                    </Button>
+                  ) : null}
+                </div>
+
+                <div className="relative flex-1 overflow-hidden p-4">
+                  {isMarkdownPreview && selectedFileIsMarkdown ? (
+                    selectedFile?.content ? (
+                      <pre className="h-full overflow-auto whitespace-pre-wrap break-words font-mono text-sm leading-6 text-slate-200">
+                        {selectedFile.content}
+                      </pre>
+                    ) : (
+                      <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-base italic text-slate-500">
+                        No content yet
+                      </p>
+                    )
                   ) : (
-                    <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-base italic text-slate-500">
-                      No content yet
-                    </p>
-                  )
-                ) : (
-                  <Textarea
-                    value={selectedFile?.content ?? ""}
-                    onChange={(event) => {
-                      if (!selectedFile) {
-                        return;
+                    <Textarea
+                      value={selectedFile?.content ?? ""}
+                      onChange={(event) => {
+                        if (!selectedFile) {
+                          return;
+                        }
+                        updateSelectedSkill((skill) => ({
+                          ...skill,
+                          files: skill.files.map((file) =>
+                            file.path === selectedFile.path
+                              ? {
+                                  ...file,
+                                  content: event.target.value,
+                                }
+                              : file,
+                          ),
+                        }));
+                      }}
+                      disabled={!selectedFile}
+                      className="h-full min-h-full w-full resize-none border-0 bg-transparent px-0 font-mono text-sm leading-6 text-slate-200 shadow-none placeholder:text-slate-600 focus-visible:ring-0"
+                      placeholder={
+                        selectedFileIsMarkdown
+                          ? "Write markdown content..."
+                          : "File content..."
                       }
-                      updateSelectedSkill((skill) => ({
-                        ...skill,
-                        files: skill.files.map((file) =>
-                          file.path === selectedFile.path
-                            ? {
-                                ...file,
-                                content: event.target.value,
-                              }
-                            : file,
-                        ),
-                      }));
-                    }}
-                    disabled={!selectedSkill || !selectedFile}
-                    className="h-full min-h-full w-full resize-none border-0 bg-transparent px-0 font-mono text-sm leading-6 text-slate-200 shadow-none placeholder:text-slate-600 focus-visible:ring-0"
-                    placeholder={
-                      selectedFileIsMarkdown
-                        ? "Write markdown content..."
-                        : "File content..."
-                    }
-                    spellCheck={false}
-                  />
-                )}
-              </div>
-            </CardContent>
+                      spellCheck={false}
+                    />
+                  )}
+                </div>
+              </CardContent>
+            ) : (
+              <CardContent className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.03]">
+                  <Sparkles className="h-5 w-5 text-slate-500" aria-hidden="true" />
+                </span>
+                <div className="space-y-1">
+                  <p className="text-base font-medium text-slate-200">
+                    Select a skill to view details
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    Create your first skill to start adding files and instructions.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-md border-white/[0.14] bg-white/[0.03] px-3 text-xs text-slate-200 hover:bg-white/[0.08]"
+                  onClick={() => setIsAddSkillDialogOpen(true)}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                  Create Skill
+                </Button>
+              </CardContent>
+            )}
           </Card>
         </div>
       </div>

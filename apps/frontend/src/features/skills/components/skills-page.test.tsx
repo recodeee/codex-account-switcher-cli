@@ -17,18 +17,14 @@ describe("SkillsPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders with a default skill and file", () => {
+  it("renders the empty state by default", () => {
     renderWithProviders(<SkillsPage />);
 
     expect(screen.getByRole("heading", { name: "Skills" })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Code review")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "SKILL.md" })).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText("Write markdown content..."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Delete skill" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No skills yet")).toBeInTheDocument();
+    expect(screen.getByText("Select a skill to view details")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Create Skill" })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Delete skill" })).not.toBeInTheDocument();
   });
 
   it("creates a skill via Add Skill dialog, adds a file, and edits content", async () => {
@@ -126,6 +122,7 @@ describe("SkillsPage", () => {
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(screen.queryByDisplayValue("Delete me")).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("Code review")).toBeInTheDocument();
+    expect(screen.getByText("No skills yet")).toBeInTheDocument();
+    expect(screen.getByText("Select a skill to view details")).toBeInTheDocument();
   });
 });
