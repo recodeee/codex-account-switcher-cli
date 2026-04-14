@@ -23,6 +23,10 @@ from app.modules.accounts.codex_auth_auto_import_ignore import (
     add_auto_import_ignored_account_id,
     remove_auto_import_ignored_account_id,
 )
+from app.modules.accounts.daemon_runtime_metadata import (
+    DaemonRuntimeMetadata,
+    read_daemon_runtime_metadata,
+)
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     CodexAuthSnapshotNotFoundError,
@@ -201,10 +205,12 @@ class AccountsService:
             runtime_usage_by_snapshot=runtime_usage_by_snapshot,
             account_ids=account_ids,
         )
+        daemon_runtime_metadata = read_daemon_runtime_metadata()
         codex_auth_by_account = {
             account.id: self._build_codex_auth_status(
                 account=account,
                 snapshot_index=snapshot_index,
+                daemon_runtime_metadata=daemon_runtime_metadata,
             )
             for account in accounts
         }
@@ -460,8 +466,13 @@ class AccountsService:
         *,
         account: Account,
         snapshot_index: CodexAuthSnapshotIndex,
+        daemon_runtime_metadata: DaemonRuntimeMetadata | None = None,
     ) -> AccountCodexAuthStatus:
-        return build_codex_auth_status(account=account, snapshot_index=snapshot_index)
+        return build_codex_auth_status(
+            account=account,
+            snapshot_index=snapshot_index,
+            daemon_runtime_metadata=daemon_runtime_metadata,
+        )
 
     def _account_from_auth_bytes(self, raw: bytes) -> Account:
         try:

@@ -453,8 +453,6 @@ export function AgentsPage() {
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const createAvatarInputRef = useRef<HTMLInputElement | null>(null);
-  const tabContentRef = useRef<HTMLDivElement | null>(null);
-  const instructionsTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const { agentsQuery, createMutation, updateMutation, deleteMutation } = useAgents();
   const dashboardQuery = useDashboard();
@@ -526,41 +524,6 @@ export function AgentsPage() {
   useEffect(() => {
     writeStoredAgentSkills(skillsByAgentId);
   }, [skillsByAgentId]);
-
-  useEffect(() => {
-    if (activeTab !== "instructions") {
-      return;
-    }
-
-    const resizeInstructionsTextarea = () => {
-      const textarea = instructionsTextareaRef.current;
-      const tabContent = tabContentRef.current;
-      if (!textarea || !tabContent) {
-        return;
-      }
-
-      const tabContentRect = tabContent.getBoundingClientRect();
-      const textareaRect = textarea.getBoundingClientRect();
-      const availableHeight = Math.floor(tabContentRect.bottom - textareaRect.top - 16);
-      if (availableHeight <= 0) {
-        return;
-      }
-
-      const minHeight = Math.min(300, availableHeight);
-      textarea.style.maxHeight = `${availableHeight}px`;
-      textarea.style.height = "auto";
-      const nextHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), availableHeight);
-      textarea.style.height = `${nextHeight}px`;
-      textarea.style.overflowY = textarea.scrollHeight > availableHeight ? "auto" : "hidden";
-    };
-
-    const frameId = window.requestAnimationFrame(resizeInstructionsTextarea);
-    window.addEventListener("resize", resizeInstructionsTextarea);
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", resizeInstructionsTextarea);
-    };
-  }, [activeTab, selectedAgent?.id, selectedAgent?.instructions]);
 
   const updateSelectedAgent = (updater: (agent: AgentEntry) => AgentEntry) => {
     if (!selectedAgent) {
@@ -958,9 +921,9 @@ export function AgentsPage() {
                   </Tabs>
                 </div>
 
-                <div ref={tabContentRef} className="flex-1 overflow-y-auto p-4">
+                <div className="flex-1 overflow-y-auto p-4">
                   {activeTab === "instructions" ? (
-                    <div className="space-y-4">
+                    <div className="flex h-full min-h-0 flex-col gap-4">
                       <div>
                         <p className="text-sm font-semibold text-slate-100">Agent Instructions</p>
                         <p className="mt-1 text-xs text-slate-500">
@@ -986,18 +949,19 @@ export function AgentsPage() {
                           Auto-write from CLI session
                         </Button>
                       </div>
-                      <Textarea
-                        ref={instructionsTextareaRef}
-                        value={selectedAgent.instructions}
-                        onChange={(event) => {
-                          updateSelectedAgent((agent) => ({
-                            ...agent,
-                            instructions: event.target.value,
-                          }));
-                        }}
-                        placeholder={AGENT_INSTRUCTIONS_PLACEHOLDER}
-                        className="min-h-[300px] resize-none border-white/[0.1] bg-[#070b12] font-mono text-sm text-slate-200 placeholder:text-slate-500/70"
-                      />
+                      <div className="min-h-0 flex-1">
+                        <Textarea
+                          value={selectedAgent.instructions}
+                          onChange={(event) => {
+                            updateSelectedAgent((agent) => ({
+                              ...agent,
+                              instructions: event.target.value,
+                            }));
+                          }}
+                          placeholder={AGENT_INSTRUCTIONS_PLACEHOLDER}
+                          className="h-full min-h-[300px] max-h-full resize-none overflow-y-auto border-white/[0.1] bg-[#070b12] font-mono text-sm text-slate-200 placeholder:text-slate-500/70"
+                        />
+                      </div>
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-slate-500">
                           {selectedAgent.instructions.length > 0

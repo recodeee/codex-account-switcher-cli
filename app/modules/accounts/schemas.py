@@ -55,6 +55,13 @@ class AccountCodexAuthStatus(DashboardModel):
     runtime_ready: bool = False
     runtime_ready_source: Literal["validated_snapshot_email_match"] | None = None
     is_omx_boosted: bool = False
+    runtime_mode: Literal["local", "cloud"] = "local"
+    daemon_id: str | None = None
+    device: str | None = None
+    cli_version: str | None = None
+    latest_cli_version: str | None = None
+    cli_update_available: bool = False
+    cli_update_command: str | None = None
 
 
 class AccountAdditionalWindow(DashboardModel):

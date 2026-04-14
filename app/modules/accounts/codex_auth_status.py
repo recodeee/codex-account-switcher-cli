@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from app.db.models import Account
+from app.modules.accounts.daemon_runtime_metadata import (
+    DaemonRuntimeMetadata,
+    read_daemon_runtime_metadata,
+)
 from app.modules.accounts.codex_auth_switcher import (
     CodexAuthSnapshotIndex,
     build_email_snapshot_name,
@@ -14,6 +18,7 @@ def build_codex_auth_status(
     *,
     account: Account,
     snapshot_index: CodexAuthSnapshotIndex,
+    daemon_runtime_metadata: DaemonRuntimeMetadata | None = None,
 ) -> AccountCodexAuthStatus:
     snapshot_names = resolve_snapshot_names_for_account(
         snapshot_index=snapshot_index,
@@ -32,6 +37,7 @@ def build_codex_auth_status(
         selected_snapshot_name and selected_snapshot_name == expected_snapshot_name
     )
     runtime_ready = bool(snapshot_names and selected_snapshot_name and snapshot_name_matches_email)
+    runtime_metadata = daemon_runtime_metadata or read_daemon_runtime_metadata()
 
     return AccountCodexAuthStatus(
         has_snapshot=bool(snapshot_names),
@@ -42,4 +48,11 @@ def build_codex_auth_status(
         snapshot_name_matches_email=snapshot_name_matches_email,
         runtime_ready=runtime_ready,
         runtime_ready_source="validated_snapshot_email_match" if runtime_ready else None,
+        runtime_mode=runtime_metadata.runtime_mode,
+        daemon_id=runtime_metadata.daemon_id,
+        device=runtime_metadata.device,
+        cli_version=runtime_metadata.cli_version,
+        latest_cli_version=runtime_metadata.latest_cli_version,
+        cli_update_available=runtime_metadata.cli_update_available,
+        cli_update_command=runtime_metadata.cli_update_command,
     )

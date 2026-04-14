@@ -928,7 +928,7 @@ export function PlansPage() {
         <AlertMessage variant="error">Couldn’t load projects: {projectsError}</AlertMessage>
       ) : null}
 
-      <div className="rounded-xl border border-border/60 bg-card/60 p-3">
+      <div className="rounded-xl border border-cyan-400/15 bg-[linear-gradient(145deg,rgba(11,20,35,0.94)_0%,rgba(6,12,24,0.92)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-[14rem] flex-1 space-y-1.5">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground/90">Project</p>
@@ -940,7 +940,10 @@ export function PlansPage() {
               }}
               disabled={projectsQuery.isLoading}
             >
-              <SelectTrigger className="h-9 bg-background/60 text-sm" data-testid="plans-project-select">
+              <SelectTrigger
+                className="h-9 border-white/10 bg-[#0a1528]/80 text-sm text-zinc-100 data-[placeholder]:text-zinc-400"
+                data-testid="plans-project-select"
+              >
                 <SelectValue placeholder="Select a project" />
               </SelectTrigger>
               <SelectContent>
@@ -958,7 +961,7 @@ export function PlansPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+            <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-zinc-300/85">
               <Switch
                 checked={showCompletedPlans}
                 onCheckedChange={(checked) => {
@@ -973,7 +976,7 @@ export function PlansPage() {
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 text-xs"
+              className="h-8 border-cyan-400/25 bg-[#0a1629]/80 text-xs text-zinc-100 hover:border-cyan-300/40 hover:bg-[#0d1a31]"
               onClick={() => setIsPlanListCollapsed((prev) => !prev)}
               aria-pressed={isDetailFullWidth}
               disabled={!canToggleListLayout}
@@ -1009,7 +1012,10 @@ export function PlansPage() {
           data-testid="plans-layout-grid"
         >
           {!isDetailFullWidth ? (
-            <div className="rounded-xl border border-border/60 bg-card/60 p-3" data-testid="plans-list-panel">
+            <div
+              className="rounded-xl border border-cyan-400/15 bg-[linear-gradient(160deg,rgba(10,19,34,0.92)_0%,rgba(6,12,23,0.9)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+              data-testid="plans-list-panel"
+            >
               <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
@@ -1037,7 +1043,9 @@ export function PlansPage() {
                       data-testid={`plan-row-${entry.slug}`}
                       className={cn(
                         "cursor-pointer",
-                        entry.slug === effectiveSelectedSlug ? "bg-muted/50" : undefined,
+                        entry.slug === effectiveSelectedSlug
+                          ? "bg-cyan-500/12 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.22)]"
+                          : undefined,
                       )}
                       onClick={() => {
                         setSelectedSlug(entry.slug);
@@ -1066,7 +1074,10 @@ export function PlansPage() {
                             </p>
                           ) : null}
                           <div className="max-w-[16rem] space-y-1">
-                            <Progress value={entry.overallProgress.percentComplete} className="h-1" />
+                            <Progress
+                              value={entry.overallProgress.percentComplete}
+                              className="h-1 bg-cyan-950/65 [&_[data-slot=progress-indicator]]:bg-cyan-300"
+                            />
                             <p className="text-[11px] text-muted-foreground">{progressLabel}</p>
                           </div>
                         </div>
@@ -1098,7 +1109,10 @@ export function PlansPage() {
             </div>
           ) : null}
 
-          <div className="rounded-xl border border-border/60 bg-card/60 p-4" data-testid="plans-detail-panel">
+          <div
+            className="rounded-xl border border-cyan-400/20 bg-[linear-gradient(165deg,rgba(9,18,32,0.95)_0%,rgba(5,11,22,0.94)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_18px_42px_-36px_rgba(34,211,238,0.75)]"
+            data-testid="plans-detail-panel"
+          >
             {selectedEntry ? (
               <>
                 <div className="mb-3 rounded-lg border border-cyan-500/15 bg-gradient-to-r from-[#040c18]/95 via-[#050c16]/95 to-[#060913]/95 p-3 shadow-[0_10px_30px_-24px_rgba(34,211,238,0.75)]">
@@ -1117,7 +1131,7 @@ export function PlansPage() {
                       </div>
                       {initialPrompt.text ? (
                         <p
-                          className="max-w-[44rem] truncate rounded-md border border-white/10 bg-background/35 px-2.5 py-1.5 text-xs text-muted-foreground"
+                          className="max-w-[44rem] truncate rounded-md border border-cyan-400/15 bg-[#081426]/70 px-2.5 py-1.5 text-xs text-zinc-300/90"
                           data-testid="plan-initial-prompt"
                           title={initialPrompt.text}
                         >
@@ -1132,7 +1146,7 @@ export function PlansPage() {
                               href={imageUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="group relative block overflow-hidden rounded-md border border-white/15 bg-background/60"
+                              className="group relative block overflow-hidden rounded-md border border-cyan-300/20 bg-[#091629]/80"
                             >
                               <img
                                 src={imageUrl}
@@ -1159,9 +1173,19 @@ export function PlansPage() {
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                       {teamExecutionPrompt ? (
-                        <CopyButton value={teamExecutionPrompt} label="Copy team execution prompt" />
+                        <CopyButton
+                          value={teamExecutionPrompt}
+                          label="Copy team execution prompt"
+                          className={PLANS_COPY_BUTTON_CLASS_NAME}
+                        />
                       ) : null}
-                      {starterPrompt ? <CopyButton value={starterPrompt} label="Copy starter prompt" /> : null}
+                      {starterPrompt ? (
+                        <CopyButton
+                          value={starterPrompt}
+                          label="Copy starter prompt"
+                          className={PLANS_COPY_BUTTON_CLASS_NAME}
+                        />
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -1174,19 +1198,23 @@ export function PlansPage() {
                   <SpinnerBlock label="Loading plan details…" />
                 ) : planDetail ? (
                   <div className="space-y-4">
-                    <div className="space-y-2 rounded-lg border border-border/60 bg-background/30 p-3">
+                    <div className="relative overflow-hidden space-y-2 rounded-[18px] border border-cyan-400/20 bg-[linear-gradient(155deg,rgba(12,23,41,0.92)_0%,rgba(8,15,30,0.9)_100%)] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 bg-[radial-gradient(75%_115%_at_0%_0%,rgba(56,189,248,0.16)_0%,rgba(56,189,248,0.02)_60%,transparent_100%)]"
+                      />
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Overall progress</p>
-                        <p className="text-xs font-medium text-muted-foreground" data-testid="plan-progress-percent">
+                        <p className="text-xs uppercase tracking-[0.11em] text-cyan-100/82">Overall progress</p>
+                        <p className="text-xs font-medium text-cyan-100/82" data-testid="plan-progress-percent">
                           {planDetail.overallProgress.percentComplete}%
                         </p>
                       </div>
                       <Progress
                         value={planDetail.overallProgress.percentComplete}
-                        className="h-2"
+                        className="h-2 bg-cyan-950/65 [&_[data-slot=progress-indicator]]:bg-cyan-300"
                         data-testid="plan-progress-bar"
                       />
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-zinc-300/88">
                         {roleCompletionLabel(
                           planDetail.overallProgress.doneCheckpoints,
                           planDetail.overallProgress.totalCheckpoints,
@@ -1196,12 +1224,12 @@ export function PlansPage() {
                     </div>
 
                     <div
-                      className="space-y-3 rounded-xl border border-emerald-500/20 bg-gradient-to-b from-[#021114] via-[#020b12] to-[#02080f] p-3.5 shadow-[0_16px_38px_-34px_rgba(34,197,94,0.9)]"
+                      className="space-y-3 rounded-xl border border-cyan-400/24 bg-[linear-gradient(165deg,rgba(6,22,35,0.96)_0%,rgba(4,14,25,0.95)_55%,rgba(3,11,21,0.96)_100%)] p-3.5 shadow-[0_20px_44px_-34px_rgba(34,211,238,0.85)]"
                       data-testid="plan-next-step-suggestions"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs uppercase tracking-wide text-emerald-100/85">Suggested next step</p>
-                        <Badge variant="outline" className="border-emerald-400/35 bg-emerald-500/15 text-[10px] text-emerald-100">
+                        <p className="text-xs uppercase tracking-[0.11em] text-cyan-100/86">Suggested next step</p>
+                        <Badge variant="outline" className="border-cyan-400/35 bg-cyan-500/15 text-[10px] text-cyan-100">
                           {launchSuggestions.length} options
                         </Badge>
                       </div>
@@ -1209,20 +1237,24 @@ export function PlansPage() {
                         {launchSuggestions.map((suggestion, index) => (
                           <li
                             key={suggestion.id}
-                            className="rounded-lg border border-emerald-500/20 bg-[#021219]/70 px-3 py-2.5"
+                            className="rounded-lg border border-cyan-400/20 bg-[#08182a]/72 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                             data-testid={`plan-launch-suggestion-${suggestion.id}`}
                           >
                             <div className="flex flex-wrap items-start justify-between gap-2.5">
                               <div className="min-w-0 space-y-1">
-                                <p className="text-sm font-medium text-emerald-100">
+                                <p className="text-sm font-medium text-cyan-50">
                                   {index + 1}. {suggestion.title}
                                 </p>
-                                <p className="text-xs text-emerald-100/70">{suggestion.description}</p>
-                                <pre className="overflow-auto rounded-md border border-emerald-500/25 bg-[#010b10] px-2 py-1.5 font-mono text-[11px] text-emerald-100/95">
+                                <p className="text-xs text-zinc-300/85">{suggestion.description}</p>
+                                <pre className="overflow-auto rounded-md border border-cyan-300/25 bg-[#061120]/88 px-2 py-1.5 font-mono text-[11px] text-cyan-100/95">
                                   {suggestion.command}
                                 </pre>
                               </div>
-                              <CopyButton value={suggestion.command} label={`Copy ${suggestion.id} next-step command`} />
+                              <CopyButton
+                                value={suggestion.command}
+                                label={`Copy ${suggestion.id} next-step command`}
+                                className={PLANS_COPY_BUTTON_CLASS_NAME}
+                              />
                             </div>
                           </li>
                         ))}
@@ -1230,12 +1262,12 @@ export function PlansPage() {
                     </div>
 
                     <div
-                      className="space-y-3 rounded-xl border border-border/60 bg-gradient-to-b from-[#030a16]/85 via-[#020813]/85 to-[#020611]/85 p-3.5"
+                      className="space-y-3 rounded-xl border border-cyan-400/20 bg-[linear-gradient(165deg,rgba(8,18,34,0.94)_0%,rgba(4,11,22,0.94)_100%)] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                       data-testid="plan-included-prompts"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Included AI prompts</p>
-                        <Badge variant="outline" className="text-[10px]">
+                        <p className="text-xs uppercase tracking-[0.11em] text-zinc-300/84">Included AI prompts</p>
+                        <Badge variant="outline" className="border-cyan-400/25 text-[10px] text-cyan-100/85">
                           {includedPromptCards.length} prompt{includedPromptCards.length === 1 ? "" : "s"}
                         </Badge>
                       </div>
@@ -1248,7 +1280,7 @@ export function PlansPage() {
                             return (
                               <li
                                 key={prompt.key}
-                                className="overflow-hidden rounded-lg border border-white/10 bg-[#020913]/70 shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]"
+                                className="overflow-hidden rounded-lg border border-cyan-300/16 bg-[#071527]/80 shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]"
                                 data-testid={`plan-included-prompt-card-${prompt.id}`}
                               >
                                 <div
@@ -1298,7 +1330,11 @@ export function PlansPage() {
                                         {prompt.checkpointIds.join(" · ")}
                                       </Badge>
                                     ) : null}
-                                    <CopyButton value={prompt.content} label={`Copy ${prompt.title}`} />
+                                    <CopyButton
+                                      value={prompt.content}
+                                      label={`Copy ${prompt.title}`}
+                                      className={PLANS_COPY_BUTTON_CLASS_NAME}
+                                    />
                                     <Button
                                       type="button"
                                       variant="outline"
@@ -1354,7 +1390,11 @@ export function PlansPage() {
                                     {statusLabel(zoomedPrompt.status)}
                                   </Badge>
                                 ) : null}
-                                <CopyButton value={zoomedPrompt.content} label={`Copy ${zoomedPrompt.title}`} />
+                                <CopyButton
+                                  value={zoomedPrompt.content}
+                                  label={`Copy ${zoomedPrompt.title}`}
+                                  className={PLANS_COPY_BUTTON_CLASS_NAME}
+                                />
                               </div>
                             </div>
                           </DialogHeader>

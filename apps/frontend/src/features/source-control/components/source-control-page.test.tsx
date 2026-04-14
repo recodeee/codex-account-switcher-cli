@@ -24,7 +24,7 @@ describe("SourceControlPage", () => {
     expect(snapshotLines.length).toBeGreaterThan(0);
     expect(screen.getByText("Codex (admin@kozponthiusbolt.hu--dup-2)")).toBeInTheDocument();
     expect(screen.getByText("codex snapshot • live sessions: 1")).toBeInTheDocument();
-    expect(screen.getByText("Current changes (agent/demo-source-control)")).toBeInTheDocument();
+    expect(screen.queryByText(/Current changes \(/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete branch" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: /agent\/fix-auth-refresh/i }));

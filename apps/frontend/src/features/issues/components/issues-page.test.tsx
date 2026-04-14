@@ -28,15 +28,17 @@ function createDataTransfer(): DataTransfer {
 }
 
 describe("IssuesPage", () => {
-  it("renders six issue columns in full board layout", () => {
+  it("renders five issue columns in full board layout", () => {
     renderWithProviders(<IssuesPage />);
 
+    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Members" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Backlog issues" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Todo issues" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "In Progress issues" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "In Review issues" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Done issues" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Blocked issues" })).toBeInTheDocument();
   });
 
   it("moves an issue card from backlog to todo via drag and drop", () => {
@@ -57,5 +59,36 @@ describe("IssuesPage", () => {
 
     expect(within(todoColumn).getByText(issueTitle)).toBeInTheDocument();
     expect(within(backlogColumn).queryByText(issueTitle)).not.toBeInTheDocument();
+  });
+
+  it("filters backlog cards by members and agents scope tabs", () => {
+    renderWithProviders(<IssuesPage />);
+
+    const backlogColumn = screen.getByRole("region", { name: "Backlog issues" });
+    expect(within(backlogColumn).getByText("Invite a teammate")).toBeInTheDocument();
+    expect(within(backlogColumn).getByText("Set up your repository connection")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Members" }));
+    expect(within(backlogColumn).getByText("Invite a teammate")).toBeInTheDocument();
+    expect(within(backlogColumn).queryByText("Set up your repository connection")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
+    expect(within(backlogColumn).getByText("Set up your repository connection")).toBeInTheDocument();
+    expect(within(backlogColumn).queryByText("Invite a teammate")).not.toBeInTheDocument();
+  });
+
+  it("creates a new issue from the composer dialog", () => {
+    renderWithProviders(<IssuesPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add issue in Backlog" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByPlaceholderText("Issue title"), {
+      target: { value: "Ship full-width issue composer parity" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create Issue" }));
+
+    const backlogColumn = screen.getByRole("region", { name: "Backlog issues" });
+    expect(within(backlogColumn).getByText("Ship full-width issue composer parity")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

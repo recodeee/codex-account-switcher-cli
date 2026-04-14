@@ -72,7 +72,7 @@ describe("projects flow integration", () => {
     );
     await user.click(within(createDialog).getByRole("button", { name: "Create Project" }));
 
-    expect(await screen.findByText("recodee-core")).toBeInTheDocument();
+    expect((await screen.findAllByText("recodee-core")).length).toBeGreaterThan(0);
     expect(screen.getByText("Main dashboard project")).toBeInTheDocument();
     expect(screen.getByText("https://recodee.com/")).toBeInTheDocument();
     expect(screen.getByText("https://github.com/webu-pro/recodee")).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe("projects flow integration", () => {
     );
     await user.click(within(editDialog).getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText("recodee-core-v2")).toBeInTheDocument();
+    expect((await screen.findAllByText("recodee-core-v2")).length).toBeGreaterThan(0);
     expect(screen.getByText("Updated project details")).toBeInTheDocument();
     expect(screen.getByText("https://recodee.dev/")).toBeInTheDocument();
     expect(screen.getByText("https://github.com/webu-pro/recodee-v2")).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe("projects flow integration", () => {
     expect(screen.getByText("feature/recodee-core-v2")).toBeInTheDocument();
     expect(screen.queryByText("recodee-core")).not.toBeInTheDocument();
 
-    await user.click(screen.getByText("recodee-core-v2"));
+    await user.click(screen.getAllByText("recodee-core-v2")[0]!);
     await user.click(screen.getByRole("button", { name: "Delete" }));
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
@@ -173,7 +173,7 @@ describe("projects flow integration", () => {
     window.history.pushState({}, "", "/projects");
     renderWithProviders(<App />);
 
-    expect(await screen.findByText("marvahome")).toBeInTheDocument();
+    expect((await screen.findAllByText("marvahome")).length).toBeGreaterThan(0);
     expect(screen.getByTestId("project-plan-count-project_live_1")).toHaveTextContent("3 plans");
     expect(screen.getByTestId("project-plan-count-project_live_1")).toHaveTextContent("2 successful");
   });
@@ -219,5 +219,62 @@ describe("projects flow integration", () => {
     await user.click(await screen.findByRole("button", { name: "Open VSCode" }));
 
     expect(await screen.findByText("Project folder is already open in VSCode")).toBeInTheDocument();
+  });
+
+  it("creates a new issue and allocates it to the selected project", async () => {
+    const user = userEvent.setup({ delay: null });
+
+    server.use(
+      http.post("http://localhost:9000/store/customers/me", () => HttpResponse.json({ customer: {} })),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          entries: [
+            {
+              id: "project_alpha",
+              name: "alpha",
+              description: "alpha project",
+              projectUrl: "https://alpha.example.com",
+              githubRepoUrl: "https://github.com/webu-pro/alpha",
+              projectPath: "/tmp/alpha",
+              sandboxMode: "workspace-write",
+              gitBranch: "dev",
+              createdAt: new Date("2026-04-14T08:00:00Z").toISOString(),
+              updatedAt: new Date("2026-04-14T08:00:00Z").toISOString(),
+            },
+            {
+              id: "project_beta",
+              name: "beta",
+              description: "beta project",
+              projectUrl: "https://beta.example.com",
+              githubRepoUrl: "https://github.com/webu-pro/beta",
+              projectPath: "/tmp/beta",
+              sandboxMode: "workspace-write",
+              gitBranch: "dev",
+              createdAt: new Date("2026-04-14T08:00:00Z").toISOString(),
+              updatedAt: new Date("2026-04-14T08:00:00Z").toISOString(),
+            },
+          ],
+        }),
+      ),
+      http.get("/api/projects/plan-links", () => HttpResponse.json({ entries: [] })),
+    );
+
+    window.history.pushState({}, "", "/projects");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByTestId("projects-issues-board")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "New Issue" }));
+
+    const issueDialog = await screen.findByRole("dialog", { name: "New Issue" });
+    await user.type(within(issueDialog).getByPlaceholderText("Issue title"), "Implement user authentication with OAuth");
+    await user.click(within(issueDialog).getByRole("combobox", { name: /project/i }));
+    await user.click(await screen.findByRole("option", { name: "beta" }));
+    await user.click(within(issueDialog).getByRole("combobox", { name: /priority/i }));
+    await user.click(await screen.findByRole("option", { name: "High" }));
+    await user.click(within(issueDialog).getByRole("button", { name: "Create Issue" }));
+
+    expect(await screen.findByText("Implement user authentication with OAuth")).toBeInTheDocument();
+    expect(screen.getByTestId("project-issue-count-project_beta")).toHaveTextContent("1 issue");
+    expect(screen.getByTestId("project-issue-count-project_beta")).toHaveTextContent("1 urgent/high");
   });
 });

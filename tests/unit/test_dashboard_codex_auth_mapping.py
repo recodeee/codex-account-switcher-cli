@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from app.core.auth import generate_unique_account_id
 from app.core.crypto import TokenEncryptor
 from app.db.models import Account, AccountStatus
+from app.modules.accounts.daemon_runtime_metadata import DaemonRuntimeMetadata
 from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
 from app.modules.accounts.codex_auth_status import build_codex_auth_status
 
@@ -25,6 +26,18 @@ def _make_account(*, account_id: str, chatgpt_account_id: str, email: str) -> Ac
     )
 
 
+def _test_daemon_runtime_metadata() -> DaemonRuntimeMetadata:
+    return DaemonRuntimeMetadata(
+        runtime_mode="local",
+        daemon_id="devbox",
+        device="devbox",
+        cli_version="0.40.0",
+        latest_cli_version="0.41.0",
+        cli_update_available=True,
+        cli_update_command="multica update",
+    )
+
+
 def test_build_codex_auth_status_collapses_conflicts_to_single_snapshot_mapping() -> None:
     denver_email = "denver@edixal.com"
     chatgpt_account_id = "shared-chatgpt-id"
@@ -42,7 +55,11 @@ def test_build_codex_auth_status_collapses_conflicts_to_single_snapshot_mapping(
         active_snapshot_name="nagyviktordp",
     )
 
-    status = build_codex_auth_status(account=denver_account, snapshot_index=snapshot_index)
+    status = build_codex_auth_status(
+        account=denver_account,
+        snapshot_index=snapshot_index,
+        daemon_runtime_metadata=_test_daemon_runtime_metadata(),
+    )
 
     assert status.snapshot_name == "denver"
     assert status.active_snapshot_name == "nagyviktordp"
@@ -51,6 +68,13 @@ def test_build_codex_auth_status_collapses_conflicts_to_single_snapshot_mapping(
     assert status.snapshot_name_matches_email is False
     assert status.runtime_ready is False
     assert status.runtime_ready_source is None
+    assert status.runtime_mode == "local"
+    assert status.daemon_id == "devbox"
+    assert status.device == "devbox"
+    assert status.cli_version == "0.40.0"
+    assert status.latest_cli_version == "0.41.0"
+    assert status.cli_update_available is True
+    assert status.cli_update_command == "multica update"
 
 
 def test_build_codex_auth_status_marks_runtime_ready_for_validated_email_snapshot() -> None:
@@ -66,9 +90,15 @@ def test_build_codex_auth_status_marks_runtime_ready_for_validated_email_snapsho
         active_snapshot_name=email,
     )
 
-    status = build_codex_auth_status(account=tokio_account, snapshot_index=snapshot_index)
+    status = build_codex_auth_status(
+        account=tokio_account,
+        snapshot_index=snapshot_index,
+        daemon_runtime_metadata=_test_daemon_runtime_metadata(),
+    )
 
     assert status.snapshot_name == email
     assert status.snapshot_name_matches_email is True
     assert status.runtime_ready is True
     assert status.runtime_ready_source == "validated_snapshot_email_match"
+    assert status.daemon_id == "devbox"
+    assert status.cli_update_available is True

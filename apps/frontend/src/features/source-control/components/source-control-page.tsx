@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bot, GitBranch, GitPullRequest, RefreshCw, Trash2 } from "lucide-react";
+import { Bot, GitPullRequest, RefreshCw, Trash2 } from "lucide-react";
 
 import { AlertMessage } from "@/components/alert-message";
 import { Button } from "@/components/ui/button";
@@ -310,9 +310,7 @@ export function SourceControlPage() {
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h1 className="text-lg font-semibold tracking-tight text-slate-100">Source Control</h1>
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Runtime-layout view for branches, current changes, PR status, and GX bot sync.
-                  </p>
+                  <p className="mt-0.5 text-xs text-slate-400">Runtime-layout view for branches, PR status, and GX bot sync.</p>
                 </div>
               </div>
 
@@ -492,32 +490,9 @@ export function SourceControlPage() {
                     </article>
                   </div>
 
-                  <article className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
-                      <GitBranch className="h-3.5 w-3.5 text-cyan-300" />
-                      Current changes ({details.branch})
-                    </div>
-                    <div className="space-y-1.5">
-                      {details.changedFiles.length === 0 ? (
-                        <p className="text-xs text-slate-500">
-                          No file diffs against {details.baseBranch} for this branch.
-                        </p>
-                      ) : (
-                        details.changedFiles.map((file) => (
-                          <div
-                            key={`${details.branch}:${file.path}:${file.code}`}
-                            className="flex items-start gap-2 rounded-md border border-white/[0.12] bg-white/[0.02] px-2.5 py-1.5"
-                          >
-                            <span className="mt-0.5 w-4 text-[10px] font-semibold text-emerald-300">{file.code}</span>
-                            <span className="min-w-0 break-all text-[11px] text-slate-300">{file.path}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </article>
                 </>
               ) : (
-                <p className="text-sm text-slate-500">Select a branch to view changes and PR status.</p>
+                <p className="text-sm text-slate-500">Select a branch to view PR status and GX bot sync.</p>
               )}
             </CardContent>
           </Card>
