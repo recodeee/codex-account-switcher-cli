@@ -26,7 +26,8 @@ class ProjectEditorLaunchError(RuntimeError):
 
 
 def open_project_folder_in_editor(project_path: str) -> str | None:
-    path = Path(project_path).expanduser()
+    resolved_project_path = _resolve_runtime_project_path(project_path)
+    path = Path(resolved_project_path).expanduser()
     if not path.is_absolute():
         raise ProjectEditorLaunchError(
             "Project path must be absolute",
@@ -122,6 +123,70 @@ def _resolve_executable(name: str) -> str | None:
     if os.path.isabs(name):
         return name if os.path.exists(name) and os.access(name, os.X_OK) else None
     return shutil.which(name)
+
+
+def _resolve_runtime_project_path(project_path: str) -> str:
+    normalized = project_path.strip()
+    if not normalized:
+        return normalized
+
+    expanded = str(Path(normalized).expanduser()) if normalized.startswith("~") else normalized
+    documents_suffix = _extract_documents_shorthand_suffix(expanded)
+    if documents_suffix is None:
+        return expanded
+
+    documents_roots = _candidate_documents_roots()
+    if not documents_roots:
+        return expanded
+
+    for documents_root in documents_roots:
+        candidate = documents_root.joinpath(*documents_suffix) if documents_suffix else documents_root
+        if candidate.exists():
+            return str(candidate)
+
+    fallback_root = documents_roots[0]
+    fallback_path = fallback_root.joinpath(*documents_suffix) if documents_suffix else fallback_root
+    return str(fallback_path)
+
+
+def _candidate_documents_roots() -> tuple[Path, ...]:
+    candidates: list[Path] = [Path.home() / "Documents"]
+    home_from_env = os.environ.get("HOME", "").strip()
+    if home_from_env:
+        candidates.append(Path(home_from_env).expanduser() / "Documents")
+
+    for env_key in ("SUDO_USER", "LOGNAME", "USER"):
+        user = os.environ.get(env_key, "").strip()
+        if not user or user.lower() == "root":
+            continue
+        candidates.append(Path("/home") / user / "Documents")
+        candidates.append(Path("/Users") / user / "Documents")
+
+    cwd_parts = Path.cwd().parts
+    if len(cwd_parts) >= 3 and cwd_parts[1] in {"home", "Users"}:
+        candidates.append(Path("/", cwd_parts[1], cwd_parts[2], "Documents"))
+
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(candidate)
+    return tuple(deduped)
+
+
+def _extract_documents_shorthand_suffix(value: str) -> tuple[str, ...] | None:
+    normalized = value.replace("\\", "/")
+    if not normalized.startswith("/"):
+        return None
+    parts = [part for part in normalized.split("/") if part]
+    if not parts:
+        return None
+    if parts[0].lower() != "documents":
+        return None
+    return tuple(parts[1:])
 
 
 def _spawn_detached(argv: list[str]) -> None:

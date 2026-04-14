@@ -1508,10 +1508,19 @@ export function AccountCard(props: AccountCardProps) {
       normalizeNearZeroQuotaPercent(primaryRemaining) >= 1) ||
     (typeof secondaryRemaining === "number" &&
       normalizeNearZeroQuotaPercent(secondaryRemaining) >= 1);
+  const hasFreshQuotaHeadroomTelemetry =
+    (typeof primaryRemaining === "number" &&
+      normalizeNearZeroQuotaPercent(primaryRemaining) >= 1 &&
+      primaryTelemetryFresh) ||
+    (typeof secondaryRemaining === "number" &&
+      normalizeNearZeroQuotaPercent(secondaryRemaining) >= 1 &&
+      secondaryTelemetryFresh);
   const hasPersistedLimitStatus =
     account.status === "rate_limited" || account.status === "quota_exceeded";
   const shouldSuppressStaleLimitSignals =
-    !hasLiveSession && hasQuotaHeadroomSignal && hasPersistedLimitStatus;
+    hasPersistedLimitStatus &&
+    hasQuotaHeadroomSignal &&
+    (!hasLiveSession || hasFreshQuotaHeadroomTelemetry);
   const usageLimitHit = shouldSuppressStaleLimitSignals
     ? false
     : isLiveUsageLimitHit({

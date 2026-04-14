@@ -57,6 +57,7 @@ const WORKSPACE_LINKS: SidebarNavEntry[] = [
 ];
 
 const MANAGER_LINKS: SidebarNavEntry[] = [
+  { to: "/skills", label: "Skills", icon: Sparkles },
   { to: "/storage", label: "Storage", icon: HardDrive, badge: "Soon" },
   { to: "/accounts", label: "Accounts", icon: Users },
   { to: "/sessions", label: "Sessions", icon: Link2 },
@@ -65,7 +66,6 @@ const MANAGER_LINKS: SidebarNavEntry[] = [
 
 const CONFIGURE_LINKS: SidebarNavEntry[] = [
   { to: "/runtimes", label: "Runtimes", icon: Server },
-  { to: "/skills", label: "Skills", icon: Sparkles },
   { to: "/settings", label: "Settings", icon: Settings2 },
 ];
 

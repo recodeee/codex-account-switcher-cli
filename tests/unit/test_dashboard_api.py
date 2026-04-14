@@ -46,3 +46,42 @@ async def test_dashboard_overview_singleflight_clears_inflight_after_failure() -
     result = await singleflight.run(_loader)
     assert result is expected_response
     assert calls["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_dashboard_overview_singleflight_times_out_and_recovers() -> None:
+    singleflight = _DashboardOverviewSingleFlight(timeout_seconds=0.01)
+    calls = {"count": 0}
+    expected_response = cast(DashboardOverviewResponse, object())
+
+    async def _loader() -> DashboardOverviewResponse:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            await asyncio.sleep(0.05)
+        return expected_response
+
+    with pytest.raises(TimeoutError):
+        await singleflight.run(_loader)
+
+    result = await singleflight.run(_loader)
+    assert result is expected_response
+    assert calls["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_dashboard_overview_singleflight_coalesces_timeout_failures() -> None:
+    singleflight = _DashboardOverviewSingleFlight(timeout_seconds=0.01)
+    calls = {"count": 0}
+
+    async def _loader() -> DashboardOverviewResponse:
+        calls["count"] += 1
+        await asyncio.sleep(0.05)
+        return cast(DashboardOverviewResponse, object())
+
+    results = await asyncio.gather(
+        *(singleflight.run(_loader) for _ in range(4)),
+        return_exceptions=True,
+    )
+
+    assert calls["count"] == 1
+    assert all(isinstance(result, TimeoutError) for result in results)

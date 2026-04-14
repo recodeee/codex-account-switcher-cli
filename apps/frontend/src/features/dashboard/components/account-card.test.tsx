@@ -977,6 +977,39 @@ describe("AccountCard", () => {
     expect(screen.getByRole("button", { name: "Use this account" })).toBeEnabled();
   });
 
+  it("suppresses stale quota-exceeded badges during live sessions when fresh quota telemetry has headroom", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      status: "quota_exceeded",
+      usage: {
+        primaryRemainingPercent: 95,
+        secondaryRemainingPercent: 87,
+      },
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "stale-limit-live",
+        activeSnapshotName: "stale-limit-live",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    const badgeRow = screen.getByTestId("token-card-badge-row");
+    expect(within(badgeRow).getByText("Active")).toBeInTheDocument();
+    expect(within(badgeRow).queryByText("Quota exceeded")).not.toBeInTheDocument();
+    expect(within(badgeRow).queryByText("Usage limit hit")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /use this account|currently used/i }),
+    ).toBeEnabled();
+  });
+
   it("shows usage-limit badge when remaining tokens are depleted", () => {
     const account = createAccountSummary({
       status: "active",

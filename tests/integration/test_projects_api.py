@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from sqlalchemy import text
 
@@ -205,6 +207,19 @@ async def test_projects_api_defaults_sandbox_mode(async_client):
     assert payload["projectPath"] is None
     assert payload["sandboxMode"] == "workspace-write"
     assert payload["gitBranch"] is None
+
+
+@pytest.mark.asyncio
+async def test_projects_api_normalizes_documents_shorthand_path(async_client):
+    created = await async_client.post(
+        "/api/projects",
+        json={
+            "name": "documents-shorthand-project",
+            "projectPath": "/documents/szaloniroda/marva",
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["projectPath"] == str(Path.home() / "Documents" / "szaloniroda" / "marva")
 
 
 @pytest.mark.asyncio

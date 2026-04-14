@@ -62,12 +62,17 @@ describe("AppSidebar", () => {
       .getAllByRole("link")
       .map((link) => link.textContent?.trim() ?? "");
 
+    const agentsIndex = labels.findIndex((label) => label === "Agents");
+    const skillsIndex = labels.findIndex((label) => label === "Skills");
     const storageIndex = labels.findIndex((label) => label.startsWith("Storage"));
     const accountsIndex = labels.findIndex((label) => label === "Accounts");
     const sessionsIndex = labels.findIndex((label) => label === "Sessions");
     const referralsIndex = labels.findIndex((label) => label === "Referrals");
 
+    expect(agentsIndex).toBeGreaterThanOrEqual(0);
+    expect(skillsIndex).toBeGreaterThan(agentsIndex);
     expect(storageIndex).toBeGreaterThanOrEqual(0);
+    expect(storageIndex).toBeGreaterThan(skillsIndex);
     expect(accountsIndex).toBeGreaterThan(storageIndex);
     expect(sessionsIndex).toBeGreaterThan(accountsIndex);
     expect(referralsIndex).toBeGreaterThan(sessionsIndex);

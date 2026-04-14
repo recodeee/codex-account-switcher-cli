@@ -191,6 +191,14 @@ function formatMonthDayLabel(iso: string) {
   });
 }
 
+function formatWeekdayDateLabel(value: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "numeric",
+    day: "numeric",
+  }).format(new Date(value));
+}
+
 function formatTokenMillions(value: number) {
   const safeValue = Math.max(0, Math.round(value));
   if (safeValue === 0) {
@@ -999,35 +1007,35 @@ function buildActivityHeatmapRows(
   const dayStarts = Array.from({ length: days }, (_, index) => firstDayStartMs + index * DAY_MS);
   const dayKeyIndexMap = new Map(dayStarts.map((dayStart, index) => [dayStart, index]));
   const buckets = Array.from({ length: days }, () => new Array<number>(24).fill(0));
+  const uniqueActivityTimestamps = new Set<number>();
+  const activityTimestamps: number[] = [];
 
-  if (safeRequestLogs.length > 0) {
-    for (const log of safeRequestLogs) {
-      const parsed = Date.parse(log.requestedAt);
-      if (!Number.isFinite(parsed) || parsed < firstDayStartMs || parsed > nowMs + DAY_MS) {
-        continue;
-      }
-      const dayStart = startOfDayMs(parsed);
-      const dayIndex = dayKeyIndexMap.get(dayStart);
-      if (dayIndex == null) {
-        continue;
-      }
-      const hour = new Date(parsed).getHours();
-      buckets[dayIndex][hour] += 1;
+  for (const log of safeRequestLogs) {
+    const parsed = Date.parse(log.requestedAt);
+    if (Number.isFinite(parsed) && !uniqueActivityTimestamps.has(parsed)) {
+      uniqueActivityTimestamps.add(parsed);
+      activityTimestamps.push(parsed);
     }
-  } else {
-    for (const timestamp of runtime.activityTimestamps) {
-      const parsed = Date.parse(timestamp);
-      if (!Number.isFinite(parsed) || parsed < firstDayStartMs || parsed > nowMs + DAY_MS) {
-        continue;
-      }
-      const dayStart = startOfDayMs(parsed);
-      const dayIndex = dayKeyIndexMap.get(dayStart);
-      if (dayIndex == null) {
-        continue;
-      }
-      const hour = new Date(parsed).getHours();
-      buckets[dayIndex][hour] += 1;
+  }
+  for (const timestamp of runtime.activityTimestamps) {
+    const parsed = Date.parse(timestamp);
+    if (Number.isFinite(parsed) && !uniqueActivityTimestamps.has(parsed)) {
+      uniqueActivityTimestamps.add(parsed);
+      activityTimestamps.push(parsed);
     }
+  }
+
+  for (const timestampMs of activityTimestamps) {
+    if (timestampMs < firstDayStartMs || timestampMs > nowMs + DAY_MS) {
+      continue;
+    }
+    const dayStart = startOfDayMs(timestampMs);
+    const dayIndex = dayKeyIndexMap.get(dayStart);
+    if (dayIndex == null) {
+      continue;
+    }
+    const hour = new Date(timestampMs).getHours();
+    buckets[dayIndex][hour] += 1;
   }
 
   const flat = buckets.flat();
@@ -1050,7 +1058,7 @@ function buildActivityHeatmapRows(
 
   return dayStarts.map((dayStart, index) => ({
     key: `${dayStart}`,
-    label: new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(dayStart)),
+    label: formatWeekdayDateLabel(dayStart),
     levels: buckets[index].map(resolveLevel),
   }));
 }
@@ -1142,8 +1150,8 @@ function HeatCell({ level }: { level: number }) {
       className={cn(
         "h-3 w-3 rounded-[3px] border border-white/[0.08]",
         level === 0 && "bg-white/[0.02]",
-        level === 1 && "bg-emerald-500/28",
-        level === 2 && "bg-emerald-500/44",
+        level === 1 && "bg-emerald-500/38",
+        level === 2 && "bg-emerald-500/52",
         level === 3 && "bg-emerald-400/70 shadow-[0_0_10px_rgba(16,185,129,0.25)]",
         level === 4 && "bg-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.35)]",
       )}
@@ -1847,8 +1855,8 @@ export function RuntimesPage() {
                       ) : (
                         activityHeatmapRows.map((row) => (
                           <div key={row.key} className="flex items-center gap-2">
-                            <span className="w-7 shrink-0 text-[10px] text-slate-500">{row.label}</span>
-                            <div className="grid flex-1 gap-0.5 [grid-template-columns:repeat(24,minmax(0,1fr))]">
+                            <span className="w-14 shrink-0 text-[10px] text-slate-500">{row.label}</span>
+                            <div className="grid flex-1 gap-px [grid-template-columns:repeat(24,minmax(0,1fr))]">
                               {row.levels.map((level, index) => (
                                 <HeatCell key={`${row.key}-${index}`} level={level} />
                               ))}

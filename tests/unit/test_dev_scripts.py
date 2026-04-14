@@ -15,6 +15,7 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEV_ALL_SCRIPT = REPO_ROOT / "scripts" / "dev-all.sh"
 DEV_LOGS_SCRIPT = REPO_ROOT / "scripts" / "dev-logs.sh"
+RUN_SERVER_DEV_SCRIPT = REPO_ROOT / "scripts" / "run-server-dev.sh"
 BACKEND_DEV_SINGLETON_SCRIPT = (
     REPO_ROOT / "apps" / "backend" / "scripts" / "dev-singleton.js"
 )
@@ -844,3 +845,75 @@ exit 96
             proc.wait(timeout=5)
         app_blocker.terminate()
         app_blocker.wait(timeout=5)
+
+
+def test_run_server_dev_defaults_migrations_fail_fast_to_false(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    (project / "scripts").mkdir(parents=True)
+
+    shutil.copy2(RUN_SERVER_DEV_SCRIPT, project / "scripts" / "run-server-dev.sh")
+
+    probe = project / "python-probe.sh"
+    _write_executable(
+        probe,
+        """#!/usr/bin/env bash
+set -euo pipefail
+echo "FAIL_FAST=${CODEX_LB_DATABASE_MIGRATIONS_FAIL_FAST:-unset}"
+echo "ARGS=$*"
+""",
+    )
+
+    env = os.environ.copy()
+    env["PYTHON_BIN"] = str(probe)
+    env["LOGGING_TO_FILE"] = "false"
+    env.pop("CODEX_LB_DATABASE_MIGRATIONS_FAIL_FAST", None)
+
+    proc = subprocess.run(
+        ["sh", "./scripts/run-server-dev.sh"],
+        cwd=project,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stdout
+    assert "FAIL_FAST=false" in proc.stdout
+    assert "ARGS=-m uvicorn app.main:app --host 0.0.0.0 --port 2455 --reload" in proc.stdout
+
+
+def test_run_server_dev_preserves_explicit_migrations_fail_fast_override(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    (project / "scripts").mkdir(parents=True)
+
+    shutil.copy2(RUN_SERVER_DEV_SCRIPT, project / "scripts" / "run-server-dev.sh")
+
+    probe = project / "python-probe.sh"
+    _write_executable(
+        probe,
+        """#!/usr/bin/env bash
+set -euo pipefail
+echo "FAIL_FAST=${CODEX_LB_DATABASE_MIGRATIONS_FAIL_FAST:-unset}"
+echo "ARGS=$*"
+""",
+    )
+
+    env = os.environ.copy()
+    env["PYTHON_BIN"] = str(probe)
+    env["LOGGING_TO_FILE"] = "false"
+    env["CODEX_LB_DATABASE_MIGRATIONS_FAIL_FAST"] = "true"
+
+    proc = subprocess.run(
+        ["sh", "./scripts/run-server-dev.sh"],
+        cwd=project,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stdout
+    assert "FAIL_FAST=true" in proc.stdout
+    assert "ARGS=-m uvicorn app.main:app --host 0.0.0.0 --port 2455 --reload" in proc.stdout

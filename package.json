@@ -32,6 +32,7 @@
     "agent:safety:fix": "gx fix",
     "agent:safety:doctor": "gx doctor",
     "agent:codex": "bash ./scripts/codex-agent.sh",
-    "agent:review:watch": "bash ./scripts/review-bot-watch.sh"
+    "agent:review:watch": "bash ./scripts/review-bot-watch.sh",
+    "agent:finish": "gx finish --all"
   }
 }

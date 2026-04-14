@@ -8,6 +8,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/accounts", label: "Accounts" },
+  { to: "/sessions", label: "Sessions" },
   { to: "/referrals", label: "Referrals" },
   {
     to: "/projects",
@@ -15,10 +16,9 @@ export const NAV_ITEMS: NavItem[] = [
     children: [{ to: "/projects/plans", label: "Plans" }],
   },
   { to: "/agents", label: "Agents" },
+  { to: "/skills", label: "Skills" },
   { to: "/storage", label: "Storage", isComingSoon: true },
   { to: "/runtimes", label: "Runtimes" },
-  { to: "/skills", label: "Skills" },
-  { to: "/sessions", label: "Sessions" },
   { to: "/settings", label: "Settings" },
 ];
 

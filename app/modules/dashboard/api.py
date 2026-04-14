@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-from fastapi import APIRouter, Depends, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, WebSocket
 
 from app.core.auth.dependencies import (
     set_dashboard_error_format,
@@ -28,12 +29,29 @@ router = APIRouter(
     dependencies=[Depends(validate_dashboard_session), Depends(set_dashboard_error_format)],
 )
 ws_router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+_DEFAULT_DASHBOARD_OVERVIEW_SINGLEFLIGHT_TIMEOUT_SECONDS = 30.0
+_MIN_DASHBOARD_OVERVIEW_SINGLEFLIGHT_TIMEOUT_SECONDS = 0.01
+
+
+def _dashboard_overview_singleflight_timeout_seconds() -> float:
+    raw = os.getenv("CODEX_LB_DASHBOARD_OVERVIEW_TIMEOUT_SECONDS")
+    if raw is None:
+        return _DEFAULT_DASHBOARD_OVERVIEW_SINGLEFLIGHT_TIMEOUT_SECONDS
+    try:
+        return max(_MIN_DASHBOARD_OVERVIEW_SINGLEFLIGHT_TIMEOUT_SECONDS, float(raw))
+    except ValueError:
+        return _DEFAULT_DASHBOARD_OVERVIEW_SINGLEFLIGHT_TIMEOUT_SECONDS
 
 
 class _DashboardOverviewSingleFlight:
-    def __init__(self) -> None:
+    def __init__(self, timeout_seconds: float | None = None) -> None:
         self._lock = asyncio.Lock()
         self._inflight: asyncio.Task[DashboardOverviewResponse] | None = None
+        self._timeout_seconds = (
+            _dashboard_overview_singleflight_timeout_seconds()
+            if timeout_seconds is None
+            else max(_MIN_DASHBOARD_OVERVIEW_SINGLEFLIGHT_TIMEOUT_SECONDS, float(timeout_seconds))
+        )
 
     async def run(
         self,
@@ -42,10 +60,16 @@ class _DashboardOverviewSingleFlight:
         async with self._lock:
             task = self._inflight
             if task is None:
-                task = asyncio.create_task(loader())
+                task = asyncio.create_task(self._run_loader(loader))
                 self._inflight = task
                 task.add_done_callback(self._clear_if_done)
         return await asyncio.shield(task)
+
+    async def _run_loader(
+        self,
+        loader: Callable[[], Coroutine[Any, Any, DashboardOverviewResponse]],
+    ) -> DashboardOverviewResponse:
+        return await asyncio.wait_for(loader(), timeout=self._timeout_seconds)
 
     def _clear_if_done(self, task: asyncio.Task[DashboardOverviewResponse]) -> None:
         # Read terminal state so cancelled orphan tasks never produce
@@ -71,7 +95,13 @@ async def _load_dashboard_overview() -> DashboardOverviewResponse:
 
 @router.get("/dashboard/overview", response_model=DashboardOverviewResponse)
 async def get_overview() -> DashboardOverviewResponse:
-    return await _overview_singleflight.run(_load_dashboard_overview)
+    try:
+        return await _overview_singleflight.run(_load_dashboard_overview)
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Dashboard overview refresh timed out. Retry shortly.",
+        ) from exc
 
 
 @ws_router.websocket("/overview/ws")

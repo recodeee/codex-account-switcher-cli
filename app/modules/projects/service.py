@@ -4,6 +4,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Literal, Protocol
 from urllib.parse import urlparse
 
@@ -111,7 +112,7 @@ class ProjectsService:
                 name=row.name,
                 description=row.description,
                 project_url=row.project_url,
-                project_path=row.project_path,
+                project_path=normalize_stored_project_path(row.project_path),
                 sandbox_mode=row.sandbox_mode,
                 git_branch=row.git_branch,
                 created_at=row.created_at,
@@ -130,7 +131,7 @@ class ProjectsService:
             name=row.name,
             description=row.description,
             project_url=row.project_url,
-            project_path=row.project_path,
+            project_path=normalize_stored_project_path(row.project_path),
             sandbox_mode=row.sandbox_mode,
             git_branch=row.git_branch,
             created_at=row.created_at,
@@ -175,7 +176,7 @@ class ProjectsService:
             name=row.name,
             description=row.description,
             project_url=row.project_url,
-            project_path=row.project_path,
+            project_path=normalize_stored_project_path(row.project_path),
             sandbox_mode=row.sandbox_mode,
             git_branch=row.git_branch,
             created_at=row.created_at,
@@ -222,7 +223,7 @@ class ProjectsService:
             name=row.name,
             description=row.description,
             project_url=row.project_url,
-            project_path=row.project_path,
+            project_path=normalize_stored_project_path(row.project_path),
             sandbox_mode=row.sandbox_mode,
             git_branch=row.git_branch,
             created_at=row.created_at,
@@ -285,7 +286,7 @@ def normalize_project_url(value: str | None) -> str | None:
 def normalize_project_path(value: str | None) -> str | None:
     if value is None:
         return None
-    normalized = value.strip()
+    normalized = _expand_project_path_shorthand(value.strip())
     if not normalized:
         return None
     if len(normalized) > 1024:
@@ -298,6 +299,18 @@ def normalize_project_path(value: str | None) -> str | None:
             "Project path must be absolute",
             code="invalid_project_path",
         )
+    return normalized
+
+
+def normalize_stored_project_path(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    expanded = _expand_project_path_shorthand(normalized)
+    if _is_absolute_project_path(expanded):
+        return expanded
     return normalized
 
 
@@ -342,3 +355,26 @@ def normalize_git_branch(value: str | None) -> str | None:
 
 def _is_absolute_project_path(value: str) -> bool:
     return value.startswith("/") or value.startswith("\\\\") or _WINDOWS_DRIVE_ABSOLUTE_PATH_PATTERN.match(value) is not None
+
+
+def _expand_project_path_shorthand(value: str) -> str:
+    if not value:
+        return value
+    normalized = str(Path(value).expanduser()) if value.startswith("~") else value
+    documents_suffix = _extract_documents_shorthand_suffix(normalized)
+    if documents_suffix is None:
+        return normalized
+    documents_root = Path.home() / "Documents"
+    return str(documents_root.joinpath(*documents_suffix)) if documents_suffix else str(documents_root)
+
+
+def _extract_documents_shorthand_suffix(value: str) -> tuple[str, ...] | None:
+    normalized = value.replace("\\", "/")
+    if not normalized.startswith("/"):
+        return None
+    parts = [part for part in normalized.split("/") if part]
+    if not parts:
+        return None
+    if parts[0].lower() != "documents":
+        return None
+    return tuple(parts[1:])

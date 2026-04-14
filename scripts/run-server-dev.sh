@@ -15,6 +15,12 @@ python_bin="${PYTHON_BIN:-}"
 backend_port="${APP_BACKEND_PORT:-2455}"
 reload_dirs_raw="${APP_RELOAD_DIRS:-app}"
 
+# Dev default: keep the API process alive through startup migration drift so
+# hot-reload sessions do not flap offline. Explicit env value always wins.
+if [ -z "${CODEX_LB_DATABASE_MIGRATIONS_FAIL_FAST+x}" ]; then
+  export CODEX_LB_DATABASE_MIGRATIONS_FAIL_FAST=false
+fi
+
 if [ -z "$python_bin" ]; then
   if [ -x "${repo_root}/.venv/bin/python" ]; then
     python_bin="${repo_root}/.venv/bin/python"

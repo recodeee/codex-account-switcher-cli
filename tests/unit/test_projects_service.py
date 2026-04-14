@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -142,6 +143,16 @@ def test_normalize_project_path_rejects_relative_value() -> None:
 
 def test_normalize_project_path_accepts_absolute_value() -> None:
     assert normalize_project_path("/home/deadpool/recodee") == "/home/deadpool/recodee"
+
+
+def test_normalize_project_path_expands_home_shorthand() -> None:
+    assert normalize_project_path("~/projects/recodee") == str(Path.home() / "projects" / "recodee")
+
+
+def test_normalize_project_path_maps_documents_root_shorthand() -> None:
+    assert normalize_project_path("/documents/szaloniroda/marva") == str(
+        Path.home() / "Documents" / "szaloniroda" / "marva",
+    )
 
 
 def test_normalize_sandbox_mode_defaults_to_workspace_write() -> None:
