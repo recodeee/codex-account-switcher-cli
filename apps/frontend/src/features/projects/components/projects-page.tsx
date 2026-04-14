@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronRight, Folder, FolderOpen, Github, Globe, Maximize2, Minimize2, Minus, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, FolderTree, Github, Globe, Maximize2, Minimize2, Minus, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import { AlertMessage } from "@/components/alert-message";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -107,18 +107,7 @@ function VsCodeIcon({ className }: { className?: string }) {
 
 function PlansIcon({ className }: { className?: string }) {
   return (
-    <span
-      className={cn(
-        "inline-flex h-3.5 w-3.5 items-center justify-center overflow-hidden rounded-[2px] bg-[#131123]",
-        className,
-      )}
-      aria-hidden="true"
-    >
-      <svg viewBox="0 0 16 16" className="h-full w-full" xmlns="http://www.w3.org/2000/svg">
-        <path fill="#6D77FF" d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-9Z" />
-        <path fill="#A8B0FF" d="M4 4h8v2H4V4Zm0 3h8v1H4V7Zm0 2h5v1H4V9Zm0 2h7v1H4v-1Z" />
-      </svg>
-    </span>
+    <FolderTree className={cn("h-4 w-4 text-slate-200", className)} strokeWidth={2.2} aria-hidden="true" />
   );
 }
 
@@ -641,20 +630,23 @@ export function ProjectsPage() {
                   <span className="text-right">Actions</span>
                 </div>
 
-                {entries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    onClick={(event) => {
-                      if (clickFromInteractiveElement(event.target)) {
-                        return;
-                      }
-                      setActiveRowId((current) => (current === entry.id ? null : entry.id));
-                    }}
-                    className={cn(
-                      "group/row grid min-h-16 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.08fr)_minmax(0,0.82fr)_minmax(0,0.75fr)_minmax(0,0.92fr)_minmax(0,2.45fr)] items-center gap-3 border-b border-border/45 px-5 py-0 text-sm transition-colors",
-                      activeRowId === entry.id ? "bg-accent/45" : "hover:bg-accent/35",
-                    )}
-                  >
+                {entries.map((entry) => {
+                  const isRowActive = activeRowId === entry.id;
+
+                  return (
+                    <div
+                      key={entry.id}
+                      onClick={(event) => {
+                        if (clickFromInteractiveElement(event.target)) {
+                          return;
+                        }
+                        setActiveRowId((current) => (current === entry.id ? null : entry.id));
+                      }}
+                      className={cn(
+                        "group/row grid min-h-16 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.08fr)_minmax(0,0.82fr)_minmax(0,0.75fr)_minmax(0,0.92fr)_minmax(0,2.45fr)] items-center gap-3 border-b border-border/45 px-5 py-0 text-sm transition-colors",
+                        isRowActive ? "bg-accent/45" : "hover:bg-accent/35",
+                      )}
+                    >
                     <div className="min-w-0">
                       <p className="truncate font-medium">{entry.name}</p>
                       <p className="truncate text-xs text-muted-foreground">{entry.description || "No description"}</p>
@@ -697,9 +689,6 @@ export function ProjectsPage() {
                     </span>
 
                     <div className="flex min-w-0 items-center gap-1">
-                      <span className="truncate font-mono text-xs text-muted-foreground">
-                        {entry.projectPath || "—"}
-                      </span>
                       {entry.projectPath ? (
                         <Button
                           type="button"
@@ -719,6 +708,9 @@ export function ProjectsPage() {
                           <FolderOpen className="h-3.5 w-3.5" />
                         </Button>
                       ) : null}
+                      <span className="truncate font-mono text-xs text-muted-foreground">
+                        {entry.projectPath || "—"}
+                      </span>
                     </div>
 
                     <Badge variant="outline" className={cn("justify-center rounded-md px-2 py-0.5 text-[11px] font-medium", resolveSandboxBadgeClass(entry.sandboxMode))}>
@@ -751,84 +743,94 @@ export function ProjectsPage() {
                       })()}
                     </div>
 
-                    <div className="flex h-full min-h-12 flex-nowrap items-center justify-end whitespace-nowrap">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-11 rounded-r-none rounded-l-md px-3 text-xs"
-                        onClick={() => navigate(`/projects/plans?projectId=${encodeURIComponent(entry.id)}`)}
-                        disabled={busy}
-                      >
-                        <PlansIcon className="mr-1" />
-                        Plans
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-11 rounded-none px-3 text-xs"
-                        onClick={() => {
-                          void openFolderMutation.mutateAsync({
-                            projectId: entry.id,
-                            target: "vscode",
-                          });
-                        }}
-                        disabled={busy || !entry.projectPath || openFolderBusyProjectId === entry.id}
-                      >
-                        <VsCodeIcon className="mr-1" />
-                        VSCode
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-11 w-11 rounded-none px-0 text-xs"
-                        onClick={() => {
-                          void openFolderMutation.mutateAsync({
-                            projectId: entry.id,
-                            target: "file-manager",
-                          });
-                        }}
-                        disabled={busy || !entry.projectPath || openFolderBusyProjectId === entry.id}
-                        title="Open folder"
-                      >
-                        <FolderOpen className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-11 w-11 rounded-l-none rounded-r-md px-0 text-xs"
-                        onClick={() => handleEditStart(entry)}
-                        disabled={busy}
-                        title="Edit"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <div
-                        className={cn(
-                          "overflow-hidden transition-all duration-200 ease-out",
-                          activeRowId === entry.id
-                            ? "max-w-[150px] translate-x-0 opacity-100"
-                            : "pointer-events-none max-w-0 translate-x-2 opacity-0",
-                        )}
-                      >
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-11 rounded-l-none rounded-r-md border-y border-r border-red-400/30 bg-red-500/10 px-3 text-xs font-semibold text-red-200 hover:bg-red-500/25 hover:text-red-100"
-                          onClick={() => deleteDialog.show({ id: entry.id, name: entry.name })}
-                          disabled={busy}
+                      <div className="flex h-full min-h-12 flex-nowrap items-center justify-end whitespace-nowrap">
+                        <div
+                          className={cn(
+                            "flex items-center overflow-hidden transition-all duration-200 ease-out",
+                            isRowActive ? "pointer-events-none max-w-0 opacity-0" : "max-w-[260px] opacity-100",
+                          )}
                         >
-                          <Trash2 className="mr-1 h-4 w-4" />
-                          Delete
-                        </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-11 rounded-r-none rounded-l-md px-3 text-xs"
+                            aria-label="Open plans"
+                            onClick={() => navigate(`/projects/plans?projectId=${encodeURIComponent(entry.id)}`)}
+                            disabled={busy}
+                          >
+                            <PlansIcon className="mr-1" />
+                            Plans
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-11 rounded-none px-3 text-xs"
+                            aria-label="Open VSCode"
+                            onClick={() => {
+                              void openFolderMutation.mutateAsync({
+                                projectId: entry.id,
+                                target: "vscode",
+                              });
+                            }}
+                            disabled={busy || !entry.projectPath || openFolderBusyProjectId === entry.id}
+                          >
+                            <VsCodeIcon className="mr-1" />
+                            VSCode
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-11 w-11 rounded-none px-0 text-xs"
+                            onClick={() => {
+                              void openFolderMutation.mutateAsync({
+                                projectId: entry.id,
+                                target: "file-manager",
+                              });
+                            }}
+                            disabled={busy || !entry.projectPath || openFolderBusyProjectId === entry.id}
+                            title="Open folder"
+                          >
+                            <FolderOpen className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-11 w-11 rounded-l-none rounded-r-md px-0 text-xs"
+                            onClick={() => handleEditStart(entry)}
+                            disabled={busy}
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div
+                          className={cn(
+                            "overflow-hidden transition-all duration-200 ease-out",
+                            isRowActive
+                              ? "max-w-[150px] translate-x-0 opacity-100"
+                              : "pointer-events-none max-w-0 translate-x-2 opacity-0",
+                          )}
+                        >
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-11 rounded-md px-3 text-xs font-semibold text-red-200 hover:bg-transparent hover:text-red-100"
+                            onClick={() => deleteDialog.show({ id: entry.id, name: entry.name })}
+                            disabled={busy}
+                          >
+                            <Trash2 className="mr-1 h-4 w-4" />
+                            Delete
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

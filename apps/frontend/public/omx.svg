@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+<svg version="1.1" id="Uploaded to svgrepo.com" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
+	 width="800px" height="800px" viewBox="0 0 32 32" xml:space="preserve">
+<style type="text/css">
+	.isometric_zeven{fill:#FF7344;}
+	.isometric_acht{fill:#F05A28;}
+	.isometric_negen{fill:#BE1E2D;}
+	.isometric_twaalf{fill:#569080;}
+	.isometric_dertien{fill:#225B49;}
+	.st0{fill:#7BD6C4;}
+	.st1{fill:#72C0AB;}
+	.st2{fill:#F29227;}
+	.st3{fill:#225B49;}
+	.st4{fill:#F28103;}
+	.st5{fill:#F8F7C5;}
+	.st6{fill:#BE1E2D;}
+	.st7{fill:#AD9A74;}
+	.st8{fill:#F2D76C;}
+	.st9{fill:#F5DF89;}
+	.st10{fill:#80CCBE;}
+</style>
+<g>
+	<polygon class="isometric_twaalf" points="14.492,10.875 18.44,8.64 18.44,4.73 7.437,11.082 7.437,28.73 14.492,24.59 	"/>
+	<path class="isometric_dertien" d="M7.437,11.082V28.73L7.062,28.5L7,10.875L18.062,4.5l0.377,0.23L7.437,11.082z M17.217,9.344
+		V8.028l-8.557,4.94v1.875l5.832-3.408v-0.561L17.217,9.344z M8.66,16.608v1.765l5.832-3.415v-1.761L8.66,16.608z M8.66,20.138
+		v1.765l5.832-3.422v-1.761L8.66,20.138z M8.66,23.667v1.765l5.832-3.429v-1.761L8.66,23.667z"/>
+	<polygon class="isometric_acht" points="25.508,4.73 25.131,4.5 14,10.875 14,28.5 14.506,28.73 14.506,11.082 	"/>
+	<polygon class="isometric_zeven" points="14.506,11.082 14.506,28.73 25.508,22.378 25.508,4.73 	"/>
+	<path class="isometric_negen" d="M24.285,9.903l-8.557,4.94v-1.875l8.557-4.94V9.903z M24.285,11.668l-8.557,4.94v1.765l8.557-4.94
+		V11.668z M24.285,15.197l-8.557,4.94v1.765l8.557-4.94V15.197z M24.285,18.727l-8.557,4.94v1.765l8.557-4.94V18.727z"/>
+</g>
+</svg>

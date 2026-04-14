@@ -119,6 +119,7 @@ describe("projects flow integration", () => {
     expect(screen.getByText("feature/recodee-core-v2")).toBeInTheDocument();
     expect(screen.queryByText("recodee-core")).not.toBeInTheDocument();
 
+    await user.click(screen.getByText("recodee-core-v2"));
     await user.click(screen.getByRole("button", { name: "Delete" }));
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
