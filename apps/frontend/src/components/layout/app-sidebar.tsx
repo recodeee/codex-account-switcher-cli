@@ -5,13 +5,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  CreditCard,
   FolderTree,
   HardDrive,
-  KeyRound,
   LayoutDashboard,
   Link2,
-  MonitorSmartphone,
   PanelsTopLeft,
   Plus,
   Share2,
@@ -62,9 +59,6 @@ const WORKSPACE_LINKS: SidebarNavEntry[] = [
 ];
 
 const CONFIGURE_LINKS: SidebarNavEntry[] = [
-  { to: "/billing", label: "Billing", icon: CreditCard },
-  { to: "/apis", label: "APIs", icon: KeyRound },
-  { to: "/devices", label: "Devices", icon: MonitorSmartphone },
   { to: "/storage", label: "Storage", icon: HardDrive, badge: "Soon" },
   { to: "/runtimes", label: "Runtimes", icon: Server },
   { to: "/skills", label: "Skills", icon: Sparkles },

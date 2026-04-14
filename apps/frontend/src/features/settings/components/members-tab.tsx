@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Crown, Plus, Shield, Trash2, UserRound, Users } from "lucide-react";
+import { Crown, CreditCard, KeyRound, MonitorSmartphone, Plus, Shield, Trash2, UserRound, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMedusaAdminAuthStore } from "@/features/medusa-auth/hooks/use-medusa-admin-auth";
+import { NavLink } from "@/lib/router-compat";
 import {
   patchWorkspaceLocalProfile,
   readWorkspaceLocalProfile,
@@ -27,6 +28,27 @@ const ROLE_LABEL: Record<LocalWorkspaceMemberRole, string> = {
   admin: "Admin",
   member: "Member",
 };
+
+const SETTINGS_MEMBER_NAV_LINKS = [
+  {
+    to: "/billing",
+    label: "Billing",
+    description: "Manage billing accounts, members, and seat usage.",
+    icon: CreditCard,
+  },
+  {
+    to: "/apis",
+    label: "APIs",
+    description: "Create and rotate API keys for your workspace.",
+    icon: KeyRound,
+  },
+  {
+    to: "/devices",
+    label: "Devices",
+    description: "Review connected devices and runtime status.",
+    icon: MonitorSmartphone,
+  },
+] as const;
 
 function resolveOwnerName(email: string): string {
   const local = email.split("@")[0] ?? email;
@@ -118,6 +140,37 @@ export function MembersTab() {
           <Users className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">Members ({members.length})</h2>
         </div>
+
+        <Card className="border-white/[0.08] bg-white/[0.03]">
+          <CardContent className="space-y-3 p-4">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Workspace management</h3>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {SETTINGS_MEMBER_NAV_LINKS.map((link) => (
+                <NavLink key={link.to} to={link.to}>
+                  {({ isActive }) => (
+                    <span
+                      className={[
+                        "flex h-full min-h-[88px] flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                        isActive
+                          ? "border-cyan-400/40 bg-cyan-500/10 text-cyan-100"
+                          : "border-white/[0.1] bg-white/[0.02] text-slate-200 hover:border-white/[0.18] hover:bg-white/[0.06]",
+                      ].join(" ")}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        <link.icon className="h-4 w-4" aria-hidden="true" />
+                        {link.label}
+                      </span>
+                      <span className="text-xs leading-relaxed text-slate-400">{link.description}</span>
+                    </span>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="border-white/[0.08] bg-white/[0.03]">
           <CardContent className="space-y-3 p-4">
