@@ -61,7 +61,7 @@ const THEME_BOOTSTRAP_SCRIPT = `
       const storageKey = "codex-lb-theme";
       const stored = window.localStorage.getItem(storageKey);
       const preference =
-        stored === "light" || stored === "dark" || stored === "auto" ? stored : "auto";
+        stored === "light" || stored === "dark" || stored === "auto" ? stored : "dark";
       const prefersDark =
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-color-scheme: dark)").matches;

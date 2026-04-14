@@ -93,11 +93,11 @@ function cleanupSystemThemeListener() {
 }
 
 export const useThemeStore = create<ThemeState>((set) => ({
-  preference: "auto",
-  theme: "light",
+  preference: "dark",
+  theme: "dark",
   initialized: false,
   initializeTheme: () => {
-    const preference = readStoredPreference() ?? "auto";
+    const preference = readStoredPreference() ?? "dark";
     const resolved = resolveTheme(preference);
     applyThemeToDocument(resolved);
     if (typeof window !== "undefined") {

@@ -112,12 +112,12 @@ describe("useThemeStore", () => {
     expect(useThemeStore.getState().theme).toBe("dark");
   });
 
-  it("defaults to auto when no stored preference", () => {
+  it("defaults to dark when no stored preference", () => {
     mockMatchMedia(false);
     useThemeStore.getState().initializeTheme();
 
-    expect(useThemeStore.getState().preference).toBe("auto");
-    expect(useThemeStore.getState().theme).toBe("light");
+    expect(useThemeStore.getState().preference).toBe("dark");
+    expect(useThemeStore.getState().theme).toBe("dark");
   });
 
   it("syncs html dark class", () => {
