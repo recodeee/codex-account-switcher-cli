@@ -1772,7 +1772,7 @@ describe("AccountCard", () => {
     expect(connector).toHaveAttribute("stroke-width", "0.55");
   });
 
-  it("shows waiting CLI runtime state inside the OMX planning graph when sessions are idle", () => {
+  it("shows the normal codex card when ralplan context is idle/waiting", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
@@ -1799,14 +1799,11 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
-    expect(
-      within(planningGraph).getByTestId("omx-planning-cli-state"),
-    ).toHaveTextContent("Waiting");
-    const waitingBadge = within(planningGraph).getByTestId("omx-planning-cli-state");
-    expect(waitingBadge.parentElement).toHaveClass("right-3");
-    expect(waitingBadge).not.toHaveClass(
-      "shadow-[0_0_14px_rgba(34,211,238,0.35)]",
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(codexActiveCard).toBeInTheDocument();
+    expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
+      "Waiting",
     );
   });
 
@@ -1845,7 +1842,7 @@ describe("AccountCard", () => {
     expect(screen.queryByTestId("codex-active-agent-card")).not.toBeInTheDocument();
   });
 
-  it("keeps planner highlighted when CLI state is waiting even if prompt keywords map elsewhere", () => {
+  it("keeps the normal codex card when waiting even if prompt keywords map to non-planner roles", () => {
     const nowIso = new Date().toISOString();
     const account = createAccountSummary({
       codexLiveSessionCount: 1,
@@ -1871,12 +1868,49 @@ describe("AccountCard", () => {
 
     render(<AccountCard account={account} />);
 
-    const planningGraph = screen.getByTestId("omx-planning-prompt-graph");
-    const plannerNode = within(planningGraph).getByText("Planner").closest("div");
-    const verifierNode = within(planningGraph).getByText("Verifier").closest("div");
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(codexActiveCard).toBeInTheDocument();
+    expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
+      "Waiting",
+    );
+  });
 
-    expect(plannerNode).toHaveClass("scale-[1.05]");
-    expect(verifierNode).not.toHaveClass("scale-[1.05]");
+  it("returns to waiting when a ralplan task is finished but the session is still open", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexCurrentTaskPreview: "$ralplan finalize consensus acceptance criteria",
+      codexSessionTaskPreviews: [
+        {
+          sessionKey: "session-1",
+          taskPreview: "Task finished",
+          taskUpdatedAt: nowIso,
+        },
+      ],
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByTestId("omx-planning-prompt-graph")).not.toBeInTheDocument();
+    const codexActiveCard = screen.getByTestId("codex-active-agent-card");
+    expect(codexActiveCard).toBeInTheDocument();
+    expect(within(codexActiveCard).getByTestId("codex-inline-status")).toHaveTextContent(
+      "Waiting",
+    );
+    const tokenCardBadgeRow = screen.getByTestId("token-card-badge-row");
+    expect(within(tokenCardBadgeRow).getByText("waiting")).toBeInTheDocument();
+    expect(within(tokenCardBadgeRow).queryByText("working...")).not.toBeInTheDocument();
   });
 
   it("keeps newest non-waiting prompt in the last response panel", () => {

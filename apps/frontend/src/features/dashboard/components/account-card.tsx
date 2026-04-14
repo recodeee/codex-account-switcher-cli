@@ -1923,16 +1923,11 @@ export function AccountCard(props: AccountCardProps) {
     (codexLiveSessionCount > 0
       ? WAITING_FOR_NEW_TASK_LABEL
       : "No prompt reported yet");
-  const showRalplanPlanningGraph =
+  const shouldShowRalplanPlanningGraph =
     !hideCurrentTaskPreview &&
     isWorkingNow &&
     codexLiveSessionCount > 0 &&
     isRalplanTaskContext;
-  const canShowIdleCodexStatus = status !== "deactivated";
-  const showCodexActiveAgentCard =
-    !hideCurrentTaskPreview &&
-    (isWorkingNow || (canShowIdleCodexStatus && showIdleCodexStatusPanel)) &&
-    !showRalplanPlanningGraph;
   const promptDrivenOmxPlanningActiveNodeKey = resolveOmxPlanningActiveNodeKey(
     newestPromptForAgentPanel,
   );
@@ -1988,16 +1983,6 @@ export function AccountCard(props: AccountCardProps) {
     sessionTaskPreviews,
   ]);
   const hasSessionTaskRows = sessionTaskRows.length > 0;
-  const shouldRenderTaskPanel =
-    showRalplanPlanningGraph ||
-    showCodexActiveAgentCard ||
-    Boolean(taskPanelAddon) ||
-    showLastTaskPreview ||
-    hasSessionTaskRows;
-  const hasTaskPanelTopContent =
-    showRalplanPlanningGraph ||
-    showCodexActiveAgentCard ||
-    Boolean(taskPanelAddon);
   const hasLiveCliSessions = codexLiveSessionCount > 0;
   const latestThinkingTaskTimestampMs = useMemo(() => {
     let latest: number | null = null;
@@ -2032,11 +2017,9 @@ export function AccountCard(props: AccountCardProps) {
     (state) => state === "thinking",
   );
   const showWorkingIndicator =
-    forceWorkingIndicator ||
-    hasThinkingSessionTaskPreview ||
-    (isWorkingNow && !isCurrentTaskWaiting);
+    forceWorkingIndicator || (isWorkingNow && hasThinkingSessionTaskPreview);
   const showWaitingForTaskIndicator =
-    !showWorkingIndicator && isWorkingNow && isCurrentTaskWaiting;
+    !showWorkingIndicator && isWorkingNow && hasLiveCliSessions;
   const sessionTaskSummary = useMemo(() => {
     const waitingCount = sessionTaskStates.filter(
       (state) => state === "waiting",
@@ -2079,15 +2062,34 @@ export function AccountCard(props: AccountCardProps) {
     sessionTaskSummary.waitingCount,
     showWorkingIndicator,
   ]);
-  const codexActiveCardCliRuntimeState: OmxCliRuntimeState = isWorkingNow
-    ? omxPlanningCliRuntimeState
-    : "waiting";
+  const codexActiveCardCliRuntimeState: OmxCliRuntimeState = !isWorkingNow
+    ? "waiting"
+    : omxPlanningCliRuntimeState === "finished" && hasLiveCliSessions
+      ? "waiting"
+      : omxPlanningCliRuntimeState;
   const omxPlanningActiveNodeKey: OmxPlanningNodeKey = useMemo(() => {
     if (omxPlanningCliRuntimeState === "waiting") {
       return "planner";
     }
     return promptDrivenOmxPlanningActiveNodeKey;
   }, [omxPlanningCliRuntimeState, promptDrivenOmxPlanningActiveNodeKey]);
+  const showRalplanPlanningGraph =
+    shouldShowRalplanPlanningGraph && omxPlanningCliRuntimeState === "thinking";
+  const canShowIdleCodexStatus = status !== "deactivated";
+  const showCodexActiveAgentCard =
+    !hideCurrentTaskPreview &&
+    (isWorkingNow || (canShowIdleCodexStatus && showIdleCodexStatusPanel)) &&
+    !showRalplanPlanningGraph;
+  const shouldRenderTaskPanel =
+    showRalplanPlanningGraph ||
+    showCodexActiveAgentCard ||
+    Boolean(taskPanelAddon) ||
+    showLastTaskPreview ||
+    hasSessionTaskRows;
+  const hasTaskPanelTopContent =
+    showRalplanPlanningGraph ||
+    showCodexActiveAgentCard ||
+    Boolean(taskPanelAddon);
   const quotaDebugLogText = liveQuotaDebug
     ? buildQuotaDebugLogLines(
         liveQuotaDebug,
