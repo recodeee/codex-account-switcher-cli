@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthGate } from "@/features/auth/components/auth-gate";
 import { useMedusaCustomerAuthStore } from "@/features/medusa-customer-auth/hooks/use-medusa-customer-auth";
+import { markNavigationLoaderSuppressed } from "@/lib/navigation-loader";
 
 function setAuthState(
   patch: Partial<ReturnType<typeof useMedusaCustomerAuthStore.getState>>,
@@ -19,6 +20,7 @@ function setAuthState(
 
 describe("AuthGate", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     setAuthState({
       initialize: vi.fn().mockResolvedValue(undefined),
     });
@@ -94,6 +96,50 @@ describe("AuthGate", () => {
     );
 
     expect(screen.getByText("Protected content")).toBeInTheDocument();
+    await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows blocking loader before initial auth restore by default", async () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
+    setAuthState({
+      initialize,
+      customer: null,
+      token: null,
+      initialized: false,
+      loading: false,
+    });
+
+    render(
+      <AuthGate>
+        <div>Protected content</div>
+      </AuthGate>,
+    );
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+    await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps app shell visible during navigation suppression even before auth restore finishes", async () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
+    setAuthState({
+      initialize,
+      customer: null,
+      token: null,
+      initialized: false,
+      loading: false,
+    });
+    markNavigationLoaderSuppressed(10_000);
+
+    render(
+      <AuthGate>
+        <div>Protected content</div>
+      </AuthGate>,
+    );
+
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
     await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
   });
 
