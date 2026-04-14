@@ -1206,6 +1206,7 @@ function RuntimeListItem({
   selected: boolean;
   onClick: () => void;
 }) {
+  const isLive = runtime.status === "online";
   const olderSessionPreviewCount = Math.max(
     0,
     runtime.currentTasks.length - runtime.sessionCount,
@@ -1292,15 +1293,37 @@ function RuntimeListItem({
           </Tooltip>
           <span
             className={cn(
-              "h-2.5 w-2.5 rounded-full",
-              runtime.status === "online" ? "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-slate-500",
+              "h-2.5 w-2.5 rounded-full ring-2 ring-offset-0 transition-colors",
+              isLive
+                ? "bg-emerald-400 ring-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.45)]"
+                : "bg-slate-500 ring-slate-500/25",
             )}
+            aria-label={isLive ? "Runtime live" : "Runtime idle"}
           />
         </span>
       </div>
       <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
-        <Badge variant="secondary" className="h-5 border-white/10 bg-white/[0.04] px-1.5 py-0 text-[10px] text-slate-300">
+        <Badge
+          variant="secondary"
+          className={cn(
+            "h-5 px-1.5 py-0 text-[10px]",
+            isLive
+              ? "border-emerald-400/30 bg-emerald-500/12 text-emerald-200"
+              : "border-white/10 bg-white/[0.04] text-slate-300",
+          )}
+        >
           {runtime.sessionCount} live
+        </Badge>
+        <Badge
+          variant="secondary"
+          className={cn(
+            "h-5 px-1.5 py-0 text-[10px] font-semibold",
+            isLive
+              ? "border-emerald-400/30 bg-emerald-500/12 text-emerald-200"
+              : "border-slate-500/35 bg-slate-500/12 text-slate-300",
+          )}
+        >
+          {isLive ? "Live" : "Idle"}
         </Badge>
         {olderSessionPreviewCount > 0 ? (
           <Badge
