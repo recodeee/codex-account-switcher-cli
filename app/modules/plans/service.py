@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shlex
+import shutil
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -157,6 +161,18 @@ class PlanRuntimeData:
     unavailable_reason: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class PlanTeamRunData:
+    slug: str
+    worker_count: int
+    command: str
+    pid: int
+    launched_at: datetime
+    plan_path: str
+    planner_plan_path: str
+    log_path: str
+
+
 class OpenSpecPlansService:
     def __init__(
         self,
@@ -164,6 +180,13 @@ class OpenSpecPlansService:
         omx_root: Path | None = None,
     ) -> None:
         repo_root = Path(__file__).resolve().parents[3]
+        if plans_root is not None:
+            resolved_plans_root = plans_root.resolve()
+            if resolved_plans_root.name == "plan" and resolved_plans_root.parent.name == "openspec":
+                repo_root = resolved_plans_root.parent.parent
+            else:
+                repo_root = resolved_plans_root.parent
+        self._repo_root = repo_root.resolve()
         self._plans_root = plans_root or (repo_root / "openspec" / "plan")
         self._omx_root = (omx_root or (repo_root / ".omx")).resolve()
 
@@ -354,6 +377,70 @@ class OpenSpecPlansService:
             unavailable_reason=unavailable_reason,
         )
 
+    def run_plan_team(self, slug: str) -> PlanTeamRunData | None:
+        plan_dir = self._resolve_plan_dir(slug)
+        if plan_dir is None or not plan_dir.exists() or not plan_dir.is_dir():
+            return None
+
+        summary_path = plan_dir / "summary.md"
+        if not summary_path.exists():
+            return None
+
+        planner_plan_path = plan_dir / "planner" / "plan.md"
+        if not planner_plan_path.exists():
+            raise OpenSpecPlansError(
+                f"Planner plan file is required to launch team execution: {planner_plan_path}",
+            )
+
+        if shutil.which("omx") is None:
+            raise OpenSpecPlansError("omx CLI is not available in PATH")
+
+        detail = self.get_plan(slug)
+        if detail is None:
+            return None
+
+        remaining_roles = [role for role in detail.roles if role.done_checkpoints < role.total_checkpoints]
+        worker_count = max(3, min(6, len(remaining_roles) or 1))
+
+        plan_path_display = self._display_path(plan_dir)
+        planner_plan_path_display = self._display_path(planner_plan_path)
+        task = (
+            f"Execute OpenSpec plan {slug} from {plan_path_display} with {planner_plan_path_display} "
+            "as the source of truth. Keep checkpoints updated and run final verification before shutdown."
+        )
+        command_argv = ["omx", "team", f"{worker_count}:executor", task]
+        launched_at = datetime.now(tz=UTC)
+        logs_dir = self._omx_root / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        launch_stamp = launched_at.strftime("%Y%m%dT%H%M%SZ")
+        log_path = logs_dir / f"plans-run-team-{slug}-{launch_stamp}.log"
+
+        try:
+            with log_path.open("ab") as log_stream:
+                process = subprocess.Popen(
+                    command_argv,
+                    cwd=str(self._repo_root),
+                    env=os.environ.copy(),
+                    stdin=subprocess.DEVNULL,
+                    stdout=log_stream,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+        except OSError as exc:
+            raise OpenSpecPlansError(f"Unable to start omx team for plan '{slug}'") from exc
+
+        return PlanTeamRunData(
+            slug=slug,
+            worker_count=worker_count,
+            command=shlex.join(command_argv),
+            pid=process.pid,
+            launched_at=launched_at,
+            plan_path=plan_path_display,
+            planner_plan_path=planner_plan_path_display,
+            log_path=self._display_path(log_path),
+        )
+
     def _resolve_runtime_session(self, plan_dir: Path) -> dict[str, Any] | None:
         plan_slug = plan_dir.name
         plan_updated_at = self._last_updated(plan_dir)
@@ -479,6 +566,12 @@ class OpenSpecPlansService:
                     )
                 )
         return events[:MAX_RUNTIME_EVENTS]
+
+    def _display_path(self, path: Path) -> str:
+        try:
+            return str(path.resolve().relative_to(self._repo_root))
+        except ValueError:
+            return str(path.resolve())
 
     def _read_agent_events(self, path: Path, session_id: str) -> list[PlanRuntimeEventData]:
         if not path.exists() or not path.is_file():

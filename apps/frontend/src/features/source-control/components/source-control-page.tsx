@@ -70,7 +70,6 @@ function botActivityClass(status: "idle" | "active"): string {
     : "border-white/20 bg-white/10 text-zinc-300";
 }
 
-<<<<<<< Updated upstream
 function isAgentBranch(branch: string | null | undefined): boolean {
   if (!branch) {
     return false;
@@ -99,8 +98,7 @@ function snapshotFromBranch(branch: string | null | undefined): string | null {
     return segments[1] ?? null;
   }
   return segments[0] ?? null;
-=======
-const AGENT_BRANCH_PATTERN = /^(?:agent[/_-]|gx[/_-]|bot[/_-]|worker[/_-]|subbranch[/_-])/i;
+}
 
 function canDeleteBranch(branch: string, activeBranch: string, baseBranch: string): boolean {
   const normalized = branch.trim();
@@ -111,7 +109,6 @@ function canDeleteBranch(branch: string, activeBranch: string, baseBranch: strin
     return false;
   }
   return AGENT_BRANCH_PATTERN.test(normalized);
->>>>>>> Stashed changes
 }
 
 export function SourceControlPage() {
@@ -137,11 +134,7 @@ export function SourceControlPage() {
   const sourceControlQuery = useSourceControl(effectiveProjectId || null);
   const preview = sourceControlQuery.data;
 
-<<<<<<< Updated upstream
-  const selectedBranchName = useMemo(() => {
-=======
   const effectiveSelectedBranch = useMemo(() => {
->>>>>>> Stashed changes
     if (!preview) {
       return "";
     }
@@ -149,21 +142,12 @@ export function SourceControlPage() {
       return selectedBranch;
     }
     const active = preview.branches.find((branch) => branch.isActive)?.name;
-<<<<<<< Updated upstream
-    const fallback = preview.branches[0]?.name;
-    return active ?? fallback ?? "";
-=======
     return active ?? preview.branches[0]?.name ?? "";
->>>>>>> Stashed changes
   }, [preview, selectedBranch]);
 
   const branchDetailsQuery = useSourceControlBranchDetails(
     effectiveProjectId || null,
-<<<<<<< Updated upstream
-    selectedBranchName || null,
-=======
     effectiveSelectedBranch || null,
->>>>>>> Stashed changes
   );
   const details = branchDetailsQuery.data;
   const selectedSnapshot = snapshotFromBranch(details?.branch);
@@ -176,20 +160,12 @@ export function SourceControlPage() {
 
   const createPrMutation = useMutation({
     mutationFn: async () => {
-<<<<<<< Updated upstream
-      if (!selectedBranchName || !preview) {
-=======
       if (!effectiveSelectedBranch || !preview) {
->>>>>>> Stashed changes
         throw new Error("Select a branch first.");
       }
       return createSourceControlPullRequest({
         projectId: effectiveProjectId || null,
-<<<<<<< Updated upstream
-        branch: selectedBranchName,
-=======
         branch: effectiveSelectedBranch,
->>>>>>> Stashed changes
         baseBranch: preview.baseBranch,
       });
     },
@@ -201,20 +177,12 @@ export function SourceControlPage() {
 
   const mergePrMutation = useMutation({
     mutationFn: async () => {
-<<<<<<< Updated upstream
-      if (!selectedBranchName || !details?.pullRequest) {
-=======
       if (!effectiveSelectedBranch || !details?.pullRequest) {
->>>>>>> Stashed changes
         throw new Error("No open pull request for this branch.");
       }
       return mergeSourceControlPullRequest({
         projectId: effectiveProjectId || null,
-<<<<<<< Updated upstream
-        branch: selectedBranchName,
-=======
         branch: effectiveSelectedBranch,
->>>>>>> Stashed changes
         pullRequestNumber: details.pullRequest.number,
         baseBranch: details.baseBranch,
         deleteBranch: true,
@@ -267,85 +235,6 @@ export function SourceControlPage() {
   return (
     <div className="animate-fade-in-up h-full w-full overflow-hidden bg-[linear-gradient(180deg,rgba(7,10,18,0.97)_0%,rgba(3,5,12,1)_100%)]">
       {preview ? (
-<<<<<<< Updated upstream
-        <div className="grid min-h-[calc(100vh-220px)] gap-3 xl:grid-cols-[330px_1fr]">
-          <aside className="flex min-h-0 flex-col rounded-xl border border-white/[0.08] bg-[#060c18]/95 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-300">
-              Current codex branches
-            </p>
-            <p className="mt-1 text-[11px] text-zinc-500">
-              local: {preview.activeBranch} • main: {preview.baseBranch}
-            </p>
-            <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-              {preview.branches.map((branch) => (
-                <button
-                  type="button"
-                  key={branch.name}
-                  onClick={() => {
-                    setActionMessage(null);
-                    setSelectedBranch(branch.name);
-                  }}
-                  className={cn(
-                    "w-full cursor-pointer rounded-md border px-2.5 py-2 text-left transition-colors",
-                    selectedBranchName === branch.name
-                      ? "border-cyan-400/40 bg-cyan-500/15"
-                      : "border-white/10 bg-black/20 hover:border-white/20 hover:bg-black/30",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-xs font-semibold text-zinc-100">{branch.name}</p>
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
-                        mergeBadgeClass(branch.mergeState),
-                      )}
-                    >
-                      {toMergeStateLabel(branch.mergeState)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-zinc-500">ahead {branch.ahead} • behind {branch.behind}</p>
-                </button>
-              ))}
-            </div>
-          </aside>
-
-          <div className="space-y-3">
-            {branchDetailsQuery.isLoading && !details ? (
-              <div className="py-12">
-                <SpinnerBlock />
-              </div>
-            ) : details ? (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <article className="rounded-lg border border-white/[0.08] bg-[#060f1d] p-3">
-                    <p className="text-[10px] uppercase tracking-[0.1em] text-zinc-500">Current branch</p>
-                    <p className="mt-2 truncate text-sm font-semibold text-zinc-100">{details.branch}</p>
-                    <p className="mt-1 text-[11px] text-zinc-400">
-                      snapshot: {selectedSnapshot ?? "--"} •{" "}
-                      {selectedBranchIsCurrent ? "working now" : "not currently checked out"}
-                    </p>
-                  </article>
-                  <article className="rounded-lg border border-white/[0.08] bg-[#060f1d] p-3">
-                    <p className="text-[10px] uppercase tracking-[0.1em] text-zinc-500">Main/base branch</p>
-                    <p className="mt-2 truncate text-sm font-semibold text-zinc-100">{details.baseBranch}</p>
-                  </article>
-                  <article className="rounded-lg border border-white/[0.08] bg-[#060f1d] p-3">
-                    <p className="text-[10px] uppercase tracking-[0.1em] text-zinc-500">Linked GX bots</p>
-                    <p className="mt-2 text-sm font-semibold text-zinc-100">{details.linkedBots.length}</p>
-                  </article>
-                  <article className="rounded-lg border border-white/[0.08] bg-[#060f1d] p-3">
-                    <p className="text-[10px] uppercase tracking-[0.1em] text-zinc-500">Merge status</p>
-                    <span
-                      className={cn(
-                        "mt-2 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
-                        mergeBadgeClass(details.mergeState),
-                      )}
-                    >
-                      {toMergeStateLabel(details.mergeState)}
-                    </span>
-                  </article>
-                </div>
-=======
         <div className="grid h-[calc(100vh-98px)] gap-px bg-white/[0.06] xl:grid-cols-[340px_minmax(0,1fr)]">
           <Card className={cn(panelSurfaceClass, "h-full rounded-none border-0 xl:border-r xl:border-white/[0.08]")}>
             <CardContent className="flex h-full flex-col space-y-3 p-3">
@@ -358,7 +247,6 @@ export function SourceControlPage() {
                   refreshed {formatIso(preview.refreshedAt)}
                 </p>
               </div>
->>>>>>> Stashed changes
 
               <label className="sr-only" htmlFor="source-control-project-select">
                 Project
@@ -454,6 +342,9 @@ export function SourceControlPage() {
                     <article className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                       <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Current branch</p>
                       <p className="mt-2 truncate text-sm font-medium text-slate-100">{details.branch}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        snapshot: {selectedSnapshot ?? "--"} • {selectedBranchIsCurrent ? "working now" : "not currently checked out"}
+                      </p>
                     </article>
                     <article className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                       <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Main/base branch</p>
@@ -503,42 +394,6 @@ export function SourceControlPage() {
                           ) : null}
                         </div>
                       ) : (
-<<<<<<< Updated upstream
-                        preview.gxBots.map((bot) => {
-                          const botSnapshot = bot.snapshotName ?? snapshotFromBranch(bot.matchedBranch);
-                          const botMatchesSelected = bot.matchedBranch === details.branch;
-                          const botSessionCount = Math.max(0, bot.sessionCount ?? 0);
-                          return (
-                          <div
-                            key={`${bot.botName}-${bot.runtime}`}
-                            className={cn(
-                              "rounded-md border px-2.5 py-2",
-                              bot.matchedBranch === details.branch
-                                ? "border-cyan-400/30 bg-cyan-500/10"
-                                : "border-white/8 bg-black/20",
-                            )}
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-xs font-semibold text-zinc-100">{bot.botName}</p>
-                              <span
-                                className={cn(
-                                  "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
-                                  botActivityClass(bot.botStatus),
-                                )}
-                              >
-                                {bot.botStatus}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-[11px] text-zinc-400">
-                              matched branch: {bot.matchedBranch ?? "--"}
-                            </p>
-                            <p className="mt-1 text-[11px] text-zinc-400">
-                              snapshot: {botSnapshot ?? "--"} • {botMatchesSelected ? "working on selected" : "not selected"}
-                            </p>
-                            <p className="mt-1 text-[11px] text-zinc-400">
-                              {bot.source === "snapshot" ? "codex snapshot" : "agent bot"} • live sessions: {botSessionCount}
-                            </p>
-=======
                         <p className="text-xs text-slate-500">No open pull request for this branch.</p>
                       )}
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -609,119 +464,89 @@ export function SourceControlPage() {
                         {preview.gxBots.length === 0 ? (
                           <p className="text-xs text-slate-500">No bots configured.</p>
                         ) : (
-                          preview.gxBots.map((bot) => (
-                            <div
-                              key={`${bot.botName}-${bot.runtime}`}
-                              className={cn(
-                                "rounded-md border px-2.5 py-2",
-                                bot.matchedBranch === details.branch
-                                  ? "border-cyan-400/30 bg-cyan-500/10"
-                                  : "border-white/[0.12] bg-white/[0.02]",
-                              )}
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-xs font-semibold text-slate-100">{bot.botName}</p>
-                                <span
-                                  className={cn(
-                                    "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
-                                    botActivityClass(bot.botStatus),
-                                  )}
-                                >
-                                  {bot.botStatus}
-                                </span>
+                          preview.gxBots.map((bot) => {
+                            const botSnapshot = bot.snapshotName ?? snapshotFromBranch(bot.matchedBranch);
+                            const botMatchesSelected = bot.matchedBranch === details.branch;
+                            const botSessionCount = Math.max(0, bot.sessionCount ?? 0);
+                            return (
+                              <div
+                                key={`${bot.botName}-${bot.runtime}`}
+                                className={cn(
+                                  "rounded-md border px-2.5 py-2",
+                                  bot.matchedBranch === details.branch
+                                    ? "border-cyan-400/30 bg-cyan-500/10"
+                                    : "border-white/[0.12] bg-white/[0.02]",
+                                )}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-slate-100">{bot.botName}</p>
+                                  <span
+                                    className={cn(
+                                      "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
+                                      botActivityClass(bot.botStatus),
+                                    )}
+                                  >
+                                    {bot.botStatus}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-[11px] text-slate-400">
+                                  matched branch: {bot.matchedBranch ?? "--"}
+                                </p>
+                                <p className="mt-1 text-[11px] text-slate-400">
+                                  snapshot: {botSnapshot ?? "--"} • {botMatchesSelected ? "working on selected" : "not selected"}
+                                </p>
+                                <p className="mt-1 text-[11px] text-slate-400">
+                                  {bot.source === "snapshot" ? "codex snapshot" : "agent bot"} • live sessions: {botSessionCount}
+                                </p>
                               </div>
-                              <p className="mt-1 text-[11px] text-slate-400">
-                                matched branch: {bot.matchedBranch ?? "--"}
-                              </p>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
                       </div>
                     </article>
                   </div>
 
-                  <article className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
-                      <GitBranch className="h-3.5 w-3.5 text-cyan-300" />
-                      Current changes ({details.branch})
-                    </div>
-                    <div className="space-y-1.5">
-                      {details.changedFiles.length === 0 ? (
-                        <p className="text-xs text-slate-500">
-                          No file diffs against {details.baseBranch} for this branch.
-                        </p>
-                      ) : (
-                        details.changedFiles.map((file) => (
-                          <div
-                            key={`${details.branch}:${file.path}:${file.code}`}
-                            className="flex items-start gap-2 rounded-md border border-white/[0.12] bg-white/[0.02] px-2.5 py-1.5"
-                          >
-                            <span className="mt-0.5 w-4 text-[10px] font-semibold text-emerald-300">{file.code}</span>
-                            <span className="min-w-0 break-all text-[11px] text-slate-300">{file.path}</span>
->>>>>>> Stashed changes
-                          </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </article>
-<<<<<<< Updated upstream
-                </div>
-
-                {shouldShowCurrentChanges ? (
-                  <article className="rounded-xl border border-cyan-500/25 bg-[#061220]/90 p-3">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-300">
-                      <GitBranch className="h-3.5 w-3.5 text-cyan-300" />
-                      Current changes ({details.branch})
-                    </div>
-                    <div className="space-y-1.5">
-                      {details.changedFiles.length === 0 ? (
-                        <p className="text-xs text-zinc-500">
-                          No file diffs against {details.baseBranch} for this branch.
-                        </p>
-                      ) : (
-                        details.changedFiles.map((file) => (
-                          <div
-                            key={`${details.branch}:${file.path}:${file.code}`}
-                            className="flex items-start gap-2 rounded-md border border-white/10 bg-[#030912] px-2.5 py-1.5"
-                          >
-                            <span className="mt-0.5 w-4 text-[10px] font-semibold text-emerald-300">{file.code}</span>
-                            <span className="min-w-0 break-all text-[11px] text-zinc-300">{file.path}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </article>
-                ) : (
-                  <article className="rounded-xl border border-white/10 bg-[#061220]/70 p-3">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-300">
-                      <GitBranch className="h-3.5 w-3.5 text-zinc-400" />
-                      Current changes
-                    </div>
-                    <p className="text-xs text-zinc-500">
-                      Current changes are shown only for agent branches with an open pull request.
-                    </p>
-                  </article>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-zinc-500">Select a branch to view changes and PR status.</p>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {preview ? (
-        <div className="text-[11px] text-zinc-500">
-          refreshed {formatIso(preview.refreshedAt)}
-=======
+                  {shouldShowCurrentChanges ? (
+                    <article className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+                        <GitBranch className="h-3.5 w-3.5 text-cyan-300" />
+                        Current changes ({details.branch})
+                      </div>
+                      <div className="space-y-1.5">
+                        {details.changedFiles.length === 0 ? (
+                          <p className="text-xs text-slate-500">
+                            No file diffs against {details.baseBranch} for this branch.
+                          </p>
+                        ) : (
+                          details.changedFiles.map((file) => (
+                            <div
+                              key={`${details.branch}:${file.path}:${file.code}`}
+                              className="flex items-start gap-2 rounded-md border border-white/[0.12] bg-white/[0.02] px-2.5 py-1.5"
+                            >
+                              <span className="mt-0.5 w-4 text-[10px] font-semibold text-emerald-300">{file.code}</span>
+                              <span className="min-w-0 break-all text-[11px] text-slate-300">{file.path}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </article>
+                  ) : (
+                    <article className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+                        <GitBranch className="h-3.5 w-3.5 text-slate-400" />
+                        Current changes
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Current changes are shown only for agent branches with an open pull request.
+                      </p>
+                    </article>
+                  )}
                 </>
               ) : (
                 <p className="text-sm text-slate-500">Select a branch to view changes and PR status.</p>
               )}
             </CardContent>
           </Card>
->>>>>>> Stashed changes
         </div>
       ) : null}
     </div>

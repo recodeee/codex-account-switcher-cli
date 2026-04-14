@@ -9,6 +9,7 @@ from app.core.exceptions import DashboardNotFoundError, DashboardServiceUnavaila
 from app.dependencies import ProjectsContext, get_projects_context
 from app.modules.plans.schemas import (
     OpenSpecPlanDetail,
+    OpenSpecPlanRunTeamResponse,
     OpenSpecPlanRuntime,
     PlanPromptBundle,
     PlanPromptItem,
@@ -255,4 +256,32 @@ async def get_open_spec_plan_runtime(
         stale_after_seconds=runtime.stale_after_seconds,
         reasons=runtime.reasons,
         unavailable_reason=runtime.unavailable_reason,
+    )
+
+
+@router.post("/{plan_slug}/run-team", response_model=OpenSpecPlanRunTeamResponse)
+async def run_open_spec_plan_team(
+    plan_slug: str,
+    service: OpenSpecPlansService = Depends(get_plans_service),
+) -> OpenSpecPlanRunTeamResponse:
+    try:
+        launch = service.run_plan_team(plan_slug)
+    except OpenSpecPlansError as exc:
+        raise DashboardServiceUnavailableError(
+            "Unable to start team execution for plan",
+            code="plans_run_team_unavailable",
+        ) from exc
+
+    if launch is None:
+        raise DashboardNotFoundError("Plan not found", code="plan_not_found")
+
+    return OpenSpecPlanRunTeamResponse(
+        slug=launch.slug,
+        worker_count=launch.worker_count,
+        command=launch.command,
+        pid=launch.pid,
+        launched_at=launch.launched_at,
+        plan_path=launch.plan_path,
+        planner_plan_path=launch.planner_plan_path,
+        log_path=launch.log_path,
     )

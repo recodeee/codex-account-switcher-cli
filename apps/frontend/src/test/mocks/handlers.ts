@@ -2199,6 +2199,38 @@ export const handlers = [
 		return HttpResponse.json(plan.runtime);
 	}),
 
+	http.post("/api/projects/plans/:planSlug/run-team", ({ params, request }) => {
+		const url = new URL(request.url);
+		const projectId = url.searchParams.get("projectId");
+		const plans = resolveProjectScopedPlans(state, projectId);
+		const planSlug = String(params.planSlug);
+		const plan = plans.find((entry) => entry.slug === planSlug);
+		if (!plan) {
+			return HttpResponse.json(
+				{
+					error: {
+						code: "plan_not_found",
+						message: "Plan not found",
+					},
+				},
+				{ status: 404 },
+			);
+		}
+
+		const workerCount = 4;
+		const launchedAt = new Date().toISOString();
+		return HttpResponse.json({
+			slug: planSlug,
+			workerCount,
+			command: `omx team ${workerCount}:executor "Execute OpenSpec plan ${planSlug}"`,
+			pid: 424242,
+			launchedAt,
+			planPath: `openspec/plan/${planSlug}`,
+			plannerPlanPath: `openspec/plan/${planSlug}/planner/plan.md`,
+			logPath: `.omx/logs/plans-run-team-${planSlug}-${launchedAt.replace(/[:.]/g, "")}.log`,
+		});
+	}),
+
 	http.get("/api/workspaces", () => {
 		return HttpResponse.json({ entries: state.workspaces });
 	}),

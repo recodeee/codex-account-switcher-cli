@@ -13,11 +13,7 @@ export const ProjectEntrySchema = z.object({
   name: z.string().min(1),
   description: z.string().nullable(),
   projectUrl: z.string().nullable(),
-<<<<<<< Updated upstream
   githubRepoUrl: z.string().nullable().default(null),
-=======
-  githubRepoUrl: z.string().nullable(),
->>>>>>> Stashed changes
   projectPath: z.string().nullable(),
   sandboxMode: ProjectSandboxModeSchema,
   gitBranch: z.string().nullable(),

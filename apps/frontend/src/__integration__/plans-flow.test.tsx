@@ -446,4 +446,39 @@ describe("plans flow integration", () => {
     expect(await screen.findByRole("button", { name: /copy team execution prompt/i })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /copy starter prompt/i })).toBeInTheDocument();
   });
+
+  it("starts team execution from the selected plan with one click", async () => {
+    const user = userEvent.setup();
+    let launchedSlug: string | null = null;
+
+    server.use(
+      http.post("/api/projects/plans/:planSlug/run-team", ({ params }) => {
+        const planSlug = String(params.planSlug);
+        launchedSlug = planSlug;
+        return HttpResponse.json({
+          slug: planSlug,
+          workerCount: 4,
+          command: `omx team 4:executor "Execute OpenSpec plan ${planSlug}"`,
+          pid: 424242,
+          launchedAt: "2026-04-14T18:30:00Z",
+          planPath: `openspec/plan/${planSlug}`,
+          plannerPlanPath: `openspec/plan/${planSlug}/planner/plan.md`,
+          logPath: `.omx/logs/plans-run-team-${planSlug}-20260414T183000Z.log`,
+        });
+      }),
+    );
+
+    window.history.pushState({}, "", "/projects/plans");
+    renderWithProviders(<App />);
+
+    const runNowButton = await screen.findByTestId("plan-run-team-now");
+    await user.click(runNowButton);
+
+    await waitFor(() => {
+      expect(launchedSlug).toBe("projects-plans-page");
+    });
+    expect(
+      await screen.findByText("Team started for projects-plans-page with 4 workers (PID 424242)."),
+    ).toBeInTheDocument();
+  });
 });

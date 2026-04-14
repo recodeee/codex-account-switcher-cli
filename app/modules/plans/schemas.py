@@ -127,3 +127,14 @@ class OpenSpecPlanRuntime(DashboardModel):
     stale_after_seconds: int | None
     reasons: list[str]
     unavailable_reason: str | None
+
+
+class OpenSpecPlanRunTeamResponse(DashboardModel):
+    slug: str
+    worker_count: int
+    command: str
+    pid: int
+    launched_at: datetime
+    plan_path: str
+    planner_plan_path: str
+    log_path: str

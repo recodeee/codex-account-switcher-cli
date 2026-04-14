@@ -337,6 +337,61 @@ mod tests {
     }
 
     #[test]
+    fn cancel_is_supported_from_claimed_and_running_states() {
+        let mut claimed = DaemonTaskLease::new("task-5b", "runtime-1", Duration::from_secs(30));
+        claimed
+            .claim("runtime-1")
+            .expect("claim should succeed before cancel");
+        assert_eq!(claimed.cancel(), Ok(()));
+        assert_eq!(claimed.state, TaskLifecycleState::Cancelled);
+
+        let mut running = DaemonTaskLease::new("task-5c", "runtime-1", Duration::from_secs(30));
+        running
+            .claim("runtime-1")
+            .expect("claim should succeed before start");
+        running.start().expect("start should succeed before cancel");
+        assert_eq!(running.cancel(), Ok(()));
+        assert_eq!(running.state, TaskLifecycleState::Cancelled);
+    }
+
+    #[test]
+    fn cancel_rejects_terminal_completed_and_failed_states() {
+        let mut completed = DaemonTaskLease::new("task-5d", "runtime-1", Duration::from_secs(30));
+        completed
+            .claim("runtime-1")
+            .expect("claim should succeed before complete");
+        completed
+            .start()
+            .expect("start should succeed before complete");
+        completed
+            .complete()
+            .expect("complete should succeed before cancel attempt");
+        assert_eq!(
+            completed.cancel(),
+            Err(TaskLifecycleError::InvalidTransition {
+                from: TaskLifecycleState::Completed,
+                to: TaskLifecycleState::Cancelled,
+            })
+        );
+
+        let mut failed = DaemonTaskLease::new("task-5e", "runtime-1", Duration::from_secs(30));
+        failed
+            .claim("runtime-1")
+            .expect("claim should succeed before fail");
+        failed.start().expect("start should succeed before fail");
+        failed
+            .fail()
+            .expect("fail should succeed before cancel attempt");
+        assert_eq!(
+            failed.cancel(),
+            Err(TaskLifecycleError::InvalidTransition {
+                from: TaskLifecycleState::Failed,
+                to: TaskLifecycleState::Cancelled,
+            })
+        );
+    }
+
+    #[test]
     fn stale_heartbeat_detection_uses_ttl() {
         let mut lease = DaemonTaskLease::new("task-6", "runtime-1", Duration::from_secs(10));
 

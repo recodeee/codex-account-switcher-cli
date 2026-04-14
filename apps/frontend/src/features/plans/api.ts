@@ -1,7 +1,8 @@
-import { get } from "@/lib/api-client";
+import { get, post } from "@/lib/api-client";
 
 import {
   OpenSpecPlanDetailSchema,
+  OpenSpecPlanRunTeamResponseSchema,
   OpenSpecPlanRuntimeSchema,
   OpenSpecPlansResponseSchema,
 } from "@/features/plans/schemas";
@@ -31,5 +32,12 @@ export function getOpenSpecPlanRuntime(planSlug: string, projectId: string | nul
   return get(
     withProjectFilter(`${OPEN_SPEC_PLANS_PATH}/${encodeURIComponent(planSlug)}/runtime`, projectId),
     OpenSpecPlanRuntimeSchema,
+  );
+}
+
+export function runOpenSpecPlanTeam(planSlug: string, projectId: string | null = null) {
+  return post(
+    withProjectFilter(`${OPEN_SPEC_PLANS_PATH}/${encodeURIComponent(planSlug)}/run-team`, projectId),
+    OpenSpecPlanRunTeamResponseSchema,
   );
 }

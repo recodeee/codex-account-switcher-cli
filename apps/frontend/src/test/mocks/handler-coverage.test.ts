@@ -87,6 +87,7 @@ const EXPECTED_ENDPOINTS = [
 	"GET /api/projects/plans",
 	"GET /api/projects/plans/:planSlug",
 	"GET /api/projects/plans/:planSlug/runtime",
+	"POST /api/projects/plans/:planSlug/run-team",
 	"POST /api/projects",
 	"PUT /api/projects/:projectId",
 	"DELETE /api/projects/:projectId",

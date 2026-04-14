@@ -122,7 +122,19 @@ export const OpenSpecPlanRuntimeSchema = z.object({
   unavailableReason: z.string().nullable(),
 });
 
+export const OpenSpecPlanRunTeamResponseSchema = z.object({
+  slug: z.string().min(1),
+  workerCount: z.number().int().positive(),
+  command: z.string().min(1),
+  pid: z.number().int().positive(),
+  launchedAt: z.string().datetime({ offset: true }),
+  planPath: z.string().min(1),
+  plannerPlanPath: z.string().min(1),
+  logPath: z.string().min(1),
+});
+
 export type OpenSpecPlanSummary = z.infer<typeof OpenSpecPlanSummarySchema>;
 export type OpenSpecPlansResponse = z.infer<typeof OpenSpecPlansResponseSchema>;
 export type OpenSpecPlanDetail = z.infer<typeof OpenSpecPlanDetailSchema>;
 export type OpenSpecPlanRuntime = z.infer<typeof OpenSpecPlanRuntimeSchema>;
+export type OpenSpecPlanRunTeamResponse = z.infer<typeof OpenSpecPlanRunTeamResponseSchema>;

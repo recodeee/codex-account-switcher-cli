@@ -569,3 +569,77 @@ async def test_plans_api_runtime_observer_requires_authoritative_session_scoped_
         assert payload["unavailableReason"] == "agent_events_invalid"
     finally:
         app_instance.dependency_overrides.pop(get_plans_service, None)
+
+
+@pytest.mark.asyncio
+async def test_plans_api_run_team_launches_omx_team(async_client, app_instance, tmp_path, monkeypatch):
+    project_root = tmp_path / "project-root"
+    plans_root = project_root / "openspec" / "plan"
+    plan_slug = "migrate-multica-runtime-model"
+    plan_dir = plans_root / plan_slug
+    (plan_dir / "planner").mkdir(parents=True, exist_ok=False)
+    (plan_dir / "summary.md").write_text(
+        f"# Plan Summary: {plan_slug}\n\n- **Status:** approved\n",
+        encoding="utf-8",
+    )
+    (plan_dir / "planner" / "plan.md").write_text(
+        "# Planner Plan\n",
+        encoding="utf-8",
+    )
+    (plan_dir / "executor").mkdir(parents=True, exist_ok=False)
+    (plan_dir / "executor" / "tasks.md").write_text(
+        "# executor tasks\n\n- [ ] [E1] IN_PROGRESS - implement runtime bridge\n",
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    class DummyProcess:
+        def __init__(self, pid: int):
+            self.pid = pid
+
+    def fake_popen(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return DummyProcess(pid=424242)
+
+    monkeypatch.setattr("app.modules.plans.service.shutil.which", lambda _name: "/usr/bin/omx")
+    monkeypatch.setattr("app.modules.plans.service.subprocess.Popen", fake_popen)
+
+    app_instance.dependency_overrides[get_plans_service] = lambda: OpenSpecPlansService(
+        plans_root=plans_root,
+        omx_root=project_root / ".omx",
+    )
+    try:
+        response = await async_client.post(f"/api/projects/plans/{plan_slug}/run-team")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["slug"] == plan_slug
+        assert payload["workerCount"] == 3
+        assert payload["pid"] == 424242
+        assert payload["planPath"] == f"openspec/plan/{plan_slug}"
+        assert payload["plannerPlanPath"] == f"openspec/plan/{plan_slug}/planner/plan.md"
+        assert payload["command"].startswith("omx team 3:executor")
+        assert payload["logPath"].startswith(".omx/logs/plans-run-team-")
+        assert payload["logPath"].endswith(".log")
+
+        popen_args = captured.get("args")
+        assert isinstance(popen_args, tuple)
+        assert len(popen_args) == 1
+        assert popen_args[0][0] == "omx"
+        assert popen_args[0][1] == "team"
+        assert popen_args[0][2] == "3:executor"
+        assert f"Execute OpenSpec plan {plan_slug}" in popen_args[0][3]
+
+        popen_kwargs = captured.get("kwargs")
+        assert isinstance(popen_kwargs, dict)
+        assert popen_kwargs["cwd"] == str(project_root)
+    finally:
+        app_instance.dependency_overrides.pop(get_plans_service, None)
+
+
+@pytest.mark.asyncio
+async def test_plans_api_run_team_returns_not_found_for_missing_plan(async_client):
+    response = await async_client.post("/api/projects/plans/missing-plan/run-team")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "plan_not_found"
