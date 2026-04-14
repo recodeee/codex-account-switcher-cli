@@ -175,19 +175,25 @@ export function WorkspaceTab() {
             key={`${settings.openaiCacheAffinityMaxAgeSeconds}-${settings.stickyReallocationBudgetThresholdPct}`}
             settings={settings}
             busy={busy}
-            onSave={(payload) => updateSettingsMutation.mutateAsync(payload)}
+            onSave={async (payload) => {
+              await updateSettingsMutation.mutateAsync(payload);
+            }}
           />
           <ImportSettings
             settings={settings}
             busy={busy}
-            onSave={(payload) => updateSettingsMutation.mutateAsync(payload)}
+            onSave={async (payload) => {
+              await updateSettingsMutation.mutateAsync(payload);
+            }}
           />
           <PasswordSettings disabled={busy} />
           <Suspense fallback={null}>
             <TotpSettings
               settings={settings}
               disabled={busy}
-              onSave={(payload) => updateSettingsMutation.mutateAsync(payload)}
+              onSave={async (payload) => {
+                await updateSettingsMutation.mutateAsync(payload);
+              }}
             />
           </Suspense>
           <FirewallSection />

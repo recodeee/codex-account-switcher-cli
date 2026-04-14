@@ -24,6 +24,7 @@ __pycache__/
 build/
 dist/
 app/static/
+apps/app/static/
 deploy/helm/*/charts/
 
 # Node

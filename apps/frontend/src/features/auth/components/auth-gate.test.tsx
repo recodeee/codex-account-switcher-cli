@@ -18,9 +18,17 @@ function setAuthState(
   });
 }
 
+function setDocumentReferrer(value: string): void {
+  Object.defineProperty(document, "referrer", {
+    configurable: true,
+    value,
+  });
+}
+
 describe("AuthGate", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
+    setDocumentReferrer("");
     setAuthState({
       initialize: vi.fn().mockResolvedValue(undefined),
     });
@@ -131,6 +139,28 @@ describe("AuthGate", () => {
       loading: false,
     });
     markNavigationLoaderSuppressed(10_000);
+
+    render(
+      <AuthGate>
+        <div>Protected content</div>
+      </AuthGate>,
+    );
+
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+    await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps app shell visible during same-origin page navigation even without explicit suppression flag", async () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
+    setAuthState({
+      initialize,
+      customer: null,
+      token: null,
+      initialized: false,
+      loading: false,
+    });
+    setDocumentReferrer(`${window.location.origin}/dashboard`);
 
     render(
       <AuthGate>

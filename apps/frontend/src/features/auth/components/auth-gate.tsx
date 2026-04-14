@@ -16,11 +16,29 @@ function resolveInitialMode(): "login" | "register" {
     : "login";
 }
 
+function isSameOriginReferrerNavigation(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const referrer = window.document.referrer;
+  if (!referrer) {
+    return false;
+  }
+
+  try {
+    return new URL(referrer).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 export function AuthGate({ children }: PropsWithChildren) {
   const initialize = useMedusaCustomerAuthStore((state) => state.initialize);
   const initialized = useMedusaCustomerAuthStore((state) => state.initialized);
   const customer = useMedusaCustomerAuthStore((state) => state.customer);
-  const hideLoaderForNavigation = isNavigationLoaderSuppressed();
+  const hideLoaderForNavigation =
+    isNavigationLoaderSuppressed() || isSameOriginReferrerNavigation();
 
   useEffect(() => {
     void initialize().catch(() => {
