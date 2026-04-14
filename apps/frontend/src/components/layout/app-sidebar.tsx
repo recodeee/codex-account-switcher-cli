@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   FolderTree,
+  GitBranch,
   HardDrive,
   LayoutDashboard,
   ListTodo,
@@ -60,6 +61,7 @@ const WORKSPACE_LINKS: SidebarNavEntry[] = [
 
 const MANAGER_LINKS: SidebarNavEntry[] = [
   { to: "/skills", label: "Skills", icon: Sparkles },
+  { to: "/source-control", label: "Source Control", icon: GitBranch },
   { to: "/storage", label: "Storage", icon: HardDrive, badge: "Soon" },
   { to: "/accounts", label: "Accounts", icon: Users },
   { to: "/sessions", label: "Sessions", icon: Link2 },

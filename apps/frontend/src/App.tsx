@@ -20,6 +20,7 @@ import { ReferralsPage } from "@/features/referrals/components/referrals-page";
 import { RuntimesPage } from "@/features/runtimes/components/runtimes-page";
 import { SessionsPage } from "@/features/sessions/components/sessions-page";
 import { SkillsPage } from "@/features/skills/components/skills-page";
+import { SourceControlPage } from "@/features/source-control/components/source-control-page";
 import { SettingsPage } from "@/features/settings/components/settings-page";
 import { StoragePage } from "@/features/storage/components/storage-page";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ function AppLayout() {
   const isSkillsRoute = location.pathname === "/skills";
   const isBillingRoute = location.pathname === "/billing";
   const isApisRoute = location.pathname === "/apis";
+  const isSourceControlRoute = location.pathname === "/source-control";
 
   return (
     <div className="flex min-h-screen bg-background pb-10">
@@ -58,6 +60,7 @@ function AppLayout() {
             || isSkillsRoute
             || isAgentsRoute
             || isIssuesRoute
+            || isSourceControlRoute
               ? "max-w-none overflow-hidden p-0"
               : isDashboardRoute
                 ? "px-0 py-8"
@@ -71,6 +74,7 @@ function AppLayout() {
             isApisRoute ||
             isBillingRoute ||
             isIssuesRoute ||
+            isSourceControlRoute ||
             isDashboardRoute
               ? "max-w-none"
               : isProjectsRoute || isAccountsRoute
@@ -107,6 +111,7 @@ export default function App() {
             <Route path="/storage" element={<StoragePage />} />
             <Route path="/runtimes" element={<RuntimesPage />} />
             <Route path="/skills" element={<SkillsPage />} />
+            <Route path="/source-control" element={<SourceControlPage />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/firewall" element={<Navigate to="/settings" replace />} />

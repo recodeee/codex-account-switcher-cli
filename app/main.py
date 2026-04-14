@@ -53,6 +53,7 @@ from app.modules.proxy.ring_membership import (
 from app.modules.projects import api as projects_api
 from app.modules.request_logs import api as request_logs_api
 from app.modules.settings import api as settings_api
+from app.modules.source_control import api as source_control_api
 from app.modules.sticky_sessions import api as sticky_sessions_api
 from app.modules.sticky_sessions.cleanup_scheduler import build_sticky_session_cleanup_scheduler
 from app.modules.usage import api as usage_api
@@ -338,6 +339,7 @@ def create_app() -> FastAPI:
     app.include_router(projects_api.router)
     app.include_router(workspaces_api.router)
     app.include_router(plans_api.router)
+    app.include_router(source_control_api.router)
     app.include_router(sticky_sessions_api.router)
     app.include_router(handoffs_api.router)
     app.include_router(api_keys_api.router)
@@ -345,10 +347,18 @@ def create_app() -> FastAPI:
     app.include_router(billing_api.router)
     app.include_router(health_api.router)
 
-    static_dir = Path(__file__).parent / "static"
+    repo_root = Path(__file__).resolve().parents[1]
+    static_dir_candidates = (
+        Path(__file__).parent / "static",
+        repo_root / "apps" / "app" / "static",
+    )
+    static_dir = next(
+        (candidate for candidate in static_dir_candidates if (candidate / "index.html").is_file()),
+        static_dir_candidates[0],
+    )
     index_html = static_dir / "index.html"
     static_root = static_dir.resolve()
-    frontend_build_hint = "Frontend assets are missing. Run `cd frontend && bun run build`."
+    frontend_build_hint = "Frontend assets are missing. Run `cd apps/frontend && bun run build`."
     excluded_prefixes = ("api/", "v1/", "backend-api/", "health")
 
     def _is_static_asset_path(path: str) -> bool:

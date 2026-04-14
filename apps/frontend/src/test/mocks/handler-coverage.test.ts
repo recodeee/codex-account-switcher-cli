@@ -24,6 +24,8 @@ const EXPECTED_ENDPOINTS = [
 	"GET /health",
 	// dashboard
 	"GET /api/dashboard/overview",
+	"GET /api/dashboard/system-monitor",
+	"GET /api/source-control/preview",
 	"GET /api/request-logs",
 	"GET /api/request-logs/options",
 	"GET /api/request-logs/usage-summary",
@@ -80,9 +82,16 @@ const EXPECTED_ENDPOINTS = [
 	"GET /api/projects/plan-links",
 	"GET /api/projects/plans",
 	"GET /api/projects/plans/:planSlug",
+	"GET /api/projects/plans/:planSlug/runtime",
 	"POST /api/projects",
 	"PUT /api/projects/:projectId",
 	"DELETE /api/projects/:projectId",
+	"POST /api/projects/:projectId/open-folder",
+	// workspaces
+	"GET /api/workspaces",
+	"POST /api/workspaces",
+	"POST /api/workspaces/:workspaceId/select",
+	"DELETE /api/workspaces/:workspaceId",
 	// models
 	"GET /api/models",
 	// api-keys

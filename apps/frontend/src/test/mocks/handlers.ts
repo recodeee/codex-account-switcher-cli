@@ -1085,6 +1085,74 @@ export const handlers = [
 		});
 	}),
 
+	http.get("/api/source-control/preview", ({ request }) => {
+		const url = new URL(request.url);
+		const projectId = url.searchParams.get("projectId");
+		const selectedProject = projectId
+			? state.projects.find((project) => project.id === projectId)
+			: null;
+
+		const refreshedAt = new Date().toISOString();
+		return HttpResponse.json({
+			repositoryRoot: selectedProject?.projectPath ?? "/home/deadpool/Documents/recodee",
+			projectPath: selectedProject?.projectPath ?? null,
+			activeBranch: selectedProject?.gitBranch ?? "agent/demo-source-control",
+			baseBranch: "dev",
+			dirty: true,
+			refreshedAt,
+			changedFiles: [
+				{ path: "apps/frontend/src/features/source-control/components/source-control-page.tsx", code: "M", staged: true, unstaged: false },
+				{ path: "app/modules/source_control/service.py", code: "M", staged: true, unstaged: false },
+				{ path: "app/modules/source_control/api.py", code: "A", staged: true, unstaged: false },
+			],
+			commitPreview: {
+				hash: "12ab34cd56ef78gh90ij",
+				subject: "feat(source-control): add gx bot commit + merge preview panel",
+				body: "Add source-control preview API and UI panel with bot branch sync status.",
+				authorName: "recodee bot",
+				authoredAt: refreshedAt,
+			},
+			branches: [
+				{ name: "agent/demo-source-control", isActive: true, ahead: 3, behind: 0, mergedIntoBase: false, mergeState: "ready" },
+				{ name: "agent/fix-auth-refresh", isActive: false, ahead: 0, behind: 0, mergedIntoBase: true, mergeState: "merged" },
+				{ name: "gx/runtime-guardrails", isActive: false, ahead: 2, behind: 1, mergedIntoBase: false, mergeState: "diverged" },
+			],
+			mergePreview: [
+				{ branch: "agent/demo-source-control", mergeState: "ready", ahead: 3, behind: 0 },
+				{ branch: "agent/fix-auth-refresh", mergeState: "merged", ahead: 0, behind: 0 },
+				{ branch: "gx/runtime-guardrails", mergeState: "diverged", ahead: 2, behind: 1 },
+			],
+			worktrees: [
+				{ path: "/home/deadpool/Documents/recodee", branch: "dev", isCurrent: true },
+				{ path: "/home/deadpool/Documents/recodee/.omx/agent-worktrees/agent-demo-source-control", branch: "agent/demo-source-control", isCurrent: false },
+			],
+			gxBots: [
+				{
+					botName: "Master Agent",
+					botStatus: "active",
+					runtime: "Codex",
+					matchedBranch: "agent/demo-source-control",
+					inSync: true,
+					branchCandidates: ["agent/master-agent", "agent_master-agent", "subbranch/master-agent"],
+				},
+				{
+					botName: "Runtime Guardrail Bot",
+					botStatus: "idle",
+					runtime: "Codex",
+					matchedBranch: "gx/runtime-guardrails",
+					inSync: true,
+					branchCandidates: ["gx/runtime-guardrails", "agent/runtime-guardrail-bot"],
+				},
+			],
+			quickActions: [
+				"git status --short",
+				"git log --oneline --decorate -n 8",
+				"git checkout agent/demo-source-control",
+				"gh pr create --fill --head agent/demo-source-control --base dev",
+			],
+		});
+	}),
+
 	http.get("/api/request-logs", ({ request }) => {
 		const url = new URL(request.url);
 		const filtered = filterRequestLogs(url);

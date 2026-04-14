@@ -110,6 +110,7 @@ describe("AppSidebar", () => {
 
     const agentsIndex = labels.findIndex((label) => label === "Agents");
     const skillsIndex = labels.findIndex((label) => label === "Skills");
+    const sourceControlIndex = labels.findIndex((label) => label === "Source Control");
     const storageIndex = labels.findIndex((label) => label.startsWith("Storage"));
     const accountsIndex = labels.findIndex((label) => label === "Accounts");
     const sessionsIndex = labels.findIndex((label) => label === "Sessions");
@@ -117,8 +118,9 @@ describe("AppSidebar", () => {
 
     expect(agentsIndex).toBeGreaterThanOrEqual(0);
     expect(skillsIndex).toBeGreaterThan(agentsIndex);
+    expect(sourceControlIndex).toBeGreaterThan(skillsIndex);
     expect(storageIndex).toBeGreaterThanOrEqual(0);
-    expect(storageIndex).toBeGreaterThan(skillsIndex);
+    expect(storageIndex).toBeGreaterThan(sourceControlIndex);
     expect(accountsIndex).toBeGreaterThan(storageIndex);
     expect(sessionsIndex).toBeGreaterThan(accountsIndex);
     expect(referralsIndex).toBeGreaterThan(sessionsIndex);

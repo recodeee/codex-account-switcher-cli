@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 
 import { Spinner } from "@/components/ui/spinner";
@@ -37,8 +37,13 @@ export function AuthGate({ children }: PropsWithChildren) {
   const initialize = useMedusaCustomerAuthStore((state) => state.initialize);
   const initialized = useMedusaCustomerAuthStore((state) => state.initialized);
   const customer = useMedusaCustomerAuthStore((state) => state.customer);
-  const hideLoaderForNavigation =
-    isNavigationLoaderSuppressed() || isSameOriginReferrerNavigation();
+  const [hideLoaderForNavigation, setHideLoaderForNavigation] = useState(false);
+
+  useEffect(() => {
+    if (isNavigationLoaderSuppressed() || isSameOriginReferrerNavigation()) {
+      setHideLoaderForNavigation(true);
+    }
+  }, []);
 
   useEffect(() => {
     void initialize().catch(() => {

@@ -146,7 +146,9 @@ describe("AuthGate", () => {
       </AuthGate>,
     );
 
-    expect(screen.getByText("Protected content")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText("Protected content")).toBeInTheDocument(),
+    );
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
     await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
   });
@@ -168,7 +170,9 @@ describe("AuthGate", () => {
       </AuthGate>,
     );
 
-    expect(screen.getByText("Protected content")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText("Protected content")).toBeInTheDocument(),
+    );
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
     await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
   });

@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
+from pydantic import Field
+
 from app.modules.shared.schemas import DashboardModel
 
 MergeState = Literal["merged", "ready", "diverged", "behind", "unknown"]
@@ -52,7 +54,7 @@ class SourceControlBotSyncEntry(DashboardModel):
     runtime: str
     matched_branch: str | None = None
     in_sync: bool = False
-    branch_candidates: list[str] = []
+    branch_candidates: list[str] = Field(default_factory=list)
 
 
 class SourceControlPreviewResponse(DashboardModel):
@@ -62,11 +64,10 @@ class SourceControlPreviewResponse(DashboardModel):
     base_branch: str
     dirty: bool
     refreshed_at: datetime
-    changed_files: list[SourceControlChangedFile] = []
+    changed_files: list[SourceControlChangedFile] = Field(default_factory=list)
     commit_preview: SourceControlCommitPreview
-    branches: list[SourceControlBranchPreview] = []
-    merge_preview: list[SourceControlMergePreviewEntry] = []
-    worktrees: list[SourceControlWorktreeEntry] = []
-    gx_bots: list[SourceControlBotSyncEntry] = []
-    quick_actions: list[str] = []
-
+    branches: list[SourceControlBranchPreview] = Field(default_factory=list)
+    merge_preview: list[SourceControlMergePreviewEntry] = Field(default_factory=list)
+    worktrees: list[SourceControlWorktreeEntry] = Field(default_factory=list)
+    gx_bots: list[SourceControlBotSyncEntry] = Field(default_factory=list)
+    quick_actions: list[str] = Field(default_factory=list)

@@ -18,6 +18,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { to: "/agents", label: "Agents" },
   { to: "/skills", label: "Skills" },
+  { to: "/source-control", label: "Source Control" },
   { to: "/storage", label: "Storage", isComingSoon: true },
   { to: "/runtimes", label: "Runtimes" },
   { to: "/settings", label: "Settings" },
