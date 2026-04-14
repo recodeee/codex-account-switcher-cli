@@ -16,6 +16,7 @@ pub(crate) struct DaemonRuntimeRegistration {
     pub workspace_id: String,
     pub provider: String,
     pub status: RuntimeStatus,
+    pub is_registered: bool,
 }
 
 impl DaemonRuntimeRegistration {
@@ -31,6 +32,7 @@ impl DaemonRuntimeRegistration {
             workspace_id: workspace_id.into(),
             provider: provider.into(),
             status: RuntimeStatus::Online,
+            is_registered: true,
         }
     }
 
@@ -44,6 +46,11 @@ impl DaemonRuntimeRegistration {
 
     pub(crate) fn mark_online(&mut self) {
         self.status = RuntimeStatus::Online;
+    }
+
+    pub(crate) fn deregister(&mut self) {
+        self.is_registered = false;
+        self.status = RuntimeStatus::Offline;
     }
 }
 
@@ -64,6 +71,10 @@ pub(crate) enum TaskLifecycleError {
         to: TaskLifecycleState,
     },
     LeaseOwnerMismatch,
+    ProgressOutOfOrder {
+        last_sequence: u64,
+        received_sequence: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +82,7 @@ pub(crate) struct DaemonTaskLease {
     pub task_id: String,
     pub runtime_id: String,
     pub state: TaskLifecycleState,
+    pub last_progress_sequence: u64,
     heartbeat_ttl: Duration,
     last_heartbeat_age: Duration,
 }
@@ -85,6 +97,7 @@ impl DaemonTaskLease {
             task_id: task_id.into(),
             runtime_id: runtime_id.into(),
             state: TaskLifecycleState::Queued,
+            last_progress_sequence: 0,
             heartbeat_ttl,
             last_heartbeat_age: Duration::ZERO,
         }
@@ -121,6 +134,25 @@ impl DaemonTaskLease {
                 to: TaskLifecycleState::Running,
             }),
         }
+    }
+
+    pub(crate) fn report_progress(&mut self, sequence: u64) -> Result<(), TaskLifecycleError> {
+        if self.state != TaskLifecycleState::Running {
+            return Err(TaskLifecycleError::InvalidTransition {
+                from: self.state,
+                to: TaskLifecycleState::Running,
+            });
+        }
+
+        if sequence < self.last_progress_sequence {
+            return Err(TaskLifecycleError::ProgressOutOfOrder {
+                last_sequence: self.last_progress_sequence,
+                received_sequence: sequence,
+            });
+        }
+
+        self.last_progress_sequence = sequence;
+        Ok(())
     }
 
     pub(crate) fn complete(&mut self) -> Result<(), TaskLifecycleError> {
@@ -214,12 +246,24 @@ mod tests {
     }
 
     #[test]
+    fn runtime_deregister_marks_runtime_offline_and_unregistered() {
+        let mut runtime =
+            DaemonRuntimeRegistration::new("runtime-1", "daemon-1", "workspace-1", "codex");
+
+        runtime.deregister();
+
+        assert_eq!(runtime.status, RuntimeStatus::Offline);
+        assert!(!runtime.is_registered);
+    }
+
+    #[test]
     fn task_lifecycle_happy_path_is_deterministic() {
         let mut lease = DaemonTaskLease::new("task-1", "runtime-1", Duration::from_secs(30));
 
         assert_eq!(lease.state, TaskLifecycleState::Queued);
         assert_eq!(lease.claim("runtime-1"), Ok(()));
         assert_eq!(lease.start(), Ok(()));
+        assert_eq!(lease.report_progress(1), Ok(()));
         assert_eq!(lease.complete(), Ok(()));
         assert_eq!(lease.state, TaskLifecycleState::Completed);
     }
@@ -238,18 +282,63 @@ mod tests {
     }
 
     #[test]
-    fn invalid_transition_is_rejected_with_explicit_error() {
+    fn progress_requires_running_state_and_monotonic_sequence() {
         let mut lease = DaemonTaskLease::new("task-3", "runtime-1", Duration::from_secs(30));
 
-        assert_eq!(lease.complete(), Err(TaskLifecycleError::InvalidTransition {
-            from: TaskLifecycleState::Queued,
-            to: TaskLifecycleState::Completed,
-        }));
+        assert_eq!(
+            lease.report_progress(1),
+            Err(TaskLifecycleError::InvalidTransition {
+                from: TaskLifecycleState::Queued,
+                to: TaskLifecycleState::Running,
+            })
+        );
+
+        lease.claim("runtime-1").expect("claim should succeed");
+        lease.start().expect("start should succeed");
+
+        assert_eq!(lease.report_progress(1), Ok(()));
+        assert_eq!(lease.report_progress(1), Ok(()));
+        assert_eq!(
+            lease.report_progress(0),
+            Err(TaskLifecycleError::ProgressOutOfOrder {
+                last_sequence: 1,
+                received_sequence: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn invalid_transition_is_rejected_with_explicit_error() {
+        let mut lease = DaemonTaskLease::new("task-4", "runtime-1", Duration::from_secs(30));
+
+        assert_eq!(
+            lease.complete(),
+            Err(TaskLifecycleError::InvalidTransition {
+                from: TaskLifecycleState::Queued,
+                to: TaskLifecycleState::Completed,
+            })
+        );
+    }
+
+    #[test]
+    fn cancel_transitions_are_supported_and_invalid_after_terminal_state() {
+        let mut lease = DaemonTaskLease::new("task-5", "runtime-1", Duration::from_secs(30));
+
+        assert_eq!(lease.cancel(), Ok(()));
+        assert_eq!(lease.cancel(), Ok(()));
+
+        assert_eq!(
+            lease.start(),
+            Err(TaskLifecycleError::InvalidTransition {
+                from: TaskLifecycleState::Cancelled,
+                to: TaskLifecycleState::Running,
+            })
+        );
     }
 
     #[test]
     fn stale_heartbeat_detection_uses_ttl() {
-        let mut lease = DaemonTaskLease::new("task-4", "runtime-1", Duration::from_secs(10));
+        let mut lease = DaemonTaskLease::new("task-6", "runtime-1", Duration::from_secs(10));
 
         lease.claim("runtime-1").expect("claim should succeed");
         lease.heartbeat("runtime-1")
@@ -264,8 +353,12 @@ mod tests {
 
     #[test]
     fn heartbeat_rejects_wrong_owner() {
-        let mut lease = DaemonTaskLease::new("task-5", "runtime-a", Duration::from_secs(10));
+        let mut lease = DaemonTaskLease::new("task-7", "runtime-a", Duration::from_secs(10));
+        lease.claim("runtime-a").expect("claim should succeed");
 
-        assert_eq!(lease.claim("runtime-b"), Err(TaskLifecycleError::LeaseOwnerMismatch));
+        assert_eq!(
+            lease.heartbeat("runtime-b"),
+            Err(TaskLifecycleError::LeaseOwnerMismatch)
+        );
     }
 }
