@@ -56,10 +56,12 @@ function parseCachePayload(raw: string | null): RuntimePresenceCachePayload {
 
 function pruneOnlineRuntimeMap(
   onlineSeenAtByRuntimeId: Record<string, number>,
-  *,
-  nowMs: number,
-  graceMs: number,
+  options: {
+    nowMs: number;
+    graceMs: number;
+  },
 ): Record<string, number> {
+  const { nowMs, graceMs } = options;
   const pruned: Record<string, number> = {};
   for (const [runtimeId, seenAt] of Object.entries(onlineSeenAtByRuntimeId)) {
     if (nowMs - seenAt <= graceMs) {
