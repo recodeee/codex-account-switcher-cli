@@ -29,6 +29,7 @@ import { deleteAccount } from "@/features/accounts/api";
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { getRequestLogs } from "@/features/dashboard/api";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
+import { useDashboardLiveSocket } from "@/features/dashboard/hooks/use-dashboard-live-socket";
 import type { RequestLog } from "@/features/dashboard/schemas";
 import { listStickySessions } from "@/features/sticky-sessions/api";
 import { useDialogState } from "@/hooks/use-dialog-state";
@@ -1311,6 +1312,9 @@ type ConnectionState = {
 };
 
 export function RuntimesPage() {
+  const websocketEnabled =
+    typeof navigator === "undefined"
+      || !navigator.userAgent.toLowerCase().includes("jsdom");
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<RuntimeScope>("mine");
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<string>("");
@@ -1348,7 +1352,12 @@ export function RuntimesPage() {
     },
   });
 
-  const dashboardQuery = useDashboard();
+  const dashboardLiveSocketConnected = useDashboardLiveSocket({
+    enabled: websocketEnabled,
+  });
+  const dashboardQuery = useDashboard({
+    websocketConnected: dashboardLiveSocketConnected,
+  });
   const stickyQuery = useQuery({
     queryKey: ["sticky-sessions", "runtime-list"],
     queryFn: () =>
@@ -1359,7 +1368,7 @@ export function RuntimesPage() {
         offset: 0,
         limit: 500,
       }),
-    refetchInterval: 10_000,
+    refetchInterval: dashboardLiveSocketConnected ? 30_000 : 10_000,
     refetchIntervalInBackground: true,
   });
 

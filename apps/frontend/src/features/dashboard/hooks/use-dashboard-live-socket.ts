@@ -8,6 +8,12 @@ type DashboardLiveSocketMessage = {
   type?: string;
 };
 
+const DASHBOARD_LIVE_INVALIDATION_QUERY_KEYS = [
+  ["dashboard", "overview"],
+  ["sticky-sessions", "runtime-list"],
+  ["workspaces", "list"],
+] as const;
+
 function buildDashboardOverviewWebSocketUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/api/dashboard/overview/ws`;
@@ -23,7 +29,11 @@ export function useDashboardLiveSocket(options: { enabled?: boolean } = {}): boo
   const isStoppedRef = useRef(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !enabled) {
+    if (
+      typeof window === "undefined"
+      || typeof WebSocket === "undefined"
+      || !enabled
+    ) {
       return;
     }
 
@@ -67,7 +77,9 @@ export function useDashboardLiveSocket(options: { enabled?: boolean } = {}): boo
           return;
         }
         if (payload.type === "dashboard.overview.invalidate") {
-          void queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+          for (const queryKey of DASHBOARD_LIVE_INVALIDATION_QUERY_KEYS) {
+            void queryClient.invalidateQueries({ queryKey });
+          }
         }
       };
 

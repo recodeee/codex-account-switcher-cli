@@ -75,7 +75,7 @@ describe("useDashboardLiveSocket", () => {
     vi.useRealTimers();
   });
 
-  it("invalidates dashboard overview when invalidate messages arrive", async () => {
+  it("invalidates dashboard overview and daemon panel query caches when invalidate messages arrive", async () => {
     const queryClient = createTestQueryClient();
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useDashboardLiveSocket(), {
@@ -97,6 +97,8 @@ describe("useDashboardLiveSocket", () => {
 
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["dashboard", "overview"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["sticky-sessions", "runtime-list"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["workspaces", "list"] });
     });
   });
 
