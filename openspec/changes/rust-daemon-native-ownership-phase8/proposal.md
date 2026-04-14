@@ -10,7 +10,11 @@ The current Rust runtime mostly proxies Python behavior. To reach the approved m
   - task lifecycle transitions (claim/start/progress/complete/fail/cancel),
   - heartbeat TTL and stale-lease handling,
   - reversible rollout and fallback expectations.
-- Add initial Rust daemon contract/state-machine module with unit tests in `rust/codex-lb-runtime`.
+- Add initial Rust daemon contract/state-machine module with unit tests in `rust/codex-lb-runtime` covering:
+  - deterministic lifecycle transitions,
+  - explicit progress reporting semantics,
+  - explicit deregister semantics,
+  - stale heartbeat detection.
 - Keep existing wildcard Python fallback posture intact while phase-8 contracts are validated.
 
 ## Impact

@@ -8,10 +8,20 @@ The Rust runtime SHALL define first-class daemon lifecycle contracts for runtime
 - **THEN** Rust code includes explicit runtime registration fields (`runtime_id`, `daemon_id`, `workspace_id`, provider/runtime status)
 - **AND** the contract supports online/degraded/offline status transitions.
 
+#### Scenario: Runtime deregister semantics are explicit
+- **WHEN** a runtime is deregistered
+- **THEN** Rust contract logic marks the runtime as not registered
+- **AND** runtime status transitions to offline deterministically.
+
 #### Scenario: Task lifecycle transitions are deterministic
 - **WHEN** a task transitions through daemon lifecycle states
 - **THEN** Rust contract logic enforces deterministic transitions for `Queued -> Claimed -> Running -> Completed|Failed|Cancelled`
 - **AND** invalid transitions are rejected with explicit errors.
+
+#### Scenario: Task progress semantics are explicit
+- **WHEN** a running task reports progress
+- **THEN** Rust contract logic enforces monotonic progress sequence updates
+- **AND** out-of-order progress reports are rejected.
 
 ### Requirement: Heartbeat TTL and stale lease semantics are testable
 The Rust daemon contract layer SHALL model heartbeat timestamps and stale lease detection with predictable TTL behavior.

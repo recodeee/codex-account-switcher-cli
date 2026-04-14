@@ -7,7 +7,7 @@
 ## 2. Implementation
 
 - [x] 2.1 Add Rust daemon contract/state-machine module under `rust/codex-lb-runtime/src/runtime/`.
-- [x] 2.2 Add unit tests for lifecycle transitions and stale heartbeat behavior.
+- [x] 2.2 Add unit tests for lifecycle transitions, explicit progress semantics, cancel transitions, and stale heartbeat behavior.
 - [ ] 2.3 Wire daemon contract module into runtime endpoint handlers (follow-up phase).
 
 ## 3. Verification
