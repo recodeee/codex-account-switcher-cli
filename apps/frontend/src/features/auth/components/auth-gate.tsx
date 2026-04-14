@@ -4,6 +4,7 @@ import type { PropsWithChildren } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { MedusaCustomerAuthPage } from "@/features/medusa-customer-auth/components/medusa-customer-auth-page";
 import { useMedusaCustomerAuthStore } from "@/features/medusa-customer-auth/hooks/use-medusa-customer-auth";
+import { isNavigationLoaderSuppressed } from "@/lib/navigation-loader";
 
 function resolveInitialMode(): "login" | "register" {
   if (typeof window === "undefined") {
@@ -19,6 +20,7 @@ export function AuthGate({ children }: PropsWithChildren) {
   const initialize = useMedusaCustomerAuthStore((state) => state.initialize);
   const initialized = useMedusaCustomerAuthStore((state) => state.initialized);
   const customer = useMedusaCustomerAuthStore((state) => state.customer);
+  const hideLoaderForNavigation = isNavigationLoaderSuppressed();
 
   useEffect(() => {
     void initialize().catch(() => {
@@ -27,6 +29,10 @@ export function AuthGate({ children }: PropsWithChildren) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (!initialized && hideLoaderForNavigation) {
+    return <>{children}</>;
+  }
 
   if (!initialized) {
     return (
