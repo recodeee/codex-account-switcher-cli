@@ -40,3 +40,23 @@ def test_open_project_folder_in_editor_resolves_documents_shorthand_to_existing_
 
     assert selected_editor == "code"
     assert launched == [["/usr/bin/code", "-n", str(target_folder)]]
+
+
+def test_open_project_folder_in_file_manager_resolves_documents_shorthand_to_existing_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    first_documents = tmp_path / "docs-first"
+    second_documents = tmp_path / "docs-second"
+    target_folder = second_documents / "szaloniroda" / "marva"
+    target_folder.mkdir(parents=True, exist_ok=True)
+
+    launched: list[list[str]] = []
+    monkeypatch.setattr(editor, "_candidate_documents_roots", lambda: (first_documents, second_documents))
+    monkeypatch.setattr(editor, "_resolve_executable", lambda name: "/usr/bin/xdg-open" if name == "xdg-open" else None)
+    monkeypatch.setattr(editor, "_spawn_detached", lambda argv: launched.append(argv))
+    monkeypatch.setattr(editor, "_default_file_manager_candidates", lambda: (("xdg-open",),))
+
+    selected_manager = editor.open_project_folder_in_file_manager("/Documents/szaloniroda/marva")
+
+    assert selected_manager == "xdg-open"
+    assert launched == [["/usr/bin/xdg-open", str(target_folder)]]

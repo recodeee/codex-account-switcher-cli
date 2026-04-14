@@ -481,8 +481,8 @@ export function ProjectsPage() {
   const busy = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
   const openFolderBusyProjectId =
     openFolderMutation.isPending
-    && typeof openFolderMutation.variables === "string"
-      ? openFolderMutation.variables
+    && typeof openFolderMutation.variables?.projectId === "string"
+      ? openFolderMutation.variables.projectId
       : null;
 
   const handleAdd = async () => {
@@ -595,8 +595,8 @@ export function ProjectsPage() {
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-auto">
-              <div className="min-w-[1580px]">
-                <div className="sticky top-0 z-[1] grid h-9 grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.15fr)_minmax(220px,1.15fr)_minmax(220px,1.6fr)_150px_170px_180px_110px_220px] items-center gap-3 border-b border-border/65 bg-background/95 px-5 text-[11px] uppercase tracking-[0.08em] text-muted-foreground backdrop-blur-sm">
+              <div className="min-w-0">
+                <div className="sticky top-0 z-[1] grid h-9 grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.85fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.65fr)_minmax(0,1.45fr)] items-center gap-3 border-b border-border/65 bg-background/95 px-5 text-[11px] uppercase tracking-[0.08em] text-muted-foreground backdrop-blur-sm">
                   <span>Name</span>
                   <span>URL</span>
                   <span>GitHub</span>
@@ -611,7 +611,7 @@ export function ProjectsPage() {
                 {entries.map((entry) => (
                   <div
                     key={entry.id}
-                    className="group/row grid min-h-12 grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.15fr)_minmax(220px,1.15fr)_minmax(220px,1.6fr)_150px_170px_180px_110px_220px] items-center gap-3 border-b border-border/45 px-5 py-2 text-sm transition-colors hover:bg-accent/35"
+                    className="group/row grid min-h-12 grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.85fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.65fr)_minmax(0,1.45fr)] items-center gap-3 border-b border-border/45 px-5 py-2 text-sm transition-colors hover:bg-accent/35"
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium">{entry.name}</p>
@@ -659,7 +659,7 @@ export function ProjectsPage() {
                     <span className="truncate font-mono text-xs text-muted-foreground">{entry.gitBranch || "—"}</span>
 
                     <div
-                      className="min-w-0 text-xs text-muted-foreground"
+                      className="min-w-0 truncate text-xs text-muted-foreground"
                       data-testid={`project-plan-count-${entry.id}`}
                     >
                       {(() => {
@@ -680,18 +680,37 @@ export function ProjectsPage() {
                       {formatRelativeDate(entry.updatedAt)}
                     </span>
 
-                    <div className="flex items-center justify-end gap-1.5 opacity-100 md:opacity-0 md:group-hover/row:opacity-100 transition-opacity">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
                         className="h-7 rounded-md px-2 text-xs"
                         onClick={() => {
-                          void openFolderMutation.mutateAsync(entry.id);
+                          void openFolderMutation.mutateAsync({
+                            projectId: entry.id,
+                            target: "vscode",
+                          });
                         }}
                         disabled={busy || !entry.projectPath || openFolderBusyProjectId === entry.id}
                       >
                         <FolderOpen className="mr-1 h-3.5 w-3.5" />
+                        Open VSCode
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 rounded-md px-2 text-xs"
+                        onClick={() => {
+                          void openFolderMutation.mutateAsync({
+                            projectId: entry.id,
+                            target: "file-manager",
+                          });
+                        }}
+                        disabled={busy || !entry.projectPath || openFolderBusyProjectId === entry.id}
+                      >
+                        <Folder className="mr-1 h-3.5 w-3.5" />
                         Open folder
                       </Button>
                       <Button

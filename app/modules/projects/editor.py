@@ -19,6 +19,8 @@ class ProjectEditorLaunchError(RuntimeError):
             "project_path_not_found",
             "editor_not_found",
             "editor_launch_failed",
+            "file_manager_not_found",
+            "file_manager_launch_failed",
         ],
     ) -> None:
         self.code = code
@@ -26,6 +28,58 @@ class ProjectEditorLaunchError(RuntimeError):
 
 
 def open_project_folder_in_editor(project_path: str) -> str | None:
+    path = _resolve_existing_project_directory(project_path)
+
+    override = os.environ.get("CODEX_LB_PROJECT_EDITOR_COMMAND", "").strip()
+    if override:
+        argv = _parse_override_command(override, env_var_name="CODEX_LB_PROJECT_EDITOR_COMMAND")
+        return _launch_override_command(
+            argv,
+            path,
+            missing_code="editor_not_found",
+            missing_message_prefix="Editor command was not found in PATH",
+            launch_code="editor_launch_failed",
+            launch_message_prefix="Failed to launch editor for project folder",
+        )
+
+    return _launch_from_candidates(
+        path,
+        _default_editor_candidates(),
+        not_found_code="editor_not_found",
+        not_found_message="No supported editor command found in PATH (tried: code, cursor, code-insiders, codium, zed, windsurf).",
+        launch_code="editor_launch_failed",
+        launch_message_prefix="Failed to launch editor for project folder",
+    )
+
+
+def open_project_folder_in_file_manager(project_path: str) -> str | None:
+    path = _resolve_existing_project_directory(project_path)
+
+    override = os.environ.get("CODEX_LB_PROJECT_FILE_MANAGER_COMMAND", "").strip()
+    if override:
+        argv = _parse_override_command(override, env_var_name="CODEX_LB_PROJECT_FILE_MANAGER_COMMAND")
+        return _launch_override_command(
+            argv,
+            path,
+            missing_code="file_manager_not_found",
+            missing_message_prefix="File manager command was not found in PATH",
+            launch_code="file_manager_launch_failed",
+            launch_message_prefix="Failed to launch file manager for project folder",
+        )
+
+    candidates = _default_file_manager_candidates()
+    tried = ", ".join(dict.fromkeys(candidate[0] for candidate in candidates))
+    return _launch_from_candidates(
+        path,
+        candidates,
+        not_found_code="file_manager_not_found",
+        not_found_message=f"No supported file manager command found in PATH (tried: {tried}).",
+        launch_code="file_manager_launch_failed",
+        launch_message_prefix="Failed to launch file manager for project folder",
+    )
+
+
+def _resolve_existing_project_directory(project_path: str) -> Path:
     resolved_project_path = _resolve_runtime_project_path(project_path)
     path = Path(resolved_project_path).expanduser()
     if not path.is_absolute():
@@ -38,52 +92,84 @@ def open_project_folder_in_editor(project_path: str) -> str | None:
             "Project folder path was not found on this machine",
             code="project_path_not_found",
         )
+    return path
 
-    override = os.environ.get("CODEX_LB_PROJECT_EDITOR_COMMAND", "").strip()
-    if override:
-        try:
-            argv = shlex.split(override)
-        except ValueError as exc:
-            raise ProjectEditorLaunchError(
-                f"Invalid CODEX_LB_PROJECT_EDITOR_COMMAND value: {exc}",
-                code="editor_launch_failed",
-            ) from exc
-        if not argv:
-            raise ProjectEditorLaunchError(
-                "CODEX_LB_PROJECT_EDITOR_COMMAND is empty",
-                code="editor_launch_failed",
-            )
-        executable = _resolve_executable(argv[0])
-        if executable is None:
-            raise ProjectEditorLaunchError(
-                f"Editor command not found in PATH: {argv[0]}",
-                code="editor_not_found",
-            )
+
+def _parse_override_command(override: str, *, env_var_name: str) -> list[str]:
+    try:
+        argv = shlex.split(override)
+    except ValueError as exc:
+        raise ProjectEditorLaunchError(
+            f"Invalid {env_var_name} value: {exc}",
+            code="editor_launch_failed" if env_var_name.endswith("EDITOR_COMMAND") else "file_manager_launch_failed",
+        ) from exc
+
+    if not argv:
+        raise ProjectEditorLaunchError(
+            f"{env_var_name} is empty",
+            code="editor_launch_failed" if env_var_name.endswith("EDITOR_COMMAND") else "file_manager_launch_failed",
+        )
+
+    return argv
+
+
+def _launch_override_command(
+    argv: list[str],
+    path: Path,
+    *,
+    missing_code: Literal["editor_not_found", "file_manager_not_found"],
+    missing_message_prefix: str,
+    launch_code: Literal["editor_launch_failed", "file_manager_launch_failed"],
+    launch_message_prefix: str,
+) -> str | None:
+    executable = _resolve_executable(argv[0])
+    if executable is None:
+        raise ProjectEditorLaunchError(
+            f"{missing_message_prefix}: {argv[0]}",
+            code=missing_code,
+        )
+
+    try:
         _spawn_detached([executable, *argv[1:], str(path)])
-        return argv[0]
+    except Exception as exc:  # pragma: no cover - platform-specific launch failures
+        raise ProjectEditorLaunchError(
+            f"{launch_message_prefix}. {argv[0]}: {exc}",
+            code=launch_code,
+        ) from exc
 
+    return argv[0]
+
+
+def _launch_from_candidates(
+    path: Path,
+    candidates: tuple[tuple[str, ...], ...],
+    *,
+    not_found_code: Literal["editor_not_found", "file_manager_not_found"],
+    not_found_message: str,
+    launch_code: Literal["editor_launch_failed", "file_manager_launch_failed"],
+    launch_message_prefix: str,
+) -> str | None:
     errors: list[str] = []
-    found_any_editor = False
-    for candidate in _default_editor_candidates():
+    found_any = False
+
+    for candidate in candidates:
         executable = _resolve_executable(candidate[0])
         if executable is None:
             continue
-        found_any_editor = True
+        found_any = True
         try:
             _spawn_detached([executable, *candidate[1:], str(path)])
             return candidate[0]
         except Exception as exc:  # pragma: no cover - platform-specific launch failures
             errors.append(f"{candidate[0]}: {exc}")
 
-    if not found_any_editor:
-        raise ProjectEditorLaunchError(
-            "No supported editor command found in PATH (tried: code, cursor, code-insiders, codium, zed, windsurf).",
-            code="editor_not_found",
-        )
+    if not found_any:
+        raise ProjectEditorLaunchError(not_found_message, code=not_found_code)
+
     detail = "; ".join(errors) if errors else "Unknown launch error"
     raise ProjectEditorLaunchError(
-        f"Failed to launch editor for project folder. {detail}",
-        code="editor_launch_failed",
+        f"{launch_message_prefix}. {detail}",
+        code=launch_code,
     )
 
 
@@ -114,6 +200,18 @@ def _default_editor_candidates() -> tuple[tuple[str, ...], ...]:
         ("codium", "-n"),
         ("zed",),
         ("windsurf", "-n"),
+    )
+
+
+def _default_file_manager_candidates() -> tuple[tuple[str, ...], ...]:
+    system = platform.system().lower()
+    if system == "darwin":
+        return (("open",),)
+    if system == "windows":
+        return (("explorer",),)
+    return (
+        ("xdg-open",),
+        ("gio", "open"),
     )
 
 

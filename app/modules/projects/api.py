@@ -5,11 +5,16 @@ from fastapi import APIRouter, Body, Depends
 from app.core.auth.dependencies import set_dashboard_error_format, validate_dashboard_session
 from app.core.exceptions import DashboardBadRequestError, DashboardConflictError, DashboardNotFoundError
 from app.dependencies import ProjectsContext, get_projects_context
-from app.modules.projects.editor import ProjectEditorLaunchError, open_project_folder_in_editor
+from app.modules.projects.editor import (
+    ProjectEditorLaunchError,
+    open_project_folder_in_editor,
+    open_project_folder_in_file_manager,
+)
 from app.modules.projects.schemas import (
     ProjectCreateRequest,
     ProjectDeleteResponse,
     ProjectEntry,
+    ProjectOpenFolderRequest,
     ProjectPlanLinkEntry,
     ProjectPlanLinksResponse,
     ProjectOpenFolderResponse,
@@ -162,6 +167,7 @@ async def delete_project(
 @router.post("/{project_id}/open-folder", response_model=ProjectOpenFolderResponse)
 async def open_project_folder(
     project_id: str,
+    payload: ProjectOpenFolderRequest = Body(default=ProjectOpenFolderRequest()),
     context: ProjectsContext = Depends(get_projects_context),
 ) -> ProjectOpenFolderResponse:
     project = await context.service.get_project(project_id)
@@ -169,17 +175,21 @@ async def open_project_folder(
         raise DashboardNotFoundError("Project not found", code="project_not_found")
     if not project.project_path:
         raise DashboardBadRequestError(
-            "Project path is required before opening in an editor",
+            "Project path is required before opening the project folder",
             code="project_path_required",
         )
 
     try:
-        editor = open_project_folder_in_editor(project.project_path)
+        if payload.target == "file-manager":
+            editor = open_project_folder_in_file_manager(project.project_path)
+        else:
+            editor = open_project_folder_in_editor(project.project_path)
     except ProjectEditorLaunchError as exc:
         raise DashboardBadRequestError(str(exc), code=exc.code) from exc
 
     return ProjectOpenFolderResponse(
         status="opened",
         project_path=project.project_path,
+        target=payload.target,
         editor=editor,
     )

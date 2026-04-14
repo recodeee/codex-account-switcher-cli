@@ -4,6 +4,7 @@ import {
   ProjectCreateRequestSchema,
   ProjectDeleteResponseSchema,
   ProjectEntrySchema,
+  ProjectOpenFolderRequestSchema,
   ProjectPlanLinksResponseSchema,
   ProjectOpenFolderResponseSchema,
   ProjectsResponseSchema,
@@ -36,9 +37,11 @@ export function deleteProject(projectId: string) {
   return del(`${PROJECTS_BASE_PATH}/${encodeURIComponent(projectId)}`, ProjectDeleteResponseSchema);
 }
 
-export function openProjectFolder(projectId: string) {
+export function openProjectFolder(projectId: string, target: "vscode" | "file-manager" = "vscode") {
+  const validated = ProjectOpenFolderRequestSchema.parse({ target });
   return post(
     `${PROJECTS_BASE_PATH}/${encodeURIComponent(projectId)}/open-folder`,
     ProjectOpenFolderResponseSchema,
+    { body: validated },
   );
 }

@@ -2759,8 +2759,15 @@ export const handlers = [
 		});
 	}),
 
-	http.post("/api/projects/:projectId/open-folder", ({ params }) => {
+	http.post("/api/projects/:projectId/open-folder", async ({ params, request }) => {
 		const projectId = String(params.projectId);
+		const payload = await parseJsonBody(
+			request,
+			z.object({
+				target: z.enum(["vscode", "file-manager"]).default("vscode"),
+			}),
+		);
+		const target = payload?.target ?? "vscode";
 		const activeWorkspaceId = getActiveWorkspaceId(state);
 		const project =
 			activeWorkspaceId == null
@@ -2784,7 +2791,7 @@ export const handlers = [
 				{
 					error: {
 						code: "project_path_required",
-						message: "Project path is required before opening in an editor",
+						message: "Project path is required before opening the project folder",
 					},
 				},
 				{ status: 400 },
@@ -2793,7 +2800,8 @@ export const handlers = [
 		return HttpResponse.json({
 			status: "opened",
 			projectPath: project.projectPath,
-			editor: "code",
+			target,
+			editor: target === "file-manager" ? "xdg-open" : "code",
 		});
 	}),
 

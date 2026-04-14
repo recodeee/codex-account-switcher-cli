@@ -283,7 +283,41 @@ async def test_projects_api_open_folder(async_client, monkeypatch):
     assert opened.json() == {
         "status": "opened",
         "projectPath": "/home/deadpool/Documents/recodee",
+        "target": "vscode",
         "editor": "code",
+    }
+
+
+@pytest.mark.asyncio
+async def test_projects_api_open_folder_in_file_manager(async_client, monkeypatch):
+    created = await async_client.post(
+        "/api/projects",
+        json={
+            "name": "open-folder-manager-project",
+            "projectPath": "/home/deadpool/Documents/recodee",
+        },
+    )
+    assert created.status_code == 200
+    project_id = created.json()["id"]
+
+    def _fake_open_in_manager(_path: str) -> str:
+        return "xdg-open"
+
+    monkeypatch.setattr(
+        "app.modules.projects.api.open_project_folder_in_file_manager",
+        _fake_open_in_manager,
+    )
+
+    opened = await async_client.post(
+        f"/api/projects/{project_id}/open-folder",
+        json={"target": "file-manager"},
+    )
+    assert opened.status_code == 200
+    assert opened.json() == {
+        "status": "opened",
+        "projectPath": "/home/deadpool/Documents/recodee",
+        "target": "file-manager",
+        "editor": "xdg-open",
     }
 
 

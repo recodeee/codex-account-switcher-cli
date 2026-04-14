@@ -9,7 +9,16 @@ import {
   openProjectFolder,
   updateProject,
 } from "@/features/projects/api";
-import type { ProjectCreateRequest, ProjectUpdateRequest } from "@/features/projects/schemas";
+import type {
+  ProjectCreateRequest,
+  ProjectOpenFolderTarget,
+  ProjectUpdateRequest,
+} from "@/features/projects/schemas";
+
+type OpenProjectFolderInput = {
+  projectId: string;
+  target?: ProjectOpenFolderTarget;
+};
 
 export function useProjects(activeWorkspaceId: string | null = null) {
   const queryClient = useQueryClient();
@@ -71,10 +80,11 @@ export function useProjects(activeWorkspaceId: string | null = null) {
   });
 
   const openFolderMutation = useMutation({
-    mutationFn: (projectId: string) => openProjectFolder(projectId),
+    mutationFn: ({ projectId, target = "vscode" }: OpenProjectFolderInput) =>
+      openProjectFolder(projectId, target),
     onSuccess: (payload) => {
-      const editorLabel = payload.editor ? ` in ${payload.editor}` : "";
-      toast.success(`Opened project folder${editorLabel}`);
+      const targetLabel = payload.target === "file-manager" ? "file manager" : "VSCode";
+      toast.success(`Opened project folder in ${targetLabel}`);
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to open project folder");

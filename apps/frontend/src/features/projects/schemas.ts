@@ -49,9 +49,16 @@ export const ProjectDeleteResponseSchema = z.object({
   status: z.string().min(1),
 });
 
+export const ProjectOpenFolderTargetSchema = z.enum(["vscode", "file-manager"]);
+
+export const ProjectOpenFolderRequestSchema = z.object({
+  target: ProjectOpenFolderTargetSchema.default("vscode"),
+});
+
 export const ProjectOpenFolderResponseSchema = z.object({
   status: z.string().min(1),
   projectPath: z.string().min(1),
+  target: ProjectOpenFolderTargetSchema.default("vscode"),
   editor: z.string().nullable().optional(),
 });
 
@@ -71,6 +78,8 @@ export type ProjectsResponse = z.infer<typeof ProjectsResponseSchema>;
 export type ProjectCreateRequest = z.input<typeof ProjectCreateRequestSchema>;
 export type ProjectUpdateRequest = z.input<typeof ProjectUpdateRequestSchema>;
 export type ProjectDeleteResponse = z.infer<typeof ProjectDeleteResponseSchema>;
+export type ProjectOpenFolderTarget = z.infer<typeof ProjectOpenFolderTargetSchema>;
+export type ProjectOpenFolderRequest = z.input<typeof ProjectOpenFolderRequestSchema>;
 export type ProjectOpenFolderResponse = z.infer<typeof ProjectOpenFolderResponseSchema>;
 export type ProjectSandboxMode = z.infer<typeof ProjectSandboxModeSchema>;
 export type ProjectPlanLinkEntry = z.infer<typeof ProjectPlanLinkEntrySchema>;

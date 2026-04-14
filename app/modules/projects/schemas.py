@@ -58,7 +58,12 @@ class ProjectDeleteResponse(DashboardModel):
     status: str
 
 
+class ProjectOpenFolderRequest(DashboardModel):
+    target: Literal["vscode", "file-manager"] = "vscode"
+
+
 class ProjectOpenFolderResponse(DashboardModel):
     status: str
     project_path: str
+    target: Literal["vscode", "file-manager"] = "vscode"
     editor: str | None = None

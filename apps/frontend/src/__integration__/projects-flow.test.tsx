@@ -75,6 +75,8 @@ describe("projects flow integration", () => {
     expect(screen.getByTestId("project-plan-count-project_1")).toHaveTextContent("0 plans");
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
     expect(screen.getAllByText("workspace-write").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Open VSCode" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open folder" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     const editDialog = await screen.findByRole("dialog", { name: "Edit project" });
