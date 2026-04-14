@@ -58,6 +58,13 @@ const HEADER_COPY_BY_PREFIX: Array<{ prefix: string; copy: HeaderCopy }> = [
     },
   },
   {
+    prefix: "/issues",
+    copy: {
+      title: "Track issues across your workspace board.",
+      description: "Move work from backlog to done with a Multica-style issue flow.",
+    },
+  },
+  {
     prefix: "/sessions",
     copy: {
       title: "Track active coding sessions.",

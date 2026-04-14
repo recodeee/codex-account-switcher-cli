@@ -8,6 +8,7 @@ import {
   FolderTree,
   HardDrive,
   LayoutDashboard,
+  ListTodo,
   Link2,
   PanelsTopLeft,
   Plus,
@@ -47,6 +48,7 @@ function workspaceMonogram(name: string): string {
 
 const WORKSPACE_LINKS: SidebarNavEntry[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/issues", label: "Issues", icon: ListTodo },
   {
     to: "/projects",
     label: "Projects",
@@ -109,16 +111,16 @@ export function AppSidebar() {
     return String(count);
   }, [dashboardQuery.data]);
 
-  const hasRuntimeIndicator = useMemo(
+  const activeRuntimeCount = useMemo(
     () =>
-      (dashboardQuery.data?.accounts ?? []).some(
+      (dashboardQuery.data?.accounts ?? []).filter(
         (account) =>
           Math.max(
             account.codexLiveSessionCount ?? 0,
             account.codexTrackedSessionCount ?? 0,
             account.codexSessionCount ?? 0,
           ) > 0,
-      ),
+      ).length,
     [dashboardQuery.data?.accounts],
   );
 
@@ -157,7 +159,7 @@ export function AppSidebar() {
 
   const renderNavLink = (item: SidebarNavEntry, compact = false) => {
     const Icon = item.icon;
-    const showRuntimeDot = item.label === "Runtimes" && hasRuntimeIndicator;
+    const showRuntimeIndicator = item.label === "Runtimes" && activeRuntimeCount > 0;
 
     return (
       <div key={`${item.label}-${compact ? "compact" : "full"}`} className={compact ? "" : "space-y-1"}>
@@ -178,8 +180,16 @@ export function AppSidebar() {
               </span>
               {!compact ? (
                 <span className="ml-auto flex items-center gap-2">
-                  {showRuntimeDot ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-red-400" aria-hidden="true" />
+                  {showRuntimeIndicator ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-400" aria-hidden="true" />
+                      <span
+                        className="rounded-full border border-red-400/35 bg-red-500/10 px-1.5 py-0 text-[10px] font-semibold leading-none text-red-200"
+                        aria-label={`${activeRuntimeCount} active runtimes`}
+                      >
+                        {activeRuntimeCount}
+                      </span>
+                    </span>
                   ) : null}
                   {item.badge ? (
                     <Badge

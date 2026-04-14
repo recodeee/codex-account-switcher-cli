@@ -1,8 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { createAccountSummary, createDashboardOverview } from "@/test/mocks/factories";
+import { server } from "@/test/mocks/server";
 import { renderWithProviders } from "@/test/utils";
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "recodee.com.sidebar.collapsed";
@@ -49,6 +52,49 @@ describe("AppSidebar", () => {
       expect(screen.getByText(/Accounts \(2\)/i)).toBeInTheDocument();
       expect(screen.queryByText(/5h Remaining/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/Weekly Remaining/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows active runtime count next to the runtimes link", async () => {
+    server.use(
+      http.get("/api/dashboard/overview", () =>
+        HttpResponse.json(
+          createDashboardOverview({
+            accounts: [
+              createAccountSummary({
+                accountId: "acc_one",
+                email: "one@example.com",
+                codexLiveSessionCount: 1,
+                codexTrackedSessionCount: 0,
+                codexSessionCount: 0,
+              }),
+              createAccountSummary({
+                accountId: "acc_two",
+                email: "two@example.com",
+                codexLiveSessionCount: 0,
+                codexTrackedSessionCount: 2,
+                codexSessionCount: 0,
+              }),
+              createAccountSummary({
+                accountId: "acc_three",
+                email: "three@example.com",
+                status: "paused",
+                codexLiveSessionCount: 0,
+                codexTrackedSessionCount: 0,
+                codexSessionCount: 0,
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    renderWithProviders(<AppSidebar />);
+
+    await waitFor(() => {
+      const runtimesLink = screen.getByRole("link", { name: /runtimes/i });
+      expect(within(runtimesLink).getByLabelText("2 active runtimes")).toBeInTheDocument();
+      expect(within(runtimesLink).getByText("2")).toBeInTheDocument();
     });
   });
 

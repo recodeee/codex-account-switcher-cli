@@ -7,6 +7,7 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
+  { to: "/issues", label: "Issues" },
   { to: "/accounts", label: "Accounts" },
   { to: "/sessions", label: "Sessions" },
   { to: "/referrals", label: "Referrals" },
