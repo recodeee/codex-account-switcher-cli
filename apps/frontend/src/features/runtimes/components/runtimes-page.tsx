@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CopyButton } from "@/components/copy-button";
+import { isLikelyEmailValue } from "@/components/blur-email";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { deleteAccount } from "@/features/accounts/api";
 import type { AccountSummary } from "@/features/accounts/schemas";
@@ -35,6 +36,7 @@ import { getSourceControlCommitActivity } from "@/features/source-control/api";
 import type { SourceControlCommitActivityEntry } from "@/features/source-control/schemas";
 import { listStickySessions } from "@/features/sticky-sessions/api";
 import { useDialogState } from "@/hooks/use-dialog-state";
+import { usePrivacyStore } from "@/hooks/use-privacy";
 import { cn } from "@/lib/utils";
 import {
   hasActiveCliSessionSignal,
@@ -1402,13 +1404,36 @@ function RuntimeProviderGlyph({ provider }: { provider: RuntimeRow["provider"] }
   return <CodexProviderLogo className="h-4 w-4 shrink-0 text-slate-100" />;
 }
 
+function RuntimeNameLabel({
+  provider,
+  snapshotName,
+  blurred,
+}: {
+  provider: RuntimeRow["provider"];
+  snapshotName: string;
+  blurred: boolean;
+}) {
+  const shouldBlurSnapshot = blurred && isLikelyEmailValue(snapshotName);
+
+  return (
+    <>
+      {getRuntimeDisplayName(provider)}
+      {" ("}
+      <span className={shouldBlurSnapshot ? "privacy-blur" : undefined}>{snapshotName}</span>
+      {")"}
+    </>
+  );
+}
+
 function RuntimeListItem({
   runtime,
   selected,
+  blurred,
   onClick,
 }: {
   runtime: RuntimeRow;
   selected: boolean;
+  blurred: boolean;
   onClick: () => void;
 }) {
   const isLive = runtime.status === "online";
@@ -1416,6 +1441,8 @@ function RuntimeListItem({
     0,
     runtime.currentTasks.length - runtime.sessionCount,
   );
+  const shouldBlurOwner = blurred && isLikelyEmailValue(runtime.owner);
+  const shouldBlurSnapshot = blurred && isLikelyEmailValue(runtime.snapshotName);
 
   return (
     <div
@@ -1439,8 +1466,16 @@ function RuntimeListItem({
         <div className="flex min-w-0 items-center gap-2">
           <RuntimeProviderGlyph provider={runtime.provider} />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">{runtime.name}</p>
-            <p className="truncate text-xs text-slate-400">{runtime.owner}</p>
+            <p className="truncate text-sm font-semibold text-white">
+              <RuntimeNameLabel
+                provider={runtime.provider}
+                snapshotName={runtime.snapshotName}
+                blurred={blurred}
+              />
+            </p>
+            <p className={cn("truncate text-xs text-slate-400", shouldBlurOwner && "privacy-blur")}>
+              {runtime.owner}
+            </p>
           </div>
         </div>
         <span className="inline-flex items-start gap-2">
@@ -1538,7 +1573,9 @@ function RuntimeListItem({
             +{olderSessionPreviewCount} older
           </Badge>
         ) : null}
-        <span>{runtime.snapshotName}</span>
+        <span className={shouldBlurSnapshot ? "privacy-blur" : undefined}>
+          {runtime.snapshotName}
+        </span>
       </div>
     </div>
   );
@@ -1551,6 +1588,7 @@ type ConnectionState = {
 };
 
 export function RuntimesPage() {
+  const blurred = usePrivacyStore((state) => state.blurred);
   const websocketEnabled =
     typeof navigator === "undefined"
       || !navigator.userAgent.toLowerCase().includes("jsdom");
@@ -1816,6 +1854,7 @@ export function RuntimesPage() {
                     key={runtime.runtimeId}
                     runtime={runtime}
                     selected={runtime.runtimeId === effectiveSelectedRuntimeId}
+                    blurred={blurred}
                     onClick={() => setSelectedRuntimeId(runtime.runtimeId)}
                   />
                 ))
@@ -1832,9 +1871,22 @@ export function RuntimesPage() {
                   <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Runtime</p>
                   <div className="mt-1 flex min-w-0 items-center gap-2">
                     <RuntimeProviderGlyph provider={selectedRuntime.provider} />
-                    <p className="truncate text-sm font-medium text-slate-100">{selectedRuntime.name}</p>
+                    <p className="truncate text-sm font-medium text-slate-100">
+                      <RuntimeNameLabel
+                        provider={selectedRuntime.provider}
+                        snapshotName={selectedRuntime.snapshotName}
+                        blurred={blurred}
+                      />
+                    </p>
                   </div>
-                  <p className="text-[11px] text-slate-500">{selectedRuntime.snapshotName}</p>
+                  <p
+                    className={cn(
+                      "text-[11px] text-slate-500",
+                      blurred && isLikelyEmailValue(selectedRuntime.snapshotName) && "privacy-blur",
+                    )}
+                  >
+                    {selectedRuntime.snapshotName}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                   <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Runtime mode</p>
@@ -1930,7 +1982,12 @@ export function RuntimesPage() {
                 </div>
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                   <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Owner</p>
-                  <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-slate-100">
+                  <p
+                    className={cn(
+                      "mt-1 flex items-center gap-1.5 text-sm font-medium text-slate-100",
+                      blurred && isLikelyEmailValue(selectedRuntime.owner) && "privacy-blur",
+                    )}
+                  >
                     <UserRound className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                     {selectedRuntime.owner}
                   </p>
@@ -2010,7 +2067,17 @@ export function RuntimesPage() {
                     ) : null}
                   </div>
                   <p className="text-xs text-slate-500">
-                    Snapshot {selectedRuntime.snapshotName} · source codex-auth session mapping
+                    Snapshot{" "}
+                    <span
+                      className={
+                        blurred && isLikelyEmailValue(selectedRuntime.snapshotName)
+                          ? "privacy-blur"
+                          : undefined
+                      }
+                    >
+                      {selectedRuntime.snapshotName}
+                    </span>{" "}
+                    · source codex-auth session mapping
                   </p>
                   {selectedRuntime.cliUpdateAvailable ? (
                     <div className="space-y-3 rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-3">

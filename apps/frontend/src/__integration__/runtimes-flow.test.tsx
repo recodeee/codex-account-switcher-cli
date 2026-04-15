@@ -8,6 +8,9 @@ import { createAccountSummary, createDashboardOverview } from "@/test/mocks/fact
 import { server } from "@/test/mocks/server";
 import { renderWithProviders } from "@/test/utils";
 
+const hasExactTextContent = (expected: string) => (_: string, node: Element | null) =>
+  node?.textContent === expected;
+
 describe("runtimes flow integration", () => {
   it("renders live codex-auth sessions in the runtimes list automatically", async () => {
     const nowIso = new Date().toISOString();
@@ -168,8 +171,8 @@ describe("runtimes flow integration", () => {
     window.history.pushState({}, "", "/runtimes");
     renderWithProviders(<App />);
 
-    expect((await screen.findAllByText("Codex (runtime-live)")).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("Openclaw (openclaw-recodee)")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(hasExactTextContent("Codex (runtime-live)"))).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(hasExactTextContent("Openclaw (openclaw-recodee)"))).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("runtime-live@example.com")).length).toBeGreaterThan(0);
     expect(screen.getByText("Live sessions")).toBeInTheDocument();
     expect(screen.getByText("Ship runtimes view from multica design")).toBeInTheDocument();
@@ -179,6 +182,14 @@ describe("runtimes flow integration", () => {
     expect(screen.getByText("Daemon recodee · Device recodee · codex-cli 0.1.28")).toBeInTheDocument();
 
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Hide sensitive values" }));
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("runtime-live@example.com").some(
+          (node) => node.classList.contains("privacy-blur"),
+        ),
+      ).toBe(true);
+    });
     const activeActivityCell = screen.getByRole("button", { name: /1 requests · 1 commits/i });
     await user.hover(activeActivityCell);
     expect((await screen.findAllByText(/GitHub commits/i)).length).toBeGreaterThan(0);
@@ -304,7 +315,7 @@ describe("runtimes flow integration", () => {
     renderWithProviders(<App />);
     const user = userEvent.setup();
 
-    expect((await screen.findAllByText("Codex (runtime-live)")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(hasExactTextContent("Codex (runtime-live)"))).length).toBeGreaterThan(0);
     const deleteButtons = screen.getAllByRole("button", {
       name: "Delete runtime Codex (runtime-live)",
     });
@@ -317,8 +328,8 @@ describe("runtimes flow integration", () => {
     await user.click(within(deleteDialog).getByRole("button", { name: "Delete runtime" }));
 
     await waitFor(() => {
-      expect(screen.queryByText("Codex (runtime-live)")).not.toBeInTheDocument();
+      expect(screen.queryByText(hasExactTextContent("Codex (runtime-live)"))).not.toBeInTheDocument();
     });
-    expect((await screen.findAllByText("Openclaw (openclaw-recodee)")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(hasExactTextContent("Openclaw (openclaw-recodee)"))).length).toBeGreaterThan(0);
   });
 });

@@ -132,6 +132,12 @@ uv run codex-lb-runtime use terminal-a work \
 
 To run two accounts concurrently, use two runtime names in different terminals (for example `terminal-a` and `terminal-b`).
 
+Runtime dashboard preview:
+
+![Runtimes dashboard preview](apps/frontend/public/runtimes-dashboard-preview.jpg)
+
+The runtime details view shows the selected runtime metadata, live/tracked session counts, active task text, and activity charts in one place.
+
 Bulk sync every saved snapshot in one shot:
 
 ```bash

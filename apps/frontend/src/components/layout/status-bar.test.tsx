@@ -1,5 +1,7 @@
-import { screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BrowserRouter } from "react-router-dom";
 
 import { fetchRuntimeAppVersion } from "@/components/layout/app-version";
 import { StatusBar } from "@/components/layout/status-bar";
@@ -67,6 +69,46 @@ describe("StatusBar", () => {
         screen.queryByTestId("status-bar-last-sync-timeout-warning"),
       ).not.toBeInTheDocument();
     }, { timeout: 3_000 });
+  });
+
+  it("keeps stale warning hidden while a stale cached overview is actively refetching", async () => {
+    vi.mocked(getDashboardOverview).mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof getDashboardOverview>>>((resolve) => {
+          window.setTimeout(() => {
+            resolve({
+              lastSyncAt: new Date().toISOString(),
+            } as Awaited<ReturnType<typeof getDashboardOverview>>);
+          }, 250);
+        }),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+          gcTime: 0,
+        },
+      },
+    });
+    queryClient.setQueryData(["dashboard", "overview"], {
+      lastSyncAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <StatusBar />
+        </BrowserRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/last sync:/i)).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("status-bar-last-sync-timeout-warning"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows timeout warning when overview request fails with request_timeout", async () => {

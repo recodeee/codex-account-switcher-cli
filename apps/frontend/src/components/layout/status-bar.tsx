@@ -9,6 +9,7 @@ import { formatTimeLong } from "@/utils/formatters";
 
 const LAST_SYNC_STALE_WARNING_MS = 60_000;
 const LAST_SYNC_CHECK_INTERVAL_MS = 10_000;
+const LAST_SYNC_REFETCH_INTERVAL_MS = 10_000;
 
 function isRequestTimeoutError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
@@ -44,10 +45,11 @@ export function StatusBar() {
   const {
     data: lastSyncAt = null,
     error: lastSyncError,
+    isFetching: isLastSyncFetching,
   } = useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: getDashboardOverview,
-    refetchInterval: 60_000,
+    refetchInterval: LAST_SYNC_REFETCH_INTERVAL_MS,
     refetchIntervalInBackground: false,
     select: (data) => data.lastSyncAt,
   });
@@ -77,7 +79,8 @@ export function StatusBar() {
   const hasStaleLastSync = syncAgeMs != null && syncAgeMs > LAST_SYNC_STALE_WARNING_MS;
   const hasRequestTimeoutError = isRequestTimeoutError(lastSyncError);
   const showRequestTimeoutWarning = hasRequestTimeoutError && !isLive;
-  const showLastSyncTimeoutWarning = showRequestTimeoutWarning || hasStaleLastSync;
+  const showStaleSyncWarning = hasStaleLastSync && !isLastSyncFetching;
+  const showLastSyncTimeoutWarning = showRequestTimeoutWarning || showStaleSyncWarning;
   const lastSyncTimeoutWarningLabel = hasRequestTimeoutError
     ? "request timeout"
     : "timeout > 1m";

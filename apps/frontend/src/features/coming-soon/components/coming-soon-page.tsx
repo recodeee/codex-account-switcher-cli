@@ -175,6 +175,8 @@ const AGENT_TOOL_ITEMS: AgentToolItem[] = [
   },
 ];
 
+const RUNTIME_DASHBOARD_PREVIEW_SRC = "/runtimes-dashboard-preview.jpg";
+
 function isValidEmailAddress(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
@@ -592,12 +594,12 @@ export function ComingSoonPage() {
                     setIsPreviewOpen(true);
                   }}
                   className="block w-full max-w-[820px]"
-                  aria-label="Open Codex app screenshot fullscreen"
+                  aria-label="Open runtimes dashboard screenshot fullscreen"
                 >
                   <div className="relative overflow-hidden rounded-[30px]">
                     <img
-                      src="/app.png"
-                      alt="Codex app screenshot"
+                      src={RUNTIME_DASHBOARD_PREVIEW_SRC}
+                      alt="Runtimes dashboard screenshot"
                       className="block h-auto w-full rounded-[30px] shadow-[0_24px_72px_rgba(6,10,25,0.55)]"
                       loading="lazy"
                     />
@@ -615,7 +617,7 @@ export function ComingSoonPage() {
               className="inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-none bg-black/96 p-0 shadow-none sm:max-w-none"
             >
               <DialogTitle className="sr-only">
-                Codex app screenshot preview
+                Runtimes dashboard screenshot preview
               </DialogTitle>
               <DialogDescription className="sr-only">
                 Fullscreen screenshot preview dialog.
@@ -634,14 +636,14 @@ export function ComingSoonPage() {
 
               <div className="relative z-0 flex h-full w-full items-center justify-center overflow-hidden rounded-2xl">
                 <img
-                  src="/app.png"
+                  src={RUNTIME_DASHBOARD_PREVIEW_SRC}
                   alt=""
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 z-0 h-full w-full scale-110 rounded-2xl object-cover opacity-28 blur-2xl"
                 />
                 <img
-                  src="/app.png"
-                  alt="Codex app screenshot fullscreen"
+                  src={RUNTIME_DASHBOARD_PREVIEW_SRC}
+                  alt="Runtimes dashboard screenshot fullscreen"
                   className="relative z-10 h-full w-full rounded-2xl border border-white/15 object-contain shadow-[0_30px_120px_rgba(0,0,0,0.65)]"
                 />
               </div>

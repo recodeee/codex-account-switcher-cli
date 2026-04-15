@@ -120,7 +120,9 @@ describe("ComingSoonPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("codex tokens used: 3B")).toBeInTheDocument();
     expect(screen.getByText("money saved: $10k+")).toBeInTheDocument();
-    expect(screen.getByAltText("Codex app screenshot")).toBeInTheDocument();
+    expect(
+      screen.getByAltText("Runtimes dashboard screenshot"),
+    ).toBeInTheDocument();
   });
 
   it("keeps only the in-card agent email field", () => {
@@ -153,7 +155,7 @@ describe("ComingSoonPage", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: "Open Codex app screenshot fullscreen",
+        name: "Open runtimes dashboard screenshot fullscreen",
       }),
     );
 
@@ -161,7 +163,7 @@ describe("ComingSoonPage", () => {
       screen.getByRole("button", { name: "Close fullscreen preview" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByAltText("Codex app screenshot fullscreen"),
+      screen.getByAltText("Runtimes dashboard screenshot fullscreen"),
     ).toBeInTheDocument();
 
     await user.click(
@@ -169,7 +171,7 @@ describe("ComingSoonPage", () => {
     );
 
     expect(
-      screen.queryByAltText("Codex app screenshot fullscreen"),
+      screen.queryByAltText("Runtimes dashboard screenshot fullscreen"),
     ).not.toBeInTheDocument();
   });
 });
