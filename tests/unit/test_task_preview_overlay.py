@@ -543,6 +543,7 @@ def test_overlay_waiting_last_task_uses_matching_snapshot_debug_sample_only(monk
 
 def test_overlay_populates_session_task_previews_from_debug_sources_when_process_mapping_missing(
     monkeypatch,
+    tmp_path,
 ) -> None:
     now = datetime(2026, 4, 6, tzinfo=timezone.utc)
     account = _make_account("acc-zeus-runtime", "zeus@edixai.com")
@@ -560,6 +561,11 @@ def test_overlay_populates_session_task_previews_from_debug_sources_when_process
     codex_session_task_previews_by_account: dict[str, list[AccountSessionTaskPreview]] = {}
 
     session_id = "019d5a6a-4665-7873-9714-9efb95b24272"
+    rollout_path = tmp_path / f"rollout-2026-04-06T10-00-00-{session_id}.jsonl"
+    rollout_path.write_text(
+        '{"cwd":"/home/deadpool/Documents/recodee","event":"response.item"}\n',
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(
         "app.modules.accounts.task_preview_overlay.read_local_codex_task_previews_by_snapshot",
@@ -597,7 +603,7 @@ def test_overlay_populates_session_task_previews_from_debug_sources_when_process
                 snapshots_considered=["zeus@edixai.com"],
                 raw_samples=[
                     AccountLiveQuotaDebugSample(
-                        source=f"/tmp/rollout-2026-04-06T10-00-00-{session_id}.jsonl",
+                        source=str(rollout_path),
                         snapshot_name="zeus@edixai.com",
                         recorded_at=now,
                         stale=False,
@@ -612,6 +618,8 @@ def test_overlay_populates_session_task_previews_from_debug_sources_when_process
     assert previews is not None
     assert [preview.session_key for preview in previews] == [session_id]
     assert previews[0].task_preview == "Investigate Zeus session task attribution"
+    assert previews[0].project_name == "recodee"
+    assert previews[0].project_path == "/home/deadpool/Documents/recodee"
 
 
 def test_overlay_suppresses_stale_snapshot_preview_after_recent_termination(monkeypatch) -> None:

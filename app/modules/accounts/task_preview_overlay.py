@@ -23,6 +23,8 @@ from app.modules.accounts.schemas import (
 _ROLLOUT_SESSION_FILE_RE = re.compile(
     r"^rollout-(?P<start>\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-(?P<session>[0-9a-fA-F-]{36})\.jsonl$"
 )
+_ROLLOUT_CWD_RE = re.compile(r'"cwd"\s*:\s*"([^"]+)"')
+_ROLLOUT_SCAN_LINE_LIMIT = 200
 _WAITING_FOR_NEW_TASK_PREVIEW = "Waiting for new task"
 
 
@@ -481,6 +483,7 @@ def _resolve_session_task_previews_from_debug_sources(
 
     normalized_snapshot_name = _normalize_snapshot_name(snapshot_name)
     previews_by_session: dict[str, AccountSessionTaskPreview] = {}
+    project_metadata_by_source: dict[str, tuple[str | None, str | None]] = {}
 
     for allow_stale in (False, True):
         for sample in debug.raw_samples:
@@ -506,10 +509,16 @@ def _resolve_session_task_previews_from_debug_sources(
             if not preview_text:
                 continue
 
+            project_name, project_path = _resolve_project_metadata_from_rollout_source(
+                source=sample.source,
+                cache=project_metadata_by_source,
+            )
             previews_by_session[session_id] = AccountSessionTaskPreview(
                 session_key=session_id,
                 task_preview=preview_text,
                 task_updated_at=preview.recorded_at,
+                project_name=project_name,
+                project_path=project_path,
             )
 
         if previews_by_session:
@@ -540,6 +549,30 @@ def _resolve_project_metadata_for_pid(pid: int) -> tuple[str | None, str | None]
     return (project_name, project_path)
 
 
+def _resolve_project_metadata_from_rollout_source(
+    *,
+    source: str,
+    cache: dict[str, tuple[str | None, str | None]],
+) -> tuple[str | None, str | None]:
+    normalized_source = source.strip()
+    if not normalized_source:
+        return (None, None)
+
+    cached = cache.get(normalized_source)
+    if cached is not None:
+        return cached
+
+    rollout_path = Path(normalized_source).expanduser()
+    if not rollout_path.exists() or not rollout_path.is_file():
+        cache[normalized_source] = (None, None)
+        return (None, None)
+
+    project_path = _extract_cwd_from_rollout_file(rollout_path)
+    project_name = _project_name_from_path(project_path)
+    cache[normalized_source] = (project_name, project_path)
+    return (project_name, project_path)
+
+
 def _resolve_process_cwd(pid: int) -> str | None:
     cwd_symlink = Path("/proc") / str(pid) / "cwd"
     try:
@@ -555,3 +588,20 @@ def _project_name_from_path(project_path: str | None) -> str | None:
     if not normalized:
         return None
     return Path(normalized).name or None
+
+
+def _extract_cwd_from_rollout_file(path: Path) -> str | None:
+    try:
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            for index, line in enumerate(handle):
+                if index >= _ROLLOUT_SCAN_LINE_LIMIT:
+                    break
+                match = _ROLLOUT_CWD_RE.search(line)
+                if match is None:
+                    continue
+                normalized = match.group(1).strip()
+                if normalized:
+                    return normalized
+    except OSError:
+        return None
+    return None
