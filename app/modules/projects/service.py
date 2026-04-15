@@ -480,18 +480,6 @@ def _discover_git_metadata_for_project_path(project_path: str) -> tuple[str | No
         return None
     return (_resolve_git_branch(repo_root), _resolve_github_repo_url(repo_root))
 
-
-def _discover_git_metadata_for_project_path(project_path: str) -> tuple[str | None, str | None] | None:
-    try:
-        project_path_value = Path(project_path).expanduser().resolve()
-    except OSError:
-        return None
-    repo_root = _resolve_git_repo_root(project_path_value)
-    if repo_root is None:
-        return None
-    return (_resolve_git_branch(repo_root), _resolve_github_repo_url(repo_root))
-
-
 def normalize_project_name(value: str) -> str:
     normalized = value.strip()
     if not normalized:
