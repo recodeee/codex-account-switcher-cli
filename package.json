@@ -33,6 +33,10 @@
     "agent:safety:doctor": "gx doctor",
     "agent:codex": "bash ./scripts/codex-agent.sh",
     "agent:review:watch": "bash ./scripts/review-bot-watch.sh",
+    "agent:autofinish:watch": "bash ./scripts/agent-autofinish-watch.sh",
+    "agent:autofinish:start": "bash ./scripts/agent-autofinish-watch.sh --daemon",
+    "agent:autofinish:stop": "bash ./scripts/agent-autofinish-watch.sh --stop",
+    "agent:autofinish:status": "bash ./scripts/agent-autofinish-watch.sh --status",
     "agent:finish": "gx finish --all"
   }
 }
