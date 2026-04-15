@@ -148,6 +148,20 @@ describe("runtimes flow integration", () => {
           hasMore: false,
         }),
       ),
+      http.get("/api/source-control/commit-activity", () =>
+        HttpResponse.json({
+          repositoryRoot: "/home/deadpool/Documents/recodee",
+          projectPath: null,
+          commits: [
+            {
+              hash: "e8c3e759c8f327e9c7f1a8029f2b58b8a1d8b420",
+              subject: "feat(agents): auto-ingest GH bot reviews into Codex autofix workflow",
+              authoredAt: nowIso,
+              url: "https://github.com/NagyVikt/recodee/commit/e8c3e759c8f327e9c7f1a8029f2b58b8a1d8b420",
+            },
+          ],
+        }),
+      ),
       http.post("http://localhost:9000/store/customers/me", () => HttpResponse.json({ customer: {} })),
     );
 
@@ -165,6 +179,10 @@ describe("runtimes flow integration", () => {
     expect(screen.getByText("Daemon recodee · Device recodee · codex-cli 0.1.28")).toBeInTheDocument();
 
     const user = userEvent.setup();
+    const activeActivityCell = screen.getByRole("button", { name: /1 requests · 1 commits/i });
+    await user.hover(activeActivityCell);
+    expect((await screen.findAllByText(/GitHub commits/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/auto-ingest GH bot reviews/i).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("tab", { name: "pnpm" }));
     expect(screen.getByText(/pnpm add -g @openai\/codex@latest/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy update commands" })).toBeInTheDocument();
@@ -268,6 +286,13 @@ describe("runtimes flow integration", () => {
           requests: [],
           total: 0,
           hasMore: false,
+        }),
+      ),
+      http.get("/api/source-control/commit-activity", () =>
+        HttpResponse.json({
+          repositoryRoot: "/home/deadpool/Documents/recodee",
+          projectPath: null,
+          commits: [],
         }),
       ),
       http.post("http://localhost:9000/store/customers/me", () =>

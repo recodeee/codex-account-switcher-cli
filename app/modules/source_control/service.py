@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Literal, Sequence
 
@@ -18,6 +19,8 @@ from app.modules.source_control.schemas import (
     SourceControlBranchDetailsResponse,
     SourceControlBranchPreview,
     SourceControlChangedFile,
+    SourceControlCommitActivityEntry,
+    SourceControlCommitActivityResponse,
     SourceControlCommitPreview,
     SourceControlCreatePullRequestResponse,
     SourceControlDeleteBranchResponse,
@@ -37,6 +40,10 @@ _BOT_BRANCH_PATTERN = re.compile(r"^(?:agent[/_-]|gx[/_-]|bot[/_-]|worker[/_-]|s
 _SLUG_NON_ALNUM_PATTERN = re.compile(r"[^a-z0-9]+")
 _FIRST_URL_PATTERN = re.compile(r"https?://\S+")
 _PR_URL_REPO_PATTERN = re.compile(r"https?://github\.com/([^/]+/[^/]+)/pull/\d+", re.IGNORECASE)
+_REMOTE_GITHUB_REPO_PATTERN = re.compile(
+    r"github\.com[:/](?P<repo>[^/\s]+/[^/\s]+?)(?:\.git)?(?:/)?$",
+    re.IGNORECASE,
+)
 _BOT_FEEDBACK_LOGINS = {
     "chatgpt-codex-connector",
     "chatgpt-codex-connector[bot]",
@@ -517,6 +524,72 @@ class SourceControlService:
             status="deleted",
             branch=target_branch,
             message="Branch deleted.",
+        )
+
+    def list_commit_activity(
+        self,
+        *,
+        project_path: str | None,
+        days: int = 7,
+        limit: int = 120,
+    ) -> SourceControlCommitActivityResponse:
+        repo_root = self._resolve_repository_root(project_path)
+        safe_days = max(1, min(int(days), 90))
+        safe_limit = max(1, min(int(limit), 500))
+        since = utcnow() - timedelta(days=safe_days)
+        since_arg = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+        raw = self._run_git(
+            [
+                "log",
+                f"--since={since_arg}",
+                f"--max-count={safe_limit}",
+                "--pretty=format:%H%x00%s%x00%aI",
+            ],
+            cwd=repo_root,
+            allow_failure=True,
+        )
+        remote_url = self._run_git(
+            ["remote", "get-url", "origin"],
+            cwd=repo_root,
+            allow_failure=True,
+        ).strip()
+        github_repo_name = _extract_github_repo_name_from_remote_url(remote_url)
+
+        commits: list[SourceControlCommitActivityEntry] = []
+        for line in raw.splitlines():
+            if not line.strip():
+                continue
+            parts = line.split("\x00")
+            if len(parts) < 3:
+                continue
+            commit_hash = parts[0].strip()
+            subject = parts[1].strip() or "Commit subject unavailable"
+            authored_at_raw = parts[2].strip()
+            if not commit_hash or not authored_at_raw:
+                continue
+            try:
+                authored_at = _parse_iso_datetime(authored_at_raw)
+            except ValueError:
+                continue
+            commit_url = (
+                f"https://github.com/{github_repo_name}/commit/{commit_hash}"
+                if github_repo_name
+                else None
+            )
+            commits.append(
+                SourceControlCommitActivityEntry(
+                    hash=commit_hash,
+                    subject=subject,
+                    authored_at=authored_at,
+                    url=commit_url,
+                )
+            )
+
+        commits.sort(key=lambda entry: entry.authored_at, reverse=True)
+        return SourceControlCommitActivityResponse(
+            repository_root=str(repo_root),
+            project_path=project_path,
+            commits=commits,
         )
 
     def _resolve_repository_hint(self, project_path: str | None) -> Path:
@@ -1545,6 +1618,16 @@ def _extract_repo_name_from_pull_request_url(url: str | None) -> str | None:
     if not match:
         return None
     return match.group(1)
+
+
+def _extract_github_repo_name_from_remote_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    normalized = url.strip()
+    match = _REMOTE_GITHUB_REPO_PATTERN.search(normalized)
+    if not match:
+        return None
+    return match.group("repo")
 
 
 def _parse_iso_datetime(value: str):

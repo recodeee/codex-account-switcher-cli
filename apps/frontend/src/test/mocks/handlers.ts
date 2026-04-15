@@ -1393,6 +1393,31 @@ export const handlers = [
 		});
 	}),
 
+	http.get("/api/source-control/commit-activity", ({ request }) => {
+		const url = new URL(request.url);
+		const days = Number.parseInt(url.searchParams.get("days") ?? "7", 10);
+		const now = Date.now();
+		const commits = [
+			{
+				hash: "e8c3e759c8f327e9c7f1a8029f2b58b8a1d8b420",
+				subject: "feat(agents): auto-ingest GH bot reviews into Codex autofix workflow",
+				authoredAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+				url: "https://github.com/NagyVikt/recodee/commit/e8c3e759c8f327e9c7f1a8029f2b58b8a1d8b420",
+			},
+			{
+				hash: "3860c7742f6f4e2de3618f5a2b63f7ba8f1cb274",
+				subject: "Enable task-level skill assignment directly inside the Agents workspace panel",
+				authoredAt: new Date(now - 5 * 60 * 60 * 1000).toISOString(),
+				url: "https://github.com/NagyVikt/recodee/commit/3860c7742f6f4e2de3618f5a2b63f7ba8f1cb274",
+			},
+		];
+		return HttpResponse.json({
+			repositoryRoot: "/home/deadpool/Documents/recodee",
+			projectPath: null,
+			commits: days > 0 ? commits : [],
+		});
+	}),
+
 	http.get("/api/source-control/preview", ({ request }) => {
 		const url = new URL(request.url);
 		const projectId = url.searchParams.get("projectId");

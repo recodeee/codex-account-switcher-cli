@@ -25,6 +25,7 @@ const EXPECTED_ENDPOINTS = [
 	// dashboard
 	"GET /api/dashboard/overview",
 	"GET /api/dashboard/system-monitor",
+	"GET /api/source-control/commit-activity",
 	"GET /api/source-control/preview",
 	"GET /api/source-control/branch-details",
 	"POST /api/source-control/pr/create",

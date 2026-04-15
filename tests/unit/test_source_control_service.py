@@ -16,6 +16,7 @@ from app.modules.source_control.service import (
     SourceControlBotSnapshot,
     SourceControlError,
     SourceControlService,
+    _extract_github_repo_name_from_remote_url,
 )
 
 pytestmark = pytest.mark.unit
@@ -379,3 +380,34 @@ def test_load_pull_request_diagnostics_extracts_conflicts_checks_and_bot_feedbac
     assert len(diagnostics.feedback) >= 2
     assert any(item.author == "chatgpt-codex-connector" for item in diagnostics.feedback)
     assert any(item.file_path == ".agents/commands/guardex.md" for item in diagnostics.feedback)
+
+
+def test_extract_github_repo_name_from_remote_url_supports_https_and_ssh() -> None:
+    assert (
+        _extract_github_repo_name_from_remote_url("https://github.com/NagyVikt/recodee.git")
+        == "NagyVikt/recodee"
+    )
+    assert (
+        _extract_github_repo_name_from_remote_url("git@github.com:NagyVikt/recodee.git")
+        == "NagyVikt/recodee"
+    )
+    assert _extract_github_repo_name_from_remote_url("https://example.com/other/repo.git") is None
+
+
+def test_list_commit_activity_includes_hash_subject_timestamp_and_url(tmp_path: Path) -> None:
+    repo = _init_repo(tmp_path)
+    _git(repo, "remote", "add", "origin", "https://github.com/NagyVikt/recodee.git")
+    (repo / "activity.txt").write_text("activity\n", encoding="utf-8")
+    _git(repo, "add", "activity.txt")
+    _git(repo, "commit", "-m", "Add activity commit")
+    expected_hash = _git(repo, "rev-parse", "HEAD")
+
+    service = SourceControlService()
+    activity = service.list_commit_activity(project_path=str(repo), days=7, limit=20)
+
+    assert activity.repository_root == str(repo.resolve())
+    assert activity.commits
+    newest = activity.commits[0]
+    assert newest.hash == expected_hash
+    assert newest.subject == "Add activity commit"
+    assert newest.url == f"https://github.com/NagyVikt/recodee/commit/{expected_hash}"

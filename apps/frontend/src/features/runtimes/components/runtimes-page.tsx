@@ -31,6 +31,8 @@ import { getRequestLogs } from "@/features/dashboard/api";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import { useDashboardLiveSocket } from "@/features/dashboard/hooks/use-dashboard-live-socket";
 import type { RequestLog } from "@/features/dashboard/schemas";
+import { getSourceControlCommitActivity } from "@/features/source-control/api";
+import type { SourceControlCommitActivityEntry } from "@/features/source-control/schemas";
 import { listStickySessions } from "@/features/sticky-sessions/api";
 import { useDialogState } from "@/hooks/use-dialog-state";
 import { cn } from "@/lib/utils";
@@ -102,7 +104,17 @@ type DailyTokenPoint = {
 type ActivityHeatmapRow = {
   key: string;
   label: string;
-  levels: number[];
+  cells: ActivityHeatmapCell[];
+};
+
+type ActivityHeatmapCell = {
+  dayStartMs: number;
+  hour: number;
+  level: number;
+  requestCount: number;
+  totalTokens: number;
+  activityStrength: number;
+  commits: SourceControlCommitActivityEntry[];
 };
 
 type HourlyDistributionEntry = {
@@ -110,6 +122,7 @@ type HourlyDistributionEntry = {
   label: string;
   requestCount: number;
   totalTokens: number;
+  activityStrength: number;
   hasTokenData: boolean;
   isEstimated: boolean;
 };
@@ -589,18 +602,34 @@ function resolveLogTokenBreakdown(log: RequestLog) {
   };
 }
 
+function applyTrailingActivitySignal(
+  buckets: Array<{ activityStrength: number }>,
+  timestampMs: number,
+  options: { baseWeight?: number } = {},
+) {
+  const baseWeight = options.baseWeight ?? 1;
+  const date = new Date(timestampMs);
+  const hour = date.getHours();
+  const trailingWeights = [baseWeight, baseWeight * 0.48, baseWeight * 0.22];
+  for (let offset = 0; offset < trailingWeights.length; offset += 1) {
+    const targetHour = hour - offset;
+    if (targetHour < 0) {
+      break;
+    }
+    buckets[targetHour].activityStrength += trailingWeights[offset];
+  }
+}
+
 function buildHourlyDistribution(runtime: RuntimeRow, requestLogs: RequestLog[] | null | undefined) {
   const safeRequestLogs = toSafeRequestLogs(requestLogs);
   const buckets = Array.from({ length: 24 }, () => ({
     requestCount: 0,
     totalTokens: 0,
+    activityStrength: 0,
     hasTokenData: false,
     isEstimated: false,
   }));
-  const logTimestamps =
-    safeRequestLogs.length > 0
-      ? safeRequestLogs.map((log) => log.requestedAt)
-      : runtime.activityTimestamps;
+  const allActivityTimestamps = new Set<number>();
 
   if (safeRequestLogs.length > 0) {
     for (const log of safeRequestLogs) {
@@ -614,20 +643,33 @@ function buildHourlyDistribution(runtime: RuntimeRow, requestLogs: RequestLog[] 
       buckets[hour].requestCount += 1;
       buckets[hour].totalTokens += totalTokens;
       buckets[hour].hasTokenData = true;
+      allActivityTimestamps.add(parsed);
     }
-  } else {
-    for (const timestamp of logTimestamps) {
-      const parsed = Date.parse(timestamp);
-      if (!Number.isFinite(parsed)) {
-        continue;
-      }
+  }
+
+  for (const timestamp of runtime.activityTimestamps) {
+    const parsed = Date.parse(timestamp);
+    if (!Number.isFinite(parsed)) {
+      continue;
+    }
+    allActivityTimestamps.add(parsed);
+    if (safeRequestLogs.length === 0) {
       const hour = new Date(parsed).getHours();
       buckets[hour].requestCount += 1;
     }
   }
 
-  if (logTimestamps.length === 0 && runtime.sessionCount > 0) {
-    buckets[new Date().getHours()].requestCount = runtime.sessionCount;
+  for (const timestampMs of allActivityTimestamps) {
+    applyTrailingActivitySignal(buckets, timestampMs, { baseWeight: 1 });
+  }
+
+  if (allActivityTimestamps.size === 0 && runtime.sessionCount > 0) {
+    const currentHour = new Date().getHours();
+    buckets[currentHour].requestCount = runtime.sessionCount;
+    buckets[currentHour].activityStrength = Math.max(
+      buckets[currentHour].activityStrength,
+      runtime.sessionCount,
+    );
   }
 
   const totalRequestCount = buckets.reduce((sum, entry) => sum + entry.requestCount, 0);
@@ -659,13 +701,14 @@ function buildHourlyDistribution(runtime: RuntimeRow, requestLogs: RequestLog[] 
     label: `${String(hour).padStart(2, "0")}:00`,
     requestCount: entry.requestCount,
     totalTokens: entry.totalTokens,
+    activityStrength: Math.max(entry.activityStrength, entry.requestCount),
     hasTokenData: entry.hasTokenData,
     isEstimated: entry.isEstimated,
   })) satisfies HourlyDistributionEntry[];
 }
 
 function getHourlyMagnitude(entry: HourlyDistributionEntry): number {
-  return entry.totalTokens > 0 ? entry.totalTokens : entry.requestCount;
+  return entry.totalTokens > 0 ? entry.totalTokens : Math.max(entry.requestCount, entry.activityStrength);
 }
 
 function HourlyUsageTooltip({ entry }: { entry: HourlyDistributionEntry }) {
@@ -681,12 +724,18 @@ function HourlyUsageTooltip({ entry }: { entry: HourlyDistributionEntry }) {
           <span className="text-slate-400">Tokens spent</span>
           <span className="font-semibold text-slate-100">{formatCompactNumber(entry.totalTokens)}</span>
         </div>
+        <div className="flex items-center justify-between gap-5">
+          <span className="text-slate-400">Activity score</span>
+          <span className="font-semibold text-slate-100">{entry.activityStrength.toFixed(2)}</span>
+        </div>
         {entry.isEstimated ? (
           <p className="pt-1 text-[10px] text-slate-500">
             Estimated from runtime token totals and request distribution.
           </p>
         ) : !entry.hasTokenData ? (
-          <p className="pt-1 text-[10px] text-slate-500">Estimated from runtime activity timestamps.</p>
+          <p className="pt-1 text-[10px] text-slate-500">
+            Includes trailing signal from previous active hours.
+          </p>
         ) : null}
       </div>
     </div>
@@ -1002,6 +1051,7 @@ function buildTokenStats(runtime: RuntimeRow, _window: UsageWindow, requestLogs:
 function buildActivityHeatmapRows(
   runtime: RuntimeRow,
   requestLogs: RequestLog[] | null | undefined,
+  commitActivities: SourceControlCommitActivityEntry[],
   days = 7,
 ): ActivityHeatmapRow[] {
   const safeRequestLogs = toSafeRequestLogs(requestLogs);
@@ -1009,44 +1059,97 @@ function buildActivityHeatmapRows(
   const firstDayStartMs = startOfDayMs(nowMs - (days - 1) * DAY_MS);
   const dayStarts = Array.from({ length: days }, (_, index) => firstDayStartMs + index * DAY_MS);
   const dayKeyIndexMap = new Map(dayStarts.map((dayStart, index) => [dayStart, index]));
-  const buckets = Array.from({ length: days }, () => new Array<number>(24).fill(0));
+  const buckets = Array.from({ length: days }, () =>
+    Array.from({ length: 24 }, () => ({
+      requestCount: 0,
+      totalTokens: 0,
+      activityStrength: 0,
+      commits: [] as SourceControlCommitActivityEntry[],
+    })),
+  );
+  const trailingWeights = [1, 0.48, 0.22];
   const uniqueActivityTimestamps = new Set<number>();
-  const activityTimestamps: number[] = [];
 
-  for (const log of safeRequestLogs) {
-    const parsed = Date.parse(log.requestedAt);
-    if (Number.isFinite(parsed) && !uniqueActivityTimestamps.has(parsed)) {
-      uniqueActivityTimestamps.add(parsed);
-      activityTimestamps.push(parsed);
-    }
-  }
-  for (const timestamp of runtime.activityTimestamps) {
-    const parsed = Date.parse(timestamp);
-    if (Number.isFinite(parsed) && !uniqueActivityTimestamps.has(parsed)) {
-      uniqueActivityTimestamps.add(parsed);
-      activityTimestamps.push(parsed);
-    }
-  }
-
-  for (const timestampMs of activityTimestamps) {
+  const addTrailingSignal = (timestampMs: number, baseWeight = 1) => {
     if (timestampMs < firstDayStartMs || timestampMs > nowMs + DAY_MS) {
-      continue;
+      return;
     }
     const dayStart = startOfDayMs(timestampMs);
     const dayIndex = dayKeyIndexMap.get(dayStart);
     if (dayIndex == null) {
-      continue;
+      return;
     }
     const hour = new Date(timestampMs).getHours();
-    buckets[dayIndex][hour] += 1;
+    for (let offset = 0; offset < trailingWeights.length; offset += 1) {
+      let targetDayIndex = dayIndex;
+      let targetHour = hour - offset;
+      while (targetHour < 0) {
+        targetDayIndex -= 1;
+        targetHour += 24;
+      }
+      if (targetDayIndex < 0) {
+        break;
+      }
+      buckets[targetDayIndex][targetHour].activityStrength += trailingWeights[offset] * baseWeight;
+    }
+  };
+
+  for (const log of safeRequestLogs) {
+    const parsed = Date.parse(log.requestedAt);
+    if (!Number.isFinite(parsed) || parsed < firstDayStartMs || parsed > nowMs + DAY_MS) {
+      continue;
+    }
+    const dayStart = startOfDayMs(parsed);
+    const dayIndex = dayKeyIndexMap.get(dayStart);
+    if (dayIndex == null) {
+      continue;
+    }
+    const hour = new Date(parsed).getHours();
+    const breakdown = resolveLogTokenBreakdown(log);
+    const totalTokens = breakdown.input + breakdown.output + breakdown.cacheRead;
+    buckets[dayIndex][hour].requestCount += 1;
+    buckets[dayIndex][hour].totalTokens += totalTokens;
+    if (!uniqueActivityTimestamps.has(parsed)) {
+      uniqueActivityTimestamps.add(parsed);
+      addTrailingSignal(parsed, 1.05);
+    }
   }
 
-  const flat = buckets.flat();
-  let max = Math.max(...flat, 0);
+  for (const timestamp of runtime.activityTimestamps) {
+    const parsed = Date.parse(timestamp);
+    if (!Number.isFinite(parsed) || uniqueActivityTimestamps.has(parsed)) {
+      continue;
+    }
+    uniqueActivityTimestamps.add(parsed);
+    addTrailingSignal(parsed, 1);
+  }
+
+  for (const commit of commitActivities) {
+    const parsed = Date.parse(commit.authoredAt);
+    if (!Number.isFinite(parsed) || parsed < firstDayStartMs || parsed > nowMs + DAY_MS) {
+      continue;
+    }
+    const dayStart = startOfDayMs(parsed);
+    const dayIndex = dayKeyIndexMap.get(dayStart);
+    if (dayIndex == null) {
+      continue;
+    }
+    const hour = new Date(parsed).getHours();
+    buckets[dayIndex][hour].commits.push(commit);
+    addTrailingSignal(parsed, 0.92);
+  }
+
+  let max = Math.max(
+    ...buckets.flatMap((row) =>
+      row.map((bucket) => Math.max(bucket.activityStrength, bucket.requestCount)),
+    ),
+    0,
+  );
   if (max === 0 && runtime.sessionCount > 0) {
     const dayIndex = days - 1;
     const hour = new Date().getHours();
-    buckets[dayIndex][hour] = Math.max(1, runtime.sessionCount);
+    buckets[dayIndex][hour].requestCount = Math.max(1, runtime.sessionCount);
+    buckets[dayIndex][hour].activityStrength = Math.max(1, runtime.sessionCount);
     max = Math.max(1, runtime.sessionCount);
   }
 
@@ -1062,7 +1165,17 @@ function buildActivityHeatmapRows(
   return dayStarts.map((dayStart, index) => ({
     key: `${dayStart}`,
     label: formatWeekdayDateLabel(dayStart),
-    levels: buckets[index].map(resolveLevel),
+    cells: buckets[index].map((bucket, hour) => ({
+      dayStartMs: dayStart,
+      hour,
+      level: resolveLevel(Math.max(bucket.activityStrength, bucket.requestCount)),
+      requestCount: bucket.requestCount,
+      totalTokens: bucket.totalTokens,
+      activityStrength: bucket.activityStrength,
+      commits: bucket.commits
+        .slice()
+        .sort((left, right) => Date.parse(right.authoredAt) - Date.parse(left.authoredAt)),
+    })),
   }));
 }
 
@@ -1147,18 +1260,110 @@ function resolveRuntimeTimestamps(runtime: RuntimeRow, requestLogs: RequestLog[]
   };
 }
 
-function HeatCell({ level }: { level: number }) {
+function formatActivityHourLabel(dayStartMs: number, hour: number) {
+  const start = new Date(dayStartMs + hour * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  return `${start.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "numeric",
+    day: "numeric",
+  })} ${start.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })} - ${end.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })}`;
+}
+
+function ActivityHeatTooltip({
+  cell,
+}: {
+  cell: ActivityHeatmapCell;
+}) {
+  const hourLabel = formatActivityHourLabel(cell.dayStartMs, cell.hour);
+  const commits = cell.commits.slice(0, 4);
+  const hiddenCommitCount = Math.max(0, cell.commits.length - commits.length);
   return (
-    <div
-      className={cn(
-        "h-3 w-3 rounded-[3px] border border-white/[0.08]",
-        level === 0 && "bg-white/[0.02]",
-        level === 1 && "bg-emerald-500/38",
-        level === 2 && "bg-emerald-500/52",
-        level === 3 && "bg-emerald-400/70 shadow-[0_0_10px_rgba(16,185,129,0.25)]",
-        level === 4 && "bg-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.35)]",
-      )}
-    />
+    <div className="min-w-[250px] max-w-[340px] rounded-lg border border-emerald-300/20 bg-[#080d14]/95 px-3 py-2.5 text-xs text-slate-200 shadow-2xl shadow-black/60">
+      <p className="mb-2 text-sm font-semibold text-emerald-200">{hourLabel}</p>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-5">
+          <span className="text-slate-400">Requests</span>
+          <span className="font-semibold text-slate-100">{cell.requestCount}</span>
+        </div>
+        <div className="flex items-center justify-between gap-5">
+          <span className="text-slate-400">Tokens</span>
+          <span className="font-semibold text-slate-100">{formatCompactNumber(cell.totalTokens)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-5">
+          <span className="text-slate-400">Activity score</span>
+          <span className="font-semibold text-slate-100">{cell.activityStrength.toFixed(2)}</span>
+        </div>
+        <div className="mt-1 border-t border-white/[0.08] pt-2">
+          <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-slate-400">GitHub commits</p>
+          {commits.length > 0 ? (
+            <div className="space-y-1">
+              {commits.map((commit) => (
+                <div key={commit.hash} className="flex items-center justify-between gap-3">
+                  <a
+                    href={commit.url ?? "#"}
+                    target={commit.url ? "_blank" : undefined}
+                    rel={commit.url ? "noopener noreferrer" : undefined}
+                    className={cn(
+                      "line-clamp-1 min-w-0 text-[11px] text-emerald-200",
+                      commit.url ? "hover:text-emerald-100 hover:underline" : "pointer-events-none opacity-80",
+                    )}
+                    title={commit.subject}
+                  >
+                    {commit.hash.slice(0, 8)} {commit.subject}
+                  </a>
+                  <span className="shrink-0 text-[10px] text-slate-500">
+                    {new Date(commit.authoredAt).toLocaleTimeString("en-US", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: false,
+                    })}
+                  </span>
+                </div>
+              ))}
+              {hiddenCommitCount > 0 ? (
+                <p className="text-[10px] text-slate-500">+{hiddenCommitCount} more commits</p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-500">No GitHub commits created in this hour.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeatCell({ cell }: { cell: ActivityHeatmapCell }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "h-3 w-3 rounded-[3px] border border-white/[0.08] transition-all duration-150",
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/45",
+            cell.level === 0 && "bg-white/[0.02]",
+            cell.level === 1 && "bg-emerald-500/38 hover:bg-emerald-500/46",
+            cell.level === 2 && "bg-emerald-500/52 hover:bg-emerald-500/60",
+            cell.level === 3 && "bg-emerald-400/70 shadow-[0_0_10px_rgba(16,185,129,0.25)] hover:bg-emerald-300/80",
+            cell.level === 4 && "bg-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.35)] hover:bg-emerald-200",
+          )}
+          aria-label={`${formatActivityHourLabel(cell.dayStartMs, cell.hour)} · ${cell.requestCount} requests · ${cell.commits.length} commits`}
+        />
+      </TooltipTrigger>
+      <TooltipContent sideOffset={10} className="border border-emerald-300/20 bg-transparent p-0 shadow-none">
+        <ActivityHeatTooltip cell={cell} />
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -1457,6 +1662,20 @@ export function RuntimesPage() {
     () => selectedAccountRequestLogsQuery.data?.requests ?? [],
     [selectedAccountRequestLogsQuery.data?.requests],
   );
+  const sourceControlCommitActivityQuery = useQuery({
+    queryKey: ["source-control", "commit-activity", 7],
+    queryFn: () =>
+      getSourceControlCommitActivity({
+        days: 7,
+        limit: 180,
+      }),
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
+  });
+  const commitActivities = useMemo(
+    () => sourceControlCommitActivityQuery.data?.commits ?? [],
+    [sourceControlCommitActivityQuery.data?.commits],
+  );
   const runtimeTimestamps = useMemo(
     () => (selectedRuntime ? resolveRuntimeTimestamps(selectedRuntime, selectedAccountRequestLogs) : null),
     [selectedRuntime, selectedAccountRequestLogs],
@@ -1496,8 +1715,11 @@ export function RuntimesPage() {
     return `${safe}`;
   };
   const activityHeatmapRows = useMemo(
-    () => (selectedRuntime ? buildActivityHeatmapRows(selectedRuntime, selectedAccountRequestLogs, 7) : []),
-    [selectedRuntime, selectedAccountRequestLogs],
+    () =>
+      selectedRuntime
+        ? buildActivityHeatmapRows(selectedRuntime, selectedAccountRequestLogs, commitActivities, 7)
+        : [],
+    [selectedRuntime, selectedAccountRequestLogs, commitActivities],
   );
   const hourlyDistribution = selectedRuntime
     ? buildHourlyDistribution(selectedRuntime, selectedAccountRequestLogs)
@@ -1892,8 +2114,8 @@ export function RuntimesPage() {
                           <div key={row.key} className="flex items-center gap-2">
                             <span className="w-14 shrink-0 text-[10px] text-slate-500">{row.label}</span>
                             <div className="grid flex-1 gap-px [grid-template-columns:repeat(24,minmax(0,1fr))]">
-                              {row.levels.map((level, index) => (
-                                <HeatCell key={`${row.key}-${index}`} level={level} />
+                              {row.cells.map((cell, index) => (
+                                <HeatCell key={`${row.key}-${index}`} cell={cell} />
                               ))}
                             </div>
                           </div>

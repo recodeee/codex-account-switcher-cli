@@ -41,6 +41,13 @@ class SourceControlCommitPreview(DashboardModel):
     authored_at: datetime | None = None
 
 
+class SourceControlCommitActivityEntry(DashboardModel):
+    hash: str
+    subject: str
+    authored_at: datetime
+    url: str | None = None
+
+
 class SourceControlBranchPreview(DashboardModel):
     name: str
     is_active: bool = False
@@ -138,6 +145,12 @@ class SourceControlPreviewResponse(DashboardModel):
     conflicted_pull_requests: list[SourceControlPullRequestDiagnostics] = Field(default_factory=list)
     bot_feedback_pull_requests: list[SourceControlPullRequestDiagnostics] = Field(default_factory=list)
     quick_actions: list[str] = Field(default_factory=list)
+
+
+class SourceControlCommitActivityResponse(DashboardModel):
+    repository_root: str
+    project_path: str | None = None
+    commits: list[SourceControlCommitActivityEntry] = Field(default_factory=list)
 
 
 class SourceControlBranchDetailsResponse(DashboardModel):

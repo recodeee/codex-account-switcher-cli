@@ -1,6 +1,7 @@
 import { get, post } from "@/lib/api-client";
 
 import {
+  SourceControlCommitActivityResponseSchema,
   SourceControlBranchDetailsResponseSchema,
   SourceControlCreatePullRequestResponseSchema,
   SourceControlDeleteBranchResponseSchema,
@@ -9,6 +10,7 @@ import {
 } from "@/features/source-control/schemas";
 
 const SOURCE_CONTROL_PREVIEW_PATH = "/api/source-control/preview";
+const SOURCE_CONTROL_COMMIT_ACTIVITY_PATH = "/api/source-control/commit-activity";
 const SOURCE_CONTROL_BRANCH_DETAILS_PATH = "/api/source-control/branch-details";
 const SOURCE_CONTROL_CREATE_PULL_REQUEST_PATH = "/api/source-control/pr/create";
 const SOURCE_CONTROL_MERGE_PULL_REQUEST_PATH = "/api/source-control/pr/merge";
@@ -24,6 +26,12 @@ type SourceControlBranchDetailsOptions = {
   projectId?: string | null;
   branch: string;
   changedFileLimit?: number;
+};
+
+type SourceControlCommitActivityOptions = {
+  projectId?: string | null;
+  days?: number;
+  limit?: number;
 };
 
 type SourceControlCreatePullRequestInput = {
@@ -78,6 +86,21 @@ export function getSourceControlBranchDetails(options: SourceControlBranchDetail
     `${SOURCE_CONTROL_BRANCH_DETAILS_PATH}?${searchParams.toString()}`,
     SourceControlBranchDetailsResponseSchema,
   );
+}
+
+export function getSourceControlCommitActivity(options: SourceControlCommitActivityOptions = {}) {
+  const searchParams = new URLSearchParams();
+  if (options.projectId) {
+    searchParams.set("projectId", options.projectId);
+  }
+  if (typeof options.days === "number") {
+    searchParams.set("days", String(options.days));
+  }
+  if (typeof options.limit === "number") {
+    searchParams.set("limit", String(options.limit));
+  }
+  const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
+  return get(`${SOURCE_CONTROL_COMMIT_ACTIVITY_PATH}${suffix}`, SourceControlCommitActivityResponseSchema);
 }
 
 export function createSourceControlPullRequest(input: SourceControlCreatePullRequestInput) {

@@ -7,6 +7,7 @@ from app.core.exceptions import DashboardBadRequestError, DashboardNotFoundError
 from app.dependencies import AgentsContext, ProjectsContext, get_agents_context, get_projects_context
 from app.modules.source_control.schemas import (
     SourceControlBranchDetailsResponse,
+    SourceControlCommitActivityResponse,
     SourceControlCreatePullRequestRequest,
     SourceControlCreatePullRequestResponse,
     SourceControlDeleteBranchRequest,
@@ -61,6 +62,36 @@ async def get_source_control_preview(
             bots=bots,
             branch_limit=branch_limit,
             changed_file_limit=changed_file_limit,
+        )
+    except SourceControlError as exc:
+        raise DashboardBadRequestError(str(exc), code=exc.code) from exc
+
+
+@router.get("/commit-activity", response_model=SourceControlCommitActivityResponse)
+async def get_source_control_commit_activity(
+    project_id: str | None = Query(default=None, alias="projectId"),
+    days: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=120, ge=1, le=500),
+    projects_context: ProjectsContext = Depends(get_projects_context),
+) -> SourceControlCommitActivityResponse:
+    project_path: str | None = None
+    if project_id:
+        project = await projects_context.service.get_project(project_id)
+        if project is None:
+            raise DashboardNotFoundError("Project not found", code="project_not_found")
+        project_path = project.project_path
+        if not project_path:
+            raise DashboardBadRequestError(
+                "Project path is required to load source control commit activity.",
+                code="project_path_required",
+            )
+
+    service = SourceControlService()
+    try:
+        return service.list_commit_activity(
+            project_path=project_path,
+            days=days,
+            limit=limit,
         )
     except SourceControlError as exc:
         raise DashboardBadRequestError(str(exc), code=exc.code) from exc

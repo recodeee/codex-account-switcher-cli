@@ -23,6 +23,13 @@ export const SourceControlCommitPreviewSchema = z.object({
   authoredAt: z.string().datetime({ offset: true }).nullable().optional(),
 });
 
+export const SourceControlCommitActivityEntrySchema = z.object({
+  hash: z.string().min(1),
+  subject: z.string().min(1),
+  authoredAt: z.string().datetime({ offset: true }),
+  url: z.string().url().nullable().optional(),
+});
+
 export const SourceControlBranchPreviewSchema = z.object({
   name: z.string().min(1),
   isActive: z.boolean().default(false),
@@ -122,6 +129,12 @@ export const SourceControlPreviewResponseSchema = z.object({
   quickActions: z.array(z.string()).default([]),
 });
 
+export const SourceControlCommitActivityResponseSchema = z.object({
+  repositoryRoot: z.string().min(1),
+  projectPath: z.string().nullable().optional(),
+  commits: z.array(SourceControlCommitActivityEntrySchema).default([]),
+});
+
 export const SourceControlBranchDetailsResponseSchema = z.object({
   repositoryRoot: z.string().min(1),
   projectPath: z.string().nullable().optional(),
@@ -158,5 +171,7 @@ export const SourceControlDeleteBranchResponseSchema = z.object({
 });
 
 export type SourceControlPreviewResponse = z.infer<typeof SourceControlPreviewResponseSchema>;
+export type SourceControlCommitActivityResponse = z.infer<typeof SourceControlCommitActivityResponseSchema>;
+export type SourceControlCommitActivityEntry = z.infer<typeof SourceControlCommitActivityEntrySchema>;
 export type SourceControlMergeState = z.infer<typeof SourceControlMergeStateSchema>;
 export type SourceControlBranchDetailsResponse = z.infer<typeof SourceControlBranchDetailsResponseSchema>;
