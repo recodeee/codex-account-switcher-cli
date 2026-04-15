@@ -10,7 +10,7 @@ import {
 
 const DASHBOARD_PATH = "/api/dashboard";
 const REQUEST_LOGS_PATH = "/api/request-logs";
-const DASHBOARD_OVERVIEW_TIMEOUT_MS = 45_000;
+const DASHBOARD_OVERVIEW_TIMEOUT_MS = 30_000;
 
 export type RequestLogsListFilters = {
   limit?: number;

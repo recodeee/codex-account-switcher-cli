@@ -139,4 +139,74 @@ describe("StatusBar", () => {
     });
     expect(screen.getByText("timeout > 1m")).toBeInTheDocument();
   });
+
+  it("uses the normal polling interval when last sync is fresh", async () => {
+    vi.mocked(getDashboardOverview).mockResolvedValue({
+      lastSyncAt: new Date().toISOString(),
+    } as Awaited<ReturnType<typeof getDashboardOverview>>);
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+          gcTime: 0,
+        },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <StatusBar />
+        </BrowserRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/last sync:/i)).toBeInTheDocument());
+
+    const query = queryClient.getQueryCache().find({ queryKey: ["dashboard", "overview"] });
+    expect(query).toBeDefined();
+    const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
+      ?.refetchInterval;
+    if (typeof refetchInterval === "function") {
+      expect(refetchInterval(query as never)).toBe(10_000);
+    } else {
+      expect(refetchInterval).toBe(10_000);
+    }
+  });
+
+  it("uses a faster recovery polling interval when last sync is stale", async () => {
+    vi.mocked(getDashboardOverview).mockResolvedValue({
+      lastSyncAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+    } as Awaited<ReturnType<typeof getDashboardOverview>>);
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+          gcTime: 0,
+        },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <StatusBar />
+        </BrowserRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/last sync:/i)).toBeInTheDocument());
+
+    const query = queryClient.getQueryCache().find({ queryKey: ["dashboard", "overview"] });
+    expect(query).toBeDefined();
+    const refetchInterval = (query?.options as { refetchInterval?: unknown } | undefined)
+      ?.refetchInterval;
+    if (typeof refetchInterval === "function") {
+      expect(refetchInterval(query as never)).toBe(4_000);
+    } else {
+      expect(refetchInterval).toBe(4_000);
+    }
+  });
 });
