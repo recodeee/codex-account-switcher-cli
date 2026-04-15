@@ -45,10 +45,8 @@ const WEEKLY_DEPLETED_SORT_THRESHOLD_PERCENT = 5;
 const QUOTA_SORT_BUCKET_PERCENT = 5;
 const ACCOUNT_CARDS_CLOCK_TICK_MS = 5_000;
 const EMAIL_AUTOCORRECT_MAX_DISTANCE = 3;
-const ACCOUNT_GRID_CLASSNAME =
-  "grid auto-rows-fr items-stretch gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,21.5rem),1fr))] [&_.card-hover]:h-full";
-const WORKING_ACCOUNT_GRID_CLASSNAME =
-  "grid auto-rows-fr items-stretch gap-3 grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 [&_.card-hover]:h-full";
+const ACCOUNT_GRID_CLASSNAME = "columns-1 gap-3 md:columns-2 xl:columns-3";
+const WORKING_ACCOUNT_GRID_CLASSNAME = "columns-1 gap-3 md:columns-2 2xl:columns-3";
 const WORKING_ACCOUNT_PLACEHOLDER_TARGET = 3;
 const WORKING_ACCOUNT_SUGGESTION_LIMIT = 3;
 
@@ -897,8 +895,8 @@ export function AccountCards({
             key={`${keyPrefix}-${account.accountId}`}
             className={
               keyPrefix === "working"
-                ? "h-full min-w-0 animate-working-account-enter"
-                : "h-full min-w-0 animate-fade-in-up"
+                ? "mb-3 min-w-0 break-inside-avoid animate-working-account-enter"
+                : "mb-3 min-w-0 break-inside-avoid animate-fade-in-up"
             }
             style={
               keyPrefix === "working"
@@ -942,7 +940,7 @@ export function AccountCards({
         {Array.from({ length: placeholderCount }).map((_, placeholderIndex) => (
           <div
             key={`${keyPrefix}-placeholder-${placeholderIndex}`}
-            className="h-full min-w-0 animate-working-account-enter"
+            className="mb-3 min-w-0 break-inside-avoid animate-working-account-enter"
             style={
               {
                 animationDelay: `${(items.length + placeholderIndex) * 85}ms`,

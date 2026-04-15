@@ -218,6 +218,71 @@ describe("AccountCards", () => {
     expect(within(idleCard).queryByTestId("codex-active-agent-card")).not.toBeInTheDocument();
   });
 
+  it("uses masonry-style columns so expanded cards do not create row-height gaps", () => {
+    const nowIso = new Date().toISOString();
+    const working = createAccountSummary({
+      accountId: "acc_working_masonry",
+      email: "working-masonry@example.com",
+      displayName: "working-masonry@example.com",
+      codexLiveSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "working-masonry",
+        activeSnapshotName: "working-masonry",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+    const idle = createAccountSummary({
+      accountId: "acc_idle_masonry",
+      email: "idle-masonry@example.com",
+      displayName: "idle-masonry@example.com",
+      codexSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "idle-masonry",
+        activeSnapshotName: "working-masonry",
+        isActiveSnapshot: false,
+        hasLiveSession: false,
+      },
+    });
+
+    render(
+      <AccountCards
+        accounts={[idle, working]}
+        primaryWindow={buildWindow("primary", "acc_working_masonry", 1000, 900)}
+        secondaryWindow={null}
+      />,
+    );
+
+    const workingSection = screen
+      .getByRole("heading", { name: "Working now" })
+      .closest("section");
+    const otherSection = screen
+      .getByRole("heading", { name: "Other accounts" })
+      .closest("section");
+
+    expect(workingSection).not.toBeNull();
+    expect(otherSection).not.toBeNull();
+
+    const workingGrid = workingSection?.querySelector("div.columns-1");
+    const otherGrid = otherSection?.querySelector("div.columns-1");
+
+    expect(workingGrid).toHaveClass("columns-1", "md:columns-2", "2xl:columns-3");
+    expect(workingGrid).not.toHaveClass("grid", "auto-rows-fr");
+    expect(otherGrid).toHaveClass("columns-1", "md:columns-2", "xl:columns-3");
+    expect(otherGrid).not.toHaveClass("grid", "auto-rows-fr");
+
+    const workingCard = screen
+      .getByText("working-masonry@example.com")
+      .closest(".card-hover");
+    expect(workingCard).not.toBeNull();
+    expect(workingCard?.closest("div.break-inside-avoid")).not.toBeNull();
+  });
+
   it("keeps a recently-working account in Working now during short telemetry dips", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-09T10:00:00.000Z"));
