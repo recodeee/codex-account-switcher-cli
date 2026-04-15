@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 from typing import Literal
 
+from app.core.auth import generate_unique_account_id
 from app.core.utils.time import to_utc_naive
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts.codex_auth_switcher import CodexAuthSnapshotIndex
@@ -213,7 +214,10 @@ def apply_local_live_usage_overrides(
             snapshot_names = snapshot_names_from_index
         session_presence_snapshot_names = _resolve_session_presence_snapshot_names_for_account(
             account_email=account.email,
-            account_owned_snapshot_names=snapshot_index.snapshots_by_account_id.get(account.id, []),
+            account_owned_snapshot_names=_resolve_account_owned_snapshot_names_for_presence(
+                account=account,
+                snapshot_index=snapshot_index,
+            ),
             selected_snapshot_name=selected_snapshot_name,
             snapshot_names_from_index=snapshot_names_from_index,
             fallback_snapshot_names=snapshot_names,
@@ -689,6 +693,7 @@ def apply_local_live_usage_overrides(
                 continue
             codex_live_session_counts_by_account[account_id] = 0
             live_process_session_counts_by_account[account_id] = 0
+            live_runtime_session_counts_by_account[account_id] = 0
             codex_auth_status = codex_auth_by_account.get(account_id)
             if codex_auth_status is not None:
                 codex_auth_status.has_live_session = False
@@ -1132,6 +1137,48 @@ def _is_email_like_snapshot_name(value: str | None) -> bool:
         return False
     _local, _sep, domain = normalized.partition("@")
     return bool(domain and "." in domain)
+
+
+def _resolve_account_owned_snapshot_names_for_presence(
+    *,
+    account: Account,
+    snapshot_index: CodexAuthSnapshotIndex,
+) -> list[str]:
+    resolved: list[str] = []
+    seen: set[str] = set()
+
+    def _add(snapshot_names: list[str] | None) -> None:
+        if not snapshot_names:
+            return
+        for snapshot_name in snapshot_names:
+            normalized = _normalize_snapshot_name(snapshot_name)
+            if normalized is None or normalized in seen:
+                continue
+            seen.add(normalized)
+            resolved.append(snapshot_name)
+
+    canonical_candidate_ids: list[str] = []
+    email = (account.email or "").strip()
+    if account.chatgpt_account_id and email:
+        canonical_candidate_ids.append(
+            generate_unique_account_id(account.chatgpt_account_id, email)
+        )
+        lowered_email = email.lower()
+        if lowered_email != email:
+            canonical_candidate_ids.append(
+                generate_unique_account_id(account.chatgpt_account_id, lowered_email)
+            )
+    canonical_candidate_ids = list(dict.fromkeys(canonical_candidate_ids))
+
+    for candidate_account_id in canonical_candidate_ids:
+        _add(snapshot_index.snapshots_by_account_id.get(candidate_account_id))
+
+    # Compatibility fallback for rows without canonical metadata, or when the
+    # canonical id has no index entry yet.
+    if not canonical_candidate_ids or not resolved:
+        _add(snapshot_index.snapshots_by_account_id.get(account.id))
+
+    return resolved
 
 
 def _resolve_session_presence_snapshot_names_for_account(
@@ -1697,7 +1744,10 @@ def _has_relevant_process_session_visibility(
         )
         session_presence_snapshot_names = _resolve_session_presence_snapshot_names_for_account(
             account_email=account.email,
-            account_owned_snapshot_names=snapshot_index.snapshots_by_account_id.get(account.id, []),
+            account_owned_snapshot_names=_resolve_account_owned_snapshot_names_for_presence(
+                account=account,
+                snapshot_index=snapshot_index,
+            ),
             selected_snapshot_name=selected_snapshot_name,
             snapshot_names_from_index=snapshot_names_from_index,
             fallback_snapshot_names=snapshot_names,
@@ -2317,6 +2367,7 @@ def _resolve_sample_account_assignments(
             cached_account_id = _lookup_sample_source_owner(
                 source=source,
                 allowed_account_ids=account_ids,
+                observed_at=samples[sample_index].recorded_at,
             )
             if cached_account_id is None:
                 continue
