@@ -229,7 +229,7 @@ function getRoleVisual(role: string): RoleVisual {
 }
 
 const PLANS_COPY_BUTTON_CLASS_NAME =
-  "h-8 rounded-xl border-cyan-300/25 bg-[linear-gradient(180deg,rgba(14,28,50,0.92)_0%,rgba(8,16,33,0.92)_100%)] text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:border-cyan-300/45 hover:bg-[linear-gradient(180deg,rgba(18,34,58,0.94)_0%,rgba(10,20,40,0.94)_100%)]";
+  "h-8 rounded-md border border-white/[0.14] bg-white/[0.04] px-2.5 text-slate-100 shadow-none transition-colors hover:border-white/[0.24] hover:bg-white/[0.1]";
 
 function checkpointStateBadgeClass(state: string): string {
   const normalizedState = state.trim().toLowerCase().replace(/\s+/g, "_");
@@ -1013,7 +1013,7 @@ export function PlansPage() {
         >
           {!isDetailFullWidth ? (
             <div
-              className="rounded-xl border border-cyan-400/15 bg-[linear-gradient(160deg,rgba(10,19,34,0.92)_0%,rgba(6,12,23,0.9)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+              className="rounded-xl border border-white/[0.1] bg-[linear-gradient(180deg,rgba(7,10,18,0.96)_0%,rgba(3,5,12,1)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
               data-testid="plans-list-panel"
             >
               <Table className="table-fixed">
@@ -1044,7 +1044,7 @@ export function PlansPage() {
                       className={cn(
                         "cursor-pointer",
                         entry.slug === effectiveSelectedSlug
-                          ? "bg-cyan-500/12 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.22)]"
+                          ? "bg-white/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)]"
                           : undefined,
                       )}
                       onClick={() => {
@@ -1066,7 +1066,7 @@ export function PlansPage() {
                           ) : null}
                           {rowAttachmentCount > 0 ? (
                             <p
-                              className="inline-flex w-fit items-center gap-1 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-100/85"
+                              className="inline-flex w-fit items-center gap-1 rounded-md border border-white/[0.14] bg-white/[0.05] px-1.5 py-0.5 text-[10px] text-slate-200/90"
                               data-testid={`plan-row-initial-prompt-attachments-${entry.slug}`}
                             >
                               <ImageIcon className="h-3 w-3" />
@@ -1076,7 +1076,7 @@ export function PlansPage() {
                           <div className="max-w-[16rem] space-y-1">
                             <Progress
                               value={entry.overallProgress.percentComplete}
-                              className="h-1 bg-cyan-950/65 [&_[data-slot=progress-indicator]]:bg-cyan-300"
+                              className="h-1 bg-white/[0.08] [&_[data-slot=progress-indicator]]:bg-emerald-400/80"
                             />
                             <p className="text-[11px] text-muted-foreground">{progressLabel}</p>
                           </div>
@@ -1110,12 +1110,12 @@ export function PlansPage() {
           ) : null}
 
           <div
-            className="rounded-xl border border-cyan-400/20 bg-[linear-gradient(165deg,rgba(9,18,32,0.95)_0%,rgba(5,11,22,0.94)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_18px_42px_-36px_rgba(34,211,238,0.75)]"
+            className="rounded-xl border border-white/[0.1] bg-[linear-gradient(180deg,rgba(7,10,18,0.97)_0%,rgba(3,5,12,1)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
             data-testid="plans-detail-panel"
           >
             {selectedEntry ? (
               <>
-                <div className="mb-3 rounded-lg border border-cyan-500/15 bg-gradient-to-r from-[#040c18]/95 via-[#050c16]/95 to-[#060913]/95 p-3 shadow-[0_10px_30px_-24px_rgba(34,211,238,0.75)]">
+                <div className="mb-3 rounded-lg border border-white/[0.1] bg-white/[0.03] p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 space-y-2">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1131,7 +1131,7 @@ export function PlansPage() {
                       </div>
                       {initialPrompt.text ? (
                         <p
-                          className="max-w-[44rem] truncate rounded-md border border-cyan-400/15 bg-[#081426]/70 px-2.5 py-1.5 text-xs text-zinc-300/90"
+                          className="max-w-[44rem] truncate rounded-md border border-white/[0.12] bg-white/[0.03] px-2.5 py-1.5 text-xs text-slate-300/90"
                           data-testid="plan-initial-prompt"
                           title={initialPrompt.text}
                         >
@@ -1146,7 +1146,7 @@ export function PlansPage() {
                               href={imageUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="group relative block overflow-hidden rounded-md border border-cyan-300/20 bg-[#091629]/80"
+                              className="group relative block overflow-hidden rounded-md border border-white/[0.12] bg-[#090f1b]/80"
                             >
                               <img
                                 src={imageUrl}
@@ -1162,7 +1162,7 @@ export function PlansPage() {
                           {initialPrompt.imageReferences.map((reference) => (
                             <span
                               key={reference}
-                              className="inline-flex items-center gap-1 rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100/90"
+                              className="inline-flex items-center gap-1 rounded-md border border-white/[0.14] bg-white/[0.05] px-2 py-1 text-[11px] text-slate-200/90"
                             >
                               <ImageIcon className="h-3 w-3" />
                               {reference}
@@ -1198,23 +1198,23 @@ export function PlansPage() {
                   <SpinnerBlock label="Loading plan details…" />
                 ) : planDetail ? (
                   <div className="space-y-4">
-                    <div className="relative overflow-hidden space-y-2 rounded-[18px] border border-cyan-400/20 bg-[linear-gradient(155deg,rgba(12,23,41,0.92)_0%,rgba(8,15,30,0.9)_100%)] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                    <div className="relative overflow-hidden space-y-2 rounded-[18px] border border-white/[0.1] bg-white/[0.03] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                       <div
                         aria-hidden="true"
-                        className="pointer-events-none absolute inset-0 bg-[radial-gradient(75%_115%_at_0%_0%,rgba(56,189,248,0.16)_0%,rgba(56,189,248,0.02)_60%,transparent_100%)]"
+                        className="pointer-events-none absolute inset-0 bg-[radial-gradient(72%_110%_at_0%_0%,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0.01)_60%,transparent_100%)]"
                       />
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs uppercase tracking-[0.11em] text-cyan-100/82">Overall progress</p>
-                        <p className="text-xs font-medium text-cyan-100/82" data-testid="plan-progress-percent">
+                        <p className="text-xs uppercase tracking-[0.11em] text-slate-300/86">Overall progress</p>
+                        <p className="text-xs font-medium text-slate-200/90" data-testid="plan-progress-percent">
                           {planDetail.overallProgress.percentComplete}%
                         </p>
                       </div>
                       <Progress
                         value={planDetail.overallProgress.percentComplete}
-                        className="h-2 bg-cyan-950/65 [&_[data-slot=progress-indicator]]:bg-cyan-300"
+                        className="h-2 bg-white/[0.1] [&_[data-slot=progress-indicator]]:bg-emerald-400/80"
                         data-testid="plan-progress-bar"
                       />
-                      <p className="text-xs text-zinc-300/88">
+                      <p className="text-xs text-slate-300/88">
                         {roleCompletionLabel(
                           planDetail.overallProgress.doneCheckpoints,
                           planDetail.overallProgress.totalCheckpoints,
@@ -1224,12 +1224,12 @@ export function PlansPage() {
                     </div>
 
                     <div
-                      className="space-y-3 rounded-xl border border-cyan-400/24 bg-[linear-gradient(165deg,rgba(6,22,35,0.96)_0%,rgba(4,14,25,0.95)_55%,rgba(3,11,21,0.96)_100%)] p-3.5 shadow-[0_20px_44px_-34px_rgba(34,211,238,0.85)]"
+                      className="space-y-3 rounded-xl border border-white/[0.1] bg-white/[0.03] p-3.5"
                       data-testid="plan-next-step-suggestions"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs uppercase tracking-[0.11em] text-cyan-100/86">Suggested next step</p>
-                        <Badge variant="outline" className="border-cyan-400/35 bg-cyan-500/15 text-[10px] text-cyan-100">
+                        <p className="text-xs uppercase tracking-[0.11em] text-slate-300/86">Suggested next step</p>
+                        <Badge variant="outline" className="border-white/[0.16] bg-white/[0.05] text-[10px] text-slate-200">
                           {launchSuggestions.length} options
                         </Badge>
                       </div>
@@ -1237,16 +1237,16 @@ export function PlansPage() {
                         {launchSuggestions.map((suggestion, index) => (
                           <li
                             key={suggestion.id}
-                            className="rounded-lg border border-cyan-400/20 bg-[#08182a]/72 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                            className="rounded-lg border border-white/[0.12] bg-[#0b121f]/78 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
                             data-testid={`plan-launch-suggestion-${suggestion.id}`}
                           >
                             <div className="flex flex-wrap items-start justify-between gap-2.5">
                               <div className="min-w-0 space-y-1">
-                                <p className="text-sm font-medium text-cyan-50">
+                                <p className="text-sm font-medium text-slate-100">
                                   {index + 1}. {suggestion.title}
                                 </p>
-                                <p className="text-xs text-zinc-300/85">{suggestion.description}</p>
-                                <pre className="overflow-auto rounded-md border border-cyan-300/25 bg-[#061120]/88 px-2 py-1.5 font-mono text-[11px] text-cyan-100/95">
+                                <p className="text-xs text-slate-300/85">{suggestion.description}</p>
+                                <pre className="overflow-auto rounded-md border border-white/[0.14] bg-[#070d18]/88 px-2 py-1.5 font-mono text-[11px] text-slate-200/95">
                                   {suggestion.command}
                                 </pre>
                               </div>
@@ -1262,12 +1262,12 @@ export function PlansPage() {
                     </div>
 
                     <div
-                      className="space-y-3 rounded-xl border border-cyan-400/20 bg-[linear-gradient(165deg,rgba(8,18,34,0.94)_0%,rgba(4,11,22,0.94)_100%)] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                      className="space-y-3 rounded-xl border border-white/[0.1] bg-[linear-gradient(180deg,rgba(8,12,20,0.92)_0%,rgba(5,8,15,0.96)_100%)] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                       data-testid="plan-included-prompts"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs uppercase tracking-[0.11em] text-zinc-300/84">Included AI prompts</p>
-                        <Badge variant="outline" className="border-cyan-400/25 text-[10px] text-cyan-100/85">
+                        <p className="text-xs uppercase tracking-[0.11em] text-slate-300/88">Included AI prompts</p>
+                        <Badge variant="outline" className="border-white/[0.16] bg-white/[0.04] text-[10px] text-slate-200/90">
                           {includedPromptCards.length} prompt{includedPromptCards.length === 1 ? "" : "s"}
                         </Badge>
                       </div>
@@ -1280,13 +1280,13 @@ export function PlansPage() {
                             return (
                               <li
                                 key={prompt.key}
-                                className="overflow-hidden rounded-lg border border-cyan-300/16 bg-[#071527]/80 shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]"
+                                className="overflow-hidden rounded-lg border border-white/[0.12] bg-[#0a101a]/88 shadow-[inset_0_1px_0_rgba(148,163,184,0.05)]"
                                 data-testid={`plan-included-prompt-card-${prompt.id}`}
                               >
                                 <div
                                   className={cn(
-                                    "px-2.5 py-2 transition-colors hover:bg-background/30",
-                                    !isCollapsed ? "border-b border-border/40" : null,
+                                    "px-3 py-2.5 transition-colors hover:bg-white/[0.04]",
+                                    !isCollapsed ? "border-b border-white/[0.08]" : null,
                                   )}
                                 >
                                   <div className="flex items-start gap-2">
@@ -1309,47 +1309,52 @@ export function PlansPage() {
                                     </button>
                                     <ChevronDown
                                       className={cn(
-                                        "mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                        "mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200",
                                         isCollapsed ? "-rotate-90" : "rotate-0",
                                       )}
                                       aria-hidden
                                     />
                                   </div>
-                                  <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-5">
-                                    {prompt.status !== "pending" ? (
-                                      <Badge
+                                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 pl-5">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {prompt.status !== "pending" ? (
+                                        <Badge
+                                          variant="outline"
+                                          className={cn("text-[10px] capitalize", stepStatusBadgeClass(prompt.status))}
+                                          data-testid={`plan-included-prompt-status-${prompt.id}`}
+                                        >
+                                          {statusLabel(prompt.status)}
+                                        </Badge>
+                                      ) : null}
+                                      {prompt.checkpointIds.length > 0 ? (
+                                        <Badge variant="outline" className="border-white/[0.14] bg-white/[0.03] text-[10px] text-slate-200">
+                                          {prompt.checkpointIds.join(" · ")}
+                                        </Badge>
+                                      ) : null}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <CopyButton
+                                        value={prompt.content}
+                                        label={`Copy ${prompt.title}`}
+                                        className={PLANS_COPY_BUTTON_CLASS_NAME}
+                                      />
+                                      <Button
+                                        type="button"
                                         variant="outline"
-                                        className={cn("text-[10px] capitalize", stepStatusBadgeClass(prompt.status))}
-                                        data-testid={`plan-included-prompt-status-${prompt.id}`}
+                                        size="xs"
+                                        onClick={() => setZoomedPromptKey(prompt.key)}
+                                        aria-label={`Zoom ${prompt.title}`}
+                                        className="h-8 rounded-md border-white/[0.14] bg-white/[0.03] text-slate-100 hover:border-white/[0.24] hover:bg-white/[0.1]"
                                       >
-                                        {statusLabel(prompt.status)}
-                                      </Badge>
-                                    ) : null}
-                                    {prompt.checkpointIds.length > 0 ? (
-                                      <Badge variant="outline" className="text-[10px]">
-                                        {prompt.checkpointIds.join(" · ")}
-                                      </Badge>
-                                    ) : null}
-                                    <CopyButton
-                                      value={prompt.content}
-                                      label={`Copy ${prompt.title}`}
-                                      className={PLANS_COPY_BUTTON_CLASS_NAME}
-                                    />
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="xs"
-                                      onClick={() => setZoomedPromptKey(prompt.key)}
-                                      aria-label={`Zoom ${prompt.title}`}
-                                    >
-                                      <Maximize2 className="size-3" />
-                                      Zoom
-                                    </Button>
+                                        <Maximize2 className="size-3" />
+                                        Zoom
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
                                 {!isCollapsed ? (
                                   <div className="px-3 py-2">
-                                    <pre className="max-h-64 overflow-auto rounded-md border border-border/60 bg-background/30 px-2 py-1.5 text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85">
+                                    <pre className="max-h-64 overflow-auto rounded-md border border-white/[0.14] bg-[#050a13]/85 px-2 py-1.5 text-[11px] leading-relaxed whitespace-pre-wrap text-slate-200/90">
                                       {prompt.content}
                                     </pre>
                                   </div>
