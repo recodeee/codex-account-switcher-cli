@@ -405,10 +405,13 @@ function CreateProjectDialog({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,1fr)_84px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,1fr)_176px]">
           <div className="flex min-h-0 flex-col">
             <div className="space-y-4 px-7 pb-3 pt-6">
-              <Folder className="h-5 w-5 text-amber-300" />
+              <Folder
+                className="h-7 w-7 text-amber-200 drop-shadow-[0_0_10px_rgba(252,211,77,0.35)]"
+                strokeWidth={2.1}
+              />
               <input
                 value={draft.name}
                 onChange={(event) => {
@@ -543,7 +546,7 @@ function CreateProjectDialog({
             </div>
           </div>
 
-          <div className="flex flex-row items-center justify-between gap-3 border-t border-slate-800/80 px-4 py-3 md:flex-col md:items-center md:justify-between md:gap-2 md:border-t-0 md:border-l md:px-3 md:py-5">
+          <div className="flex flex-row items-center justify-between gap-3 border-t border-slate-800/80 px-4 py-3 md:flex-col md:items-center md:justify-between md:gap-2 md:border-t-0 md:border-l md:px-4 md:py-5">
             <div className="flex flex-wrap items-center gap-2 md:flex-col md:gap-1.5">
               <button
                 type="button"
@@ -598,7 +601,7 @@ function CreateProjectDialog({
               <SelectTrigger className="h-10 w-[180px] rounded-md border-slate-700/70 bg-slate-900/75 px-2 text-xs text-slate-200 shadow-none md:w-full">
                 <SelectValue placeholder="Sandbox mode" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" side="left" align="end" className="min-w-[220px]">
                 {SANDBOX_MODE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
