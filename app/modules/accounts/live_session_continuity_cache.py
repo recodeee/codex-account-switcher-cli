@@ -5,7 +5,8 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from app.core.config.settings import get_settings
@@ -52,13 +53,16 @@ class LiveSessionContinuityCache:
         key_prefix: str,
         ttl_seconds: int,
         socket_timeout_seconds: float,
+        file_path: Path | None,
     ) -> None:
         self._redis_url = (redis_url or "").strip() or None
         self._key_prefix = key_prefix.strip() or "codex-lb:dashboard-session-continuity:v1"
         self._ttl_seconds = max(1, int(ttl_seconds))
         self._socket_timeout_seconds = max(0.05, float(socket_timeout_seconds))
+        self._file_path = file_path.expanduser() if file_path is not None else None
         self._client: Redis | None = None
         self._client_lock = asyncio.Lock()
+        self._file_lock = asyncio.Lock()
         self._missing_dependency_logged = False
 
     async def load(self, account_ids: Iterable[str]) -> dict[str, LiveSessionContinuitySignal]:
@@ -68,14 +72,14 @@ class LiveSessionContinuityCache:
 
         client = await self._get_client()
         if client is None:
-            return {}
+            return await self._load_from_file(unique_account_ids)
 
         keys = [self._build_key(account_id) for account_id in unique_account_ids]
         try:
             raw_values = await client.mget(keys)
         except RedisError:
             await self._on_client_error("Failed to read dashboard session continuity cache")
-            return {}
+            return await self._load_from_file(unique_account_ids)
 
         recovered: dict[str, LiveSessionContinuitySignal] = {}
         for account_id, raw_value in zip(unique_account_ids, raw_values, strict=False):
@@ -94,6 +98,7 @@ class LiveSessionContinuityCache:
 
         client = await self._get_client()
         if client is None:
+            await self._store_to_file(prepared)
             return
 
         try:
@@ -107,6 +112,7 @@ class LiveSessionContinuityCache:
             await pipeline.execute()
         except RedisError:
             await self._on_client_error("Failed to store dashboard session continuity cache")
+            await self._store_to_file(prepared)
 
     async def close(self) -> None:
         async with self._client_lock:
@@ -151,9 +157,107 @@ class LiveSessionContinuityCache:
     def _build_key(self, account_id: str) -> str:
         return f"{self._key_prefix}:{account_id}"
 
+    async def _load_from_file(self, account_ids: list[str]) -> dict[str, LiveSessionContinuitySignal]:
+        if self._file_path is None:
+            return {}
+
+        async with self._file_lock:
+            payloads = self._read_file_payloads()
+            if not payloads:
+                return {}
+
+            now_utc = datetime.now(timezone.utc)
+            recovered: dict[str, LiveSessionContinuitySignal] = {}
+            changed = False
+
+            for account_id in account_ids:
+                raw_payload = payloads.get(account_id)
+                payload = _coerce_signal_payload(raw_payload)
+                if payload is None:
+                    if account_id in payloads:
+                        payloads.pop(account_id, None)
+                        changed = True
+                    continue
+                if not _is_payload_fresh(payload=payload, ttl_seconds=self._ttl_seconds, now_utc=now_utc):
+                    payloads.pop(account_id, None)
+                    changed = True
+                    continue
+                signal = _decode_signal_payload(payload)
+                if signal is None:
+                    payloads.pop(account_id, None)
+                    changed = True
+                    continue
+                recovered[account_id] = signal
+
+            if changed:
+                self._write_file_payloads(payloads)
+            return recovered
+
+    async def _store_to_file(self, signals: list[LiveSessionContinuitySignal]) -> None:
+        if self._file_path is None:
+            return
+
+        async with self._file_lock:
+            payloads = self._read_file_payloads()
+            now_utc = datetime.now(timezone.utc)
+
+            # Keep the on-disk cache compact by pruning stale entries whenever we write.
+            stale_account_ids = [
+                account_id
+                for account_id, raw_payload in payloads.items()
+                if not _is_payload_fresh(
+                    payload=_coerce_signal_payload(raw_payload),
+                    ttl_seconds=self._ttl_seconds,
+                    now_utc=now_utc,
+                )
+            ]
+            for account_id in stale_account_ids:
+                payloads.pop(account_id, None)
+
+            for signal in signals:
+                payloads[signal.account_id] = _encode_signal_payload(signal)
+
+            self._write_file_payloads(payloads)
+
+    def _read_file_payloads(self) -> dict[str, object]:
+        if self._file_path is None or not self._file_path.exists():
+            return {}
+
+        try:
+            raw = self._file_path.read_text(encoding="utf-8")
+        except OSError:
+            logger.warning("Failed to read dashboard session continuity file cache", exc_info=True)
+            return {}
+        if not raw.strip():
+            return {}
+
+        try:
+            decoded = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("Invalid dashboard session continuity file cache payload", exc_info=True)
+            return {}
+        if not isinstance(decoded, dict):
+            return {}
+        return {str(account_id): payload for account_id, payload in decoded.items()}
+
+    def _write_file_payloads(self, payloads: dict[str, object]) -> None:
+        if self._file_path is None:
+            return
+
+        try:
+            self._file_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self._file_path.with_name(self._file_path.name + ".tmp")
+            tmp_path.write_text(
+                json.dumps(payloads, separators=(",", ":"), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            tmp_path.replace(self._file_path)
+        except OSError:
+            logger.warning("Failed to write dashboard session continuity file cache", exc_info=True)
+
 
 _cache: LiveSessionContinuityCache | None = None
-_cache_config: tuple[str | None, str, int, float] | None = None
+_cache_config: tuple[str | None, str, int, float, Path | None] | None = None
 
 
 def get_live_session_continuity_cache() -> LiveSessionContinuityCache:
@@ -163,6 +267,7 @@ def get_live_session_continuity_cache() -> LiveSessionContinuityCache:
         settings.dashboard_session_continuity_key_prefix,
         settings.dashboard_session_continuity_ttl_seconds,
         settings.dashboard_session_continuity_socket_timeout_seconds,
+        settings.dashboard_session_continuity_file_path,
     )
 
     global _cache, _cache_config
@@ -172,6 +277,7 @@ def get_live_session_continuity_cache() -> LiveSessionContinuityCache:
             key_prefix=cache_config[1],
             ttl_seconds=cache_config[2],
             socket_timeout_seconds=cache_config[3],
+            file_path=cache_config[4],
         )
         _cache_config = cache_config
 
@@ -351,16 +457,20 @@ def _normalize_snapshot_name(value: str | None) -> str | None:
 
 
 def _encode_signal(signal: LiveSessionContinuitySignal) -> str:
-    payload = {
+    payload = _encode_signal_payload(signal)
+    return json.dumps(payload, separators=(",", ":"))
+
+
+def _encode_signal_payload(signal: LiveSessionContinuitySignal) -> dict[str, object]:
+    return {
         "account_id": signal.account_id,
         "snapshot_name": signal.snapshot_name,
         "codex_live_session_count": max(0, int(signal.codex_live_session_count)),
         "codex_tracked_session_count": max(0, int(signal.codex_tracked_session_count)),
         "has_live_session": bool(signal.has_live_session),
         "task_preview": _normalize_task_preview(signal.task_preview),
-        "recorded_at": datetime.utcnow().isoformat() + "Z",
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
     }
-    return json.dumps(payload, separators=(",", ":"))
 
 
 def _decode_signal(raw: str) -> LiveSessionContinuitySignal | None:
@@ -368,6 +478,25 @@ def _decode_signal(raw: str) -> LiveSessionContinuitySignal | None:
         payload = json.loads(raw)
     except json.JSONDecodeError:
         return None
+    if not isinstance(payload, dict):
+        return None
+    return _decode_signal_payload(payload)
+
+
+def _coerce_signal_payload(raw_payload: object) -> dict[str, object] | None:
+    if isinstance(raw_payload, dict):
+        return raw_payload
+    if isinstance(raw_payload, str):
+        try:
+            decoded = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(decoded, dict):
+            return decoded
+    return None
+
+
+def _decode_signal_payload(payload: dict[str, object]) -> LiveSessionContinuitySignal | None:
     if not isinstance(payload, dict):
         return None
 
@@ -388,6 +517,39 @@ def _decode_signal(raw: str) -> LiveSessionContinuitySignal | None:
         has_live_session=bool(payload.get("has_live_session")),
         task_preview=_normalize_task_preview(task_preview),
     )
+
+
+def _is_payload_fresh(
+    *,
+    payload: dict[str, object] | None,
+    ttl_seconds: int,
+    now_utc: datetime,
+) -> bool:
+    if payload is None:
+        return False
+    recorded_at = _parse_payload_recorded_at(payload.get("recorded_at"))
+    if recorded_at is None:
+        return False
+    max_age = max(1, int(ttl_seconds))
+    age_seconds = (now_utc - recorded_at).total_seconds()
+    return age_seconds <= max_age
+
+
+def _parse_payload_recorded_at(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _safe_int(value: object) -> int:

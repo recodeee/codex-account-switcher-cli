@@ -144,6 +144,9 @@ class Settings(BaseSettings):
     dashboard_session_continuity_key_prefix: str = "codex-lb:dashboard-session-continuity:v1"
     dashboard_session_continuity_ttl_seconds: int = Field(default=600, gt=0)
     dashboard_session_continuity_socket_timeout_seconds: float = Field(default=0.35, gt=0)
+    dashboard_session_continuity_file_path: Path | None = (
+        DEFAULT_HOME_DIR / "dashboard-session-continuity.json"
+    )
 
     memory_warning_threshold_mb: int = 0
     memory_reject_threshold_mb: int = 0
@@ -177,6 +180,22 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return Path(value).expanduser()
         raise TypeError("encryption_key_file must be a path")
+
+    @field_validator("dashboard_session_continuity_file_path", mode="before")
+    @classmethod
+    def _expand_dashboard_session_continuity_file_path(
+        cls, value: str | Path | None
+    ) -> Path | None:
+        if value is None:
+            return None
+        if isinstance(value, Path):
+            return value.expanduser()
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                return None
+            return Path(normalized).expanduser()
+        raise TypeError("dashboard_session_continuity_file_path must be a path or null")
 
     @field_validator("image_inline_allowed_hosts", mode="before")
     @classmethod
