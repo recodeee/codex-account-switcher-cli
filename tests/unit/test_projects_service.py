@@ -17,6 +17,7 @@ from app.modules.projects.service import (
     ProjectsRepositoryPort,
     ProjectsService,
     ProjectValidationError,
+    discover_active_codex_git_projects,
     normalize_git_branch,
     normalize_github_repo_url,
     normalize_project_description,
@@ -405,3 +406,41 @@ async def test_list_projects_auto_discovery_updates_existing_missing_git_metadat
     assert listed.entries[0].project_url == "https://recodee.com"
     assert listed.entries[0].git_branch == "feature/active"
     assert listed.entries[0].github_repo_url == "https://github.com/webu-pro/recodee"
+
+
+def test_discover_active_codex_git_projects_includes_current_process_cwd_repo(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "recodee"
+    repo_root.mkdir()
+    daemon_cwd = repo_root / "app"
+    daemon_cwd.mkdir()
+
+    monkeypatch.setattr(
+        "app.modules.projects.service._iter_codex_process_cwds",
+        lambda: [],
+    )
+    monkeypatch.setattr(
+        "app.modules.projects.service._resolve_current_process_cwd",
+        lambda: daemon_cwd,
+    )
+    monkeypatch.setattr(
+        "app.modules.projects.service._resolve_git_repo_root",
+        lambda cwd: repo_root if cwd == daemon_cwd else None,
+    )
+    monkeypatch.setattr(
+        "app.modules.projects.service._resolve_git_branch",
+        lambda _repo_root: "dev",
+    )
+    monkeypatch.setattr(
+        "app.modules.projects.service._resolve_github_repo_url",
+        lambda _repo_root: "https://github.com/webu-pro/recodee",
+    )
+
+    discovered = discover_active_codex_git_projects()
+    assert len(discovered) == 1
+    assert discovered[0].name == "recodee"
+    assert discovered[0].project_path == str(repo_root)
+    assert discovered[0].git_branch == "dev"
+    assert discovered[0].github_repo_url == "https://github.com/webu-pro/recodee"

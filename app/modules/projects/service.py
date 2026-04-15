@@ -630,24 +630,18 @@ def _safe_path_mtime(path: Path) -> float:
 
 
 def discover_active_codex_git_projects() -> list[AutoDiscoveredGitProject]:
-    proc_root = Path("/proc")
-    if not proc_root.exists() or not proc_root.is_dir():
-        return []
-
     repo_roots: dict[str, Path] = {}
-    for pid_dir in proc_root.iterdir():
-        if not pid_dir.is_dir() or not pid_dir.name.isdigit():
-            continue
-        command = _read_process_cmdline(pid_dir)
-        if not _looks_like_codex_cli_command(command):
-            continue
-        cwd = _read_process_cwd(pid_dir)
-        if cwd is None:
-            continue
+    for cwd in _iter_codex_process_cwds():
         repo_root = _resolve_git_repo_root(cwd)
         if repo_root is None:
             continue
         repo_roots[str(repo_root)] = repo_root
+
+    current_cwd = _resolve_current_process_cwd()
+    if current_cwd is not None:
+        repo_root = _resolve_git_repo_root(current_cwd)
+        if repo_root is not None:
+            repo_roots[str(repo_root)] = repo_root
 
     discovered: list[AutoDiscoveredGitProject] = []
     for repo_root in sorted(repo_roots.values(), key=lambda value: str(value).lower()):
@@ -662,6 +656,32 @@ def discover_active_codex_git_projects() -> list[AutoDiscoveredGitProject]:
             )
         )
     return discovered
+
+
+def _iter_codex_process_cwds() -> list[Path]:
+    proc_root = Path("/proc")
+    if not proc_root.exists() or not proc_root.is_dir():
+        return []
+
+    discovered_cwds: list[Path] = []
+    for pid_dir in proc_root.iterdir():
+        if not pid_dir.is_dir() or not pid_dir.name.isdigit():
+            continue
+        command = _read_process_cmdline(pid_dir)
+        if not _looks_like_codex_cli_command(command):
+            continue
+        cwd = _read_process_cwd(pid_dir)
+        if cwd is None:
+            continue
+        discovered_cwds.append(cwd)
+    return discovered_cwds
+
+
+def _resolve_current_process_cwd() -> Path | None:
+    try:
+        return Path.cwd().resolve()
+    except OSError:
+        return None
 
 
 def _read_process_cmdline(pid_dir: Path) -> list[str]:
