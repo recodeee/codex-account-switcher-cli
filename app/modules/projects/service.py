@@ -432,6 +432,54 @@ class ProjectsService:
             if updated is not None:
                 existing_by_path[normalized_path] = updated
 
+        for normalized_path, existing in list(existing_by_path.items()):
+            if normalized_path in discovered_paths:
+                continue
+            refreshed = await asyncio.to_thread(_discover_git_metadata_for_project_path, normalized_path)
+            if refreshed is None:
+                continue
+            discovered_git_branch, discovered_github_repo_url = refreshed
+            next_git_branch = discovered_git_branch or existing.git_branch
+            next_github_repo_url = (
+                discovered_github_repo_url
+                if discovered_github_repo_url and discovered_github_repo_url != existing.github_repo_url
+                else existing.github_repo_url
+            )
+
+            if (
+                normalize_stored_project_path(existing.project_path) == normalized_path
+                and existing.git_branch == next_git_branch
+                and existing.github_repo_url == next_github_repo_url
+            ):
+                continue
+
+            try:
+                updated = await self._repository.update(
+                    existing.id,
+                    existing.name,
+                    existing.description,
+                    existing.project_url,
+                    next_github_repo_url,
+                    normalized_path,
+                    existing.sandbox_mode,
+                    next_git_branch,
+                )
+            except ProjectRepositoryConflictError:
+                continue
+            if updated is not None:
+                existing_by_path[normalized_path] = updated
+
+
+def _discover_git_metadata_for_project_path(project_path: str) -> tuple[str | None, str | None] | None:
+    try:
+        project_path_value = Path(project_path).expanduser().resolve()
+    except OSError:
+        return None
+    repo_root = _resolve_git_repo_root(project_path_value)
+    if repo_root is None:
+        return None
+    return (_resolve_git_branch(repo_root), _resolve_github_repo_url(repo_root))
+
 
 def _discover_git_metadata_for_project_path(project_path: str) -> tuple[str | None, str | None] | None:
     try:
