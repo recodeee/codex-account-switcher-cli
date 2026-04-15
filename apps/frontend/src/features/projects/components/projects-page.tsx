@@ -366,29 +366,29 @@ function CreateProjectDialog({
       <DialogContent
         showCloseButton={false}
         className={cn(
-          "flex flex-col gap-0 overflow-hidden border border-white/10 bg-[#0a0d15] p-0 text-foreground shadow-2xl",
+          "flex flex-col gap-0 overflow-hidden rounded-2xl border border-slate-800/90 bg-[radial-gradient(circle_at_top,_rgba(19,33,66,0.45),_rgba(4,8,18,0.98)_48%)] p-0 text-foreground shadow-[0_36px_110px_-50px_rgba(2,6,23,0.95)]",
           "!top-1/2 !left-1/2 !-translate-x-1/2 !transition-all !duration-300 !ease-out",
           expanded
-            ? "!h-[82vh] !w-full !max-w-5xl !-translate-y-1/2"
-            : "!h-96 !w-full !max-w-4xl !-translate-y-1/2",
+            ? "!h-[88vh] !w-full !max-w-[1320px] !-translate-y-1/2"
+            : "!h-[74vh] !w-full !max-w-[1140px] !-translate-y-1/2",
         )}
       >
         <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
         <DialogDescription className="sr-only">{dialogDescription}</DialogDescription>
 
-        <div className="flex items-center justify-between border-b border-white/5 px-5 pb-2 pt-3">
-          <div className="flex items-center gap-1.5 text-xs">
-            <Folder className="size-3.5 text-amber-300" />
-            <span className="text-muted-foreground">{workspaceName}</span>
-            <ChevronRight className="size-3 text-muted-foreground/50" />
+        <div className="flex items-center justify-between border-b border-slate-800/80 px-7 py-4">
+          <div className="flex items-center gap-2 text-sm">
+            <Folder className="size-4 text-amber-300" />
+            <span className="text-slate-400">{workspaceName}</span>
+            <ChevronRight className="size-3.5 text-slate-600" />
             <span className="font-medium text-white">{dialogTitle}</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setExpanded((current) => !current)}
               aria-label={expanded ? "Collapse project modal" : "Expand project modal"}
-              className="rounded-sm p-1.5 text-muted-foreground/75 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-700/40 hover:text-white"
               title={expanded ? "Collapse" : "Expand"}
             >
               {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
@@ -397,7 +397,7 @@ function CreateProjectDialog({
               type="button"
               onClick={() => onOpenChange(false)}
               aria-label="Close"
-              className="rounded-sm p-1.5 text-muted-foreground/75 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-700/40 hover:text-white"
               title="Close"
             >
               <X className="size-4" />
@@ -405,209 +405,207 @@ function CreateProjectDialog({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="space-y-3 px-5 pb-2 pt-4">
-            <Folder className="h-5 w-5 text-amber-300" />
-            <input
-              value={draft.name}
-              onChange={(event) => {
-                onDraftChange((current) => ({ ...current, name: event.target.value }));
-              }}
-              placeholder={mode === "create" ? "Project title" : "Project name (e.g. recodee-core)"}
-              className="w-full border-0 bg-transparent p-0 text-[2.6rem] font-semibold leading-tight tracking-tight text-white placeholder:text-white/45 focus-visible:outline-none"
-              disabled={disabled}
-            />
-            <div className="flex items-center gap-2">
+        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,1fr)_84px]">
+          <div className="flex min-h-0 flex-col">
+            <div className="space-y-4 px-7 pb-3 pt-6">
+              <Folder className="h-5 w-5 text-amber-300" />
               <input
-                value={draft.projectUrl}
+                value={draft.name}
                 onChange={(event) => {
-                  onDraftChange((current) => ({ ...current, projectUrl: event.target.value }));
+                  onDraftChange((current) => ({ ...current, name: event.target.value }));
                 }}
-                placeholder={mode === "create" ? "https://project-domain.com" : "https://project-domain.com (optional)"}
-                className="w-full border-0 bg-transparent p-0 text-base text-cyan-200/90 placeholder:text-cyan-200/45 focus-visible:outline-none"
+                placeholder={mode === "create" ? "Project title" : "Project name (e.g. recodee-core)"}
+                className="w-full border-0 bg-transparent p-0 text-[clamp(2.1rem,5.2vw,3.8rem)] font-semibold leading-[1.03] tracking-tight text-slate-200 placeholder:text-slate-500 focus-visible:outline-none"
                 disabled={disabled}
               />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 shrink-0 text-cyan-200/80 hover:text-cyan-100"
-                disabled={disabled || !projectHref}
-                title="Open project URL"
-                aria-label="Open project URL in new tab"
-                onClick={() => {
-                  if (!projectHref) {
-                    return;
-                  }
-                  window.open(projectHref, "_blank", "noopener,noreferrer");
-                }}
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Button>
+              <div className="space-y-2.5 pt-1">
+                <input
+                  value={draft.projectUrl}
+                  onChange={(event) => {
+                    onDraftChange((current) => ({ ...current, projectUrl: event.target.value }));
+                  }}
+                  placeholder={mode === "create" ? "https://project-domain.com" : "https://project-domain.com (optional)"}
+                  className="w-full border-0 bg-transparent p-0 text-[1.9rem] leading-tight text-cyan-200/75 placeholder:text-cyan-200/35 focus-visible:outline-none"
+                  disabled={disabled}
+                />
+                <input
+                  value={draft.githubRepoUrl}
+                  onChange={(event) => {
+                    onDraftChange((current) => ({ ...current, githubRepoUrl: event.target.value }));
+                  }}
+                  placeholder={mode === "create" ? "https://github.com/owner/repo" : "https://github.com/owner/repo (optional)"}
+                  className="w-full border-0 bg-transparent p-0 text-[1.9rem] leading-tight text-emerald-200/60 placeholder:text-emerald-200/30 focus-visible:outline-none"
+                  disabled={disabled}
+                />
+                <input
+                  value={draft.projectPath}
+                  onChange={(event) => {
+                    onDraftChange((current) => ({ ...current, projectPath: event.target.value }));
+                  }}
+                  placeholder={mode === "create" ? "/absolute/path/to/project" : "Absolute project path (optional)"}
+                  className="w-full border-0 bg-transparent p-0 text-3xl font-mono leading-tight tracking-tight text-slate-500/95 placeholder:text-slate-600 focus-visible:outline-none"
+                  disabled={disabled}
+                />
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                value={draft.githubRepoUrl}
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-7 py-2">
+              <Textarea
+                value={draft.description}
                 onChange={(event) => {
-                  onDraftChange((current) => ({ ...current, githubRepoUrl: event.target.value }));
+                  onDraftChange((current) => ({ ...current, description: event.target.value }));
                 }}
-                placeholder={mode === "create" ? "https://github.com/owner/repo" : "https://github.com/owner/repo (optional)"}
-                className="w-full border-0 bg-transparent p-0 text-sm text-emerald-200/90 placeholder:text-emerald-200/45 focus-visible:outline-none"
+                placeholder={mode === "create" ? "Add description..." : "Optional description (max 512 characters)"}
+                className="min-h-full resize-none border-0 bg-transparent px-0 text-[1.85rem] leading-[1.3] text-slate-300/70 shadow-none outline-none placeholder:text-slate-500 focus-visible:ring-0"
                 disabled={disabled}
+                maxLength={512}
               />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 shrink-0 text-emerald-200/80 hover:text-emerald-100"
-                disabled={disabled || !githubHref}
-                title="Open GitHub repository"
-                aria-label="Open GitHub repository in new tab"
-                onClick={() => {
-                  if (!githubHref) {
-                    return;
-                  }
-                  window.open(githubHref, "_blank", "noopener,noreferrer");
-                }}
-              >
-                <Github className="h-3.5 w-3.5" />
-              </Button>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                value={draft.projectPath}
-                onChange={(event) => {
-                  onDraftChange((current) => ({ ...current, projectPath: event.target.value }));
-                }}
-                placeholder={mode === "create" ? "/absolute/path/to/project" : "Absolute project path (optional)"}
-                className="w-full border-0 bg-transparent p-0 text-sm font-mono text-muted-foreground/95 placeholder:text-muted-foreground/55 focus-visible:outline-none"
-                disabled={disabled}
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 shrink-0 text-muted-foreground/85 hover:text-foreground"
-                onClick={() => {
-                  void onPickProjectPath();
-                }}
-                disabled={disabled || pickingProjectPath}
-                title={pickingProjectPath ? "Selecting project folder..." : "Select project folder"}
-                aria-label="Select project folder"
-              >
-                <FolderOpen className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <div className="grid gap-3 pt-1 sm:grid-cols-[minmax(0,1fr)_200px]">
+
+            <div className="px-7 pb-4 pt-2">
               <input
                 value={draft.gitBranch}
                 onChange={(event) => {
                   onDraftChange((current) => ({ ...current, gitBranch: event.target.value }));
                 }}
                 placeholder={mode === "create" ? "Git branch (optional)" : "Git branch (optional)"}
-                className="w-full border-0 bg-transparent p-0 text-sm font-mono text-slate-200/90 placeholder:text-slate-300/50 focus-visible:outline-none"
+                className="w-full border-0 bg-transparent p-0 text-[2rem] font-mono tracking-tight text-slate-300/90 placeholder:text-slate-500 focus-visible:outline-none"
                 disabled={disabled}
               />
-              <Select
-                value={draft.sandboxMode}
-                onValueChange={(value) => {
-                  onDraftChange((current) => ({ ...current, sandboxMode: value as ProjectSandboxMode }));
-                }}
-                disabled={disabled}
+            </div>
+
+            <div className="mt-auto flex flex-wrap items-end justify-between gap-3 border-t border-slate-800/80 px-5 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlanStageIndex((current) => (current + 1) % PLAN_STAGE_OPTIONS.length);
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-sm transition-colors hover:border-white/35",
+                    planStageIndex === 3
+                      ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-100"
+                      : planStageIndex === 2
+                        ? "border-amber-400/35 bg-amber-500/15 text-amber-100"
+                        : planStageIndex === 1
+                          ? "border-sky-400/35 bg-sky-500/15 text-sky-100"
+                          : "border-white/12 bg-white/5 text-white/85",
+                  )}
+                  disabled={disabled}
+                  title="Cycle plan status badge"
+                >
+                  <span className="size-2 rounded-full bg-current/90" />
+                  {PLAN_STAGE_OPTIONS[planStageIndex]}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPriorityIndex((current) => (current + 1) % PRIORITY_OPTIONS.length);
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-sm transition-colors hover:border-white/35",
+                    priorityIndex === 3
+                      ? "border-red-400/35 bg-red-500/15 text-red-100"
+                      : priorityIndex === 2
+                        ? "border-amber-400/35 bg-amber-500/15 text-amber-100"
+                        : priorityIndex === 1
+                          ? "border-sky-400/35 bg-sky-500/15 text-sky-100"
+                          : "border-white/12 bg-white/5 text-white/85",
+                  )}
+                  disabled={disabled}
+                  title="Cycle priority badge"
+                >
+                  <Minus className="size-3.5" />
+                  {PRIORITY_OPTIONS[priorityIndex]}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLeadIndex((current) => (current + 1) % LEAD_OPTIONS.length);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-2.5 py-1 text-sm text-white/85 transition-colors hover:border-white/35"
+                  disabled={disabled}
+                  title="Cycle lead badge"
+                >
+                  {LEAD_OPTIONS[leadIndex]}
+                </button>
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={onSubmit}
+                disabled={submitDisabled}
+                className="h-11 rounded-xl bg-white/10 px-5 text-base font-semibold text-slate-100 transition-colors hover:bg-white/20"
               >
-                <SelectTrigger className="h-8 rounded-md border-white/15 bg-white/[0.04] px-2 text-xs text-slate-100">
-                  <SelectValue placeholder="Sandbox mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SANDBOX_MODE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {submitting ? (mode === "create" ? "Creating…" : "Saving…") : (mode === "create" ? "Create Project" : "Save")}
+              </Button>
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-5">
-            <Textarea
-              value={draft.description}
-              onChange={(event) => {
-                onDraftChange((current) => ({ ...current, description: event.target.value }));
+          <div className="flex flex-row items-center justify-between gap-3 border-t border-slate-800/80 px-4 py-3 md:flex-col md:items-center md:justify-between md:gap-2 md:border-t-0 md:border-l md:px-3 md:py-5">
+            <div className="flex flex-wrap items-center gap-2 md:flex-col md:gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!projectHref) {
+                    return;
+                  }
+                  window.open(projectHref, "_blank", "noopener,noreferrer");
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-cyan-200/70 transition-colors hover:bg-slate-700/40 hover:text-cyan-100 disabled:text-slate-700"
+                disabled={disabled || !projectHref}
+                title="Open project URL"
+                aria-label="Open project URL in new tab"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!githubHref) {
+                    return;
+                  }
+                  window.open(githubHref, "_blank", "noopener,noreferrer");
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-emerald-200/70 transition-colors hover:bg-slate-700/40 hover:text-emerald-100 disabled:text-slate-700"
+                disabled={disabled || !githubHref}
+                title="Open GitHub repository"
+                aria-label="Open GitHub repository in new tab"
+              >
+                <Github className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void onPickProjectPath();
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-700/40 hover:text-slate-100 disabled:text-slate-700"
+                disabled={disabled || pickingProjectPath}
+                title={pickingProjectPath ? "Selecting project folder..." : "Select project folder"}
+                aria-label="Select project folder"
+              >
+                <FolderOpen className="h-4 w-4" />
+              </button>
+            </div>
+            <Select
+              value={draft.sandboxMode}
+              onValueChange={(value) => {
+                onDraftChange((current) => ({ ...current, sandboxMode: value as ProjectSandboxMode }));
               }}
-              placeholder={mode === "create" ? "Add description..." : "Optional description (max 512 characters)"}
-              className="min-h-full resize-none border-0 bg-transparent px-0 text-2xl text-muted-foreground shadow-none outline-none placeholder:text-muted-foreground/80 focus-visible:ring-0"
               disabled={disabled}
-              maxLength={512}
-            />
-          </div>
-
-          <div className="mt-auto flex flex-wrap items-end justify-between gap-3 border-t border-white/10 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPlanStageIndex((current) => (current + 1) % PLAN_STAGE_OPTIONS.length);
-                }}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-sm transition-colors hover:border-white/35",
-                  planStageIndex === 3
-                    ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-100"
-                    : planStageIndex === 2
-                      ? "border-amber-400/35 bg-amber-500/15 text-amber-100"
-                      : planStageIndex === 1
-                        ? "border-sky-400/35 bg-sky-500/15 text-sky-100"
-                        : "border-white/12 bg-white/5 text-white/85",
-                )}
-                disabled={disabled}
-                title="Cycle plan status badge"
-              >
-                <span className="size-2 rounded-full bg-current/90" />
-                {PLAN_STAGE_OPTIONS[planStageIndex]}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPriorityIndex((current) => (current + 1) % PRIORITY_OPTIONS.length);
-                }}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-sm transition-colors hover:border-white/35",
-                  priorityIndex === 3
-                    ? "border-red-400/35 bg-red-500/15 text-red-100"
-                    : priorityIndex === 2
-                      ? "border-amber-400/35 bg-amber-500/15 text-amber-100"
-                      : priorityIndex === 1
-                        ? "border-sky-400/35 bg-sky-500/15 text-sky-100"
-                        : "border-white/12 bg-white/5 text-white/85",
-                )}
-                disabled={disabled}
-                title="Cycle priority badge"
-              >
-                <Minus className="size-3.5" />
-                {PRIORITY_OPTIONS[priorityIndex]}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLeadIndex((current) => (current + 1) % LEAD_OPTIONS.length);
-                }}
-                className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-2.5 py-1 text-sm text-white/85 transition-colors hover:border-white/35"
-                disabled={disabled}
-                title="Cycle lead badge"
-              >
-                {LEAD_OPTIONS[leadIndex]}
-              </button>
-            </div>
-
-            <Button
-              type="button"
-              size="sm"
-              onClick={onSubmit}
-              disabled={submitDisabled}
-              className="h-9 rounded-lg bg-white/20 px-4 text-sm font-semibold text-white hover:bg-white/30"
             >
-              {submitting ? (mode === "create" ? "Creating…" : "Saving…") : (mode === "create" ? "Create Project" : "Save")}
-            </Button>
+              <SelectTrigger className="h-10 w-[180px] rounded-md border-slate-700/70 bg-slate-900/75 px-2 text-xs text-slate-200 shadow-none md:w-full">
+                <SelectValue placeholder="Sandbox mode" />
+              </SelectTrigger>
+              <SelectContent>
+                {SANDBOX_MODE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </DialogContent>
