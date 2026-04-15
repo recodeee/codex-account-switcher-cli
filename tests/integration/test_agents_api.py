@@ -13,8 +13,9 @@ async def test_agents_api_crud_and_avatar_upload(async_client):
     initial = await async_client.get("/api/agents")
     assert initial.status_code == 200
     initial_payload = initial.json()
-    assert len(initial_payload["entries"]) >= 1
-    assert initial_payload["entries"][0]["name"] == "Master Agent"
+    initial_names = {entry["name"] for entry in initial_payload["entries"]}
+    assert "Master Agent" in initial_names
+    assert "Cleanup Agent" in initial_names
 
     created = await async_client.post(
         "/api/agents",
@@ -127,5 +128,5 @@ async def test_agents_api_recovers_when_table_missing(async_client):
     listed = await async_client.get("/api/agents")
     assert listed.status_code == 200
     payload = listed.json()
-    assert len(payload["entries"]) == 1
-    assert payload["entries"][0]["name"] == "Master Agent"
+    names = {entry["name"] for entry in payload["entries"]}
+    assert names == {"Master Agent", "Cleanup Agent"}

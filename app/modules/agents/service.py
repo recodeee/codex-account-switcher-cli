@@ -134,6 +134,10 @@ MAX_DESCRIPTION_LENGTH = 512
 MAX_ENVIRONMENT_VARIABLE_COUNT = 64
 MAX_ENVIRONMENT_VARIABLE_KEY_LENGTH = 128
 MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH = 4_000
+DEFAULT_AGENT_NAMES = (
+    "Master Agent",
+    "Cleanup Agent",
+)
 _AVATAR_DATA_URL_RE = re.compile(
     r"^data:(image/(?:png|jpeg|jpg|webp|gif));base64,([A-Za-z0-9+/=\\s]+)$",
     re.IGNORECASE,
@@ -147,8 +151,8 @@ class AgentsService:
 
     async def list_agents(self) -> AgentsListData:
         rows = list(await self._repository.list_entries())
-        if len(rows) == 0:
-            await self._create_default_master_agent()
+        if len(rows) == 0 or self._has_missing_default_agents(rows):
+            await self._create_missing_default_agents(rows)
             rows = list(await self._repository.list_entries())
 
         entries = [_to_entry_data(row) for row in rows]
@@ -249,22 +253,33 @@ class AgentsService:
     async def remove_agent(self, agent_id: str) -> bool:
         return await self._repository.delete(agent_id)
 
-    async def _create_default_master_agent(self) -> None:
-        try:
-            await self._repository.add(
-                name="Master Agent",
-                status=DEFAULT_STATUS,
-                description="",
-                visibility=DEFAULT_VISIBILITY,
-                runtime=DEFAULT_RUNTIME,
-                instructions="",
-                max_concurrent_tasks=DEFAULT_MAX_CONCURRENT_TASKS,
-                avatar_data_url=None,
-                environment_variables_json=serialize_agent_environment_variables([]),
-            )
-        except AgentRepositoryConflictError:
-            # Another process inserted the bootstrap row concurrently.
-            pass
+    async def _create_missing_default_agents(self, rows: Sequence[AgentEntryLike]) -> None:
+        existing_names = {row.name for row in rows}
+        for default_name in DEFAULT_AGENT_NAMES:
+            if default_name in existing_names:
+                continue
+            try:
+                await self._repository.add(
+                    name=default_name,
+                    status=DEFAULT_STATUS,
+                    description="",
+                    visibility=DEFAULT_VISIBILITY,
+                    runtime=DEFAULT_RUNTIME,
+                    instructions="",
+                    max_concurrent_tasks=DEFAULT_MAX_CONCURRENT_TASKS,
+                    avatar_data_url=None,
+                    environment_variables_json=serialize_agent_environment_variables([]),
+                )
+            except AgentRepositoryConflictError:
+                # Another process inserted the bootstrap row concurrently.
+                continue
+
+    def _has_missing_default_agents(self, rows: Sequence[AgentEntryLike]) -> bool:
+        existing_names = {row.name for row in rows}
+        for default_name in DEFAULT_AGENT_NAMES:
+            if default_name not in existing_names:
+                return True
+        return False
 
 
 def _to_entry_data(row: AgentEntryLike) -> AgentEntryData:
