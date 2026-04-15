@@ -898,6 +898,32 @@ describe("AccountCard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("hides last codex response when no CLI sessions remain after termination", () => {
+    const account = createAccountSummary({
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexSessionCount: 0,
+      codexCurrentTaskPreview: null,
+      codexLastTaskPreview: "Do not show this after terminate sessions",
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+      lastUsageRecordedAtPrimary: null,
+      lastUsageRecordedAtSecondary: null,
+    });
+
+    render(<AccountCard account={account} />);
+
+    expect(screen.queryByText("Last codex response:")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Do not show this after terminate sessions"),
+    ).not.toBeInTheDocument();
+  });
+
   it("calls delete action when delete button is clicked", async () => {
     const user = userEvent.setup({ delay: null });
     const account = createAccountSummary();
@@ -3093,7 +3119,7 @@ describe("AccountCard", () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
-  it("falls back to idle account view after usage-limit grace expires", () => {
+  it("keeps current task preview visible after usage-limit grace expires while live CLI signals remain", () => {
     vi.useFakeTimers();
     try {
       const now = new Date("2026-04-05T00:00:00.000Z");
@@ -3132,15 +3158,9 @@ describe("AccountCard", () => {
 
       expect(screen.queryByText("Current task")).not.toBeInTheDocument();
       expect(
-        screen.queryByText("Investigate codexina rollout session mapping"),
-      ).not.toBeInTheDocument();
+        screen.getAllByText("Investigate codexina rollout session mapping").length,
+      ).toBeGreaterThanOrEqual(1);
       expect(screen.queryByText(/leaves in/i)).not.toBeInTheDocument();
-      expect(screen.queryByTestId("codex-active-agent-card")).not.toBeInTheDocument();
-      expect(screen.queryByText("CLI session tasks")).not.toBeInTheDocument();
-      const cliSessionsLabel = screen.getByText("CLI sessions:");
-      expect(
-        within(cliSessionsLabel.parentElement as HTMLElement).getByText(/^0$/),
-      ).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

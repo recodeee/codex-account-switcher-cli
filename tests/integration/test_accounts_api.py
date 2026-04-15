@@ -1691,6 +1691,66 @@ async def test_repair_snapshot_readd_aligns_snapshot_name_to_email(
 
 
 @pytest.mark.asyncio
+async def test_repair_snapshot_readd_overwrites_existing_target_and_prunes_dup_alias(
+    async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    email = "admin@kozpontihusbolt.hu"
+    raw_account_id = "acc_snapshot_repair_readd_conflict"
+    payload = {
+        "email": email,
+        "chatgpt_account_id": raw_account_id,
+        "https://api.openai.com/auth": {"chatgpt_plan_type": "plus"},
+    }
+    auth_json = {
+        "tokens": {
+            "idToken": _encode_jwt(payload),
+            "accessToken": "access",
+            "refreshToken": "refresh",
+            "accountId": raw_account_id,
+        },
+    }
+    expected_account_id = generate_unique_account_id(raw_account_id, email)
+    files = {"auth_json": ("auth.json", json.dumps(auth_json), "application/json")}
+    response = await async_client.post("/api/accounts/import", files=files)
+    assert response.status_code == 200
+
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    duplicate_snapshot = "admin@kozpontihusbolt.hu--dup-2"
+    canonical_snapshot = "admin@kozpontihusbolt.hu"
+    _write_auth_snapshot(
+        accounts_dir / f"{duplicate_snapshot}.json",
+        email=email,
+        account_id=raw_account_id,
+    )
+    _write_auth_snapshot(
+        accounts_dir / f"{canonical_snapshot}.json",
+        email="other@example.com",
+        account_id="acc_other",
+    )
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    repair_response = await async_client.post(
+        f"/api/accounts/{expected_account_id}/repair-snapshot?mode=readd"
+    )
+    assert repair_response.status_code == 200
+    payload = repair_response.json()
+    assert payload["status"] == "repaired"
+    assert payload["mode"] == "readd"
+    assert payload["changed"] is True
+    assert payload["previousSnapshotName"] == duplicate_snapshot
+    assert payload["snapshotName"] == canonical_snapshot
+    assert not (accounts_dir / f"{duplicate_snapshot}.json").exists()
+    assert (accounts_dir / f"{canonical_snapshot}.json").exists()
+    canonical_auth = json.loads((accounts_dir / f"{canonical_snapshot}.json").read_text(encoding="utf-8"))
+    assert canonical_auth["tokens"]["accountId"] == raw_account_id
+    assert (tmp_path / "current").read_text(encoding="utf-8").strip() == canonical_snapshot
+    assert (tmp_path / "auth.json").resolve() == (accounts_dir / f"{canonical_snapshot}.json").resolve()
+
+
+@pytest.mark.asyncio
 async def test_repair_snapshot_rename_returns_conflict_when_target_exists(
     async_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):

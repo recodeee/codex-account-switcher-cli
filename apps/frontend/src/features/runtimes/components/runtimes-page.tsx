@@ -1354,14 +1354,14 @@ function ActivityHeatTooltip({
 
 function HeatCell({ cell }: { cell: ActivityHeatmapCell }) {
   return (
-    <Tooltip>
+    <Tooltip disableHoverableContent>
       <TooltipTrigger asChild>
         <button
           type="button"
           className={cn(
-            "h-3 w-3 rounded-[3px] border border-white/[0.08] transition-all duration-150",
+            "h-3.5 w-3.5 cursor-help rounded-[4px] border border-white/[0.08] transition-all duration-150",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/45",
-            cell.level === 0 && "bg-white/[0.02]",
+            cell.level === 0 && "bg-white/[0.02] hover:bg-white/[0.07]",
             cell.level === 1 && "bg-emerald-500/38 hover:bg-emerald-500/46",
             cell.level === 2 && "bg-emerald-500/52 hover:bg-emerald-500/60",
             cell.level === 3 && "bg-emerald-400/70 shadow-[0_0_10px_rgba(16,185,129,0.25)] hover:bg-emerald-300/80",
@@ -1370,7 +1370,12 @@ function HeatCell({ cell }: { cell: ActivityHeatmapCell }) {
           aria-label={`${formatActivityHourLabel(cell.dayStartMs, cell.hour)} · ${cell.requestCount} requests · ${cell.commits.length} commits`}
         />
       </TooltipTrigger>
-      <TooltipContent sideOffset={10} className="border border-emerald-300/20 bg-transparent p-0 shadow-none">
+      <TooltipContent
+        side="top"
+        align="center"
+        sideOffset={12}
+        className="border border-emerald-300/20 bg-transparent p-0 shadow-none"
+      >
         <ActivityHeatTooltip cell={cell} />
       </TooltipContent>
     </Tooltip>

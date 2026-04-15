@@ -194,6 +194,10 @@ describe("runtimes flow integration", () => {
     await user.hover(activeActivityCell);
     expect((await screen.findAllByText(/GitHub commits/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/auto-ingest GH bot reviews/i).length).toBeGreaterThan(0);
+    await user.unhover(activeActivityCell);
+    const idleActivityCell = screen.getAllByRole("button", { name: /0 requests · 0 commits/i })[0];
+    await user.hover(idleActivityCell);
+    expect(await screen.findByText("No GitHub commits created in this hour.")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "pnpm" }));
     expect(screen.getByText(/pnpm add -g @openai\/codex@latest/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy update commands" })).toBeInTheDocument();

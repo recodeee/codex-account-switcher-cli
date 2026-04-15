@@ -48,6 +48,7 @@ class CodexAuthSnapshotRepairResult:
 
 _INVALID_SNAPSHOT_CHARS = re.compile(r"[^a-z0-9._-]+")
 _EMAIL_SNAPSHOT_NAME_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_DUPLICATE_SNAPSHOT_SUFFIX_PATTERN = re.compile(r"--dup-\d+$")
 
 
 def build_email_snapshot_name(email: str) -> str:
@@ -713,20 +714,40 @@ def repair_snapshot_for_account(
         )
 
     target_path = accounts_dir / f"{target_snapshot_name}.json"
-    if target_path.exists():
-        raise CodexAuthSnapshotConflictError(
-            f"Cannot {mode} snapshot {selected_snapshot_name!r} to {target_snapshot_name!r}: target already exists."
-        )
+    prune_duplicate_source_after_readd = bool(
+        mode == "readd"
+        and selected_snapshot_name != target_snapshot_name
+        and _DUPLICATE_SNAPSHOT_SUFFIX_PATTERN.search(selected_snapshot_name)
+    )
 
-    try:
-        if mode == "readd":
+    if target_path.exists():
+        if mode == "rename":
+            raise CodexAuthSnapshotConflictError(
+                f"Cannot {mode} snapshot {selected_snapshot_name!r} to {target_snapshot_name!r}: target already exists."
+            )
+        try:
+            # Re-add should refresh the canonical email snapshot with the
+            # currently working snapshot payload even if the canonical file
+            # already exists.
             copy2(source_path, target_path)
-        else:
-            source_path.rename(target_path)
-    except OSError as exc:
-        raise CodexAuthSnapshotRepairFailedError(
-            f"Failed to {mode} snapshot {selected_snapshot_name!r} to {target_snapshot_name!r}: {exc}"
-        ) from exc
+            if prune_duplicate_source_after_readd:
+                source_path.unlink()
+        except OSError as exc:
+            raise CodexAuthSnapshotRepairFailedError(
+                f"Failed to {mode} snapshot {selected_snapshot_name!r} to {target_snapshot_name!r}: {exc}"
+            ) from exc
+    else:
+        try:
+            if mode == "readd":
+                copy2(source_path, target_path)
+                if prune_duplicate_source_after_readd:
+                    source_path.unlink()
+            else:
+                source_path.rename(target_path)
+        except OSError as exc:
+            raise CodexAuthSnapshotRepairFailedError(
+                f"Failed to {mode} snapshot {selected_snapshot_name!r} to {target_snapshot_name!r}: {exc}"
+            ) from exc
 
     try:
         _switch_snapshot_without_cli(target_snapshot_name)

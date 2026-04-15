@@ -1879,7 +1879,8 @@ export function AccountCard(props: AccountCardProps) {
   const showLastTaskPreview =
     codexLastTaskPreview != null &&
     codexLastTaskPreview !== WAITING_FOR_NEW_TASK_LABEL &&
-    codexLastTaskPreview !== effectiveCurrentTaskPreview;
+    codexLastTaskPreview !== effectiveCurrentTaskPreview &&
+    hasSessionInventory;
   const displayCurrentTaskPreview = effectiveCurrentTaskPreview;
   const lastTaskPreviewExcerpt = codexLastTaskPreview
     ? getTaskPreviewExcerpt(codexLastTaskPreview)

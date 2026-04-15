@@ -796,6 +796,46 @@ def test_repair_snapshot_for_account_rename_moves_snapshot_to_email_name(
     assert (tmp_path / "auth.json").resolve() == expected_snapshot_path.resolve()
 
 
+def test_repair_snapshot_for_account_readd_overwrites_existing_target_and_prunes_dup_snapshot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    email = "pia@edix.hu"
+    account_id = "pia-account-id"
+    canonical_account_id = generate_unique_account_id(account_id, email)
+    accounts_dir = tmp_path / "accounts"
+    accounts_dir.mkdir()
+    source_snapshot_path = accounts_dir / "pia@edix.hu--dup-2.json"
+    target_snapshot_path = accounts_dir / "pia@edix.hu.json"
+    _write_auth_snapshot(source_snapshot_path, email=email, account_id=account_id)
+    _write_auth_snapshot(
+        target_snapshot_path,
+        email="other@example.com",
+        account_id="other-account",
+    )
+    monkeypatch.setenv("CODEX_AUTH_ACCOUNTS_DIR", str(accounts_dir))
+    monkeypatch.setenv("CODEX_AUTH_CURRENT_PATH", str(tmp_path / "current"))
+    monkeypatch.setenv("CODEX_AUTH_JSON_PATH", str(tmp_path / "auth.json"))
+
+    result = repair_snapshot_for_account(
+        account_id=canonical_account_id,
+        chatgpt_account_id=account_id,
+        email=email,
+        mode="readd",
+    )
+
+    assert result.mode == "readd"
+    assert result.changed is True
+    assert result.previous_snapshot_name == "pia@edix.hu--dup-2"
+    assert result.snapshot_name == "pia@edix.hu"
+    assert not source_snapshot_path.exists()
+    assert target_snapshot_path.exists()
+    assert json.loads(target_snapshot_path.read_text(encoding="utf-8"))["tokens"][
+        "accountId"
+    ] == account_id
+    assert (tmp_path / "current").read_text(encoding="utf-8").strip() == "pia@edix.hu"
+    assert (tmp_path / "auth.json").resolve() == target_snapshot_path.resolve()
+
+
 def test_repair_snapshot_for_account_raises_on_target_conflict(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
