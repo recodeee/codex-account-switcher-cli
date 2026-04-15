@@ -1995,6 +1995,68 @@ describe("AccountCards", () => {
     expect(titles[0]).toBe("non-zero@example.com");
   });
 
+  it("keeps usage-limit-hit accounts after active accounts in available-first order", () => {
+    const csoves = createAccountSummary({
+      accountId: "acc_csoves",
+      email: "csoves@example.com",
+      displayName: "csoves@example.com",
+      usage: {
+        primaryRemainingPercent: 12,
+        secondaryRemainingPercent: 49,
+      },
+    });
+    const webu = createAccountSummary({
+      accountId: "acc_webu",
+      email: "webubusiness@gmail.com",
+      displayName: "webubusiness@gmail.com",
+      usage: {
+        primaryRemainingPercent: 58,
+        secondaryRemainingPercent: 71,
+      },
+    });
+    const grepolis = createAccountSummary({
+      accountId: "acc_grepolis",
+      email: "grepolis@megkapja.hu",
+      displayName: "grepolis@megkapja.hu",
+      usage: {
+        primaryRemainingPercent: 100,
+        secondaryRemainingPercent: 100,
+      },
+    });
+    const usageLimitHit = createAccountSummary({
+      accountId: "acc_limit_hit",
+      email: "bia@edixai.com",
+      displayName: "bia@edixai.com",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 84,
+      },
+    });
+
+    const { container } = render(
+      <AccountCards
+        accounts={[usageLimitHit, csoves, webu, grepolis]}
+        primaryWindow={null}
+        secondaryWindow={null}
+      />,
+    );
+
+    const titles = Array.from(container.querySelectorAll(".card-hover")).map(
+      (card) =>
+        card.querySelector("p.truncate.text-sm.font-semibold.leading-tight")
+          ?.textContent ?? "",
+    );
+    const limitHitIndex = titles.indexOf("bia@edixai.com");
+
+    expect(limitHitIndex).toBeGreaterThan(titles.indexOf("csoves@example.com"));
+    expect(limitHitIndex).toBeGreaterThan(
+      titles.indexOf("webubusiness@gmail.com"),
+    );
+    expect(limitHitIndex).toBeGreaterThan(
+      titles.indexOf("grepolis@megkapja.hu"),
+    );
+  });
+
   it("orders depleted 5h accounts by the nearest primary reset time", () => {
     const now = Date.now();
     const resetsSoon = createAccountSummary({

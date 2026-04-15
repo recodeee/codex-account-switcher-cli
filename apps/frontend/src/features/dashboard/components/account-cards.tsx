@@ -307,6 +307,13 @@ function sortAccountsByAvailableQuota(
           secondaryResetAtMs: resolveSortableResetAtMs(account, "secondary"),
           secondaryRemaining,
           secondarySortBucket: bucketizeQuotaPercent(secondaryRemaining),
+          hasUsageLimitHit:
+            account.status === "rate_limited" ||
+            account.status === "quota_exceeded" ||
+            (primaryRemaining != null &&
+              normalizeNearZeroQuotaPercent(primaryRemaining) <= 0) ||
+            (secondaryRemaining != null &&
+              normalizeNearZeroQuotaPercent(secondaryRemaining) <= 0),
           title: account.displayName || account.email || account.accountId,
         },
       ] as const;
@@ -324,6 +331,10 @@ function sortAccountsByAvailableQuota(
     const rightMetrics = sortMetricsByAccount.get(right);
     if (!leftMetrics || !rightMetrics) {
       return left.accountId.localeCompare(right.accountId);
+    }
+
+    if (leftMetrics.hasUsageLimitHit !== rightMetrics.hasUsageLimitHit) {
+      return leftMetrics.hasUsageLimitHit ? 1 : -1;
     }
 
     const leftWeeklyDepletedPinned =
