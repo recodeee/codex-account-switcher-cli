@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import os
 import re
 import shutil
@@ -9,7 +7,6 @@ import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from functools import partial
 from pathlib import Path
 from typing import Literal, Protocol
 from urllib.parse import urlparse
@@ -137,10 +134,6 @@ _GIT_BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9._/-]+$")
 _GIT_REMOTE_SCP_PATTERN = re.compile(r"^(?:ssh://)?git@([^:]+):(.+)$", flags=re.IGNORECASE)
 _GITHUB_REPO_PATH_PATTERN = re.compile(r"^/([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
 _GIT_COMMAND_TIMEOUT_SECONDS = 2.5
-_PROJECTS_IO_EXECUTOR = ThreadPoolExecutor(
-    max_workers=4,
-    thread_name_prefix="projects-service-io",
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -338,7 +331,7 @@ class ProjectsService:
     async def _sync_auto_discovered_projects(self) -> None:
         if not _is_auto_discovery_enabled():
             return
-        discovered_projects = await _run_projects_io(discover_active_codex_git_projects)
+        discovered_projects = discover_active_codex_git_projects()
 
         rows = list(await self._repository.list_entries())
         existing_by_path: dict[str, ProjectEntryLike] = {}
@@ -404,7 +397,7 @@ class ProjectsService:
         for normalized_path, existing in list(existing_by_path.items()):
             if normalized_path in discovered_paths:
                 continue
-            refreshed = await _run_projects_io(_discover_git_metadata_for_project_path, normalized_path)
+            refreshed = _discover_git_metadata_for_project_path(normalized_path)
             if refreshed is None:
                 continue
             discovered_git_branch, discovered_github_repo_url = refreshed
@@ -437,48 +430,6 @@ class ProjectsService:
                 continue
             if updated is not None:
                 existing_by_path[normalized_path] = updated
-
-        for normalized_path, existing in list(existing_by_path.items()):
-            if normalized_path in discovered_paths:
-                continue
-            refreshed = await _run_projects_io(_discover_git_metadata_for_project_path, normalized_path)
-            if refreshed is None:
-                continue
-            discovered_git_branch, discovered_github_repo_url = refreshed
-            next_git_branch = discovered_git_branch or existing.git_branch
-            next_github_repo_url = (
-                discovered_github_repo_url
-                if discovered_github_repo_url and discovered_github_repo_url != existing.github_repo_url
-                else existing.github_repo_url
-            )
-
-            if (
-                normalize_stored_project_path(existing.project_path) == normalized_path
-                and existing.git_branch == next_git_branch
-                and existing.github_repo_url == next_github_repo_url
-            ):
-                continue
-
-            try:
-                updated = await self._repository.update(
-                    existing.id,
-                    existing.name,
-                    existing.description,
-                    existing.project_url,
-                    next_github_repo_url,
-                    normalized_path,
-                    existing.sandbox_mode,
-                    next_git_branch,
-                )
-            except ProjectRepositoryConflictError:
-                continue
-            if updated is not None:
-                existing_by_path[normalized_path] = updated
-
-
-async def _run_projects_io(func, /, *args):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_PROJECTS_IO_EXECUTOR, partial(func, *args))
 
 
 def _discover_git_metadata_for_project_path(project_path: str) -> tuple[str | None, str | None] | None:
