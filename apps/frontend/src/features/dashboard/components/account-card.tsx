@@ -1553,6 +1553,7 @@ export function AccountCard(props: AccountCardProps) {
   const showLimitTint =
     showUsageLimitHitBadge || showWeeklyUsageLimitDetailBadge;
   const showUsageLimitGraceOverlay = Boolean(
+    isWorkingNow &&
     usageLimitHit &&
     usageLimitHitCountdownMs != null &&
     usageLimitHitCountdownMs > 0,

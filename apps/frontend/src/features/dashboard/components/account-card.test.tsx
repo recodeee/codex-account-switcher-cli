@@ -1239,6 +1239,42 @@ describe("AccountCard", () => {
     }
   });
 
+  it("hides usage-limit countdown overlay when account is no longer working", () => {
+    vi.useFakeTimers();
+    try {
+      const now = new Date("2026-04-05T00:00:00.000Z");
+      vi.setSystemTime(now);
+      const account = createAccountSummary({
+        status: "active",
+        usage: {
+          primaryRemainingPercent: 0,
+          secondaryRemainingPercent: 66,
+        },
+        codexLiveSessionCount: 0,
+        codexTrackedSessionCount: 0,
+        codexSessionCount: 0,
+        codexCurrentTaskPreview: null,
+        codexSessionTaskPreviews: [],
+        codexAuth: {
+          hasSnapshot: true,
+          snapshotName: "main",
+          activeSnapshotName: "main",
+          isActiveSnapshot: true,
+          hasLiveSession: true,
+        },
+        lastUsageRecordedAtPrimary: null,
+        lastUsageRecordedAtSecondary: null,
+      });
+
+      render(<AccountCard account={account} />);
+
+      expect(screen.getByText("Usage limit hit")).toBeInTheDocument();
+      expect(screen.queryByText(/Leaving working now in/i)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not auto-terminate CLI sessions when the usage-limit grace window expires", () => {
     vi.useFakeTimers();
     try {

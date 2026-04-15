@@ -25,6 +25,7 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
   const isSettingsRoute = pathname === "/settings";
   const isFullBleedRoute =
     isPlansRoute
+    || isAccountsRoute
     || isRuntimesRoute
     || isSourceControlRoute
     || isSkillsRoute
@@ -48,7 +49,8 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
           <main
             className={cn(
               "w-full flex-1",
-              isRuntimesRoute
+              isAccountsRoute
+                || isRuntimesRoute
                 || isSourceControlRoute
                 || isSkillsRoute
                 || isAgentsRoute
@@ -56,11 +58,11 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
                 ? "max-w-none overflow-hidden p-0"
                 : isSettingsRoute
                   ? "max-w-none px-0 py-5"
-                : isProjectsRoute || isAccountsRoute || isPlansRoute
+                : isProjectsRoute || isPlansRoute
                   ? "px-2 py-5 sm:px-3 lg:px-4"
                 : "px-4 py-8 sm:px-6 lg:px-8",
               !isFullBleedRoute
-                ? isProjectsRoute || isAccountsRoute
+                ? isProjectsRoute
                   ? "mx-auto max-w-[1900px]"
                   : "mx-auto max-w-[1500px]"
                 : null,

@@ -823,7 +823,17 @@ class SourceControlService:
             deduplicated.append(candidate)
             if len(deduplicated) >= limit:
                 break
-        return deduplicated
+        if deduplicated:
+            return deduplicated
+
+        # Fallback for repos where GitHub search qualifiers do not return PR review/comment matches
+        # even though bot feedback exists on historical PRs.
+        return self._list_pull_requests(
+            repo_root=repo_root,
+            base_branch=base_branch,
+            state="all",
+            limit=limit,
+        )
 
     def _parse_pull_request_preview(
         self,

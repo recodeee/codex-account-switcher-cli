@@ -29,7 +29,7 @@ function mockWorkspaces(entries: WorkspaceEntry[]) {
     createMutation: { isPending: false, mutateAsync: vi.fn() },
     selectMutation: { isPending: false, mutate: vi.fn() },
     deleteMutation: { isPending: false, mutate: vi.fn() },
-  } as ReturnType<typeof useWorkspaces>);
+  } as unknown as ReturnType<typeof useWorkspaces>);
 }
 
 describe("MembersTab", () => {

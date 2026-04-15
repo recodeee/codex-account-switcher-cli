@@ -153,7 +153,7 @@ export function WorkspacesTab() {
         </p>
       </section>
 
-      <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2">
         {drafts.map(({ workspace, draft }) => {
           const isActive = workspace.id === activeWorkspaceId;
           const displayName = draft.displayName.trim() || workspace.name;

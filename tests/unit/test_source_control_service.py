@@ -382,6 +382,41 @@ def test_load_pull_request_diagnostics_extracts_conflicts_checks_and_bot_feedbac
     assert any(item.file_path == ".agents/commands/guardex.md" for item in diagnostics.feedback)
 
 
+def test_list_pull_requests_with_bot_activity_falls_back_to_recent_when_search_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = SourceControlService()
+    fallback_preview = SourceControlPullRequestPreview(
+        number=78,
+        title="Autofix workflow",
+        state="merged",
+        head_branch="agent/codex/autofix",
+        base_branch="dev",
+        url="https://github.com/NagyVikt/recodee/pull/78",
+        author="NagyVikt",
+        is_draft=False,
+    )
+    calls: list[dict[str, object]] = []
+
+    def _list_pull_requests(**kwargs):
+        calls.append(kwargs)
+        if kwargs.get("search"):
+            return []
+        return [fallback_preview]
+
+    monkeypatch.setattr(service, "_list_pull_requests", _list_pull_requests)
+
+    results = service._list_pull_requests_with_bot_activity(
+        repo_root=Path("/tmp/repo"),
+        base_branch="dev",
+        limit=20,
+    )
+
+    assert [entry.number for entry in results] == [78]
+    assert any(call.get("search") for call in calls)
+    assert any(call.get("state") == "all" and call.get("search") is None for call in calls)
+
+
 def test_extract_github_repo_name_from_remote_url_supports_https_and_ssh() -> None:
     assert (
         _extract_github_repo_name_from_remote_url("https://github.com/NagyVikt/recodee.git")

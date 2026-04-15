@@ -60,12 +60,16 @@ describe("WorkspacesTab", () => {
       createMutation: { isPending: false, mutateAsync: vi.fn() },
       selectMutation: { isPending: false, mutate: selectMutate },
       deleteMutation: { isPending: false, mutateAsync: vi.fn() },
-    } as ReturnType<typeof useWorkspaces>);
+    } as unknown as ReturnType<typeof useWorkspaces>);
 
     renderWithProviders(<WorkspacesTab />);
 
     expect(screen.getByText("DPQ")).toBeInTheDocument();
     expect(screen.getByText("recodee.com")).toBeInTheDocument();
+    const heading = screen.getByRole("heading", { name: "Workspaces" });
+    const listContainer = heading.closest("section")?.nextElementSibling as HTMLElement | null;
+    expect(listContainer).not.toBeNull();
+    expect(listContainer).toHaveClass("grid", "lg:grid-cols-2");
 
     await user.click(screen.getByRole("button", { name: "Use workspace" }));
     expect(selectMutate).toHaveBeenCalledWith("ws-two");
@@ -83,7 +87,7 @@ describe("WorkspacesTab", () => {
       createMutation: { isPending: false, mutateAsync: vi.fn() },
       selectMutation: { isPending: false, mutate: vi.fn() },
       deleteMutation: { isPending: false, mutateAsync: vi.fn() },
-    } as ReturnType<typeof useWorkspaces>);
+    } as unknown as ReturnType<typeof useWorkspaces>);
 
     renderWithProviders(<WorkspacesTab />);
 
