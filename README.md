@@ -43,6 +43,11 @@ Load balancer for ChatGPT accounts. Pool multiple accounts, track usage, manage 
 </tr>
 </table>
 
+## Automation Tools We Use
+
+- [Probot](https://github.com/probot/probot) - GitHub App framework used for repository automation workflows.
+- [ChatGPT-CodeReview](https://github.com/anc95/ChatGPT-CodeReview) - AI-assisted pull request/code review automation in our GitHub flow.
+
 ## Quick Start
 
 ```bash

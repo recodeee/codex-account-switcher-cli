@@ -274,6 +274,29 @@ const OpenRouterWordmark = () => {
   );
 };
 
+const ProbotWordmark = () => (
+  <span className="inline-flex items-center gap-1.5 text-white">
+    <svg
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      className="h-[14px] w-[14px]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="6.5" y="8" width="11" height="9" rx="2.2" />
+      <path d="M9.5 12.5h.01M14.5 12.5h.01" />
+      <path d="M12 8V5.8" />
+      <circle cx="12" cy="4.5" r="1.2" fill="currentColor" stroke="none" />
+      <path d="M8.5 18.8h7" />
+    </svg>
+    <span className="text-[13px] font-semibold leading-none">Probot</span>
+  </span>
+);
+
 const FreestyleWordmark = () => (
   <span className="inline-flex items-center gap-1.5 text-white">
     <svg
@@ -375,6 +398,11 @@ const TECH_STACK_ITEMS: TechStackItem[] = [
     label: "OpenRouter",
     href: "https://openrouter.ai",
     wordmark: <OpenRouterWordmark />,
+  },
+  {
+    label: "Probot",
+    href: "https://github.com/probot/probot",
+    wordmark: <ProbotWordmark />,
   },
   {
     label: "Freestyle",

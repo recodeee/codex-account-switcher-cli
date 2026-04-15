@@ -99,6 +99,13 @@ describe("ComingSoonPage", () => {
         .getAllByRole("link", { name: "OpenRouter" })
         .some((link) => link.getAttribute("href") === "https://openrouter.ai"),
     ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("link", { name: "Probot" })
+        .some(
+          (link) => link.getAttribute("href") === "https://github.com/probot/probot",
+        ),
+    ).toBe(true);
     expect(screen.getByText("Fun Fact")).toBeInTheDocument();
     expect(
       screen.getByText("We built recodee with recodee. We call that confidence."),
