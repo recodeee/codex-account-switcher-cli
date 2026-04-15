@@ -2173,14 +2173,14 @@ export function RuntimesPage() {
                 <div className="grid gap-3 xl:grid-cols-2">
                   <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                     <p className="mb-2 text-xs font-semibold text-slate-300">Activity</p>
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {activityHeatmapRows.length === 0 ? (
                         <p className="py-3 text-xs text-slate-500">No activity samples yet.</p>
                       ) : (
                         activityHeatmapRows.map((row) => (
                           <div key={row.key} className="flex items-center gap-2">
                             <span className="w-14 shrink-0 text-[10px] text-slate-500">{row.label}</span>
-                            <div className="grid flex-1 gap-px [grid-template-columns:repeat(24,minmax(0,1fr))]">
+                            <div className="grid flex-1 gap-[3px] [grid-template-columns:repeat(24,minmax(0,1fr))]">
                               {row.cells.map((cell, index) => (
                                 <HeatCell key={`${row.key}-${index}`} cell={cell} />
                               ))}

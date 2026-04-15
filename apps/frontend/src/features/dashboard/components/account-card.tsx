@@ -74,6 +74,7 @@ export type AccountActionContext = {
 
 export type AccountCardProps = {
   account: AccountSummary;
+  workingNowOverride?: boolean;
   tokensUsed?: number | null;
   tokensRemaining?: number | null;
   showTokensRemaining?: boolean;
@@ -1329,6 +1330,7 @@ function formatLimitHitCountdown(remainingMs: number): string {
 export function AccountCard(props: AccountCardProps) {
   const {
     account,
+    workingNowOverride,
     tokensUsed = null,
     showTokensRemaining = false,
     showAccountId = false,
@@ -1409,7 +1411,8 @@ export function AccountCard(props: AccountCardProps) {
   const recentUsageSignal =
     (account.codexAuth?.hasSnapshot ?? false) &&
     hasRecentUsageSignal(account, nowMs);
-  const isWorkingNow = isAccountWorkingNow(account, nowMs);
+  const computedIsWorkingNow = isAccountWorkingNow(account, nowMs);
+  const isWorkingNow = workingNowOverride ?? computedIsWorkingNow;
   const usageLimitHitCountdownMs = getWorkingNowUsageLimitHitCountdownMs(
     account,
     nowMs,

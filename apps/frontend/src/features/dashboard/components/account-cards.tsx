@@ -481,8 +481,6 @@ function resolveTopSuggestedAccounts(
   return sortAccountsByLastSeenAndAvailableQuota(accounts, nowMs)
     .filter((account) => {
       const hasActiveCliSession = hasActiveCliSessionSignal(account, nowMs);
-      const hideFromWorkingNowForUsageLimitHit =
-        shouldHideFromWorkingNowForUsageLimitHit(account, nowMs);
       const effectiveStatus = resolveEffectiveAccountStatus({
         status: account.status,
         hasSnapshot: account.codexAuth?.hasSnapshot,
@@ -915,6 +913,13 @@ export function AccountCards({
           >
             <AccountCard
               account={account}
+              workingNowOverride={
+                keyPrefix === "working"
+                  ? true
+                  : keyPrefix === "remaining"
+                    ? false
+                    : undefined
+              }
               tokensRemaining={resolveCardTokensRemaining(
                 account,
                 primaryRemainingByAccount,

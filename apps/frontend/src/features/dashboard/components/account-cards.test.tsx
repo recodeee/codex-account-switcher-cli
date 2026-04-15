@@ -344,6 +344,11 @@ describe("AccountCards", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("limit-hit@example.com")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Other accounts" })).toBeInTheDocument();
+    const otherCard = screen.getByText("limit-hit@example.com").closest(".card-hover");
+    expect(otherCard).not.toBeNull();
+    expect(
+      within(otherCard as HTMLElement).queryByTestId("codex-active-agent-card"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the Working now row at three cards by rendering add-card placeholders", () => {
