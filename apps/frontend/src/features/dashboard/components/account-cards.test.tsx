@@ -303,6 +303,49 @@ describe("AccountCards", () => {
     expect(screen.getByText("No account is working now currently.")).toBeInTheDocument();
   });
 
+  it("keeps usage-limit-hit accounts out of Working now even with live session signals", () => {
+    const nowIso = new Date().toISOString();
+    const limitHit = createAccountSummary({
+      accountId: "acc_limit_hit",
+      email: "limit-hit@example.com",
+      displayName: "limit-hit@example.com",
+      status: "active",
+      usage: {
+        primaryRemainingPercent: 0,
+        secondaryRemainingPercent: 88,
+      },
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "limit-hit",
+        activeSnapshotName: "limit-hit",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(
+      <AccountCards
+        accounts={[limitHit]}
+        primaryWindow={buildWindow("primary", "acc_limit_hit", 1000, 0, 0)}
+        secondaryWindow={buildWindow("secondary", "acc_limit_hit", 1000, 880, 88)}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: "Working now" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No account is working now currently."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("limit-hit@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Other accounts" })).toBeInTheDocument();
+  });
+
   it("keeps the Working now row at three cards by rendering add-card placeholders", () => {
     const nowIso = new Date().toISOString();
     const workingOne = createAccountSummary({
@@ -813,7 +856,7 @@ describe("AccountCards", () => {
     expect(screen.queryByText("5h price spend")).not.toBeInTheDocument();
   });
 
-  it("keeps accounts in working-now when primary rounds to 0% but sessions are active", () => {
+  it("keeps accounts with primary 0% out of working-now even when sessions are active", () => {
     const nowIso = new Date().toISOString();
     const working = createAccountSummary({
       accountId: "acc_reset",
@@ -845,11 +888,16 @@ describe("AccountCards", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Working now" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Working now" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No account is working now currently."),
+    ).toBeInTheDocument();
     expect(screen.getByText("reset@example.com")).toBeInTheDocument();
   });
 
-  it("keeps usage-limit-hit accounts in working-now after 1 minute when sessions are still active", () => {
+  it("keeps usage-limit-hit accounts out of working-now after 1 minute even when sessions stay active", () => {
     vi.useFakeTimers();
     const now = new Date("2026-04-04T21:04:00.000Z");
     vi.setSystemTime(now);
@@ -884,15 +932,18 @@ describe("AccountCards", () => {
       );
 
       expect(
-        screen.getByRole("heading", { name: "Working now" }),
-      ).toBeInTheDocument();
+        screen.queryByRole("heading", { name: "Working now" }),
+      ).not.toBeInTheDocument();
 
       act(() => {
         vi.advanceTimersByTime(61_000);
       });
 
       expect(
-        screen.getByRole("heading", { name: "Working now" }),
+        screen.queryByRole("heading", { name: "Working now" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText("No account is working now currently."),
       ).toBeInTheDocument();
       expect(screen.getByText("limit-hit@example.com")).toBeInTheDocument();
     } finally {
