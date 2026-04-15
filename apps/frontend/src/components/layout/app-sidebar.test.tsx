@@ -108,21 +108,24 @@ describe("AppSidebar", () => {
       .getAllByRole("link")
       .map((link) => link.textContent?.trim() ?? "");
 
-    const issuesIndex = labels.findIndex((label) => label === "Issues");
-    const agentsIndex = labels.findIndex((label) => label === "Agents");
-    const skillsIndex = labels.findIndex((label) => label === "Skills");
-    const sourceControlIndex = labels.findIndex((label) => label === "Source Control");
-    const storageIndex = labels.findIndex((label) => label.startsWith("Storage"));
-    const accountsIndex = labels.findIndex((label) => label === "Accounts");
-    const sessionsIndex = labels.findIndex((label) => label === "Sessions");
-    const referralsIndex = labels.findIndex((label) => label === "Referrals");
+    const findRequiredIndex = (name: string, matcher?: (label: string) => boolean) => {
+      const index = labels.findIndex((label) => (matcher ? matcher(label) : label === name));
+      expect(index).toBeGreaterThanOrEqual(0);
+      return index;
+    };
 
-    expect(issuesIndex).toBeGreaterThanOrEqual(0);
-    expect(agentsIndex).toBeGreaterThanOrEqual(0);
+    const issuesIndex = findRequiredIndex("Issues");
+    const sourceControlIndex = findRequiredIndex("Source Control");
+    const agentsIndex = findRequiredIndex("Agents");
+    const skillsIndex = findRequiredIndex("Skills");
+    const storageIndex = findRequiredIndex("Storage", (label) => label.startsWith("Storage"));
+    const accountsIndex = findRequiredIndex("Accounts");
+    const sessionsIndex = findRequiredIndex("Sessions");
+    const referralsIndex = findRequiredIndex("Referrals");
+
     expect(sourceControlIndex).toBeGreaterThan(issuesIndex);
-    expect(sourceControlIndex).toBeLessThan(agentsIndex);
+    expect(agentsIndex).toBeGreaterThan(sourceControlIndex);
     expect(skillsIndex).toBeGreaterThan(agentsIndex);
-    expect(storageIndex).toBeGreaterThanOrEqual(0);
     expect(storageIndex).toBeGreaterThan(skillsIndex);
     expect(accountsIndex).toBeGreaterThan(storageIndex);
     expect(sessionsIndex).toBeGreaterThan(accountsIndex);

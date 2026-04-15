@@ -897,7 +897,55 @@ describe("AccountCard", () => {
     });
 
     render(<AccountCard account={account} />);
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
+  });
 
+  it("uses precise token formatting when workingNowOverride is true", () => {
+    const account = createAccountSummary({
+      codexSessionCount: 0,
+      codexLiveSessionCount: 0,
+      codexTrackedSessionCount: 0,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: false,
+      },
+    });
+
+    render(<AccountCard account={account} tokensUsed={1500} workingNowOverride />);
+
+    const tokensLabel = screen.getByText("Tokens used");
+    const tokensValue = tokensLabel.parentElement?.querySelector("p.mt-0\\.5 > span");
+    expect(tokensValue).not.toBeNull();
+    expect(tokensValue).toHaveTextContent(/^1,500k tokens$/);
+  });
+
+  it("uses compact token formatting when workingNowOverride is false", () => {
+    const nowIso = new Date().toISOString();
+    const account = createAccountSummary({
+      codexSessionCount: 1,
+      codexLiveSessionCount: 1,
+      codexTrackedSessionCount: 1,
+      codexAuth: {
+        hasSnapshot: true,
+        snapshotName: "main",
+        activeSnapshotName: "main",
+        isActiveSnapshot: true,
+        hasLiveSession: true,
+      },
+      lastUsageRecordedAtPrimary: nowIso,
+      lastUsageRecordedAtSecondary: nowIso,
+    });
+
+    render(<AccountCard account={account} tokensUsed={1500} workingNowOverride={false} />);
+
+    const tokensLabel = screen.getByText("Tokens used");
+    const tokensValue = tokensLabel.parentElement?.querySelector("p.mt-0\\.5 > span");
+    expect(tokensValue).not.toBeNull();
+    expect(tokensValue).toHaveTextContent(/^1.5m tokens$/i);
+    expect(screen.queryByText("working...")).not.toBeInTheDocument();
   });
 
   it("shows live token and 5h status affordances for working accounts", () => {
