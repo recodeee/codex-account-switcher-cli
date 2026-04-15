@@ -10,6 +10,7 @@ import { formatTimeLong } from "@/utils/formatters";
 const LAST_SYNC_STALE_WARNING_MS = 60_000;
 const LAST_SYNC_CHECK_INTERVAL_MS = 10_000;
 const LAST_SYNC_REFETCH_INTERVAL_MS = 10_000;
+const LAST_SYNC_RECOVERY_REFETCH_INTERVAL_MS = 4_000;
 
 function isRequestTimeoutError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
@@ -23,6 +24,32 @@ function isRequestTimeoutError(error: unknown): boolean {
     return maybe.message.toLowerCase().includes("timed out");
   }
   return false;
+}
+
+function resolveLastSyncRefetchInterval(query: {
+  state: {
+    data?: unknown;
+    error?: unknown;
+  };
+}): number {
+  if (isRequestTimeoutError(query.state.error)) {
+    return LAST_SYNC_RECOVERY_REFETCH_INTERVAL_MS;
+  }
+  const lastSyncAtRaw = query.state.data;
+  const lastSyncAt =
+    typeof lastSyncAtRaw === "string"
+      ? lastSyncAtRaw
+      : (lastSyncAtRaw as { lastSyncAt?: unknown } | null | undefined)?.lastSyncAt;
+  if (typeof lastSyncAt !== "string") {
+    return LAST_SYNC_REFETCH_INTERVAL_MS;
+  }
+  const parsedMs = Date.parse(lastSyncAt);
+  if (!Number.isFinite(parsedMs)) {
+    return LAST_SYNC_REFETCH_INTERVAL_MS;
+  }
+  return Date.now() - parsedMs > LAST_SYNC_STALE_WARNING_MS
+    ? LAST_SYNC_RECOVERY_REFETCH_INTERVAL_MS
+    : LAST_SYNC_REFETCH_INTERVAL_MS;
 }
 
 function getRoutingLabel(strategy: "usage_weighted" | "round_robin" | "capacity_weighted", sticky: boolean, preferEarlier: boolean): string {
@@ -49,8 +76,8 @@ export function StatusBar() {
   } = useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: getDashboardOverview,
-    refetchInterval: LAST_SYNC_REFETCH_INTERVAL_MS,
-    refetchIntervalInBackground: false,
+    refetchInterval: resolveLastSyncRefetchInterval,
+    refetchIntervalInBackground: true,
     select: (data) => data.lastSyncAt,
   });
 
