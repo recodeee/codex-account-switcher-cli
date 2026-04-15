@@ -17,5 +17,6 @@ describe("NAV_ITEMS", () => {
 
     expect(flattened.some((item) => item.to === "/projects/plans" && item.depth === 1)).toBe(true);
     expect(flattened.some((item) => item.to === "/projects/issues" && item.depth === 1)).toBe(true);
+    expect(flattened.some((item) => item.to === "/source-control" && item.depth === 1)).toBe(true);
   });
 });

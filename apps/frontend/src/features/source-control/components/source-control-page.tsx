@@ -174,6 +174,17 @@ export function SourceControlPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const projects = useMemo(() => projectsQuery.data?.entries ?? [], [projectsQuery.data?.entries]);
+  const projectOptions = useMemo(
+    () =>
+      projects.map((project) => {
+        const projectPath = project.projectPath?.trim() ?? "";
+        return {
+          id: project.id,
+          label: projectPath ? `${project.name} — ${projectPath}` : project.name,
+        };
+      }),
+    [projects],
+  );
   const effectiveProjectId = useMemo(() => {
     if (!selectedProjectId) {
       return "";
@@ -199,8 +210,8 @@ export function SourceControlPage() {
     if (!effectiveProjectId) {
       return "Current repository";
     }
-    return projects.find((project) => project.id === effectiveProjectId)?.name ?? "Current repository";
-  }, [effectiveProjectId, projects]);
+    return projectOptions.find((project) => project.id === effectiveProjectId)?.label ?? "Current repository";
+  }, [effectiveProjectId, projectOptions]);
 
   const selectedBranchPreview = useMemo(() => {
     if (!preview) {
@@ -304,11 +315,15 @@ export function SourceControlPage() {
                 <p className="text-[11px] text-slate-500">refreshed {formatIso(preview.refreshedAt)}</p>
               </div>
 
-              <label className="sr-only" htmlFor="source-control-project-select">
-                Project
+              <label
+                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400"
+                htmlFor="source-control-project-select"
+              >
+                Repository scope
               </label>
               <select
                 id="source-control-project-select"
+                aria-label="Select repository scope"
                 value={effectiveProjectId}
                 onChange={(event) => setSelectedProjectId(event.target.value)}
                 className="h-8 min-w-[220px] rounded-lg border border-white/[0.12] bg-white/[0.02] px-3 text-xs text-slate-100 outline-none transition-colors focus:border-emerald-400/45 [color-scheme:dark]"
@@ -316,9 +331,9 @@ export function SourceControlPage() {
                 <option value="" className="bg-slate-950 text-slate-100">
                   Current repository
                 </option>
-                {projects.map((project) => (
+                {projectOptions.map((project) => (
                   <option key={project.id} value={project.id} className="bg-slate-950 text-slate-100">
-                    {project.name}
+                    {project.label}
                   </option>
                 ))}
               </select>

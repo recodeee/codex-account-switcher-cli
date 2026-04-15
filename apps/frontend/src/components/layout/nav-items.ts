@@ -16,11 +16,11 @@ export const NAV_ITEMS: NavItem[] = [
     children: [
       { to: "/projects/plans", label: "Plans" },
       { to: "/projects/issues", label: "Issues" },
+      { to: "/source-control", label: "Source Control" },
     ],
   },
   { to: "/agents", label: "Agents" },
   { to: "/skills", label: "Skills" },
-  { to: "/source-control", label: "Source Control" },
   { to: "/storage", label: "Storage", isComingSoon: true },
   { to: "/runtimes", label: "Runtimes" },
   { to: "/settings", label: "Settings" },

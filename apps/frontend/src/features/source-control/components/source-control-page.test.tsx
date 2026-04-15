@@ -11,6 +11,8 @@ describe("SourceControlPage", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Source Control" })).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Select repository scope" })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: "Current repository" })).toBeInTheDocument();
       expect(screen.getByText("Current project branch")).toBeInTheDocument();
       expect(screen.getByText("Current pull requests")).toBeInTheDocument();
       expect(screen.getByText("Current GX bot statuses")).toBeInTheDocument();

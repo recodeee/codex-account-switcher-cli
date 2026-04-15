@@ -66,6 +66,7 @@ const WORKSPACE_LINKS: SidebarNavEntry[] = [
     children: [
       { to: "/projects/plans", label: "Plans", icon: FolderTree },
       { to: "/projects/issues", label: "Issues", icon: ListTodo },
+      { to: "/source-control", label: "Source Control", icon: GitBranch },
     ],
   },
   { to: "/agents", label: "Agents", icon: Bot },
@@ -73,7 +74,6 @@ const WORKSPACE_LINKS: SidebarNavEntry[] = [
 
 const MANAGER_LINKS: SidebarNavEntry[] = [
   { to: "/skills", label: "Skills", icon: Sparkles },
-  { to: "/source-control", label: "Source Control", icon: GitBranch },
   { to: "/storage", label: "Storage", icon: HardDrive, badge: "Soon" },
   { to: "/accounts", label: "Accounts", icon: Users },
   { to: "/sessions", label: "Sessions", icon: Link2 },
