@@ -14,6 +14,9 @@ type LocalWorkspaceMember = {
 };
 
 type LocalWorkspaceProfile = {
+  displayName: string;
+  label: string;
+  avatarDataUrl: string | null;
   description: string;
   context: string;
   repositories: LocalWorkspaceRepository[];
@@ -23,6 +26,7 @@ type LocalWorkspaceProfile = {
 type LocalWorkspaceState = Record<string, LocalWorkspaceProfile>;
 
 const STORAGE_KEY = "recodee.settings.workspace.local.v1";
+const PROFILE_UPDATE_EVENT = "recodee.settings.workspace.local.updated";
 
 function readState(): LocalWorkspaceState {
   if (typeof window === "undefined") {
@@ -48,10 +52,14 @@ function writeState(next: LocalWorkspaceState): void {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new Event(PROFILE_UPDATE_EVENT));
 }
 
 function defaultProfile(): LocalWorkspaceProfile {
   return {
+    displayName: "",
+    label: "",
+    avatarDataUrl: null,
     description: "",
     context: "",
     repositories: [],
@@ -85,6 +93,14 @@ export function patchWorkspaceLocalProfile(
     [workspaceId]: next,
   });
   return next;
+}
+
+export function subscribeWorkspaceLocalProfileUpdates(listener: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+  window.addEventListener(PROFILE_UPDATE_EVENT, listener);
+  return () => window.removeEventListener(PROFILE_UPDATE_EVENT, listener);
 }
 
 export type { LocalWorkspaceMember, LocalWorkspaceMemberRole, LocalWorkspaceProfile, LocalWorkspaceRepository };

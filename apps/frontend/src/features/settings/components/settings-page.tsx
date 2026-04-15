@@ -1,4 +1,4 @@
-import { FolderGit2, KeyRound, Palette, Settings2, UserRound, Users } from "lucide-react";
+import { FolderGit2, KeyRound, LayoutGrid, Palette, Settings2, UserRound, Users } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountTab } from "@/features/settings/components/account-tab";
@@ -7,6 +7,7 @@ import { MembersTab } from "@/features/settings/components/members-tab";
 import { RepositoriesTab } from "@/features/settings/components/repositories-tab";
 import { TokensTab } from "@/features/settings/components/tokens-tab";
 import { WorkspaceTab } from "@/features/settings/components/workspace-tab";
+import { WorkspacesTab } from "@/features/settings/components/workspaces-tab";
 import { useWorkspaces } from "@/features/workspaces/hooks/use-workspaces";
 
 const ACCOUNT_TABS = [
@@ -16,6 +17,7 @@ const ACCOUNT_TABS = [
 ] as const;
 
 const WORKSPACE_TABS = [
+  { value: "workspaces", label: "Workspaces", icon: LayoutGrid },
   { value: "workspace", label: "General", icon: Settings2 },
   { value: "repositories", label: "Repositories", icon: FolderGit2 },
   { value: "members", label: "Members", icon: Users },
@@ -70,6 +72,9 @@ export function SettingsPage() {
             </TabsContent>
             <TabsContent value="workspace">
               <WorkspaceTab key={`workspace-${activeWorkspaceId}`} />
+            </TabsContent>
+            <TabsContent value="workspaces">
+              <WorkspacesTab />
             </TabsContent>
             <TabsContent value="repositories">
               <RepositoriesTab key={`repositories-${activeWorkspaceId}`} />

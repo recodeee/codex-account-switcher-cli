@@ -40,7 +40,14 @@ export function WorkspaceTab() {
     return entries.find((entry) => entry.isActive) ?? entries[0] ?? null;
   }, [workspacesQuery.data?.entries]);
 
-  const [name, setName] = useState(() => workspace?.name ?? "");
+  const [name, setName] = useState(() => {
+    const local = readWorkspaceLocalProfile(workspace?.id);
+    return local.displayName.trim() || workspace?.name || "";
+  });
+  const [label, setLabel] = useState(() => {
+    const local = readWorkspaceLocalProfile(workspace?.id);
+    return local.label.trim() || workspace?.label || "";
+  });
   const [description, setDescription] = useState(() => readWorkspaceLocalProfile(workspace?.id).description);
   const [context, setContext] = useState(() => readWorkspaceLocalProfile(workspace?.id).context);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -51,14 +58,12 @@ export function WorkspaceTab() {
       return;
     }
     patchWorkspaceLocalProfile(workspace.id, {
+      displayName: name.trim() && name.trim() !== workspace.name ? name.trim() : "",
+      label: label.trim() && label.trim() !== workspace.label ? label.trim() : "",
       description: description.trim(),
       context: context.trim(),
     });
-    if (name.trim() !== workspace.name.trim()) {
-      toast.message("Workspace name rename is not available yet in this build.");
-    } else {
-      toast.success("Workspace settings saved");
-    }
+    toast.success("Workspace settings saved");
   };
 
   const settings = settingsQuery.data;
@@ -95,6 +100,19 @@ export function WorkspaceTab() {
                 rows={3}
                 className="resize-none bg-white/[0.03]"
                 placeholder="What does this workspace focus on?"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="workspace-label" className="text-xs text-muted-foreground">
+                Label
+              </Label>
+              <Input
+                id="workspace-label"
+                value={label}
+                onChange={(event) => setLabel(event.target.value)}
+                className="bg-white/[0.03]"
+                placeholder="Team"
               />
             </div>
 

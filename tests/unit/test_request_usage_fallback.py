@@ -96,3 +96,67 @@ def test_merge_request_usage_fallback_raises_lower_input_from_runtime_when_neede
     assert usage.cached_input_tokens == 180
     assert usage.cache_write_tokens == 55
     assert usage.total_cost_usd == 0.5
+
+
+def test_merge_request_usage_fallback_resolves_email_snapshot_to_runtime_alias() -> None:
+    merged = merge_request_usage_with_runtime_fallback(
+        request_usage_by_account={},
+        snapshot_names_by_account={"acc-a": ["perzeus@kozpontihusbolt.hu"]},
+        runtime_usage_by_snapshot={
+            "perzeus": LocalCodexRuntimeUsageSummary(
+                input_tokens=800,
+                output_tokens=120,
+                cache_read_tokens=200,
+                cache_write_tokens=30,
+                session_count=2,
+            )
+        },
+        account_ids=["acc-a"],
+    )
+
+    usage = merged["acc-a"]
+    assert usage.request_count == 2
+    assert usage.total_tokens == 920
+    assert usage.output_tokens == 120
+    assert usage.cached_input_tokens == 200
+    assert usage.cache_write_tokens == 30
+
+
+def test_merge_request_usage_fallback_skips_ambiguous_alias_matches() -> None:
+    merged = merge_request_usage_with_runtime_fallback(
+        request_usage_by_account={},
+        snapshot_names_by_account={"acc-a": ["admin@unknown-domain.example"]},
+        runtime_usage_by_snapshot={
+            "admin@kozpontihusbolt.hu": LocalCodexRuntimeUsageSummary(input_tokens=100, output_tokens=20),
+            "admin@other-domain.example": LocalCodexRuntimeUsageSummary(input_tokens=300, output_tokens=40),
+        },
+        account_ids=["acc-a"],
+    )
+
+    assert "acc-a" not in merged
+
+
+def test_merge_request_usage_fallback_does_not_double_count_same_runtime_snapshot() -> None:
+    merged = merge_request_usage_with_runtime_fallback(
+        request_usage_by_account={},
+        snapshot_names_by_account={
+            "acc-a": ["perzeus@kozpontihusbolt.hu", "perzeus"],
+        },
+        runtime_usage_by_snapshot={
+            "perzeus": LocalCodexRuntimeUsageSummary(
+                input_tokens=500,
+                output_tokens=80,
+                cache_read_tokens=90,
+                cache_write_tokens=11,
+                session_count=4,
+            )
+        },
+        account_ids=["acc-a"],
+    )
+
+    usage = merged["acc-a"]
+    assert usage.request_count == 4
+    assert usage.total_tokens == 580
+    assert usage.output_tokens == 80
+    assert usage.cached_input_tokens == 90
+    assert usage.cache_write_tokens == 11

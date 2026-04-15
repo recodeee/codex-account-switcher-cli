@@ -420,6 +420,33 @@ function isUsageLimitAvailableAccount(
   return usageLimitHit && weeklyAvailable;
 }
 
+function shouldHideFromWorkingNowForUsageLimitHit(
+  account: AccountSummary,
+  nowMs: number,
+): boolean {
+  const primaryRemaining = resolveSortableRemainingPercent(
+    account,
+    "primary",
+    nowMs,
+  );
+  const secondaryRemaining = resolveSortableRemainingPercent(
+    account,
+    "secondary",
+    nowMs,
+  );
+
+  const hasPrimaryLimitHit =
+    account.status === "rate_limited" ||
+    account.status === "quota_exceeded" ||
+    (primaryRemaining != null &&
+      normalizeNearZeroQuotaPercent(primaryRemaining) <= 0);
+  const hasWeeklyLimitHit =
+    secondaryRemaining != null &&
+    normalizeNearZeroQuotaPercent(secondaryRemaining) <= 0;
+
+  return hasPrimaryLimitHit || hasWeeklyLimitHit;
+}
+
 function sortAccountsByUsageLimitAvailableFirst(
   accounts: AccountSummary[],
   nowMs: number,
@@ -454,6 +481,8 @@ function resolveTopSuggestedAccounts(
   return sortAccountsByLastSeenAndAvailableQuota(accounts, nowMs)
     .filter((account) => {
       const hasActiveCliSession = hasActiveCliSessionSignal(account, nowMs);
+      const hideFromWorkingNowForUsageLimitHit =
+        shouldHideFromWorkingNowForUsageLimitHit(account, nowMs);
       const effectiveStatus = resolveEffectiveAccountStatus({
         status: account.status,
         hasSnapshot: account.codexAuth?.hasSnapshot,
@@ -708,6 +737,8 @@ export function AccountCards({
 
     for (const account of accounts) {
       const hasActiveCliSession = hasActiveCliSessionSignal(account, nowMs);
+      const hideFromWorkingNowForUsageLimitHit =
+        shouldHideFromWorkingNowForUsageLimitHit(account, nowMs);
       const effectiveStatus = resolveEffectiveAccountStatus({
         status: account.status,
         hasSnapshot: account.codexAuth?.hasSnapshot,
@@ -719,13 +750,16 @@ export function AccountCards({
         allowDeactivatedOverride: false,
       });
 
-      const hasWorkingNowSignal = isAccountWorkingNow(account, nowMs);
+      const hasWorkingNowSignal =
+        !hideFromWorkingNowForUsageLimitHit &&
+        isAccountWorkingNow(account, nowMs);
       if (hasWorkingNowSignal) {
         noteWorkingNowSignal(account, nowMs);
         working.push(account);
         continue;
       }
       if (
+        !hideFromWorkingNowForUsageLimitHit &&
         account.status !== "deactivated" &&
         hasRecentWorkingNowSignal(account, nowMs)
       ) {

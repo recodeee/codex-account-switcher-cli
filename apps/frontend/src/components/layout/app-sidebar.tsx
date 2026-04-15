@@ -19,11 +19,15 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "@/lib/router-compat";
 
 import { CodexLogo } from "@/components/brand/codex-logo";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
+import {
+  readWorkspaceLocalProfile,
+  subscribeWorkspaceLocalProfileUpdates,
+} from "@/features/settings/components/workspace-settings-local";
 import { WorkspaceOnboardingDialog } from "@/features/workspaces/components/workspace-onboarding-dialog";
 import { useWorkspaces } from "@/features/workspaces/hooks/use-workspaces";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +50,12 @@ function workspaceMonogram(name: string): string {
   const first = trimmed[0];
   return first ? first.toUpperCase() : "W";
 }
+
+type WorkspaceDisplay = {
+  name: string;
+  label: string;
+  avatarDataUrl: string | null;
+};
 
 const WORKSPACE_LINKS: SidebarNavEntry[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -104,8 +114,15 @@ export function AppSidebar() {
   );
   const [switchboardOpen, setSwitchboardOpen] = useState(false);
   const [workspaceOnboardingOpen, setWorkspaceOnboardingOpen] = useState(false);
+  const [workspaceProfileVersion, setWorkspaceProfileVersion] = useState(0);
   const dashboardQuery = useDashboard();
   const { workspacesQuery, createMutation, selectMutation } = useWorkspaces();
+
+  useEffect(() => {
+    return subscribeWorkspaceLocalProfileUpdates(() => {
+      setWorkspaceProfileVersion((current) => current + 1);
+    });
+  }, []);
 
   const accountCountLabel = useMemo(() => {
     const count =
@@ -136,6 +153,19 @@ export function AppSidebar() {
     () => workspaces.find((workspace) => workspace.isActive) ?? workspaces[0] ?? null,
     [workspaces],
   );
+  const workspaceDisplayById = useMemo(() => {
+    const displayById = new Map<string, WorkspaceDisplay>();
+    for (const workspace of workspaces) {
+      const local = readWorkspaceLocalProfile(workspace.id);
+      displayById.set(workspace.id, {
+        name: local.displayName.trim() || workspace.name,
+        label: local.label.trim() || workspace.label,
+        avatarDataUrl: local.avatarDataUrl,
+      });
+    }
+    return displayById;
+  }, [workspaces, workspaceProfileVersion]);
+  const activeWorkspaceDisplay = activeWorkspace ? workspaceDisplayById.get(activeWorkspace.id) : null;
 
   const toggleCollapsed = () => {
     setCollapsed((previous) => {
@@ -331,17 +361,25 @@ export function AppSidebar() {
                   />
                   <div className="flex items-center gap-3">
                     <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.14] bg-white/[0.05] text-sm font-semibold tracking-wide text-slate-200">
-                      {workspaceMonogram(activeWorkspace?.name ?? "Workspace")}
+                      {activeWorkspaceDisplay?.avatarDataUrl ? (
+                        <img
+                          src={activeWorkspaceDisplay.avatarDataUrl}
+                          alt={`${activeWorkspaceDisplay.name} avatar`}
+                          className="h-full w-full rounded-lg object-cover"
+                        />
+                      ) : (
+                        workspaceMonogram(activeWorkspaceDisplay?.name ?? activeWorkspace?.name ?? "Workspace")
+                      )}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p
                         aria-label="Active workspace name"
                         className="truncate text-sm font-semibold tracking-tight text-slate-100"
                       >
-                        {activeWorkspace?.name ?? "Workspace"}
+                        {activeWorkspaceDisplay?.name ?? activeWorkspace?.name ?? "Workspace"}
                       </p>
                       <p className="truncate text-xs text-slate-400">
-                        {activeWorkspace?.label ?? "Team"}
+                        {activeWorkspaceDisplay?.label ?? activeWorkspace?.label ?? "Team"}
                       </p>
                     </div>
                     <span className="inline-flex h-5 items-center rounded-full border border-emerald-300/30 bg-emerald-300/10 px-1.5 text-[10px] font-medium text-emerald-200">
@@ -365,12 +403,16 @@ export function AppSidebar() {
                 <div className="space-y-2 px-2 pb-2">
                   {workspaces.map((workspace) => {
                     const isSelected = workspace.isActive;
+                    const workspaceDisplay = workspaceDisplayById.get(workspace.id);
+                    const workspaceName = workspaceDisplay?.name ?? workspace.name;
+                    const workspaceLabel = workspaceDisplay?.label ?? workspace.label;
+                    const avatarDataUrl = workspaceDisplay?.avatarDataUrl;
                     return (
                       <button
                         type="button"
                         key={workspace.id}
                         onClick={() => handleSelectWorkspace(workspace.id)}
-                        aria-label={`Select workspace ${workspace.name}`}
+                        aria-label={`Select workspace ${workspaceName}`}
                         className={cn(
                           "relative flex w-full items-center gap-3 rounded-xl border px-2.5 py-2.5 text-left transition-all",
                           isSelected
@@ -393,13 +435,21 @@ export function AppSidebar() {
                               : "border-white/[0.12] bg-white/[0.03] text-slate-300",
                           )}
                         >
-                          {workspaceMonogram(workspace.name)}
+                          {avatarDataUrl ? (
+                            <img
+                              src={avatarDataUrl}
+                              alt={`${workspaceName} avatar`}
+                              className="h-full w-full rounded-lg object-cover"
+                            />
+                          ) : (
+                            workspaceMonogram(workspaceName)
+                          )}
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-white">
-                            {workspace.name}
+                            {workspaceName}
                           </p>
-                          <p className="truncate text-xs text-slate-400">{workspace.label}</p>
+                          <p className="truncate text-xs text-slate-400">{workspaceLabel}</p>
                         </div>
                         {isSelected ? (
                           <span className="flex h-6 w-6 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/12">
