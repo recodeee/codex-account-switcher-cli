@@ -175,6 +175,14 @@ def test_overlay_includes_live_process_session_task_previews(monkeypatch) -> Non
             task_previews_by_pid={31001: ["next js error debug"]},
         ),
     )
+    monkeypatch.setattr(
+        "app.modules.accounts.task_preview_overlay._resolve_project_metadata_for_pid",
+        lambda pid: (
+            ("recodee", "/home/deadpool/Documents/recodee")
+            if pid == 31001
+            else (None, None)
+        ),
+    )
 
     overlay_live_codex_task_previews(
         accounts=[account],
@@ -194,7 +202,11 @@ def test_overlay_includes_live_process_session_task_previews(monkeypatch) -> Non
         "pid:31002",
     ]
     assert session_previews[0].task_preview == "next js error debug"
+    assert session_previews[0].project_name == "recodee"
+    assert session_previews[0].project_path == "/home/deadpool/Documents/recodee"
     assert session_previews[1].task_preview is None
+    assert session_previews[1].project_name is None
+    assert session_previews[1].project_path is None
 
 
 def test_overlay_keeps_fallback_mapped_session_on_original_snapshot(

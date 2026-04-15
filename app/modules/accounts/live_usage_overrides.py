@@ -213,6 +213,7 @@ def apply_local_live_usage_overrides(
             snapshot_names = snapshot_names_from_index
         session_presence_snapshot_names = _resolve_session_presence_snapshot_names_for_account(
             account_email=account.email,
+            account_owned_snapshot_names=snapshot_index.snapshots_by_account_id.get(account.id, []),
             selected_snapshot_name=selected_snapshot_name,
             snapshot_names_from_index=snapshot_names_from_index,
             fallback_snapshot_names=snapshot_names,
@@ -1136,6 +1137,7 @@ def _is_email_like_snapshot_name(value: str | None) -> bool:
 def _resolve_session_presence_snapshot_names_for_account(
     *,
     account_email: str,
+    account_owned_snapshot_names: list[str] | None,
     selected_snapshot_name: str | None,
     snapshot_names_from_index: list[str],
     fallback_snapshot_names: list[str],
@@ -1150,19 +1152,25 @@ def _resolve_session_presence_snapshot_names_for_account(
     all of those names and augment with the expected email snapshot alias.
     """
 
-    if not snapshot_names_from_index:
+    account_owned_snapshot_names = account_owned_snapshot_names or []
+    if not snapshot_names_from_index and not account_owned_snapshot_names:
         return _augment_session_presence_snapshot_names_with_email_aliases(
             account_email=account_email,
             snapshot_names=fallback_snapshot_names,
         )
 
     # Keep the full account-owned snapshot set for live-session presence hints.
-    # The upstream candidate resolver already limits names to this account's
-    # ownership scope; pruning non-email aliases here can hide real running
-    # CLI sessions after snapshot renames/rotations.
+    # Candidate resolution for quota attribution can intentionally narrow to a
+    # single selected snapshot; presence hints should still include explicit
+    # account-owned aliases from the index so long-running renamed sessions
+    # remain attributable.
+    merged_snapshot_names = [
+        *snapshot_names_from_index,
+        *account_owned_snapshot_names,
+    ]
     return _augment_session_presence_snapshot_names_with_email_aliases(
         account_email=account_email,
-        snapshot_names=snapshot_names_from_index,
+        snapshot_names=merged_snapshot_names,
     )
 
 
@@ -1390,6 +1398,7 @@ def _build_default_sample_debug_overrides(
             owner_account_id := _lookup_sample_source_owner(
                 source=sample.source,
                 allowed_account_ids=all_account_ids,
+                observed_at=sample.recorded_at,
             )
         )
         is not None
@@ -1560,6 +1569,7 @@ def _prime_unattributed_default_scope_sample_owners(
     if _lookup_sample_source_owner(
         source=sample.source,
         allowed_account_ids=candidate_account_ids,
+        observed_at=sample.recorded_at,
     ):
         return
 
@@ -1687,6 +1697,7 @@ def _has_relevant_process_session_visibility(
         )
         session_presence_snapshot_names = _resolve_session_presence_snapshot_names_for_account(
             account_email=account.email,
+            account_owned_snapshot_names=snapshot_index.snapshots_by_account_id.get(account.id, []),
             selected_snapshot_name=selected_snapshot_name,
             snapshot_names_from_index=snapshot_names_from_index,
             fallback_snapshot_names=snapshot_names,
@@ -1921,6 +1932,7 @@ def _apply_local_default_session_fingerprint_overrides(
             owner_account_id := _lookup_sample_source_owner(
                 source=sample.source,
                 allowed_account_ids=all_account_ids,
+                observed_at=sample.recorded_at,
             )
         )
         is not None
@@ -2149,6 +2161,7 @@ def _lookup_sample_source_owner(
     *,
     source: str,
     allowed_account_ids: list[str],
+    observed_at: datetime | None = None,
 ) -> str | None:
     if not source:
         return None
@@ -2156,7 +2169,7 @@ def _lookup_sample_source_owner(
     if owner is None:
         return None
 
-    now = datetime.now(timezone.utc)
+    now = _normalize_observed_at(observed_at or datetime.now(timezone.utc))
     if _normalize_observed_at(owner.observed_at) < _normalize_observed_at(now) - _SAMPLE_SOURCE_OWNER_TTL:
         _sample_source_owner_cache.pop(source, None)
         return None

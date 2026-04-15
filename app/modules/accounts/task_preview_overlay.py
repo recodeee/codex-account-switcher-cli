@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
+from pathlib import Path
 import re
 from typing import Iterable
 
@@ -343,11 +345,14 @@ def _read_live_process_task_preview_state_by_snapshot(
                 (preview.strip() for preview in pid_previews if preview.strip()),
                 None,
             )
+            project_name, project_path = _resolve_project_metadata_for_pid(pid)
             session_task_previews.append(
                 AccountSessionTaskPreview(
                     session_key=f"pid:{pid}",
                     task_preview=normalized_task_preview,
                     task_updated_at=None,
+                    project_name=project_name,
+                    project_path=project_path,
                 )
             )
             for preview in task_previews_by_pid.get(pid, []):
@@ -525,3 +530,28 @@ def _resolve_session_task_previews_from_debug_sources(
 def _normalize_snapshot_name(value: str | None) -> str | None:
     normalized = (value or "").strip().lower()
     return normalized or None
+
+
+def _resolve_project_metadata_for_pid(pid: int) -> tuple[str | None, str | None]:
+    project_path = _resolve_process_cwd(pid)
+    if project_path is None:
+        return (None, None)
+    project_name = _project_name_from_path(project_path)
+    return (project_name, project_path)
+
+
+def _resolve_process_cwd(pid: int) -> str | None:
+    cwd_symlink = Path("/proc") / str(pid) / "cwd"
+    try:
+        return str(Path(os.readlink(cwd_symlink)).resolve())
+    except OSError:
+        return None
+
+
+def _project_name_from_path(project_path: str | None) -> str | None:
+    if project_path is None:
+        return None
+    normalized = project_path.strip()
+    if not normalized:
+        return None
+    return Path(normalized).name or None
