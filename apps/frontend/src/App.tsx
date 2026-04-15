@@ -33,7 +33,7 @@ function AppLayout() {
   const isProjectsRoute = location.pathname === "/projects";
   const isAccountsRoute = location.pathname === "/accounts";
   const isPlansRoute = location.pathname === "/projects/plans";
-  const isIssuesRoute = location.pathname === "/projects/issues" || location.pathname === "/issues";
+  const isIssuesRoute = location.pathname.startsWith("/projects/issues") || location.pathname.startsWith("/issues");
   const isAgentsRoute = location.pathname === "/agents";
   const isRuntimesRoute = location.pathname === "/runtimes";
   const isSkillsRoute = location.pathname === "/skills";

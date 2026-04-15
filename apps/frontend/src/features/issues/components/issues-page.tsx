@@ -705,7 +705,7 @@ export function IssuesPage() {
 
   return (
     <>
-      <div className="flex min-h-[calc(100vh-8.5rem)] flex-col border-t border-white/8 bg-[#070a12]">
+      <div className="flex h-full w-full min-h-[calc(100vh-8.5rem)] flex-col overflow-hidden border-t border-white/8 bg-[#070a12]">
         <h1 className="sr-only">Issues</h1>
 
         <div className="flex h-11 items-center justify-between border-b border-white/8 px-4">
@@ -781,7 +781,7 @@ export function IssuesPage() {
 
         {hasScopedIssues ? (
           <div className="flex-1 overflow-x-auto px-4 pb-4 pt-3">
-            <div className="flex min-h-full min-w-[1240px] gap-3">
+            <div className="flex min-h-full w-full min-w-[1150px] gap-3">
               {ISSUE_COLUMNS.map((column) => {
                 const entries = scopedIssuesByColumn[column.key];
                 const isDropTarget = activeDropColumn === column.key;
@@ -792,7 +792,7 @@ export function IssuesPage() {
                     role="region"
                     aria-label={`${column.label} issues`}
                     className={cn(
-                      "flex w-[244px] shrink-0 flex-col rounded-xl border p-2 transition-colors",
+                      "flex min-w-[220px] flex-1 flex-col rounded-xl border p-2 transition-colors",
                       column.panelClassName,
                       isDropTarget ? "ring-1 ring-white/25" : null,
                     )}
