@@ -741,7 +741,6 @@ class SourceControlService:
                     search=query,
                 )
             )
-
         deduplicated: list[SourceControlPullRequestPreview] = []
         seen_numbers: set[int] = set()
         for candidate in sorted(candidates, key=lambda entry: entry.number, reverse=True):

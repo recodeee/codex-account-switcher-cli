@@ -376,5 +376,6 @@ def test_load_pull_request_diagnostics_extracts_conflicts_checks_and_bot_feedbac
     assert diagnostics.merge_state_status == "DIRTY"
     assert len(diagnostics.failed_checks) == 1
     assert diagnostics.failed_checks[0].name == "Frontend lint (eslint)"
+    assert len(diagnostics.feedback) >= 2
     assert any(item.author == "chatgpt-codex-connector" for item in diagnostics.feedback)
     assert any(item.file_path == ".agents/commands/guardex.md" for item in diagnostics.feedback)
