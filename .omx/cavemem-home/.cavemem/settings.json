@@ -1,0 +1,28 @@
+{
+  "dataDir": "/home/deadpool/Documents/recodee/codex-account-switcher/.omx/cavemem-home/.cavemem",
+  "workerPort": 37777,
+  "logLevel": "info",
+  "compression": {
+    "intensity": "full",
+    "expandForModel": false
+  },
+  "embedding": {
+    "provider": "local",
+    "model": "Xenova/all-MiniLM-L6-v2",
+    "batchSize": 16,
+    "autoStart": true,
+    "idleShutdownMs": 600000
+  },
+  "search": {
+    "alpha": 0.5,
+    "defaultLimit": 10
+  },
+  "privacy": {
+    "excludePatterns": [],
+    "redactSecrets": true
+  },
+  "ides": {
+    "claude-code": true,
+    "codex": true
+  }
+}

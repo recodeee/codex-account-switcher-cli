@@ -1,0 +1,60 @@
+{
+  "name": "@imdeadpool/codex-account-switcher",
+  "version": "0.1.15",
+  "description": "A command-line tool that lets you manage and switch between multiple Codex accounts instantly, no more constant logins and logouts.",
+  "license": "MIT",
+  "bin": {
+    "codex-auth": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "postinstall": "node scripts/postinstall-login-hook.cjs",
+    "prepublishOnly": "npm run build",
+    "test": "npm run build && node --test dist/tests/**/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "scripts/postinstall-login-hook.cjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "codex",
+    "cli",
+    "auth",
+    "accounts",
+    "switch",
+    "tokens"
+  ],
+  "preferGlobal": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/recodeecom/codex-account-switcher-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/recodeecom/codex-account-switcher-cli/issues"
+  },
+  "homepage": "https://github.com/recodeecom/codex-account-switcher-cli#readme",
+  "author": "NagyVikt",
+  "dependencies": {
+    "@oclif/core": "^3.0.0",
+    "prompts": "^2.4.2",
+    "tslib": "^2.8.1",
+    "typescript": "^5.6.3"
+  },
+  "devDependencies": {
+    "@types/prompts": "^2.4.9"
+  },
+  "oclif": {
+    "bin": "codex-auth",
+    "commands": "./dist/commands",
+    "hooks": {
+      "init": "./dist/hooks/init/update-notifier"
+    }
+  }
+}

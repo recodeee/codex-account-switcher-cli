@@ -1,0 +1,10 @@
+{
+  "session_id": "019db613-ea2c-7b82-aa0b-b5e7ca8012ab",
+  "native_session_id": "019db613-ea2c-7b82-aa0b-b5e7ca8012ab",
+  "started_at": "2026-04-22T16:44:20.687Z",
+  "cwd": "/home/deadpool/Documents/recodee/codex-account-switcher",
+  "pid": 2390052,
+  "platform": "linux",
+  "pid_start_ticks": 3545043,
+  "pid_cmdline": "/home/deadpool/.nvm/versions/node/v22.22.0/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex/codex"
+}
