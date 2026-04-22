@@ -35,6 +35,8 @@ import {
 import {
   fetchUsageFromApi,
   fetchUsageFromLocal,
+  remainingPercent,
+  resolveRateWindow,
   shouldSwitchCurrent,
   usageScore,
 } from "./usage";
@@ -51,6 +53,7 @@ const SESSION_ACTIVE_OVERRIDE_ENV = "CODEX_AUTH_SESSION_ACTIVE_OVERRIDE";
 
 interface SessionMapEntry {
   accountName: string;
+  authFingerprint?: string;
   updatedAt: string;
 }
 
@@ -77,11 +80,13 @@ export interface SaveAccountOptions {
 export interface ResolvedDefaultAccountName {
   name: string;
   source: "active" | "inferred";
+  forceOverwrite?: boolean;
 }
 
 export interface ResolvedLoginAccountName {
   name: string;
-  source: "inferred";
+  source: "active" | "inferred";
+  forceOverwrite?: boolean;
 }
 
 export interface ExternalAuthSyncResult {
@@ -100,14 +105,32 @@ export class AccountService {
       };
     }
 
-    await this.materializeAuthSymlink(authPath);
-
-    const incomingSnapshot = await parseAuthSnapshotFile(authPath);
-    if (incomingSnapshot.authMode !== "chatgpt") {
+    const initialAuthState = await this.readAuthSyncState(authPath);
+    const externalSyncForced = this.isExternalSyncForced();
+    if (
+      initialAuthState &&
+      !initialAuthState.isSymbolicLink &&
+      !externalSyncForced &&
+      (await this.getSessionAuthFingerprint()) === initialAuthState.fingerprint
+    ) {
       return {
         synchronized: false,
         autoSwitchDisabled: false,
       };
+    }
+
+    await this.materializeAuthSymlink(authPath);
+    const rememberAuthState = async (result: ExternalAuthSyncResult): Promise<ExternalAuthSyncResult> => {
+      await this.rememberSessionAuthFingerprint(authPath);
+      return result;
+    };
+
+    const incomingSnapshot = await parseAuthSnapshotFile(authPath);
+    if (incomingSnapshot.authMode !== "chatgpt") {
+      return rememberAuthState({
+        synchronized: false,
+        autoSwitchDisabled: false,
+      });
     }
 
     const sessionAccountName = await this.getActiveSessionAccountName();
@@ -118,12 +141,12 @@ export class AccountService {
         if (
           sessionSnapshot.authMode === "chatgpt" &&
           !this.snapshotsShareIdentity(sessionSnapshot, incomingSnapshot) &&
-          !this.isExternalSyncForced()
+          !externalSyncForced
         ) {
-          return {
+          return rememberAuthState({
             synchronized: false,
             autoSwitchDisabled: false,
-          };
+          });
         }
       }
     }
@@ -136,18 +159,18 @@ export class AccountService {
         const activeSnapshot = await parseAuthSnapshotFile(activeSnapshotPath);
         if (this.snapshotsShareIdentity(activeSnapshot, incomingSnapshot)) {
           if (activeName === resolvedName.name) {
-            return {
+            return rememberAuthState({
               synchronized: false,
               autoSwitchDisabled: false,
-            };
+            });
           }
 
           const authMatchesActiveSnapshot = await this.filesMatch(authPath, activeSnapshotPath);
           if (authMatchesActiveSnapshot) {
-            return {
+            return rememberAuthState({
               synchronized: false,
               autoSwitchDisabled: false,
-            };
+            });
           }
         }
       }
@@ -159,13 +182,15 @@ export class AccountService {
       await this.setAutoSwitchEnabled(false);
     }
 
-    const savedName = await this.saveAccount(resolvedName.name);
+    const savedName = await this.saveAccount(resolvedName.name, {
+      force: Boolean(resolvedName.forceOverwrite),
+    });
 
-    return {
+    return rememberAuthState({
       synchronized: true,
       savedName,
       autoSwitchDisabled,
-    };
+    });
   }
 
   public async restoreSessionSnapshotIfNeeded(): Promise<{ restored: boolean; accountName?: string }> {
@@ -246,6 +271,7 @@ export class AccountService {
       this.getCurrentAccountName(),
       this.loadReconciledRegistry(),
     ]);
+    const nowSeconds = Math.floor(Date.now() / 1000);
 
     return Promise.all(
       accounts.map(async (name) => {
@@ -256,6 +282,12 @@ export class AccountService {
           fallbackSnapshot = await parseAuthSnapshotFile(this.accountFilePath(name));
         }
 
+        const remaining5hPercent = remainingPercent(resolveRateWindow(entry?.lastUsage, 300, true), nowSeconds);
+        const remainingWeeklyPercent = remainingPercent(
+          resolveRateWindow(entry?.lastUsage, 10080, false),
+          nowSeconds,
+        );
+
         return {
           name,
           active: current === name,
@@ -265,6 +297,8 @@ export class AccountService {
           planType: entry?.planType ?? fallbackSnapshot?.planType,
           lastUsageAt: entry?.lastUsageAt,
           usageSource: entry?.lastUsage?.source,
+          remaining5hPercent,
+          remainingWeeklyPercent,
         };
       }),
     );
@@ -367,20 +401,26 @@ export class AccountService {
   public async resolveDefaultAccountNameFromCurrentAuth(): Promise<ResolvedDefaultAccountName> {
     const authPath = resolveAuthPath();
     await this.ensureAuthFileExists(authPath);
+    const incomingSnapshot = await parseAuthSnapshotFile(authPath);
 
     const activeName = await this.getCurrentAccountName();
     if (activeName) {
       const activeSnapshotPath = this.accountFilePath(activeName);
       if (await this.pathExists(activeSnapshotPath)) {
-        const [activeSnapshot, incomingSnapshot] = await Promise.all([
-          parseAuthSnapshotFile(activeSnapshotPath),
-          parseAuthSnapshotFile(authPath),
-        ]);
+        const activeSnapshot = await parseAuthSnapshotFile(activeSnapshotPath);
 
         if (this.snapshotsShareIdentity(activeSnapshot, incomingSnapshot)) {
           return {
             name: activeName,
             source: "active",
+          };
+        }
+
+        if (this.canRefreshActiveCanonicalEmailSnapshot(activeName, activeSnapshot, incomingSnapshot)) {
+          return {
+            name: activeName,
+            source: "active",
+            forceOverwrite: true,
           };
         }
       }
@@ -393,6 +433,31 @@ export class AccountService {
   }
 
   public async resolveLoginAccountNameFromCurrentAuth(): Promise<ResolvedLoginAccountName> {
+    const authPath = resolveAuthPath();
+    await this.ensureAuthFileExists(authPath);
+    const incomingSnapshot = await parseAuthSnapshotFile(authPath);
+    const activeName = await this.getCurrentAccountName();
+
+    if (activeName) {
+      const activeSnapshotPath = this.accountFilePath(activeName);
+      if (await this.pathExists(activeSnapshotPath)) {
+        const activeSnapshot = await parseAuthSnapshotFile(activeSnapshotPath);
+
+        if (this.canRefreshActiveCanonicalEmailSnapshot(activeName, activeSnapshot, incomingSnapshot)) {
+          return this.snapshotsShareIdentity(activeSnapshot, incomingSnapshot)
+            ? {
+                name: activeName,
+                source: "active",
+              }
+            : {
+                name: activeName,
+                source: "active",
+                forceOverwrite: true,
+              };
+        }
+      }
+    }
+
     return {
       name: await this.inferAccountNameFromCurrentAuth(),
       source: "inferred",
@@ -809,6 +874,27 @@ export class AccountService {
     }
   }
 
+  private async readAuthSyncState(authPath: string): Promise<{ fingerprint: string; isSymbolicLink: boolean } | null> {
+    try {
+      const stat = await fsp.lstat(authPath);
+      return {
+        fingerprint: this.createAuthSyncFingerprint(stat),
+        isSymbolicLink: stat.isSymbolicLink(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private createAuthSyncFingerprint(stat: fs.Stats): string {
+    return [
+      stat.isSymbolicLink() ? "symlink" : "file",
+      typeof stat.ino === "number" ? Math.trunc(stat.ino) : 0,
+      Math.trunc(stat.size),
+      Math.trunc(stat.mtimeMs),
+    ].join(":");
+  }
+
   private async hydrateSnapshotMetadata(registry: RegistryData, accountName: string): Promise<void> {
     const parsed = await parseAuthSnapshotFile(this.accountFilePath(accountName));
     const entry = registry.accounts[accountName] ?? {
@@ -928,6 +1014,19 @@ export class AccountService {
     }
   }
 
+  private async getSessionAuthFingerprint(): Promise<string | null> {
+    const sessionKey = this.resolveSessionScopeKey();
+    if (!sessionKey) return null;
+
+    const sessionMap = await this.readSessionMap();
+    const entry = sessionMap.sessions[sessionKey];
+    if (!entry?.authFingerprint || typeof entry.authFingerprint !== "string") {
+      return null;
+    }
+
+    return entry.authFingerprint.trim() || null;
+  }
+
   private async getActiveSessionAccountName(): Promise<string | null> {
     const sessionAccountName = await this.getSessionAccountName();
     if (!sessionAccountName) return null;
@@ -944,8 +1043,10 @@ export class AccountService {
     if (!sessionKey) return;
 
     const sessionMap = await this.readSessionMap();
+    const existing = sessionMap.sessions[sessionKey];
     sessionMap.sessions[sessionKey] = {
       accountName,
+      authFingerprint: existing?.authFingerprint,
       updatedAt: new Date().toISOString(),
     };
     await this.writeSessionMap(sessionMap);
@@ -984,8 +1085,13 @@ export class AccountService {
         const rawEntry = value as Record<string, unknown>;
         const accountName = typeof rawEntry.accountName === "string" ? rawEntry.accountName.trim() : "";
         if (!accountName) continue;
+        const authFingerprint =
+          typeof rawEntry.authFingerprint === "string" && rawEntry.authFingerprint.trim().length > 0
+            ? rawEntry.authFingerprint.trim()
+            : undefined;
         sessions[key] = {
           accountName,
+          authFingerprint,
           updatedAt:
             typeof rawEntry.updatedAt === "string" && rawEntry.updatedAt.length > 0
               ? rawEntry.updatedAt
@@ -1009,6 +1115,27 @@ export class AccountService {
     const sessionMapPath = resolveSessionMapPath();
     await this.ensureDir(path.dirname(sessionMapPath));
     await fsp.writeFile(sessionMapPath, `${JSON.stringify(sessionMap, null, 2)}\n`, "utf8");
+  }
+
+  private async rememberSessionAuthFingerprint(authPath: string): Promise<void> {
+    const sessionKey = this.resolveSessionScopeKey();
+    if (!sessionKey) return;
+
+    const authState = await this.readAuthSyncState(authPath);
+    if (!authState || authState.isSymbolicLink) return;
+
+    const sessionMap = await this.readSessionMap();
+    const existing = sessionMap.sessions[sessionKey];
+    if (!existing?.accountName || existing.authFingerprint === authState.fingerprint) {
+      return;
+    }
+
+    sessionMap.sessions[sessionKey] = {
+      ...existing,
+      authFingerprint: authState.fingerprint,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.writeSessionMap(sessionMap);
   }
 
   private async isSessionPinnedToActiveCodex(): Promise<boolean> {
@@ -1097,6 +1224,25 @@ export class AccountService {
     }
 
     return false;
+  }
+
+  private canRefreshActiveCanonicalEmailSnapshot(
+    activeName: string,
+    activeSnapshot: ParsedAuthSnapshot,
+    incomingSnapshot: ParsedAuthSnapshot,
+  ): boolean {
+    const activeEmail = activeSnapshot.email?.trim().toLowerCase();
+    const incomingEmail = incomingSnapshot.email?.trim().toLowerCase();
+
+    if (!activeEmail || !incomingEmail || activeEmail !== incomingEmail) {
+      return false;
+    }
+
+    try {
+      return activeName === this.normalizeAccountName(incomingEmail);
+    } catch {
+      return false;
+    }
   }
 
   private renderSnapshotIdentity(snapshot: ParsedAuthSnapshot, fallbackEmail: string): string {

@@ -2,7 +2,7 @@ import { Flags } from "@oclif/core";
 import prompts from "prompts";
 import { BaseCommand } from "../lib/base-command";
 import {
-  fetchLatestNpmVersion,
+  fetchLatestNpmVersionCached,
   formatUpdateSummaryInline,
   getUpdateSummary,
   PACKAGE_NAME,
@@ -27,16 +27,17 @@ export default class ListCommand extends BaseCommand {
       await this.maybeOfferGlobalUpdate();
 
       if (!detailed) {
-        const accounts = await this.accounts.listAccountNames();
-        const current = await this.accounts.getCurrentAccountName();
+        const accounts = await this.accounts.listAccountMappings();
         if (!accounts.length) {
           this.log("No saved Codex accounts yet. Run `codex-auth save <name>`.");
           return;
         }
 
-        for (const name of accounts) {
-          const mark = current === name ? "*" : " ";
-          this.log(`${mark} ${name}`);
+        for (const account of accounts) {
+          const mark = account.active ? "*" : " ";
+          this.log(
+            `${mark} ${account.name}  5h=${this.formatRemaining(account.remaining5hPercent)}  weekly=${this.formatRemaining(account.remainingWeeklyPercent)}`,
+          );
         }
         return;
       }
@@ -54,10 +55,17 @@ export default class ListCommand extends BaseCommand {
           `    email=${account.email ?? "-"} account=${account.accountId ?? "-"} user=${account.userId ?? "-"}`,
         );
         this.log(
-          `    plan=${account.planType ?? "-"} usage=${account.usageSource ?? "-"} lastUsageAt=${account.lastUsageAt ?? "-"}`,
+          `    plan=${account.planType ?? "-"} usage=${account.usageSource ?? "-"} 5h=${this.formatRemaining(account.remaining5hPercent)} weekly=${this.formatRemaining(account.remainingWeeklyPercent)} lastUsageAt=${account.lastUsageAt ?? "-"}`,
         );
       }
     });
+  }
+
+  private formatRemaining(value: number | undefined): string {
+    if (typeof value !== "number") {
+      return "-";
+    }
+    return `${value}%`;
   }
 
   private async maybeOfferGlobalUpdate(): Promise<void> {
@@ -66,7 +74,7 @@ export default class ListCommand extends BaseCommand {
     const currentVersion = this.config.version;
     if (!currentVersion || typeof currentVersion !== "string") return;
 
-    const latestVersion = await fetchLatestNpmVersion(PACKAGE_NAME);
+    const latestVersion = await fetchLatestNpmVersionCached(PACKAGE_NAME, { timeoutMs: 900 });
     if (!latestVersion) return;
 
     const summary = getUpdateSummary(currentVersion, latestVersion);

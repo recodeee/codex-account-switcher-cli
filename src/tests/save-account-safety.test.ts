@@ -250,6 +250,39 @@ test("resolveLoginAccountNameFromCurrentAuth creates an email-shaped duplicate w
   });
 });
 
+test("resolveLoginAccountNameFromCurrentAuth reuses active canonical email snapshot for same-email relogin", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const email = "admin@mite.hu";
+    const currentPath = path.join(codexDir, "current");
+
+    await fsp.writeFile(
+      path.join(accountsDir, `${email}.json`),
+      buildAuthPayload(email, {
+        accountId: "acct-old",
+        userId: "user-admin",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, `${email}\n`, "utf8");
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload(email, {
+        accountId: "acct-new",
+        userId: "user-admin",
+      }),
+      "utf8",
+    );
+
+    const resolved = await service.resolveLoginAccountNameFromCurrentAuth();
+    assert.deepEqual(resolved, {
+      name: email,
+      source: "active",
+      forceOverwrite: true,
+    });
+  });
+});
+
 test("resolveLoginAccountNameFromCurrentAuth ignores active alias and infers canonical email snapshot", async (t) => {
   await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
     const service = new AccountService();
@@ -366,6 +399,39 @@ test("resolveDefaultAccountNameFromCurrentAuth reuses active snapshot name when 
   });
 });
 
+test("resolveDefaultAccountNameFromCurrentAuth reuses active canonical email snapshot for same-email relogin", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const email = "admin@mite.hu";
+    const currentPath = path.join(codexDir, "current");
+
+    await fsp.writeFile(
+      path.join(accountsDir, `${email}.json`),
+      buildAuthPayload(email, {
+        accountId: "acct-old",
+        userId: "user-admin",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, `${email}\n`, "utf8");
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload(email, {
+        accountId: "acct-new",
+        userId: "user-admin",
+      }),
+      "utf8",
+    );
+
+    const resolved = await service.resolveDefaultAccountNameFromCurrentAuth();
+    assert.deepEqual(resolved, {
+      name: email,
+      source: "active",
+      forceOverwrite: true,
+    });
+  });
+});
+
 test("resolveDefaultAccountNameFromCurrentAuth falls back to inferred email-shaped name when active snapshot mismatches identity", async (t) => {
   await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
     const service = new AccountService();
@@ -458,6 +524,94 @@ test("listAccountMappings returns active flag and identity metadata for each sna
         },
       ],
     );
+  });
+});
+
+test("listAccountMappings includes 5h and weekly remaining usage percentages", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const currentPath = path.join(codexDir, "current");
+    const registryPath = path.join(accountsDir, "registry.json");
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
+    await fsp.writeFile(
+      path.join(accountsDir, "alpha.json"),
+      buildAuthPayload("alpha@edixai.com", {
+        accountId: "acct-alpha",
+        userId: "user-alpha",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(
+      path.join(accountsDir, "beta.json"),
+      buildAuthPayload("beta@edixai.com", {
+        accountId: "acct-beta",
+        userId: "user-beta",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, "alpha\n", "utf8");
+    await fsp.writeFile(authPath, buildAuthPayload("alpha@edixai.com"), "utf8");
+
+    await fsp.writeFile(
+      registryPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          autoSwitch: {
+            enabled: false,
+            threshold5hPercent: 10,
+            thresholdWeeklyPercent: 5,
+          },
+          api: {
+            usage: true,
+          },
+          activeAccountName: "alpha",
+          accounts: {
+            alpha: {
+              name: "alpha",
+              createdAt: new Date().toISOString(),
+              email: "alpha@edixai.com",
+              accountId: "acct-alpha",
+              userId: "user-alpha",
+              lastUsageAt: new Date().toISOString(),
+              lastUsage: {
+                primary: { usedPercent: 25, windowMinutes: 300 },
+                secondary: { usedPercent: 40, windowMinutes: 10080 },
+                fetchedAt: new Date().toISOString(),
+                source: "cached",
+              },
+            },
+            beta: {
+              name: "beta",
+              createdAt: new Date().toISOString(),
+              email: "beta@edixai.com",
+              accountId: "acct-beta",
+              userId: "user-beta",
+              lastUsageAt: new Date().toISOString(),
+              lastUsage: {
+                primary: { usedPercent: 99, windowMinutes: 300, resetsAt: nowSeconds - 5 },
+                secondary: { usedPercent: 30, windowMinutes: 10080 },
+                fetchedAt: new Date().toISOString(),
+                source: "cached",
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const mappings = await service.listAccountMappings();
+    const alpha = mappings.find((item) => item.name === "alpha");
+    const beta = mappings.find((item) => item.name === "beta");
+
+    assert.equal(alpha?.remaining5hPercent, 75);
+    assert.equal(alpha?.remainingWeeklyPercent, 60);
+    assert.equal(beta?.remaining5hPercent, 100);
+    assert.equal(beta?.remainingWeeklyPercent, 70);
   });
 });
 
@@ -571,6 +725,48 @@ test("syncExternalAuthSnapshotIfNeeded re-keys active alias to inferred email na
     assert.equal((await fsp.readFile(currentPath, "utf8")).trim(), incomingEmail);
     const inferredSnapshot = await parseAuthSnapshotFile(path.join(accountsDir, `${incomingEmail}.json`));
     assert.equal(inferredSnapshot.email, incomingEmail);
+  });
+});
+
+test("syncExternalAuthSnapshotIfNeeded refreshes active canonical email snapshot instead of creating a duplicate", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const email = "admin@mite.hu";
+    const currentPath = path.join(codexDir, "current");
+
+    await fsp.writeFile(
+      path.join(accountsDir, `${email}.json`),
+      buildAuthPayload(email, {
+        accountId: "acct-old",
+        userId: "user-admin",
+        tokenSeed: "pre-login",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, `${email}\n`, "utf8");
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload(email, {
+        accountId: "acct-new",
+        userId: "user-admin",
+        tokenSeed: "post-login",
+      }),
+      "utf8",
+    );
+
+    const result = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(result, {
+      synchronized: true,
+      savedName: email,
+      autoSwitchDisabled: false,
+    });
+
+    assert.equal((await fsp.readFile(currentPath, "utf8")).trim(), email);
+
+    const refreshedSnapshot = await parseAuthSnapshotFile(path.join(accountsDir, `${email}.json`));
+    assert.equal(refreshedSnapshot.accountId, "acct-new");
+
+    await assert.rejects(() => fsp.access(path.join(accountsDir, `${email}--dup-2.json`)));
   });
 });
 
@@ -876,6 +1072,66 @@ test("syncExternalAuthSnapshotIfNeeded can be forced for explicit in-terminal co
       autoSwitchDisabled: false,
     });
     assert.equal((await fsp.readFile(currentPath, "utf8")).trim(), "lajos@edix.hu");
+  });
+});
+
+test("syncExternalAuthSnapshotIfNeeded skips auth re-read when the current session already saw the same auth file", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const activeName = "odin@megkapja.hu";
+    const currentPath = path.join(codexDir, "current");
+    const sessionMapPath = path.join(accountsDir, "sessions.json");
+    const sessionKey = `ppid:${process.ppid}`;
+    const snapshotPayload = buildAuthPayload(activeName, {
+      accountId: "acct-odin",
+      userId: "user-odin",
+      tokenSeed: "steady",
+    });
+
+    process.env.CODEX_AUTH_SESSION_ACTIVE_OVERRIDE = "1";
+
+    await fsp.writeFile(path.join(accountsDir, `${activeName}.json`), snapshotPayload, "utf8");
+    await fsp.writeFile(currentPath, `${activeName}\n`, "utf8");
+    await fsp.writeFile(
+      sessionMapPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          sessions: {
+            [sessionKey]: {
+              accountName: activeName,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fsp.writeFile(authPath, snapshotPayload, "utf8");
+
+    const firstResult = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(firstResult, {
+      synchronized: false,
+      autoSwitchDisabled: false,
+    });
+
+    const sessionMapAfterFirstRun = JSON.parse(await fsp.readFile(sessionMapPath, "utf8")) as {
+      sessions: Record<string, { authFingerprint?: string }>;
+    };
+    const cachedFingerprint = sessionMapAfterFirstRun.sessions[sessionKey]?.authFingerprint;
+    assert.equal(typeof cachedFingerprint, "string");
+    const secondResult = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(secondResult, {
+      synchronized: false,
+      autoSwitchDisabled: false,
+    });
+
+    const sessionMapAfterSecondRun = JSON.parse(await fsp.readFile(sessionMapPath, "utf8")) as {
+      sessions: Record<string, { authFingerprint?: string }>;
+    };
+    assert.equal(sessionMapAfterSecondRun.sessions[sessionKey]?.authFingerprint, cachedFingerprint);
   });
 });
 

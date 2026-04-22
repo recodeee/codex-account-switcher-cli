@@ -79,4 +79,6 @@ export interface AccountMapping {
   planType?: string;
   lastUsageAt?: string;
   usageSource?: UsageSource;
+  remaining5hPercent?: number;
+  remainingWeeklyPercent?: number;
 }

@@ -47,14 +47,19 @@ export default class LoginCommand extends BaseCommand {
       await this.waitForCodexAuthSnapshot();
 
       const resolvedName = providedName
-        ? { name: providedName, source: "explicit" as const }
+        ? { name: providedName, source: "explicit" as const, forceOverwrite: false }
         : await this.accounts.resolveLoginAccountNameFromCurrentAuth();
-      const forceOverwrite = Boolean(flags.force);
+      const forceOverwrite = Boolean(flags.force || resolvedName.forceOverwrite);
       const savedName = await this.accounts.saveAccount(resolvedName.name, {
         force: forceOverwrite,
       });
 
-      const suffix = resolvedName.source === "explicit" ? "" : " (inferred from auth email)";
+      const suffix =
+        resolvedName.source === "explicit"
+          ? ""
+          : resolvedName.source === "active"
+            ? " (reused active account name)"
+            : " (inferred from auth email)";
       this.log(`Saved current Codex auth tokens as "${savedName}"${suffix}.`);
     });
   }

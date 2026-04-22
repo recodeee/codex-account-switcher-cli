@@ -1,13 +1,70 @@
+import fsp from "node:fs/promises";
+import path from "node:path";
 import { spawn } from "node:child_process";
+import { resolveAccountsDir } from "./config/paths";
 
 const SEMVER_TRIPLET = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/;
+const DEFAULT_UPDATE_CHECK_TIMEOUT_MS = 2_500;
+const DEFAULT_UPDATE_CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
 export const PACKAGE_NAME = "@imdeadpool/codex-account-switcher";
 export type UpdateState = "update-available" | "up-to-date" | "unknown";
+type FetchLatestVersionFn = (packageName: string, timeoutMs?: number) => Promise<string | null>;
 
 export interface UpdateSummary {
   currentVersion: string;
   latestVersion: string;
   state: UpdateState;
+}
+
+interface UpdateCheckCacheRecord {
+  version: 1;
+  packageName: string;
+  latestVersion: string;
+  checkedAt: number;
+}
+
+export interface CachedUpdateCheckOptions {
+  cachePath?: string;
+  fetcher?: FetchLatestVersionFn;
+  nowMs?: number;
+  timeoutMs?: number;
+  ttlMs?: number;
+}
+
+function resolveUpdateCheckCachePath(): string {
+  return path.join(resolveAccountsDir(), "update-check.json");
+}
+
+async function loadUpdateCheckCache(cachePath: string): Promise<UpdateCheckCacheRecord | null> {
+  try {
+    const raw = await fsp.readFile(cachePath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const root = parsed as Record<string, unknown>;
+    if (root.version !== 1) return null;
+    if (typeof root.packageName !== "string" || !root.packageName.trim()) return null;
+    if (typeof root.latestVersion !== "string" || !root.latestVersion.trim()) return null;
+    if (typeof root.checkedAt !== "number" || !Number.isFinite(root.checkedAt)) return null;
+
+    return {
+      version: 1,
+      packageName: root.packageName.trim(),
+      latestVersion: root.latestVersion.trim(),
+      checkedAt: Math.round(root.checkedAt),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function saveUpdateCheckCache(cachePath: string, record: UpdateCheckCacheRecord): Promise<void> {
+  try {
+    await fsp.mkdir(path.dirname(cachePath), { recursive: true });
+    await fsp.writeFile(cachePath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  } catch {
+    // Best-effort cache only.
+  }
 }
 
 export function parseVersionTriplet(version: string): [number, number, number] | null {
@@ -84,7 +141,10 @@ export function shouldProceedWithYesDefault(answer: string): boolean {
   return false;
 }
 
-export async function fetchLatestNpmVersion(packageName: string, timeoutMs = 2_500): Promise<string | null> {
+export async function fetchLatestNpmVersion(
+  packageName: string,
+  timeoutMs = DEFAULT_UPDATE_CHECK_TIMEOUT_MS,
+): Promise<string | null> {
   return new Promise((resolve) => {
     const child = spawn("npm", ["view", packageName, "version", "--json"], {
       stdio: ["ignore", "pipe", "ignore"],
@@ -131,6 +191,44 @@ export async function fetchLatestNpmVersion(packageName: string, timeoutMs = 2_5
       resolve(trimmed.replace(/^"+|"+$/g, ""));
     });
   });
+}
+
+export async function fetchLatestNpmVersionCached(
+  packageName: string,
+  options: CachedUpdateCheckOptions = {},
+): Promise<string | null> {
+  const cachePath = options.cachePath ?? resolveUpdateCheckCachePath();
+  const ttlMs = options.ttlMs ?? DEFAULT_UPDATE_CACHE_TTL_MS;
+  const nowMs = options.nowMs ?? Date.now();
+  const cached = await loadUpdateCheckCache(cachePath);
+
+  if (
+    cached &&
+    cached.packageName === packageName &&
+    nowMs - cached.checkedAt >= 0 &&
+    nowMs - cached.checkedAt <= ttlMs
+  ) {
+    return cached.latestVersion;
+  }
+
+  const fetcher = options.fetcher ?? fetchLatestNpmVersion;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_UPDATE_CHECK_TIMEOUT_MS;
+  const latestVersion = await fetcher(packageName, timeoutMs);
+  if (latestVersion) {
+    await saveUpdateCheckCache(cachePath, {
+      version: 1,
+      packageName,
+      latestVersion,
+      checkedAt: nowMs,
+    });
+    return latestVersion;
+  }
+
+  if (cached && cached.packageName === packageName) {
+    return cached.latestVersion;
+  }
+
+  return null;
 }
 
 export async function runGlobalNpmInstall(

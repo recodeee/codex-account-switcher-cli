@@ -1,7 +1,7 @@
 import type { Hook } from "@oclif/core";
 import readline from "node:readline/promises";
 import {
-  fetchLatestNpmVersion,
+  fetchLatestNpmVersionCached,
   formatUpdateSummaryInline,
   getUpdateSummary,
   PACKAGE_NAME,
@@ -17,7 +17,7 @@ const hook: Hook.Init = async function (options) {
   const currentVersion = options.config.version;
   if (!currentVersion) return;
 
-  const latestVersion = await fetchLatestNpmVersion(PACKAGE_NAME);
+  const latestVersion = await fetchLatestNpmVersionCached(PACKAGE_NAME, { timeoutMs: 900 });
   if (!latestVersion) return;
   const summary = getUpdateSummary(currentVersion, latestVersion);
   if (summary.state !== "update-available") return;

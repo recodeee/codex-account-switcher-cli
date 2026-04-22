@@ -1,11 +1,16 @@
+import fsp from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
 
 import {
+  fetchLatestNpmVersionCached,
   formatUpdateSummaryCard,
   formatUpdateSummaryInline,
   getUpdateSummary,
   isVersionNewer,
+  PACKAGE_NAME,
   parseVersionTriplet,
   shouldProceedWithYesDefault,
 } from "../lib/update-check";
@@ -95,4 +100,67 @@ test("shouldProceedWithYesDefault rejects no and unknown responses", () => {
   assert.equal(shouldProceedWithYesDefault("n"), false);
   assert.equal(shouldProceedWithYesDefault("No"), false);
   assert.equal(shouldProceedWithYesDefault("later"), false);
+});
+
+test("fetchLatestNpmVersionCached reuses a fresh cached version", async (t) => {
+  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-update-check-"));
+  const cachePath = path.join(cacheDir, "update-check.json");
+  t.after(async () => {
+    await fsp.rm(cacheDir, { recursive: true, force: true });
+  });
+
+  let fetchCalls = 0;
+  const first = await fetchLatestNpmVersionCached(PACKAGE_NAME, {
+    cachePath,
+    nowMs: 1_000,
+    ttlMs: 60_000,
+    fetcher: async () => {
+      fetchCalls += 1;
+      return "0.1.16";
+    },
+  });
+  const second = await fetchLatestNpmVersionCached(PACKAGE_NAME, {
+    cachePath,
+    nowMs: 1_500,
+    ttlMs: 60_000,
+    fetcher: async () => {
+      fetchCalls += 1;
+      return "0.1.17";
+    },
+  });
+
+  assert.equal(first, "0.1.16");
+  assert.equal(second, "0.1.16");
+  assert.equal(fetchCalls, 1);
+});
+
+test("fetchLatestNpmVersionCached refreshes a stale cache", async (t) => {
+  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-update-check-"));
+  const cachePath = path.join(cacheDir, "update-check.json");
+  t.after(async () => {
+    await fsp.rm(cacheDir, { recursive: true, force: true });
+  });
+
+  let fetchCalls = 0;
+  await fetchLatestNpmVersionCached(PACKAGE_NAME, {
+    cachePath,
+    nowMs: 1_000,
+    ttlMs: 60_000,
+    fetcher: async () => {
+      fetchCalls += 1;
+      return "0.1.16";
+    },
+  });
+  const refreshed = await fetchLatestNpmVersionCached(PACKAGE_NAME, {
+    cachePath,
+    nowMs: 70_000,
+    ttlMs: 60_000,
+    fetcher: async () => {
+      fetchCalls += 1;
+      return "0.1.17";
+    },
+  });
+
+  assert.equal(refreshed, "0.1.17");
+  assert.equal(fetchCalls, 2);
 });
