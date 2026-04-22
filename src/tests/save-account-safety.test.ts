@@ -1075,6 +1075,66 @@ test("syncExternalAuthSnapshotIfNeeded can be forced for explicit in-terminal co
   });
 });
 
+test("syncExternalAuthSnapshotIfNeeded skips auth re-read when the current session already saw the same auth file", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const activeName = "odin@megkapja.hu";
+    const currentPath = path.join(codexDir, "current");
+    const sessionMapPath = path.join(accountsDir, "sessions.json");
+    const sessionKey = `ppid:${process.ppid}`;
+    const snapshotPayload = buildAuthPayload(activeName, {
+      accountId: "acct-odin",
+      userId: "user-odin",
+      tokenSeed: "steady",
+    });
+
+    process.env.CODEX_AUTH_SESSION_ACTIVE_OVERRIDE = "1";
+
+    await fsp.writeFile(path.join(accountsDir, `${activeName}.json`), snapshotPayload, "utf8");
+    await fsp.writeFile(currentPath, `${activeName}\n`, "utf8");
+    await fsp.writeFile(
+      sessionMapPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          sessions: {
+            [sessionKey]: {
+              accountName: activeName,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fsp.writeFile(authPath, snapshotPayload, "utf8");
+
+    const firstResult = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(firstResult, {
+      synchronized: false,
+      autoSwitchDisabled: false,
+    });
+
+    const sessionMapAfterFirstRun = JSON.parse(await fsp.readFile(sessionMapPath, "utf8")) as {
+      sessions: Record<string, { authFingerprint?: string }>;
+    };
+    const cachedFingerprint = sessionMapAfterFirstRun.sessions[sessionKey]?.authFingerprint;
+    assert.equal(typeof cachedFingerprint, "string");
+    const secondResult = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(secondResult, {
+      synchronized: false,
+      autoSwitchDisabled: false,
+    });
+
+    const sessionMapAfterSecondRun = JSON.parse(await fsp.readFile(sessionMapPath, "utf8")) as {
+      sessions: Record<string, { authFingerprint?: string }>;
+    };
+    assert.equal(sessionMapAfterSecondRun.sessions[sessionKey]?.authFingerprint, cachedFingerprint);
+  });
+});
+
 test("restoreSessionSnapshotIfNeeded skips restore when codex is not active in this terminal", async (t) => {
   await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
     const service = new AccountService();

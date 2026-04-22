@@ -2,7 +2,7 @@ import { Flags } from "@oclif/core";
 import prompts from "prompts";
 import { BaseCommand } from "../lib/base-command";
 import {
-  fetchLatestNpmVersion,
+  fetchLatestNpmVersionCached,
   formatUpdateSummaryInline,
   getUpdateSummary,
   PACKAGE_NAME,
@@ -74,7 +74,7 @@ export default class ListCommand extends BaseCommand {
     const currentVersion = this.config.version;
     if (!currentVersion || typeof currentVersion !== "string") return;
 
-    const latestVersion = await fetchLatestNpmVersion(PACKAGE_NAME);
+    const latestVersion = await fetchLatestNpmVersionCached(PACKAGE_NAME, { timeoutMs: 900 });
     if (!latestVersion) return;
 
     const summary = getUpdateSummary(currentVersion, latestVersion);
