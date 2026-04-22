@@ -47,7 +47,7 @@ export default class LoginCommand extends BaseCommand {
       await this.waitForCodexAuthSnapshot();
 
       const resolvedName = providedName
-        ? { name: providedName, source: "explicit" as const }
+        ? { name: providedName, source: "explicit" as const, forceOverwrite: false }
         : await this.accounts.resolveLoginAccountNameFromCurrentAuth();
       const forceOverwrite = Boolean(flags.force || resolvedName.forceOverwrite);
       const savedName = await this.accounts.saveAccount(resolvedName.name, {

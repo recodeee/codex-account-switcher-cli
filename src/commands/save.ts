@@ -27,7 +27,7 @@ export default class SaveCommand extends BaseCommand {
       const { args, flags } = await this.parse(SaveCommand);
       const providedName = args.name as string | undefined;
       const resolvedName = providedName
-        ? { name: providedName, source: "explicit" as const }
+        ? { name: providedName, source: "explicit" as const, forceOverwrite: false }
         : await this.accounts.resolveDefaultAccountNameFromCurrentAuth();
       const savedName = await this.accounts.saveAccount(resolvedName.name, {
         force: Boolean(flags.force || resolvedName.forceOverwrite),
