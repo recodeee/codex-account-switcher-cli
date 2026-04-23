@@ -35,6 +35,8 @@ import {
 import {
   fetchUsageFromApi,
   fetchUsageFromLocal,
+  fetchUsageFromProxy,
+  ProxyUsageIndex,
   remainingPercent,
   resolveRateWindow,
   shouldSwitchCurrent,
@@ -722,7 +724,7 @@ export class AccountService {
   private async refreshAccountUsage(
     registry: RegistryData,
     accountName: string,
-    options: { preferApi: boolean; allowLocalFallback: boolean },
+    options: { preferApi: boolean; allowLocalFallback: boolean; proxyUsageIndex?: ProxyUsageIndex | null },
   ): Promise<UsageSnapshot | undefined> {
     const snapshotPath = this.accountFilePath(accountName);
     const parsed = await parseAuthSnapshotFile(snapshotPath);
@@ -739,6 +741,10 @@ export class AccountService {
 
     let usage: UsageSnapshot | null = null;
     if (options.preferApi) {
+      usage = this.resolveProxyUsage(options.proxyUsageIndex, accountName, entry, parsed);
+    }
+
+    if (!usage && options.preferApi) {
       usage = await fetchUsageFromApi(parsed);
     }
 
@@ -787,6 +793,9 @@ export class AccountService {
 
     let index = 0;
     const workerCount = Math.min(LIST_USAGE_REFRESH_CONCURRENCY, accountNamesToRefresh.length);
+    const proxyUsageIndex = registry.api.usage
+      ? await fetchUsageFromProxy()
+      : null;
     await Promise.all(
       Array.from({ length: workerCount }, async () => {
         for (;;) {
@@ -799,6 +808,7 @@ export class AccountService {
           await this.refreshAccountUsage(registry, accountName, {
             preferApi: registry.api.usage,
             allowLocalFallback: currentAccountName === accountName,
+            proxyUsageIndex,
           });
         }
       }),
@@ -811,6 +821,54 @@ export class AccountService {
     const remaining5hPercent = remainingPercent(resolveRateWindow(usage, 300, true), nowSeconds);
     const remainingWeeklyPercent = remainingPercent(resolveRateWindow(usage, 10080, false), nowSeconds);
     return typeof remaining5hPercent !== "number" || typeof remainingWeeklyPercent !== "number";
+  }
+
+  private resolveProxyUsage(
+    proxyUsageIndex: ProxyUsageIndex | null | undefined,
+    accountName: string,
+    entry: RegistryData["accounts"][string],
+    parsed: ParsedAuthSnapshot,
+  ): UsageSnapshot | null {
+    if (!proxyUsageIndex) {
+      return null;
+    }
+
+    const candidates = [
+      parsed.accountId,
+      entry.accountId,
+    ];
+    for (const candidate of candidates) {
+      const usage = this.lookupProxyUsage(proxyUsageIndex.byAccountId, candidate);
+      if (usage) {
+        return usage;
+      }
+    }
+
+    const emailCandidates = [
+      parsed.email,
+      entry.email,
+    ];
+    for (const candidate of emailCandidates) {
+      const usage = this.lookupProxyUsage(proxyUsageIndex.byEmail, candidate);
+      if (usage) {
+        return usage;
+      }
+    }
+
+    return this.lookupProxyUsage(proxyUsageIndex.bySnapshotName, accountName);
+  }
+
+  private lookupProxyUsage(map: Map<string, UsageSnapshot>, rawValue: string | undefined): UsageSnapshot | null {
+    if (!rawValue) {
+      return null;
+    }
+
+    const normalized = rawValue.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    return map.get(normalized) ?? null;
   }
 
   private accountFilePath(name: string): string {

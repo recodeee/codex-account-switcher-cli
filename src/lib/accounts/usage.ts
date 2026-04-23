@@ -1,9 +1,73 @@
+import { exec as execCallback } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { ParsedAuthSnapshot, RateLimitWindow, UsageSnapshot } from "./types";
 
 const USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage";
+const DEFAULT_PROXY_URL = "http://127.0.0.1:2455";
+const DASHBOARD_SESSION_PATH = "/api/dashboard-auth/session";
+const PASSWORD_LOGIN_PATH = "/api/dashboard-auth/password/login";
+const TOTP_VERIFY_PATH = "/api/dashboard-auth/totp/verify";
+const ACCOUNTS_PATH = "/api/accounts";
 const REQUEST_TIMEOUT_MS = 5000;
+const PROXY_REQUEST_TIMEOUT_MS = 2000;
+const DASHBOARD_PASSWORD_ENV = "CODEX_LB_DASHBOARD_PASSWORD";
+const DASHBOARD_TOTP_CODE_ENV = "CODEX_LB_DASHBOARD_TOTP_CODE";
+const DASHBOARD_TOTP_COMMAND_ENV = "CODEX_LB_DASHBOARD_TOTP_COMMAND";
+
+const execAsync = promisify(execCallback);
+
+interface ProxySessionState {
+  authenticated: boolean;
+  passwordRequired: boolean;
+  totpRequiredOnLogin: boolean;
+}
+
+interface ProxyAccountRecord {
+  accountId?: string;
+  email?: string;
+  snapshotNames: string[];
+  usage: UsageSnapshot;
+}
+
+export interface ProxyUsageIndex {
+  byAccountId: Map<string, UsageSnapshot>;
+  byEmail: Map<string, UsageSnapshot>;
+  bySnapshotName: Map<string, UsageSnapshot>;
+}
+
+interface ProxyRequestResult {
+  status: number;
+  payload: unknown;
+}
+
+type HeaderLookup = {
+  get?(name: string): string | null;
+  getSetCookie?(): string[];
+};
+
+type ProxyAccountPayload = {
+  accountId?: unknown;
+  email?: unknown;
+  planType?: unknown;
+  usage?: {
+    primaryRemainingPercent?: unknown;
+    secondaryRemainingPercent?: unknown;
+  } | null;
+  resetAtPrimary?: unknown;
+  resetAtSecondary?: unknown;
+  windowMinutesPrimary?: unknown;
+  windowMinutesSecondary?: unknown;
+  codexAuth?: {
+    snapshotName?: unknown;
+    listedSnapshotName?: unknown;
+  } | null;
+};
+
+type ProxyAccountsPayload = {
+  accounts?: unknown;
+};
 
 function coerceWindow(raw: unknown): RateLimitWindow | undefined {
   if (!raw || typeof raw !== "object") return undefined;
@@ -80,6 +144,344 @@ function parseTimestampSeconds(input: unknown): number {
   }
 
   return Math.floor(Date.now() / 1000);
+}
+
+function parseOptionalTimestampSeconds(input: unknown): number | undefined {
+  if (input === undefined || input === null || input === "") {
+    return undefined;
+  }
+
+  return parseTimestampSeconds(input);
+}
+
+function coerceRemainingPercent(remainingRaw: unknown): number | undefined {
+  if (typeof remainingRaw !== "number" || !Number.isFinite(remainingRaw)) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.min(100, 100 - remainingRaw));
+}
+
+function normalizeLookupKey(value: string | undefined | null): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().toLowerCase();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function buildProxyWindow(
+  remainingRaw: unknown,
+  windowMinutesRaw: unknown,
+  resetAtRaw: unknown,
+): RateLimitWindow | undefined {
+  const usedPercent = coerceRemainingPercent(remainingRaw);
+  if (typeof usedPercent !== "number") {
+    return undefined;
+  }
+
+  return {
+    usedPercent,
+    windowMinutes: typeof windowMinutesRaw === "number" && Number.isFinite(windowMinutesRaw)
+      ? Math.round(windowMinutesRaw)
+      : undefined,
+    resetsAt: parseOptionalTimestampSeconds(resetAtRaw),
+  };
+}
+
+function buildSnapshotFromProxyAccount(account: ProxyAccountPayload): UsageSnapshot | null {
+  const primary = buildProxyWindow(
+    account.usage?.primaryRemainingPercent,
+    account.windowMinutesPrimary,
+    account.resetAtPrimary,
+  );
+  const secondary = buildProxyWindow(
+    account.usage?.secondaryRemainingPercent,
+    account.windowMinutesSecondary,
+    account.resetAtSecondary,
+  );
+
+  if (!primary && !secondary) {
+    return null;
+  }
+
+  return {
+    primary,
+    secondary,
+    planType: typeof account.planType === "string" ? account.planType : undefined,
+    fetchedAt: new Date().toISOString(),
+    source: "proxy",
+  };
+}
+
+function buildProxyAccountRecord(payload: ProxyAccountPayload): ProxyAccountRecord | null {
+  const usage = buildSnapshotFromProxyAccount(payload);
+  if (!usage) {
+    return null;
+  }
+
+  const snapshotNames = [
+    payload.codexAuth?.snapshotName,
+    payload.codexAuth?.listedSnapshotName,
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  return {
+    accountId: typeof payload.accountId === "string" ? payload.accountId : undefined,
+    email: typeof payload.email === "string" ? payload.email : undefined,
+    snapshotNames,
+    usage,
+  };
+}
+
+function storeUsageIndexEntry(map: Map<string, UsageSnapshot>, rawKey: string | undefined, usage: UsageSnapshot): void {
+  const normalized = normalizeLookupKey(rawKey);
+  if (!normalized || map.has(normalized)) {
+    return;
+  }
+
+  map.set(normalized, usage);
+}
+
+function extractSetCookieHeaders(headers: HeaderLookup | undefined): string[] {
+  if (!headers) return [];
+
+  if (typeof headers.getSetCookie === "function") {
+    return headers.getSetCookie();
+  }
+
+  if (typeof headers.get === "function") {
+    const single = headers.get("set-cookie");
+    return single ? [single] : [];
+  }
+
+  return [];
+}
+
+class DashboardProxyClient {
+  private readonly cookies = new Map<string, string>();
+
+  public constructor(private readonly baseUrl: string) {}
+
+  public async fetchJson(
+    pathName: string,
+    options?: {
+      method?: "GET" | "POST";
+      payload?: Record<string, unknown>;
+    },
+  ): Promise<ProxyRequestResult | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PROXY_REQUEST_TIMEOUT_MS);
+    try {
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        "User-Agent": "codex-auth",
+      };
+      const cookieHeader = this.buildCookieHeader();
+      if (cookieHeader) {
+        headers.Cookie = cookieHeader;
+      }
+
+      let body: string | undefined;
+      if (options?.payload) {
+        headers["Content-Type"] = "application/json";
+        body = JSON.stringify(options.payload);
+      }
+
+      const response = await fetch(new URL(pathName, this.baseUrl), {
+        method: options?.method ?? "GET",
+        headers,
+        body,
+        signal: controller.signal,
+      });
+
+      this.storeCookies(response.headers as HeaderLookup);
+
+      let payload: unknown = null;
+      const raw = await response.text();
+      if (raw.trim().length > 0) {
+        try {
+          payload = JSON.parse(raw) as unknown;
+        } catch {
+          payload = null;
+        }
+      }
+
+      return {
+        status: response.status,
+        payload,
+      };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private buildCookieHeader(): string | null {
+    if (this.cookies.size === 0) {
+      return null;
+    }
+
+    return Array.from(this.cookies.entries())
+      .map(([name, value]) => `${name}=${value}`)
+      .join("; ");
+  }
+
+  private storeCookies(headers: HeaderLookup | undefined): void {
+    for (const cookie of extractSetCookieHeaders(headers)) {
+      const firstPair = cookie.split(";")[0];
+      const separatorIndex = firstPair.indexOf("=");
+      if (separatorIndex <= 0) continue;
+
+      const name = firstPair.slice(0, separatorIndex).trim();
+      const value = firstPair.slice(separatorIndex + 1).trim();
+      if (!name) continue;
+      this.cookies.set(name, value);
+    }
+  }
+}
+
+function parseProxySessionState(payload: unknown): ProxySessionState | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const session = payload as Record<string, unknown>;
+  return {
+    authenticated: Boolean(session.authenticated ?? session.authenticated),
+    passwordRequired: Boolean(session.passwordRequired ?? session.password_required),
+    totpRequiredOnLogin: Boolean(session.totpRequiredOnLogin ?? session.totp_required_on_login),
+  };
+}
+
+async function resolveTotpCode(): Promise<string | null> {
+  const directCode = process.env[DASHBOARD_TOTP_CODE_ENV]?.trim();
+  if (directCode) {
+    return directCode;
+  }
+
+  const command = process.env[DASHBOARD_TOTP_COMMAND_ENV]?.trim();
+  if (!command) {
+    return null;
+  }
+
+  try {
+    const { stdout } = await execAsync(command, { timeout: PROXY_REQUEST_TIMEOUT_MS });
+    const code = stdout.trim();
+    return code.length > 0 ? code : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureDashboardSession(client: DashboardProxyClient): Promise<boolean> {
+  const sessionResponse = await client.fetchJson(DASHBOARD_SESSION_PATH);
+  const initialState = parseProxySessionState(sessionResponse?.payload);
+  if (!sessionResponse || sessionResponse.status !== 200 || !initialState) {
+    return false;
+  }
+
+  if (initialState.authenticated || !initialState.passwordRequired) {
+    return true;
+  }
+
+  const password = process.env[DASHBOARD_PASSWORD_ENV]?.trim();
+  if (!password) {
+    return false;
+  }
+
+  const loginResponse = await client.fetchJson(PASSWORD_LOGIN_PATH, {
+    method: "POST",
+    payload: { password },
+  });
+  if (!loginResponse || loginResponse.status !== 200) {
+    return false;
+  }
+
+  const loginState = parseProxySessionState((await client.fetchJson(DASHBOARD_SESSION_PATH))?.payload);
+  if (!loginState) {
+    return false;
+  }
+
+  if (loginState.authenticated) {
+    return true;
+  }
+
+  if (loginState.totpRequiredOnLogin) {
+    const code = await resolveTotpCode();
+    if (!code) {
+      return false;
+    }
+
+    const verifyResponse = await client.fetchJson(TOTP_VERIFY_PATH, {
+      method: "POST",
+      payload: { code },
+    });
+    if (!verifyResponse || verifyResponse.status !== 200) {
+      return false;
+    }
+  }
+
+  const finalState = parseProxySessionState((await client.fetchJson(DASHBOARD_SESSION_PATH))?.payload);
+  return Boolean(finalState?.authenticated);
+}
+
+function resolveProxyBaseUrl(): string | null {
+  const raw = process.env.CODEX_LB_URL?.trim() || DEFAULT_PROXY_URL;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchUsageFromProxy(): Promise<ProxyUsageIndex | null> {
+  const baseUrl = resolveProxyBaseUrl();
+  if (!baseUrl) {
+    return null;
+  }
+
+  const client = new DashboardProxyClient(baseUrl);
+  if (!(await ensureDashboardSession(client))) {
+    return null;
+  }
+
+  const accountsResponse = await client.fetchJson(ACCOUNTS_PATH);
+  if (!accountsResponse || accountsResponse.status !== 200) {
+    return null;
+  }
+
+  const payload = accountsResponse.payload as ProxyAccountsPayload | null;
+  if (!payload || !Array.isArray(payload.accounts)) {
+    return null;
+  }
+
+  const index: ProxyUsageIndex = {
+    byAccountId: new Map<string, UsageSnapshot>(),
+    byEmail: new Map<string, UsageSnapshot>(),
+    bySnapshotName: new Map<string, UsageSnapshot>(),
+  };
+
+  for (const account of payload.accounts) {
+    if (!account || typeof account !== "object") {
+      continue;
+    }
+
+    const record = buildProxyAccountRecord(account as ProxyAccountPayload);
+    if (!record) {
+      continue;
+    }
+
+    storeUsageIndexEntry(index.byAccountId, record.accountId, record.usage);
+    storeUsageIndexEntry(index.byEmail, record.email, record.usage);
+    for (const snapshotName of record.snapshotNames) {
+      storeUsageIndexEntry(index.bySnapshotName, snapshotName, record.usage);
+    }
+  }
+
+  return index;
 }
 
 export function resolveRateWindow(snapshot: UsageSnapshot | undefined, minutes: number, fallbackPrimary: boolean): RateLimitWindow | undefined {

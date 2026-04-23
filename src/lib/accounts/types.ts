@@ -1,7 +1,7 @@
 export const DEFAULT_THRESHOLD_5H_PERCENT = 10;
 export const DEFAULT_THRESHOLD_WEEKLY_PERCENT = 5;
 
-export type UsageSource = "api" | "local" | "cached";
+export type UsageSource = "api" | "local" | "cached" | "proxy";
 
 export interface RateLimitWindow {
   usedPercent: number;

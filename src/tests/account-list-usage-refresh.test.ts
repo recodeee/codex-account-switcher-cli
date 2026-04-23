@@ -87,7 +87,138 @@ async function writeRegistry(registryPath: string, registry: RegistryData): Prom
   await fsp.writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`, "utf8");
 }
 
-test("listAccountMappings refreshes missing quota values from API mode", async (t) => {
+test("listAccountMappings refreshes missing quota values from proxy bulk usage when available", async (t) => {
+  await withIsolatedCodexDir(t, async ({ accountsDir, authPath, registryPath }) => {
+    const service = new AccountService();
+    const futureResetAt = Math.floor(Date.now() / 1000) + 600;
+    const proxyCalls: string[] = [];
+    const usageCalls: string[] = [];
+
+    await Promise.all([
+      fsp.writeFile(path.join(accountsDir, "odin@munchi.hu.json"), buildAuthPayload("odin@munchi.hu"), "utf8"),
+      fsp.writeFile(path.join(accountsDir, "viktor@edixai.com.json"), buildAuthPayload("viktor@edixai.com"), "utf8"),
+      fsp.writeFile(authPath, buildAuthPayload("odin@munchi.hu"), "utf8"),
+      writeRegistry(registryPath, {
+        version: 1,
+        autoSwitch: {
+          enabled: false,
+          threshold5hPercent: 10,
+          thresholdWeeklyPercent: 5,
+        },
+        api: {
+          usage: true,
+        },
+        accounts: {
+          "odin@munchi.hu": {
+            name: "odin@munchi.hu",
+            createdAt: new Date().toISOString(),
+          },
+          "viktor@edixai.com": {
+            name: "viktor@edixai.com",
+            createdAt: new Date().toISOString(),
+            lastUsageAt: new Date().toISOString(),
+            lastUsage: {
+              source: "cached",
+              fetchedAt: new Date().toISOString(),
+              primary: { usedPercent: 0, windowMinutes: 300, resetsAt: futureResetAt },
+              secondary: { usedPercent: 0, windowMinutes: 10080, resetsAt: futureResetAt },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const originalFetch = global.fetch;
+    global.fetch = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "http://127.0.0.1:2455/api/dashboard-auth/session") {
+        proxyCalls.push(url);
+        return {
+          status: 200,
+          headers: {
+            get() {
+              return null;
+            },
+          },
+          async text() {
+            return JSON.stringify({
+              authenticated: false,
+              passwordRequired: false,
+              totpRequiredOnLogin: false,
+            });
+          },
+        } as unknown as Response;
+      }
+
+      if (url === "http://127.0.0.1:2455/api/accounts") {
+        proxyCalls.push(url);
+        return {
+          status: 200,
+          headers: {
+            get() {
+              return null;
+            },
+          },
+          async text() {
+            return JSON.stringify({
+              accounts: [
+                {
+                  accountId: "acct-1",
+                  email: "odin@munchi.hu",
+                  planType: "team",
+                  usage: {
+                    primaryRemainingPercent: 83,
+                    secondaryRemainingPercent: 62,
+                  },
+                  resetAtPrimary: new Date(futureResetAt * 1000).toISOString(),
+                  resetAtSecondary: new Date((futureResetAt + 3600) * 1000).toISOString(),
+                  windowMinutesPrimary: 300,
+                  windowMinutesSecondary: 10080,
+                  codexAuth: {
+                    snapshotName: "odin@munchi.hu",
+                  },
+                },
+              ],
+            });
+          },
+        } as unknown as Response;
+      }
+
+      usageCalls.push(url);
+      throw new Error(`usage api should not run when proxy bulk load succeeds: ${url}`);
+    }) as typeof global.fetch;
+
+    t.after(() => {
+      global.fetch = originalFetch;
+    });
+
+    const mappings = await service.listAccountMappings({ refreshUsage: "missing" });
+
+    assert.deepEqual(proxyCalls, [
+      "http://127.0.0.1:2455/api/dashboard-auth/session",
+      "http://127.0.0.1:2455/api/accounts",
+    ]);
+    assert.deepEqual(usageCalls, []);
+    assert.equal(
+      mappings.find((entry) => entry.name === "odin@munchi.hu")?.remaining5hPercent,
+      83,
+    );
+    assert.equal(
+      mappings.find((entry) => entry.name === "odin@munchi.hu")?.remainingWeeklyPercent,
+      62,
+    );
+    assert.equal(
+      mappings.find((entry) => entry.name === "viktor@edixai.com")?.remaining5hPercent,
+      100,
+    );
+    assert.equal(
+      mappings.find((entry) => entry.name === "odin@munchi.hu")?.usageSource,
+      "proxy",
+    );
+  });
+});
+
+test("listAccountMappings falls back to per-account API when proxy bulk load is unavailable", async (t) => {
   await withIsolatedCodexDir(t, async ({ accountsDir, authPath, registryPath }) => {
     const service = new AccountService();
     const futureResetAt = Math.floor(Date.now() / 1000) + 600;
@@ -128,11 +259,18 @@ test("listAccountMappings refreshes missing quota values from API mode", async (
     ]);
 
     const originalFetch = global.fetch;
-    global.fetch = (async (_input: unknown, init?: RequestInit) => {
+    global.fetch = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      fetchCalls.push(url);
+
+      if (url === "http://127.0.0.1:2455/api/dashboard-auth/session") {
+        throw new Error("proxy unavailable");
+      }
+
       const accountId = init?.headers && typeof init.headers === "object"
         ? (init.headers as Record<string, string>)["ChatGPT-Account-Id"]
         : undefined;
-      fetchCalls.push(accountId ?? "missing");
+      assert.equal(accountId, "acct-1");
       return {
         ok: true,
         async json() {
@@ -153,7 +291,10 @@ test("listAccountMappings refreshes missing quota values from API mode", async (
 
     const mappings = await service.listAccountMappings({ refreshUsage: "missing" });
 
-    assert.deepEqual(fetchCalls, ["acct-1"]);
+    assert.deepEqual(fetchCalls, [
+      "http://127.0.0.1:2455/api/dashboard-auth/session",
+      "https://chatgpt.com/backend-api/wham/usage",
+    ]);
     assert.equal(
       mappings.find((entry) => entry.name === "odin@munchi.hu")?.remaining5hPercent,
       83,
@@ -163,8 +304,8 @@ test("listAccountMappings refreshes missing quota values from API mode", async (
       62,
     );
     assert.equal(
-      mappings.find((entry) => entry.name === "viktor@edixai.com")?.remaining5hPercent,
-      100,
+      mappings.find((entry) => entry.name === "odin@munchi.hu")?.usageSource,
+      "api",
     );
   });
 });
