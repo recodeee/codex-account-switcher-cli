@@ -6,6 +6,7 @@ import { resolveAccountsDir } from "./config/paths";
 const SEMVER_TRIPLET = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/;
 const DEFAULT_UPDATE_CHECK_TIMEOUT_MS = 2_500;
 const DEFAULT_UPDATE_CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
+const DEFAULT_UP_TO_DATE_CACHE_TTL_MS = 60 * 1_000;
 export const PACKAGE_NAME = "@imdeadpool/codex-account-switcher";
 export type UpdateState = "update-available" | "up-to-date" | "unknown";
 type FetchLatestVersionFn = (packageName: string, timeoutMs?: number) => Promise<string | null>;
@@ -25,10 +26,12 @@ interface UpdateCheckCacheRecord {
 
 export interface CachedUpdateCheckOptions {
   cachePath?: string;
+  currentVersion?: string;
   fetcher?: FetchLatestVersionFn;
   nowMs?: number;
   timeoutMs?: number;
   ttlMs?: number;
+  upToDateTtlMs?: number;
 }
 
 function resolveUpdateCheckCachePath(): string {
@@ -222,14 +225,22 @@ export async function fetchLatestNpmVersionCached(
 ): Promise<string | null> {
   const cachePath = options.cachePath ?? resolveUpdateCheckCachePath();
   const ttlMs = options.ttlMs ?? DEFAULT_UPDATE_CACHE_TTL_MS;
+  const upToDateTtlMs = options.upToDateTtlMs ?? DEFAULT_UP_TO_DATE_CACHE_TTL_MS;
   const nowMs = options.nowMs ?? Date.now();
   const cached = await loadUpdateCheckCache(cachePath);
+
+  const cachedTtlMs =
+    cached && typeof options.currentVersion === "string" && options.currentVersion.trim().length > 0
+      ? isVersionNewer(options.currentVersion, cached.latestVersion)
+        ? ttlMs
+        : upToDateTtlMs
+      : ttlMs;
 
   if (
     cached &&
     cached.packageName === packageName &&
     nowMs - cached.checkedAt >= 0 &&
-    nowMs - cached.checkedAt <= ttlMs
+    nowMs - cached.checkedAt <= cachedTtlMs
   ) {
     return cached.latestVersion;
   }

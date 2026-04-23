@@ -155,6 +155,77 @@ test("fetchLatestNpmVersionCached reuses a fresh cached version", async (t) => {
   assert.equal(fetchCalls, 1);
 });
 
+test("fetchLatestNpmVersionCached refreshes stale up-to-date cache quickly", async (t) => {
+  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-update-check-"));
+  const cachePath = path.join(cacheDir, "update-check.json");
+  t.after(async () => {
+    await fsp.rm(cacheDir, { recursive: true, force: true });
+  });
+
+  let fetchCalls = 0;
+  await fetchLatestNpmVersionCached(PACKAGE_NAME, {
+    cachePath,
+    currentVersion: "0.1.16",
+    nowMs: 1_000,
+    ttlMs: 6 * 60 * 60 * 1_000,
+    upToDateTtlMs: 60_000,
+    fetcher: async () => {
+      fetchCalls += 1;
+      return "0.1.16";
+    },
+  });
+  const refreshed = await fetchLatestNpmVersionCached(PACKAGE_NAME, {
+    cachePath,
+    currentVersion: "0.1.16",
+    nowMs: 61_500,
+    ttlMs: 6 * 60 * 60 * 1_000,
+    upToDateTtlMs: 60_000,
+    fetcher: async () => {
+      fetchCalls += 1;
+      return "0.1.18";
+    },
+  });
+
+  assert.equal(refreshed, "0.1.18");
+  assert.equal(fetchCalls, 2);
+});
+
+test("fetchLatestNpmVersionCached reuses update-available cache for the long ttl", async (t) => {
+  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-update-check-"));
+  const cachePath = path.join(cacheDir, "update-check.json");
+  t.after(async () => {
+    await fsp.rm(cacheDir, { recursive: true, force: true });
+  });
+
+  let fetchCalls = 0;
+  const first = await fetchLatestNpmVersionCached(PACKAGE_NAME, {
+    cachePath,
+    currentVersion: "0.1.16",
+    nowMs: 1_000,
+    ttlMs: 6 * 60 * 60 * 1_000,
+    upToDateTtlMs: 60_000,
+    fetcher: async () => {
+      fetchCalls += 1;
+      return "0.1.18";
+    },
+  });
+  const second = await fetchLatestNpmVersionCached(PACKAGE_NAME, {
+    cachePath,
+    currentVersion: "0.1.16",
+    nowMs: 61_500,
+    ttlMs: 6 * 60 * 60 * 1_000,
+    upToDateTtlMs: 60_000,
+    fetcher: async () => {
+      fetchCalls += 1;
+      return "0.1.19";
+    },
+  });
+
+  assert.equal(first, "0.1.18");
+  assert.equal(second, "0.1.18");
+  assert.equal(fetchCalls, 1);
+});
+
 test("fetchLatestNpmVersionCached refreshes a stale cache", async (t) => {
   const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-update-check-"));
   const cachePath = path.join(cacheDir, "update-check.json");

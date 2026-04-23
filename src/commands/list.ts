@@ -76,7 +76,10 @@ export default class ListCommand extends BaseCommand {
     const currentVersion = this.config.version;
     if (!currentVersion || typeof currentVersion !== "string") return;
 
-    const latestVersion = await fetchLatestNpmVersionCached(PACKAGE_NAME, { timeoutMs: 900 });
+    const latestVersion = await fetchLatestNpmVersionCached(PACKAGE_NAME, {
+      currentVersion,
+      timeoutMs: 900,
+    });
     if (!latestVersion) return;
 
     const summary = getUpdateSummary(currentVersion, latestVersion);
