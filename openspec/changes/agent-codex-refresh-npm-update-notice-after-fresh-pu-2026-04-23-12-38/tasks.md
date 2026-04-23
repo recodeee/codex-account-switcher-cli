@@ -20,5 +20,5 @@
 ## 5. Cleanup
 
 - [x] 5.1 Validate the change with `openspec validate agent-codex-refresh-npm-update-notice-after-fresh-pu-2026-04-23-12-38 --type change --strict`
-- [ ] 5.2 Finish with `gx branch finish --branch "agent/codex/refresh-npm-update-notice-after-fresh-pu-2026-04-23-12-38" --base main --via-pr --wait-for-merge --cleanup`
-- [ ] 5.3 Record PR URL and final `MERGED` evidence
+- [x] 5.2 Finished with `gx branch finish --branch "agent/codex/refresh-npm-update-notice-after-fresh-pu-2026-04-23-12-38" --base main --via-pr --wait-for-merge --cleanup`
+- [x] 5.3 PR `#9` `https://github.com/recodeee/codex-account-switcher-cli/pull/9` is `MERGED` at `2026-04-23T10:44:02Z`; `git worktree list` shows only `/home/deadpool/Documents/recodee/codex-account-switcher` on `main`
