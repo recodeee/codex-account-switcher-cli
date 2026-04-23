@@ -27,7 +27,7 @@ export default class ListCommand extends BaseCommand {
       await this.maybeOfferGlobalUpdate();
 
       if (!detailed) {
-        const accounts = await this.accounts.listAccountMappings();
+        const accounts = await this.accounts.listAccountMappings({ refreshUsage: "missing" });
         if (!accounts.length) {
           this.log("No saved Codex accounts yet. Run `codex-auth save <name>`.");
           return;
@@ -42,7 +42,7 @@ export default class ListCommand extends BaseCommand {
         return;
       }
 
-      const accounts = await this.accounts.listAccountMappings();
+      const accounts = await this.accounts.listAccountMappings({ refreshUsage: "missing" });
       if (!accounts.length) {
         this.log("No saved Codex accounts yet. Run `codex-auth save <name>`.");
         return;

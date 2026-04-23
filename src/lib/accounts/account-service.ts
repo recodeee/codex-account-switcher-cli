@@ -50,6 +50,7 @@ const ACCOUNT_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._@+-]*$/;
 const EXTERNAL_SYNC_FORCE_ENV = "CODEX_AUTH_FORCE_EXTERNAL_SYNC";
 const SESSION_KEY_ENV = "CODEX_AUTH_SESSION_KEY";
 const SESSION_ACTIVE_OVERRIDE_ENV = "CODEX_AUTH_SESSION_ACTIVE_OVERRIDE";
+const LIST_USAGE_REFRESH_CONCURRENCY = 6;
 
 interface SessionMapEntry {
   accountName: string;
@@ -66,6 +67,10 @@ export interface AccountChoice {
   name: string;
   email?: string;
   active: boolean;
+}
+
+export interface ListAccountMappingsOptions {
+  refreshUsage?: "never" | "missing" | "always";
 }
 
 export interface RemoveResult {
@@ -265,13 +270,20 @@ export class AccountService {
     }));
   }
 
-  public async listAccountMappings(): Promise<AccountMapping[]> {
+  public async listAccountMappings(options?: ListAccountMappingsOptions): Promise<AccountMapping[]> {
     const [accounts, current, registry] = await Promise.all([
       this.listAccountNames(),
       this.getCurrentAccountName(),
       this.loadReconciledRegistry(),
     ]);
     const nowSeconds = Math.floor(Date.now() / 1000);
+    await this.refreshListUsageIfNeeded(
+      accounts,
+      current,
+      registry,
+      options?.refreshUsage ?? "never",
+      nowSeconds,
+    );
 
     return Promise.all(
       accounts.map(async (name) => {
@@ -744,6 +756,61 @@ export class AccountService {
 
     registry.accounts[accountName] = entry;
     return entry.lastUsage;
+  }
+
+  private async refreshListUsageIfNeeded(
+    accountNames: string[],
+    currentAccountName: string | null,
+    registry: RegistryData,
+    refreshUsage: "never" | "missing" | "always",
+    nowSeconds: number,
+  ): Promise<void> {
+    if (refreshUsage === "never" || accountNames.length === 0) {
+      return;
+    }
+
+    const accountNamesToRefresh = accountNames.filter((accountName) => {
+      if (!registry.api.usage && currentAccountName !== accountName) {
+        return false;
+      }
+
+      if (refreshUsage === "always") {
+        return true;
+      }
+
+      return this.isUsageMissingForList(registry.accounts[accountName]?.lastUsage, nowSeconds);
+    });
+
+    if (accountNamesToRefresh.length === 0) {
+      return;
+    }
+
+    let index = 0;
+    const workerCount = Math.min(LIST_USAGE_REFRESH_CONCURRENCY, accountNamesToRefresh.length);
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        for (;;) {
+          const accountName = accountNamesToRefresh[index];
+          index += 1;
+          if (!accountName) {
+            return;
+          }
+
+          await this.refreshAccountUsage(registry, accountName, {
+            preferApi: registry.api.usage,
+            allowLocalFallback: currentAccountName === accountName,
+          });
+        }
+      }),
+    );
+
+    await this.persistRegistry(registry);
+  }
+
+  private isUsageMissingForList(usage: UsageSnapshot | undefined, nowSeconds: number): boolean {
+    const remaining5hPercent = remainingPercent(resolveRateWindow(usage, 300, true), nowSeconds);
+    const remainingWeeklyPercent = remainingPercent(resolveRateWindow(usage, 10080, false), nowSeconds);
+    return typeof remaining5hPercent !== "number" || typeof remainingWeeklyPercent !== "number";
   }
 
   private accountFilePath(name: string): string {
