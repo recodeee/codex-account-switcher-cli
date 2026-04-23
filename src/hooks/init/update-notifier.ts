@@ -2,6 +2,8 @@ import type { Hook } from "@oclif/core";
 import readline from "node:readline/promises";
 import {
   fetchLatestNpmVersionCached,
+  formatGlobalInstallCommand,
+  formatUpdateCompletedMessage,
   formatUpdateSummaryInline,
   getUpdateSummary,
   PACKAGE_NAME,
@@ -30,7 +32,7 @@ const hook: Hook.Init = async function (options) {
 
   let shouldUpdate = false;
   try {
-    const answer = await rl.question("Install the update now? [Y/n] ");
+    const answer = await rl.question(`Install codex-auth ${latestVersion} now? [Y/n] `);
     shouldUpdate = shouldProceedWithYesDefault(answer);
   } finally {
     rl.close();
@@ -41,13 +43,15 @@ const hook: Hook.Init = async function (options) {
     return;
   }
 
-  const exitCode = await runGlobalNpmInstall(PACKAGE_NAME);
+  const exitCode = await runGlobalNpmInstall(PACKAGE_NAME, latestVersion);
   if (exitCode === 0) {
-    this.log(`✓ codex-auth updated to ${latestVersion}.`);
+    this.log(formatUpdateCompletedMessage(latestVersion));
     return;
   }
 
-  this.log(`Update failed (exit code ${exitCode}). Run: npm i -g ${PACKAGE_NAME}@latest`);
+  this.log(
+    `Update failed (exit code ${exitCode}). Run: ${formatGlobalInstallCommand(PACKAGE_NAME, latestVersion)}`,
+  );
 };
 
 export default hook;

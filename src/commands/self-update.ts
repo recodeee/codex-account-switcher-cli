@@ -3,6 +3,8 @@ import prompts from "prompts";
 import { BaseCommand } from "../lib/base-command";
 import {
   fetchLatestNpmVersion,
+  formatGlobalInstallCommand,
+  formatUpdateCompletedMessage,
   formatUpdateSummaryCard,
   formatUpdateSummaryInline,
   getUpdateSummary,
@@ -69,7 +71,7 @@ export default class SelfUpdateCommand extends BaseCommand {
         const response = await prompts({
           type: "confirm",
           name: "proceed",
-          message: "Proceed with global npm update now?",
+          message: `Proceed with global npm update to ${latestVersion} now?`,
           initial: true,
         });
 
@@ -79,13 +81,15 @@ export default class SelfUpdateCommand extends BaseCommand {
         }
       }
 
-      const exitCode = await runGlobalNpmInstall(PACKAGE_NAME);
+      const exitCode = await runGlobalNpmInstall(PACKAGE_NAME, latestVersion);
       if (exitCode === 0) {
-        this.log(`✓ Global update completed (installed ${latestVersion}).`);
+        this.log(formatUpdateCompletedMessage(latestVersion));
         return;
       }
 
-      this.warn(`Global update failed (exit code ${exitCode}). Run: npm i -g ${PACKAGE_NAME}@latest`);
+      this.warn(
+        `Global update failed (exit code ${exitCode}). Run: ${formatGlobalInstallCommand(PACKAGE_NAME, latestVersion)}`,
+      );
     });
   }
 }

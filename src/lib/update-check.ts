@@ -133,6 +133,29 @@ export function formatUpdateSummaryInline(summary: UpdateSummary): string {
   return `ℹ Update status unknown (current: ${summary.currentVersion}, latest: ${summary.latestVersion})`;
 }
 
+function normalizeInstallVersion(version: "latest" | string = "latest"): string {
+  const trimmed = version.trim();
+  return trimmed.length > 0 ? trimmed : "latest";
+}
+
+export function formatGlobalInstallSpec(
+  packageName: string,
+  version: "latest" | string = "latest",
+): string {
+  return `${packageName}@${normalizeInstallVersion(version)}`;
+}
+
+export function formatGlobalInstallCommand(
+  packageName: string,
+  version: "latest" | string = "latest",
+): string {
+  return `npm i -g ${formatGlobalInstallSpec(packageName, version)}`;
+}
+
+export function formatUpdateCompletedMessage(version: string): string {
+  return `✓ Global update completed (installed ${normalizeInstallVersion(version)}).`;
+}
+
 export function shouldProceedWithYesDefault(answer: string): boolean {
   const normalized = answer.trim().toLowerCase();
   if (!normalized) return true;
@@ -236,7 +259,7 @@ export async function runGlobalNpmInstall(
   version: "latest" | string = "latest",
 ): Promise<number> {
   return new Promise((resolve) => {
-    const child = spawn("npm", ["i", "-g", `${packageName}@${version}`], {
+    const child = spawn("npm", ["i", "-g", formatGlobalInstallSpec(packageName, version)], {
       stdio: "inherit",
     });
 
