@@ -6,6 +6,9 @@ import path from "node:path";
 
 import {
   fetchLatestNpmVersionCached,
+  formatGlobalInstallCommand,
+  formatGlobalInstallSpec,
+  formatUpdateCompletedMessage,
   formatUpdateSummaryCard,
   formatUpdateSummaryInline,
   getUpdateSummary,
@@ -87,6 +90,24 @@ test("formatUpdateSummaryCard renders a stable 4-line card", () => {
   assert.equal(lines.length, 4);
   assert.equal(lines[0], "┌─ codex-auth update");
   assert.equal(lines[3], "└─ status : update available");
+});
+
+test("formatGlobalInstallSpec and command pin an exact version", () => {
+  assert.equal(
+    formatGlobalInstallSpec(PACKAGE_NAME, "0.1.18"),
+    "@imdeadpool/codex-account-switcher@0.1.18",
+  );
+  assert.equal(
+    formatGlobalInstallCommand(PACKAGE_NAME, "0.1.18"),
+    "npm i -g @imdeadpool/codex-account-switcher@0.1.18",
+  );
+});
+
+test("formatUpdateCompletedMessage includes the installed version", () => {
+  assert.equal(
+    formatUpdateCompletedMessage("0.1.18"),
+    "✓ Global update completed (installed 0.1.18).",
+  );
 });
 
 test("shouldProceedWithYesDefault accepts enter and yes responses", () => {

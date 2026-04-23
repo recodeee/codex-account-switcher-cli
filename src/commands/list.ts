@@ -3,6 +3,8 @@ import prompts from "prompts";
 import { BaseCommand } from "../lib/base-command";
 import {
   fetchLatestNpmVersionCached,
+  formatGlobalInstallCommand,
+  formatUpdateCompletedMessage,
   formatUpdateSummaryInline,
   getUpdateSummary,
   PACKAGE_NAME,
@@ -85,21 +87,23 @@ export default class ListCommand extends BaseCommand {
     const prompt = await prompts({
       type: "confirm",
       name: "install",
-      message: "Press Enter to update globally now",
+      message: `Press Enter to update globally to ${latestVersion}`,
       initial: true,
     });
 
     if (!prompt.install) {
-      this.log(`Skipped update. Run manually: npm i -g ${PACKAGE_NAME}@latest`);
+      this.log(`Skipped update. Run manually: ${formatGlobalInstallCommand(PACKAGE_NAME, latestVersion)}`);
       return;
     }
 
-    const installExitCode = await runGlobalNpmInstall(PACKAGE_NAME);
+    const installExitCode = await runGlobalNpmInstall(PACKAGE_NAME, latestVersion);
     if (installExitCode === 0) {
-      this.log("Global update completed.");
+      this.log(formatUpdateCompletedMessage(latestVersion));
       return;
     }
 
-    this.warn(`Global update failed (exit code ${installExitCode}). Try: npm i -g ${PACKAGE_NAME}@latest`);
+    this.warn(
+      `Global update failed (exit code ${installExitCode}). Try: ${formatGlobalInstallCommand(PACKAGE_NAME, latestVersion)}`,
+    );
   }
 }
