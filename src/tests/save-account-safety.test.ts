@@ -855,6 +855,85 @@ test("syncExternalAuthSnapshotIfNeeded reuses a saved alias that matches relogin
   });
 });
 
+test("syncExternalAuthSnapshotIfNeeded uses registry metadata before parsing every saved snapshot", async (t) => {
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const activeName = "primary@edixai.com";
+    const savedAlias = "team-primary";
+    const incomingEmail = "admin@kozpontihusbolt.hu";
+    const currentPath = path.join(codexDir, "current");
+    const registryPath = path.join(accountsDir, "registry.json");
+
+    await fsp.writeFile(
+      path.join(accountsDir, `${activeName}.json`),
+      buildAuthPayload(activeName, {
+        accountId: "acct-primary",
+        userId: "user-primary",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(path.join(accountsDir, `${savedAlias}.json`), "{broken", "utf8");
+    await fsp.writeFile(currentPath, `${activeName}\n`, "utf8");
+    await fsp.writeFile(
+      registryPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          autoSwitch: {
+            enabled: false,
+            threshold5hPercent: 10,
+            thresholdWeeklyPercent: 5,
+          },
+          api: {
+            usage: true,
+          },
+          activeAccountName: activeName,
+          accounts: {
+            [activeName]: {
+              name: activeName,
+              createdAt: new Date().toISOString(),
+              email: activeName,
+              accountId: "acct-primary",
+              userId: "user-primary",
+            },
+            [savedAlias]: {
+              name: savedAlias,
+              createdAt: new Date().toISOString(),
+              email: incomingEmail,
+              accountId: "acct-team",
+              userId: "user-team",
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fsp.writeFile(
+      authPath,
+      buildAuthPayload(incomingEmail, {
+        accountId: "acct-team",
+        userId: "user-team",
+        tokenSeed: "post-login",
+      }),
+      "utf8",
+    );
+
+    const result = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.deepEqual(result, {
+      synchronized: true,
+      savedName: savedAlias,
+      autoSwitchDisabled: false,
+    });
+
+    assert.equal((await fsp.readFile(currentPath, "utf8")).trim(), savedAlias);
+    const aliasSnapshotRaw = await fsp.readFile(path.join(accountsDir, `${savedAlias}.json`), "utf8");
+    assert.match(aliasSnapshotRaw, /token-post-login/);
+    await assert.rejects(() => fsp.access(path.join(accountsDir, `${incomingEmail}.json`)));
+  });
+});
+
 test("syncExternalAuthSnapshotIfNeeded refreshes active canonical email snapshot instead of creating a duplicate", async (t) => {
   await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
     const service = new AccountService();

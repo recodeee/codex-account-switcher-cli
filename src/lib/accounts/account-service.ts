@@ -31,6 +31,7 @@ import {
   RegistryData,
   StatusReport,
   UsageSnapshot,
+  AccountRegistryEntry,
 } from "./types";
 import {
   fetchUsageFromApi,
@@ -908,11 +909,11 @@ export class AccountService {
     }
   }
 
-  private async writeCurrentName(name: string): Promise<void> {
+  private async writeCurrentName(name: string, options?: { authFingerprint?: string }): Promise<void> {
     const currentNamePath = resolveCurrentNamePath();
     await this.ensureDir(path.dirname(currentNamePath));
     await fsp.writeFile(currentNamePath, `${name}\n`, "utf8");
-    await this.setSessionAccountName(name);
+    await this.setSessionAccountName(name, options?.authFingerprint);
   }
 
   private async readCurrentNameFile(currentNamePath: string): Promise<string | null> {
@@ -1012,6 +1013,14 @@ export class AccountService {
     let emailMatch: ResolvedDefaultAccountName | null = null;
     const accountNames = await this.listAccountNames();
     const candidates = this.orderReloginSnapshotCandidates(accountNames, incomingSnapshot, activeName);
+    const registryMatch = await this.resolveRegistryAccountNameForIncomingSnapshot(
+      incomingSnapshot,
+      candidates,
+      activeName,
+    );
+    if (registryMatch) {
+      return registryMatch;
+    }
 
     for (const name of candidates) {
       const snapshotPath = this.accountFilePath(name);
@@ -1035,6 +1044,41 @@ export class AccountService {
     }
 
     return emailMatch;
+  }
+
+  private async resolveRegistryAccountNameForIncomingSnapshot(
+    incomingSnapshot: ParsedAuthSnapshot,
+    candidates: string[],
+    activeName: string | null,
+  ): Promise<ResolvedDefaultAccountName | null> {
+    const registry = await loadRegistry();
+    let activeEmailMatch: ResolvedDefaultAccountName | null = null;
+
+    for (const name of candidates) {
+      const entry = registry.accounts[name];
+      if (!entry || !(await this.pathExists(this.accountFilePath(name)))) continue;
+
+      if (this.registryEntrySharesIdentity(entry, incomingSnapshot)) {
+        return {
+          name,
+          source: activeName === name ? "active" : "existing",
+        };
+      }
+
+      if (
+        !activeEmailMatch &&
+        activeName === name &&
+        this.registryEntrySharesEmail(entry, incomingSnapshot)
+      ) {
+        activeEmailMatch = {
+          name,
+          source: "active",
+          forceOverwrite: true,
+        };
+      }
+    }
+
+    return activeEmailMatch;
   }
 
   private orderReloginSnapshotCandidates(
@@ -1132,8 +1176,10 @@ export class AccountService {
     await this.ensureDir(path.dirname(authPath));
     await fsp.copyFile(source, authPath);
 
-    await this.writeCurrentName(name);
-    await this.rememberSessionAuthFingerprint(authPath);
+    const authState = await this.readAuthSyncState(authPath);
+    await this.writeCurrentName(name, {
+      authFingerprint: authState && !authState.isSymbolicLink ? authState.fingerprint : undefined,
+    });
   }
 
   private async clearActivePointers(): Promise<void> {
@@ -1205,7 +1251,7 @@ export class AccountService {
     return null;
   }
 
-  private async setSessionAccountName(accountName: string): Promise<void> {
+  private async setSessionAccountName(accountName: string, authFingerprint?: string): Promise<void> {
     const sessionKey = this.resolveSessionScopeKey();
     if (!sessionKey) return;
 
@@ -1213,7 +1259,7 @@ export class AccountService {
     const existing = sessionMap.sessions[sessionKey];
     sessionMap.sessions[sessionKey] = {
       accountName,
-      authFingerprint: existing?.authFingerprint,
+      authFingerprint: authFingerprint ?? existing?.authFingerprint,
       updatedAt: new Date().toISOString(),
     };
     await this.writeSessionMap(sessionMap);
@@ -1391,6 +1437,32 @@ export class AccountService {
     }
 
     return false;
+  }
+
+  private registryEntrySharesIdentity(entry: AccountRegistryEntry, snapshot: ParsedAuthSnapshot): boolean {
+    if (snapshot.authMode !== "chatgpt") {
+      return false;
+    }
+
+    if (entry.userId && snapshot.userId && entry.accountId && snapshot.accountId) {
+      return entry.userId === snapshot.userId && entry.accountId === snapshot.accountId;
+    }
+
+    if (entry.accountId && snapshot.accountId) {
+      return entry.accountId === snapshot.accountId;
+    }
+
+    if (entry.userId && snapshot.userId) {
+      return entry.userId === snapshot.userId;
+    }
+
+    return this.registryEntrySharesEmail(entry, snapshot);
+  }
+
+  private registryEntrySharesEmail(entry: AccountRegistryEntry, snapshot: ParsedAuthSnapshot): boolean {
+    const entryEmail = entry.email?.trim().toLowerCase();
+    const snapshotEmail = snapshot.email?.trim().toLowerCase();
+    return Boolean(entryEmail && snapshotEmail && entryEmail === snapshotEmail);
   }
 
   private snapshotsShareEmail(a: ParsedAuthSnapshot, b: ParsedAuthSnapshot): boolean {
