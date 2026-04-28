@@ -23,5 +23,5 @@
 
 ## 5. Cleanup
 
-- [ ] Commit, push, create/update PR, wait for `MERGED`, and prune sandbox with `gx branch finish --branch agent/codex/speed-up-account-switching-v0-1-20-2026-04-28-22-23 --base main --via-pr --wait-for-merge --cleanup`.
-- [ ] Record PR URL and final `MERGED` evidence.
+- [x] Commit, push, create/update PR, wait for `MERGED`, and prune sandbox with `gx branch finish --branch agent/codex/speed-up-account-switching-v0-1-20-2026-04-28-22-23 --base main --via-pr --wait-for-merge --cleanup`.
+- [x] Record PR URL and final `MERGED` evidence: https://github.com/recodeee/codex-account-switcher-cli/pull/17, state `MERGED`, merge commit `359dbc3dd9bb1f02a7b420dca953697d7f455218`, merged at `2026-04-28T20:30:48Z`; source branch and remote removed by `gx branch finish`, detached sandbox pruned by `gx cleanup --base main`.
