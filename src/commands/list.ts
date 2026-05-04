@@ -1,6 +1,7 @@
 import { Flags } from "@oclif/core";
 import prompts from "prompts";
 import { BaseCommand } from "../lib/base-command";
+import { formatAccountType } from "../lib/accounts/plan-display";
 import {
   fetchLatestNpmVersionCached,
   formatGlobalInstallCommand,
@@ -17,7 +18,7 @@ export default class ListCommand extends BaseCommand {
   static flags = {
     details: Flags.boolean({
       char: "d",
-      description: "Show per-account mapping metadata (email/account/user/usage)",
+      description: "Show per-account mapping metadata (email/account/user/type/usage)",
       default: false,
     }),
   } as const;
@@ -38,7 +39,7 @@ export default class ListCommand extends BaseCommand {
         for (const account of accounts) {
           const mark = account.active ? "*" : " ";
           this.log(
-            `${mark} ${account.name}  5h=${this.formatRemaining(account.remaining5hPercent)}  weekly=${this.formatRemaining(account.remainingWeeklyPercent)}`,
+            `${mark} ${account.name}  type=${formatAccountType(account.planType)}  5h=${this.formatRemaining(account.remaining5hPercent)}  weekly=${this.formatRemaining(account.remainingWeeklyPercent)}`,
           );
         }
         return;
@@ -57,7 +58,7 @@ export default class ListCommand extends BaseCommand {
           `    email=${account.email ?? "-"} account=${account.accountId ?? "-"} user=${account.userId ?? "-"}`,
         );
         this.log(
-          `    plan=${account.planType ?? "-"} usage=${account.usageSource ?? "-"} 5h=${this.formatRemaining(account.remaining5hPercent)} weekly=${this.formatRemaining(account.remainingWeeklyPercent)} lastUsageAt=${account.lastUsageAt ?? "-"}`,
+          `    type=${formatAccountType(account.planType)} plan=${account.planType ?? "-"} usage=${account.usageSource ?? "-"} 5h=${this.formatRemaining(account.remaining5hPercent)} weekly=${this.formatRemaining(account.remainingWeeklyPercent)} lastUsageAt=${account.lastUsageAt ?? "-"}`,
         );
       }
     });

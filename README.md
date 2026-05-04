@@ -116,10 +116,10 @@ codex-auth use
 codex-auth list
 
 # bare list shows the saved account/snapshot name first,
-# then the remaining 5h and weekly quota percentages
+# then the account type and remaining 5h/weekly quota percentages
 # (the active row is marked with `*`)
-#   admin@compastor.com  5h=1%  weekly=22%
-# * recodee@portasmosonmagyarovar.hu  5h=99%  weekly=44%
+#   admin@compastor.com  type=ChatGPT seat (Business)  5h=1%  weekly=22%
+# * recodee@portasmosonmagyarovar.hu  type=Usage based (Codex)  5h=99%  weekly=44%
 
 # list accounts with mapping metadata (email/account/user/usage)
 codex-auth list --details
@@ -170,7 +170,7 @@ codex-auth remove-login-hook
 - `codex-auth save <name> [--force]` – Validates `<name>`, ensures `auth.json` exists, then snapshots it to `~/.codex/accounts/<name>.json`. By default, it blocks overwriting a name when the existing snapshot email differs from current auth. If `name` is omitted, it first tries reusing the active snapshot name when identity matches; otherwise it infers one from auth email.
 - `codex-auth login [name] [--device-auth] [--force]` – Runs `codex login` (optionally with device auth), waits for refreshed auth snapshot detection, then saves it. If `name` is omitted, it always infers one from auth email with unique-suffix handling for multi-workspace identities.
 - `codex-auth use [name]` – Accepts a name or launches an interactive selector with the current account pre-selected, writes `~/.codex/auth.json` as a regular file from the chosen snapshot, and records the active name.
-- `codex-auth list [--details]` – Lists all saved snapshots alphabetically. In the default view, each row starts with the saved account/snapshot name, followed by `5h=` and `weekly=` remaining values, and the active row is marked with `*`. `--details` adds per-snapshot mapping metadata (email, account id, user id, and usage metadata) for easier session/account troubleshooting.
+- `codex-auth list [--details]` – Lists all saved snapshots alphabetically. In the default view, each row starts with the saved account/snapshot name, followed by `type=`, `5h=`, and `weekly=` values, and the active row is marked with `*`. `type=` renders Codex usage-based plans as `Usage based (Codex)` and ChatGPT seat plans with their tier, such as Plus, Business, Pro, or Max. `--details` adds per-snapshot mapping metadata (email, account id, user id, raw plan, usage metadata, and friendly type) for easier session/account troubleshooting.
 - `codex-auth current` – Prints the active account name, or a friendly message if none is active.
 - `codex-auth self-update [--check] [--reinstall] [-y]` – Checks npm for newer release metadata. `--check` prints current/latest/status only. `--reinstall` forces reinstall even when already up to date. `-y` skips confirmation prompts.
 - `codex-auth remove [query|--all]` – Removes snapshots interactively or by selector. If the active account is removed, the best remaining account is activated automatically.
