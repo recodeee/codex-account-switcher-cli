@@ -55,6 +55,10 @@ export function resolveSessionMapPath(): string {
   return path.join(resolveAccountsDir(), "sessions.json");
 }
 
+export function resolveSnapshotBackupDir(): string {
+  return path.join(resolveAccountsDir(), ".snapshot-backups");
+}
+
 export const codexDir: string = resolveCodexDir();
 export const accountsDir: string = resolveAccountsDir();
 export const authPath: string = resolveAuthPath();

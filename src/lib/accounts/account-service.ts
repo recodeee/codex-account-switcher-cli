@@ -7,6 +7,7 @@ import {
   resolveCodexDir,
   resolveCurrentNamePath,
   resolveSessionMapPath,
+  resolveSnapshotBackupDir,
 } from "../config/paths";
 import {
   AccountNotFoundError,
@@ -136,6 +137,11 @@ export class AccountService {
       return result;
     };
 
+    // Repair any snapshot file that codex clobbered through a stale symlink
+    // before we attempt name resolution — otherwise the identity-based scan
+    // mistakes the clobbered file for a refresh of the previous account.
+    await this.restoreClobberedSnapshotsFromBackup();
+
     const incomingSnapshot = await parseAuthSnapshotFile(authPath);
     if (incomingSnapshot.authMode !== "chatgpt") {
       return rememberAuthState({
@@ -187,6 +193,9 @@ export class AccountService {
       force: Boolean(resolvedName.forceOverwrite),
     });
 
+    // The backup vault has served its purpose for this codex run.
+    await this.clearSnapshotBackupVault();
+
     return rememberAuthState({
       synchronized: true,
       savedName,
@@ -204,6 +213,13 @@ export class AccountService {
     if (await this.pathExists(authPath)) {
       await this.materializeAuthSymlink(authPath);
     }
+
+    // Defensive safety net: snapshot every saved account into a backup vault
+    // before codex runs. If the materialize step is bypassed (e.g., this
+    // function isn't invoked because the shell hook is shadowed by another
+    // codex() function), the next sync after codex exits can still recover
+    // any snapshot file that got clobbered.
+    await this.backupAllSnapshots();
 
     const sessionAccountName = await this.getActiveSessionAccountName();
     if (!sessionAccountName) {
@@ -834,6 +850,109 @@ export class AccountService {
 
   private accountFilePath(name: string): string {
     return path.join(resolveAccountsDir(), `${name}.json`);
+  }
+
+  private snapshotBackupPath(name: string): string {
+    return path.join(resolveSnapshotBackupDir(), `${name}.json`);
+  }
+
+  private async backupAllSnapshots(): Promise<void> {
+    let accountNames: string[];
+    try {
+      accountNames = await this.listAccountNames();
+    } catch {
+      return;
+    }
+
+    const backupDir = resolveSnapshotBackupDir();
+    // Replace stale vault contents from a previous codex run with the current
+    // snapshot state so recovery only ever restores from this run's backup.
+    await this.clearSnapshotBackupVault();
+
+    if (accountNames.length === 0) {
+      return;
+    }
+
+    try {
+      await this.ensureDir(backupDir);
+    } catch {
+      return;
+    }
+
+    await Promise.all(
+      accountNames.map(async (name) => {
+        const source = this.accountFilePath(name);
+        const destination = this.snapshotBackupPath(name);
+        try {
+          await fsp.copyFile(source, destination);
+        } catch {
+          // Best-effort backup; one failure shouldn't block codex from running.
+        }
+      }),
+    );
+  }
+
+  private async restoreClobberedSnapshotsFromBackup(): Promise<void> {
+    const backupDir = resolveSnapshotBackupDir();
+    if (!(await this.pathExists(backupDir))) {
+      return;
+    }
+
+    let entries: string[];
+    try {
+      entries = await fsp.readdir(backupDir);
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.endsWith(".json")) continue;
+      const name = entry.replace(/\.json$/i, "");
+      const destination = this.accountFilePath(name);
+      const source = path.join(backupDir, entry);
+
+      try {
+        const backupSnapshot = await parseAuthSnapshotFile(source);
+        if (backupSnapshot.authMode !== "chatgpt") continue;
+      } catch {
+        continue;
+      }
+
+      if (!(await this.pathExists(destination))) {
+        // Destination missing: codex deleted it (or never saved). Recover.
+        try {
+          await this.ensureDir(path.dirname(destination));
+          await fsp.copyFile(source, destination);
+        } catch {
+          // Best-effort; skip on failure.
+        }
+        continue;
+      }
+
+      // Destination exists. If its identity differs from the backup's
+      // identity, codex clobbered it through a stale symlink. Restore.
+      try {
+        const [backupSnapshot, currentSnapshot] = await Promise.all([
+          parseAuthSnapshotFile(source),
+          parseAuthSnapshotFile(destination),
+        ]);
+        if (this.snapshotsShareIdentity(backupSnapshot, currentSnapshot)) {
+          continue;
+        }
+        await fsp.copyFile(source, destination);
+      } catch {
+        // Skip on any read/write failure rather than abort the whole recovery.
+      }
+    }
+  }
+
+  private async clearSnapshotBackupVault(): Promise<void> {
+    const backupDir = resolveSnapshotBackupDir();
+    try {
+      await fsp.rm(backupDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup; do not propagate.
+    }
   }
 
   private normalizeAccountName(rawName: string | undefined): string {
