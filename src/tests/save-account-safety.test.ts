@@ -1194,6 +1194,72 @@ test("restoreSessionSnapshotIfNeeded materializes the auth symlink even when no 
   });
 });
 
+test("syncExternalAuthSnapshotIfNeeded recovers a snapshot that codex login clobbered through a symlink", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("symlink conversion behavior is Unix-specific in this test");
+    return;
+  }
+
+  await withIsolatedCodexDir(t, async ({ codexDir, accountsDir, authPath }) => {
+    const service = new AccountService();
+    const previousName = "admin@kollarrobert.sk";
+    const previousSnapshotPath = path.join(accountsDir, `${previousName}.json`);
+    const currentPath = path.join(codexDir, "current");
+
+    process.env.CODEX_AUTH_SESSION_KEY = "recovery-test";
+    process.env.CODEX_AUTH_SESSION_ACTIVE_OVERRIDE = "1";
+    process.env.CODEX_AUTH_FORCE_EXTERNAL_SYNC = "1";
+
+    t.after(() => {
+      delete process.env.CODEX_AUTH_FORCE_EXTERNAL_SYNC;
+    });
+
+    await fsp.writeFile(
+      previousSnapshotPath,
+      buildAuthPayload(previousName, {
+        accountId: "acct-admin",
+        userId: "user-admin",
+        tokenSeed: "admin-original",
+      }),
+      "utf8",
+    );
+    await fsp.writeFile(currentPath, `${previousName}\n`, "utf8");
+    await fsp.symlink(previousSnapshotPath, authPath);
+
+    // restore-session runs the pre-codex backup vault.
+    await service.restoreSessionSnapshotIfNeeded();
+
+    // Simulate codex login writing through the still-stale symlink
+    // (this is what happens when the shell hook is shadowed): the previous
+    // snapshot file gets the new account's tokens written into it directly.
+    await fsp.rm(authPath, { force: true });
+    await fsp.symlink(previousSnapshotPath, authPath);
+    await fsp.writeFile(
+      previousSnapshotPath,
+      buildAuthPayload("zeus@mite.hu", {
+        accountId: "acct-zeus",
+        userId: "user-zeus",
+        tokenSeed: "zeus-login",
+      }),
+      "utf8",
+    );
+
+    // Post-codex sync runs syncExternalAuthSnapshotIfNeeded; it should save
+    // zeus under its own name AND recover the admin snapshot from backup.
+    const result = await service.syncExternalAuthSnapshotIfNeeded();
+    assert.equal(result.synchronized, true);
+    assert.equal(result.savedName, "zeus@mite.hu");
+
+    const recovered = await parseAuthSnapshotFile(previousSnapshotPath);
+    assert.equal(recovered.email, previousName);
+    assert.equal(recovered.accountId, "acct-admin");
+
+    const zeus = await parseAuthSnapshotFile(path.join(accountsDir, "zeus@mite.hu.json"));
+    assert.equal(zeus.email, "zeus@mite.hu");
+    assert.equal(zeus.accountId, "acct-zeus");
+  });
+});
+
 test("listAccountNames excludes the update-check cache file", async (t) => {
   await withIsolatedCodexDir(t, async ({ accountsDir }) => {
     const service = new AccountService();
