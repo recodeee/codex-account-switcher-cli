@@ -1587,7 +1587,7 @@ export class AccountService {
       const cmdline = await fsp.readFile(`/proc/${pid}/cmdline`, "utf8");
       const normalized = cmdline.replace(/\0/g, " ").trim();
       if (!normalized) return false;
-      if (/\bcodex-auth\b/.test(normalized)) return false;
+      if (/\bauthmux\b/.test(normalized)) return false;
       if (/(^|\s|\/)codex(\s|$)/.test(normalized)) return true;
       if (/(^|\s|\/)codex-linux-[^\s]*($|\s)/.test(normalized)) return true;
       return false;

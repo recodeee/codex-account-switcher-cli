@@ -52,7 +52,7 @@ async function withIsolatedCodexDir(
   t: TestContext,
   fn: (paths: { codexDir: string; accountsDir: string; authPath: string; registryPath: string }) => Promise<void>,
 ): Promise<void> {
-  const codexDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-list-"));
+  const codexDir = await fsp.mkdtemp(path.join(os.tmpdir(), "authmux-list-"));
   const accountsDir = path.join(codexDir, "accounts");
   const authPath = path.join(codexDir, "auth.json");
   const registryPath = path.join(accountsDir, "registry.json");

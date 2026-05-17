@@ -53,7 +53,7 @@ async function withIsolatedCodexDir(
   t: TestContext,
   fn: (paths: { codexDir: string; accountsDir: string; authPath: string }) => Promise<void>,
 ): Promise<void> {
-  const codexDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-save-"));
+  const codexDir = await fsp.mkdtemp(path.join(os.tmpdir(), "authmux-save-"));
   const accountsDir = path.join(codexDir, "accounts");
   const authPath = path.join(codexDir, "auth.json");
   await fsp.mkdir(accountsDir, { recursive: true });
@@ -1272,7 +1272,7 @@ test("listAccountNames excludes the update-check cache file", async (t) => {
       path.join(accountsDir, "update-check.json"),
       JSON.stringify({
         version: 1,
-        packageName: "@imdeadpool/codex-account-switcher",
+        packageName: "authmux",
         latestVersion: "0.1.23",
         checkedAt: 1778696332060,
       }),

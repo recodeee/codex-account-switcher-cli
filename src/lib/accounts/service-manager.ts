@@ -5,9 +5,9 @@ import { spawnSync } from "node:child_process";
 
 export type ServiceState = "active" | "inactive" | "unknown";
 
-const LINUX_SERVICE_NAME = "codex-auth-autoswitch.service";
+const LINUX_SERVICE_NAME = "authmux-autoswitch.service";
 const MAC_LABEL = "com.codex.auth.autoswitch";
-const WINDOWS_TASK_NAME = "codex-auth-autoswitch";
+const WINDOWS_TASK_NAME = "authmux-autoswitch";
 
 interface CommandResult {
   code: number | null;
@@ -33,13 +33,13 @@ function linuxUnitPath(): string {
 function linuxUnitContents(): string {
   return [
     "[Unit]",
-    "Description=codex-auth auto-switch watcher",
+    "Description=authmux auto-switch watcher",
     "",
     "[Service]",
     "Type=simple",
     "Restart=always",
     "RestartSec=1",
-    "ExecStart=codex-auth daemon --watch",
+    "ExecStart=authmux daemon --watch",
     "",
     "[Install]",
     "WantedBy=default.target",
@@ -102,7 +102,7 @@ function macPlistContents(): string {
     `  <string>${MAC_LABEL}</string>`,
     "  <key>ProgramArguments</key>",
     "  <array>",
-    "    <string>codex-auth</string>",
+    "    <string>authmux</string>",
     "    <string>daemon</string>",
     "    <string>--watch</string>",
     "  </array>",
@@ -152,7 +152,7 @@ async function enableWindowsService(): Promise<void> {
     "/SC",
     "ONLOGON",
     "/TR",
-    "cmd /c codex-auth daemon --watch",
+    "cmd /c authmux daemon --watch",
     "/F",
   ]);
   if (create.code !== 0) {

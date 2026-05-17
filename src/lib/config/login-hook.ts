@@ -2,8 +2,8 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-export const LOGIN_HOOK_MARK_START = "# >>> codex-auth-login-auto-snapshot >>>";
-export const LOGIN_HOOK_MARK_END = "# <<< codex-auth-login-auto-snapshot <<<";
+export const LOGIN_HOOK_MARK_START = "# >>> authmux-login-auto-snapshot >>>";
+export const LOGIN_HOOK_MARK_END = "# <<< authmux-login-auto-snapshot <<<";
 
 export type HookInstallStatus = "installed" | "updated" | "already-installed";
 export type HookRemoveStatus = "removed" | "not-installed";
@@ -48,13 +48,13 @@ export function renderLoginHookBlock(): string {
     "  printf '\\033[>4m\\033[<u\\033[?2026l\\033[?1004l\\033[?1l\\033[?2004l\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?1049l\\033[0m\\033[?25h\\033[H\\033>' >\"$__tty_target\" 2>/dev/null || true",
     "}",
     "codex() {",
-    "  if command -v codex-auth >/dev/null 2>&1; then",
-    "    command codex-auth restore-session >/dev/null 2>&1 || true",
+    "  if command -v authmux >/dev/null 2>&1; then",
+    "    command authmux restore-session >/dev/null 2>&1 || true",
     "  fi",
     "  command codex \"$@\"",
     "  local __codex_exit=$?",
-    "  if command -v codex-auth >/dev/null 2>&1; then",
-    "    CODEX_AUTH_FORCE_EXTERNAL_SYNC=1 command codex-auth status >/dev/null 2>&1 || true",
+    "  if command -v authmux >/dev/null 2>&1; then",
+    "    CODEX_AUTH_FORCE_EXTERNAL_SYNC=1 command authmux status >/dev/null 2>&1 || true",
     "  fi",
     "  if [[ -z \"${CODEX_AUTH_SKIP_TTY_RESTORE:-}\" ]]; then",
     "    __codex_auth_restore_tty",

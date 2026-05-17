@@ -13,7 +13,7 @@ import {
 } from "../lib/update-check";
 
 export default class SelfUpdateCommand extends BaseCommand {
-  static description = "Check for updates and upgrade codex-auth globally";
+  static description = "Check for updates and upgrade agent-auth globally";
 
   static flags = {
     check: Flags.boolean({
@@ -50,14 +50,14 @@ export default class SelfUpdateCommand extends BaseCommand {
           this.log(line);
         }
         if (hasUpdate) {
-          this.log("Run `codex-auth self-update` to install the latest release.");
+          this.log("Run `agent-auth self-update` to install the latest release.");
         }
         return;
       }
 
       if (!hasUpdate && !flags.reinstall) {
         this.log(formatUpdateSummaryInline(summary));
-        this.log("Use `codex-auth self-update --reinstall` if you want to reinstall anyway.");
+        this.log("Use `agent-auth self-update --reinstall` if you want to reinstall anyway.");
         return;
       }
 

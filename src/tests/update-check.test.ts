@@ -88,18 +88,18 @@ test("formatUpdateSummaryCard renders a stable 4-line card", () => {
     state: "update-available",
   });
   assert.equal(lines.length, 4);
-  assert.equal(lines[0], "┌─ codex-auth update");
+  assert.equal(lines[0], "┌─ authmux update");
   assert.equal(lines[3], "└─ status : update available");
 });
 
 test("formatGlobalInstallSpec and command pin an exact version", () => {
   assert.equal(
     formatGlobalInstallSpec(PACKAGE_NAME, "0.1.18"),
-    "@imdeadpool/codex-account-switcher@0.1.18",
+    "authmux@0.1.18",
   );
   assert.equal(
     formatGlobalInstallCommand(PACKAGE_NAME, "0.1.18"),
-    "npm i -g @imdeadpool/codex-account-switcher@0.1.18",
+    "npm i -g authmux@0.1.18",
   );
 });
 
@@ -124,7 +124,7 @@ test("shouldProceedWithYesDefault rejects no and unknown responses", () => {
 });
 
 test("fetchLatestNpmVersionCached reuses a fresh cached version", async (t) => {
-  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-update-check-"));
+  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "authmux-update-check-"));
   const cachePath = path.join(cacheDir, "update-check.json");
   t.after(async () => {
     await fsp.rm(cacheDir, { recursive: true, force: true });
@@ -156,7 +156,7 @@ test("fetchLatestNpmVersionCached reuses a fresh cached version", async (t) => {
 });
 
 test("fetchLatestNpmVersionCached refreshes stale up-to-date cache quickly", async (t) => {
-  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-update-check-"));
+  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "authmux-update-check-"));
   const cachePath = path.join(cacheDir, "update-check.json");
   t.after(async () => {
     await fsp.rm(cacheDir, { recursive: true, force: true });
@@ -191,7 +191,7 @@ test("fetchLatestNpmVersionCached refreshes stale up-to-date cache quickly", asy
 });
 
 test("fetchLatestNpmVersionCached reuses update-available cache for the long ttl", async (t) => {
-  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-update-check-"));
+  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "authmux-update-check-"));
   const cachePath = path.join(cacheDir, "update-check.json");
   t.after(async () => {
     await fsp.rm(cacheDir, { recursive: true, force: true });
@@ -227,7 +227,7 @@ test("fetchLatestNpmVersionCached reuses update-available cache for the long ttl
 });
 
 test("fetchLatestNpmVersionCached refreshes a stale cache", async (t) => {
-  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "codex-auth-update-check-"));
+  const cacheDir = await fsp.mkdtemp(path.join(os.tmpdir(), "authmux-update-check-"));
   const cachePath = path.join(cacheDir, "update-check.json");
   t.after(async () => {
     await fsp.rm(cacheDir, { recursive: true, force: true });

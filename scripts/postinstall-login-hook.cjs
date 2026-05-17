@@ -7,8 +7,8 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const readline = require("node:readline/promises");
 
-const MARK_START = "# >>> codex-auth-login-auto-snapshot >>>";
-const MARK_END = "# <<< codex-auth-login-auto-snapshot <<<";
+const MARK_START = "# >>> authmux-login-auto-snapshot >>>";
+const MARK_END = "# <<< authmux-login-auto-snapshot <<<";
 
 function isTruthy(value) {
   return typeof value === "string" && /^(1|true|yes|on)$/i.test(value.trim());
@@ -32,13 +32,13 @@ function renderHookBlock() {
     "  printf '\\033[>4m\\033[<u\\033[?2026l\\033[?1004l\\033[?1l\\033[?2004l\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?1049l\\033[0m\\033[?25h\\033[H\\033>' >\"$__tty_target\" 2>/dev/null || true",
     "}",
     "codex() {",
-    "  if command -v codex-auth >/dev/null 2>&1; then",
-    "    command codex-auth restore-session >/dev/null 2>&1 || true",
+    "  if command -v authmux >/dev/null 2>&1; then",
+    "    command authmux restore-session >/dev/null 2>&1 || true",
     "  fi",
     "  command codex \"$@\"",
     "  local __codex_exit=$?",
-    "  if command -v codex-auth >/dev/null 2>&1; then",
-    "    CODEX_AUTH_FORCE_EXTERNAL_SYNC=1 command codex-auth status >/dev/null 2>&1 || true",
+    "  if command -v authmux >/dev/null 2>&1; then",
+    "    CODEX_AUTH_FORCE_EXTERNAL_SYNC=1 command authmux status >/dev/null 2>&1 || true",
     "  fi",
     "  if [[ -z \"${CODEX_AUTH_SKIP_TTY_RESTORE:-}\" ]]; then",
     "    __codex_auth_restore_tty",
@@ -156,6 +156,6 @@ Promise.resolve()
   .then(() => runPostinstall())
   .catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`\n[codex-auth postinstall] Failed: ${message}\n`);
+    process.stderr.write(`\n[authmux postinstall] Failed: ${message}\n`);
     process.exitCode = 1;
   });

@@ -272,7 +272,7 @@ class DashboardProxyClient {
     try {
       const headers: Record<string, string> = {
         Accept: "application/json",
-        "User-Agent": "codex-auth",
+        "User-Agent": "authmux",
       };
       const cookieHeader = this.buildCookieHeader();
       if (cookieHeader) {
@@ -545,7 +545,7 @@ export async function fetchUsageFromApi(snapshotInfo: ParsedAuthSnapshot): Promi
       headers: {
         Authorization: `Bearer ${snapshotInfo.accessToken}`,
         "ChatGPT-Account-Id": snapshotInfo.accountId,
-        "User-Agent": "codex-auth",
+        "User-Agent": "authmux",
       },
       signal: controller.signal,
     });

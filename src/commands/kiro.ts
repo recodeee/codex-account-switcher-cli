@@ -1,0 +1,108 @@
+import { Command, Flags } from "@oclif/core";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
+import * as readline from "node:readline";
+
+const DATA_DIR = path.join(os.homedir(), ".local/share/kiro-cli");
+const DATA_FILE = path.join(DATA_DIR, "data.sqlite3");
+const SWITCHER_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local/share"), "kiro-account-switcher");
+const ACTIVE_FILE = path.join(SWITCHER_DIR, "active");
+
+function getAccounts(): string[] {
+  if (!fs.existsSync(DATA_DIR)) return [];
+  return fs.readdirSync(DATA_DIR)
+    .filter((f) => f.endsWith(".sqlite3") && f !== "data.sqlite3")
+    .sort()
+    .map((f) => f.replace(/\.sqlite3$/, ""));
+}
+
+function prompt(question: string): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => { rl.close(); resolve(answer.trim()); });
+  });
+}
+
+export default class KiroSwitch extends Command {
+  static description = "Switch between saved Kiro CLI accounts";
+
+  static flags = {
+    new: Flags.boolean({ description: "Remove symlink to prep for a new kiro-cli login" }),
+  } as const;
+
+  static args = {} as const;
+  static strict = false;
+
+  async run(): Promise<void> {
+    const { flags, argv } = await this.parse(KiroSwitch);
+
+    if (flags.new) {
+      this.prepNew();
+      return;
+    }
+
+    // Direct switch if account name passed
+    const directName = (argv as string[])[0];
+    if (directName) {
+      this.switchTo(directName);
+      return;
+    }
+
+    // Interactive pick
+    const accounts = getAccounts();
+    if (!accounts.length) {
+      this.error(`No Kiro account snapshots in ${DATA_DIR}. Run: agent-auth kiro-login`);
+    }
+
+    const active = this.getActive();
+    this.log("Kiro accounts:\n");
+    for (let i = 0; i < accounts.length; i++) {
+      const mark = accounts[i] === active ? " *" : "";
+      this.log(`  ${i + 1}) ${accounts[i]}${mark}`);
+    }
+    this.log("");
+
+    const choice = await prompt("Pick a number: ");
+    const idx = parseInt(choice, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= accounts.length) {
+      this.error("Invalid choice.");
+    }
+
+    this.switchTo(accounts[idx]);
+  }
+
+  private switchTo(name: string): void {
+    const target = path.join(DATA_DIR, `${name}.sqlite3`);
+    if (!fs.existsSync(target)) {
+      this.error(`Account "${name}" not found. Available: ${getAccounts().join(", ")}`);
+    }
+
+    if (fs.existsSync(DATA_FILE) || fs.lstatSync(DATA_FILE).isSymbolicLink()) {
+      try { fs.unlinkSync(DATA_FILE); } catch { /* ok */ }
+    }
+
+    fs.symlinkSync(target, DATA_FILE);
+    fs.mkdirSync(SWITCHER_DIR, { recursive: true });
+    fs.writeFileSync(ACTIVE_FILE, name);
+    this.log(`Switched Kiro to: ${name}`);
+  }
+
+  private prepNew(): void {
+    if (!fs.existsSync(DATA_FILE)) {
+      this.log("No data.sqlite3 to remove. Run: kiro-cli login");
+      return;
+    }
+    const stat = fs.lstatSync(DATA_FILE);
+    if (stat.isSymbolicLink()) {
+      fs.unlinkSync(DATA_FILE);
+      this.log("Removed symlink. Now run: agent-auth kiro-login");
+    } else {
+      this.error(`${DATA_FILE} is a regular file. Run: agent-auth kiro-login --name <name>`);
+    }
+  }
+
+  private getActive(): string | undefined {
+    try { return fs.readFileSync(ACTIVE_FILE, "utf-8").trim(); } catch { return undefined; }
+  }
+}

@@ -7,7 +7,7 @@ const SEMVER_TRIPLET = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/;
 const DEFAULT_UPDATE_CHECK_TIMEOUT_MS = 2_500;
 const DEFAULT_UPDATE_CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
 const DEFAULT_UP_TO_DATE_CACHE_TTL_MS = 60 * 1_000;
-export const PACKAGE_NAME = "@imdeadpool/codex-account-switcher";
+export const PACKAGE_NAME = "authmux";
 export type UpdateState = "update-available" | "up-to-date" | "unknown";
 type FetchLatestVersionFn = (packageName: string, timeoutMs?: number) => Promise<string | null>;
 
@@ -117,7 +117,7 @@ export function formatUpdateSummaryCard(summary: UpdateSummary): string[] {
         : "unknown";
 
   return [
-    "┌─ codex-auth update",
+    "┌─ authmux update",
     `│  current: ${summary.currentVersion}`,
     `│  latest : ${summary.latestVersion}`,
     `└─ status : ${statusLabel}`,

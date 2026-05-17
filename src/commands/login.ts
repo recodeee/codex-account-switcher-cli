@@ -119,7 +119,7 @@ export default class LoginCommand extends BaseCommand {
     }
 
     throw new CodexAuthError(
-      "Timed out waiting for refreshed Codex auth snapshot after login. Retry `codex-auth login`.",
+      "Timed out waiting for refreshed Codex auth snapshot after login. Retry `authmux login`.",
     );
   }
 }

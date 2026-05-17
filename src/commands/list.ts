@@ -32,7 +32,7 @@ export default class ListCommand extends BaseCommand {
       if (!detailed) {
         const accounts = await this.accounts.listAccountMappings({ refreshUsage: "missing" });
         if (!accounts.length) {
-          this.log("No saved Codex accounts yet. Run `codex-auth save <name>`.");
+          this.log("No saved Codex accounts yet. Run `authmux save <name>`.");
           return;
         }
 
@@ -47,7 +47,7 @@ export default class ListCommand extends BaseCommand {
 
       const accounts = await this.accounts.listAccountMappings({ refreshUsage: "missing" });
       if (!accounts.length) {
-        this.log("No saved Codex accounts yet. Run `codex-auth save <name>`.");
+        this.log("No saved Codex accounts yet. Run `authmux save <name>`.");
         return;
       }
 

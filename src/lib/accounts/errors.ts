@@ -22,7 +22,7 @@ export class AccountNotFoundError extends CodexAuthError {
 
 export class NoAccountsSavedError extends CodexAuthError {
   constructor() {
-    super(`No saved Codex accounts yet. Run "codex-auth save <name>" first.`);
+    super(`No saved Codex accounts yet. Run "authmux save <name>" first.`);
   }
 }
 
@@ -37,7 +37,7 @@ export class InvalidAccountNameError extends CodexAuthError {
 
 export class AccountNameInferenceError extends CodexAuthError {
   constructor() {
-    super("Could not infer account name from auth email. Pass one explicitly: codex-auth save <name>.");
+    super("Could not infer account name from auth email. Pass one explicitly: authmux save <name>.");
   }
 }
 
@@ -46,7 +46,7 @@ export class SnapshotEmailMismatchError extends CodexAuthError {
     super(
       `Refusing to overwrite snapshot "${accountName}" because it belongs to ` +
         `${existingEmail}, but current auth is ${incomingEmail}. ` +
-        `Use a different name, run "codex-auth remove ${accountName}" first, or re-run with --force.`,
+        `Use a different name, run "authmux remove ${accountName}" first, or re-run with --force.`,
     );
   }
 }

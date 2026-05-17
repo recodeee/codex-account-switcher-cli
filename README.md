@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="./logo.png" alt="codex-auth logo" width="220" />
+  <img src="./logo.png" alt="authmux logo" width="220" />
 </p>
 
-<h1 align="center">codex-auth</h1>
+<h1 align="center">authmux</h1>
 
 <p align="center">
   multi-account Codex auth switching for local CLI workflows
@@ -13,20 +13,20 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@imdeadpool/codex-account-switcher">
-    <img alt="npm version" src="https://img.shields.io/npm/v/%40imdeadpool%2Fcodex-account-switcher?color=cb3837&label=npm" />
+  <a href="https://www.npmjs.com/package/authmux">
+    <img alt="npm version" src="https://img.shields.io/npm/v/authmux?color=cb3837&label=npm" />
   </a>
-  <a href="https://www.npmjs.com/package/@imdeadpool/codex-account-switcher">
-    <img alt="npm downloads" src="https://img.shields.io/npm/dm/%40imdeadpool%2Fcodex-account-switcher?color=0b7285&label=downloads%2Fmonth" />
+  <a href="https://www.npmjs.com/package/authmux">
+    <img alt="npm downloads" src="https://img.shields.io/npm/dm/authmux?color=0b7285&label=downloads%2Fmonth" />
   </a>
-  <a href="https://github.com/recodeee/codex-account-switcher-cli">
-    <img alt="node version" src="https://img.shields.io/node/v/%40imdeadpool%2Fcodex-account-switcher?color=3c873a&label=node" />
+  <a href="https://github.com/recodeee/authmux">
+    <img alt="node version" src="https://img.shields.io/node/v/authmux?color=3c873a&label=node" />
   </a>
-  <a href="https://github.com/recodeee/codex-account-switcher-cli/commits/main">
-    <img alt="last commit" src="https://img.shields.io/github/last-commit/recodeee/codex-account-switcher-cli?color=5865f2&label=last%20commit" />
+  <a href="https://github.com/recodeee/authmux/commits/main">
+    <img alt="last commit" src="https://img.shields.io/github/last-commit/recodeee/authmux?color=5865f2&label=last%20commit" />
   </a>
-  <a href="https://github.com/recodeee/codex-account-switcher-cli/blob/main/LICENSE">
-    <img alt="license" src="https://img.shields.io/github/license/recodeee/codex-account-switcher-cli?color=9acd32&label=license" />
+  <a href="https://github.com/recodeee/authmux/blob/main/LICENSE">
+    <img alt="license" src="https://img.shields.io/github/license/recodeee/authmux?color=9acd32&label=license" />
   </a>
 </p>
 
@@ -51,9 +51,9 @@ A command-line tool that lets you manage and switch between multiple Codex accou
 
 ## How it Works
 
-Codex stores your authentication session in a single `auth.json` file. This tool works by creating named snapshots of that file for each of your accounts. When you want to switch, `codex-auth` swaps the active `~/.codex/auth.json` with the snapshot you select, instantly changing your logged-in account.
+Codex stores your authentication session in a single `auth.json` file. This tool works by creating named snapshots of that file for each of your accounts. When you want to switch, `authmux` swaps the active `~/.codex/auth.json` with the snapshot you select, instantly changing your logged-in account.
 
-`codex-auth` also keeps a lightweight per-terminal session memory (scoped by shell parent PID by default), so older terminals keep using their original snapshot even if a different terminal logs into another account later.
+`authmux` also keeps a lightweight per-terminal session memory (scoped by shell parent PID by default), so older terminals keep using their original snapshot even if a different terminal logs into another account later.
 
 ## Requirements
 
@@ -62,14 +62,14 @@ Codex stores your authentication session in a single `auth.json` file. This tool
 ## Install (npm)
 
 ```sh
-npm i -g @imdeadpool/codex-account-switcher
+npm i -g authmux
 ```
 
 During global install, the package asks for permission to add an optional shell hook
 (`~/.bashrc` or `~/.zshrc`) that auto-runs a silent snapshot sync after successful
 official `codex login`.
 
-On later global updates, if the hook is already installed, `codex-auth` refreshes the
+On later global updates, if the hook is already installed, `authmux` refreshes the
 hook block automatically to the latest template (no manual remove/setup needed).
 The refreshed hook always wraps `codex` in your shell so sync/restore still run even if
 another shell config already defined `codex` as a function.
@@ -86,34 +86,34 @@ another shell config already defined `codex` as a function.
   status_line = ["model-with-reasoning", "git-branch", "context-remaining"]
   ```
 
-  This remains a manual Codex config choice; `codex-auth` does not rewrite `~/.codex/config.toml`.
+  This remains a manual Codex config choice; `authmux` does not rewrite `~/.codex/config.toml`.
 
 ## Usage
 
 ```sh
 # login to Codex and immediately snapshot the refreshed auth session
-codex-auth login [name]
+authmux login [name]
 
 # headless/remote login flow + snapshot
-codex-auth login [name] --device-auth
+authmux login [name] --device-auth
 
 # force overwrite when reusing a name across different detected identities
-codex-auth login [name] --force
+authmux login [name] --force
 
 # save the current logged-in token as a named account
-codex-auth save <name>
+authmux save <name>
 
 # force overwrite a name even when it currently maps to a different email
-codex-auth save <name> --force
+authmux save <name> --force
 
 # switch active account
-codex-auth use <name>
+authmux use <name>
 
 # or pick interactively
-codex-auth use
+authmux use
 
 # list accounts
-codex-auth list
+authmux list
 
 # bare list shows the saved account/snapshot name first,
 # then the account type and remaining 5h/weekly quota percentages
@@ -122,65 +122,65 @@ codex-auth list
 # * recodee@portasmosonmagyarovar.hu  type=Usage based (Codex)  5h=99%  weekly=44%
 
 # list accounts with mapping metadata (email/account/user/usage)
-codex-auth list --details
+authmux list --details
 
 # show current account name
-codex-auth current
+authmux current
 
 # check for a newer release and update globally
-codex-auth self-update
+authmux update
 
 # check only (no install)
-codex-auth self-update --check
+authmux update --check
 
 # reinstall latest even if already up to date
-codex-auth self-update --reinstall
+authmux update --reinstall
 
 # remove accounts (interactive multi-select)
-codex-auth remove
+authmux remove
 
 # remove by selector or all
-codex-auth remove <query>
-codex-auth remove --all
+authmux remove <query>
+authmux remove --all
 
 # show auto-switch + service status
-codex-auth status
+authmux status
 
 # auto-switch configuration
-codex-auth config auto enable
-codex-auth config auto disable
-codex-auth config auto --5h 12 --weekly 8
+authmux config auto enable
+authmux config auto disable
+authmux config auto --5h 12 --weekly 8
 
 # usage source configuration
-codex-auth config api enable
-codex-auth config api disable
+authmux config api enable
+authmux config api disable
 
 # daemon runtime (internal/service use)
-codex-auth daemon --once
-codex-auth daemon --watch
+authmux daemon --once
+authmux daemon --watch
 
 # optional shell hook helpers
-codex-auth setup-login-hook
-codex-auth hook-status
-codex-auth remove-login-hook
+authmux hook-install
+authmux hook-status
+authmux hook-remove
 ```
 
 ### Command reference
 
-- `codex-auth save <name> [--force]` – Validates `<name>`, ensures `auth.json` exists, then snapshots it to `~/.codex/accounts/<name>.json`. By default, it blocks overwriting a name when the existing snapshot email differs from current auth. If `name` is omitted, it first tries reusing the active snapshot name when identity matches; otherwise it infers one from auth email.
-- `codex-auth login [name] [--device-auth] [--force]` – Runs `codex login` (optionally with device auth), waits for refreshed auth snapshot detection, then saves it. If `name` is omitted, it always infers one from auth email with unique-suffix handling for multi-workspace identities.
-- `codex-auth use [name]` – Accepts a name or launches an interactive selector with the current account pre-selected, writes `~/.codex/auth.json` as a regular file from the chosen snapshot, and records the active name.
-- `codex-auth list [--details]` – Lists all saved snapshots alphabetically. In the default view, each row starts with the saved account/snapshot name, followed by `type=`, `5h=`, and `weekly=` values, and the active row is marked with `*`. `type=` renders Codex usage-based plans as `Usage based (Codex)` and ChatGPT seat plans with their tier, such as Plus, Business, Pro, or Max. `--details` adds per-snapshot mapping metadata (email, account id, user id, raw plan, usage metadata, and friendly type) for easier session/account troubleshooting.
-- `codex-auth current` – Prints the active account name, or a friendly message if none is active.
-- `codex-auth self-update [--check] [--reinstall] [-y]` – Checks npm for newer release metadata. `--check` prints current/latest/status only. `--reinstall` forces reinstall even when already up to date. `-y` skips confirmation prompts.
-- `codex-auth remove [query|--all]` – Removes snapshots interactively or by selector. If the active account is removed, the best remaining account is activated automatically.
-- `codex-auth status` – Prints auto-switch state, managed service status, active thresholds, and usage mode.
-- `codex-auth config auto ...` – Enables/disables managed auto-switch and updates threshold percentages.
-- `codex-auth config api enable|disable` – Chooses usage source mode (`api` or `local`).
-- `codex-auth daemon --once|--watch` – Runs the auto-switch loop once or continuously.
-- `codex-auth setup-login-hook [-f <path>]` – Installs or refreshes an optional shell hook in your rc file to restore session-pinned snapshot before each `codex` run, refresh codex-auth session memory after each `codex` exit, and restore common terminal modes before returning to your prompt.
-- `codex-auth hook-status [-f <path>]` – Shows whether the optional login auto-snapshot hook is installed for the selected rc file.
-- `codex-auth remove-login-hook [-f <path>]` – Removes the optional shell hook.
+- `authmux save <name> [--force]` – Validates `<name>`, ensures `auth.json` exists, then snapshots it to `~/.codex/accounts/<name>.json`. By default, it blocks overwriting a name when the existing snapshot email differs from current auth. If `name` is omitted, it first tries reusing the active snapshot name when identity matches; otherwise it infers one from auth email.
+- `authmux login [name] [--device-auth] [--force]` – Runs `codex login` (optionally with device auth), waits for refreshed auth snapshot detection, then saves it. If `name` is omitted, it always infers one from auth email with unique-suffix handling for multi-workspace identities.
+- `authmux use [name]` – Accepts a name or launches an interactive selector with the current account pre-selected, writes `~/.codex/auth.json` as a regular file from the chosen snapshot, and records the active name.
+- `authmux list [--details]` – Lists all saved snapshots alphabetically. In the default view, each row starts with the saved account/snapshot name, followed by `type=`, `5h=`, and `weekly=` values, and the active row is marked with `*`. `type=` renders Codex usage-based plans as `Usage based (Codex)` and ChatGPT seat plans with their tier, such as Plus, Business, Pro, or Max. `--details` adds per-snapshot mapping metadata (email, account id, user id, raw plan, usage metadata, and friendly type) for easier session/account troubleshooting.
+- `authmux current` – Prints the active account name, or a friendly message if none is active.
+- `authmux update [--check] [--reinstall] [-y]` – Checks npm for newer release metadata. `--check` prints current/latest/status only. `--reinstall` forces reinstall even when already up to date. `-y` skips confirmation prompts.
+- `authmux remove [query|--all]` – Removes snapshots interactively or by selector. If the active account is removed, the best remaining account is activated automatically.
+- `authmux status` – Prints auto-switch state, managed service status, active thresholds, and usage mode.
+- `authmux config auto ...` – Enables/disables managed auto-switch and updates threshold percentages.
+- `authmux config api enable|disable` – Chooses usage source mode (`api` or `local`).
+- `authmux daemon --once|--watch` – Runs the auto-switch loop once or continuously.
+- `authmux hook-install [-f <path>]` – Installs or refreshes an optional shell hook in your rc file to restore session-pinned snapshot before each `codex` run, refresh authmux session memory after each `codex` exit, and restore common terminal modes before returning to your prompt.
+- `authmux hook-status [-f <path>]` – Shows whether the optional login auto-snapshot hook is installed for the selected rc file.
+- `authmux hook-remove [-f <path>]` – Removes the optional shell hook.
 
 ### Auto-switch behavior
 
@@ -196,17 +196,69 @@ Usage refresh is hybrid:
 
 ### Managed background service
 
-`codex-auth config auto enable` installs a managed watcher per OS:
+`authmux config auto enable` installs a managed watcher per OS:
 
 - Linux: user `systemd` service
 - macOS: LaunchAgent
 - Windows: Scheduled Task
 
-`codex-auth status` reports whether the managed watcher is active.
+`authmux status` reports whether the managed watcher is active.
+
+## Claude Code Parallel Accounts
+
+Run multiple Claude Code subscriptions simultaneously in separate terminals — each with its own credentials and usage limits.
+
+### Quick setup (CLI)
+
+```sh
+# Add profiles
+authmux parallel --add work
+authmux parallel --add personal
+
+# Install shell aliases into ~/.bashrc or ~/.zshrc
+authmux parallel --install
+
+# Reload shell
+source ~/.bashrc  # or ~/.zshrc
+
+# Authenticate each in separate terminals
+claude-work       # logs in, credentials saved to ~/.claude-accounts/work
+claude-personal   # logs in, credentials saved to ~/.claude-accounts/personal
+```
+
+### Quick setup (standalone script)
+
+```sh
+./scripts/claude-parallel-setup.sh work personal client
+source ~/.bashrc
+```
+
+### Commands
+
+```sh
+authmux parallel --add <name>     # Create a new profile
+authmux parallel --remove <name>  # Remove a profile
+authmux parallel --list           # List all profiles
+authmux parallel --aliases        # Print aliases (without installing)
+authmux parallel --install        # Write aliases to shell rc file
+```
+
+### How it works
+
+Each profile gets its own config directory at `~/.claude-accounts/<name>`. Shell aliases set `CLAUDE_CONFIG_DIR` before launching `claude`, so each instance uses isolated credentials, settings, and history. Run them in separate terminal tabs or tmux panes for true parallel usage.
+
+### Notes
+
+- Requires a separate Anthropic subscription (different email) per profile.
+- Works on macOS and Linux. For Windows, use PowerShell functions with `$env:CLAUDE_CONFIG_DIR`.
+- To share settings across profiles, symlink specific files between config dirs.
+- Check Anthropic's terms of service for compliance.
+
+---
 
 Notes:
 
 - Works on macOS/Linux/Windows (regular-file auth snapshot activation).
 - Requires Node 18+.
-- Running bare `codex-auth` shows the help screen and also displays an update notice when a newer npm release is available.
-- Running bare `codex-auth` now prompts to install updates immediately when a newer npm release is available (`[Y/n]`, Enter defaults to yes).
+- Running bare `authmux` shows the help screen and also displays an update notice when a newer npm release is available.
+- Running bare `authmux` now prompts to install updates immediately when a newer npm release is available (`[Y/n]`, Enter defaults to yes).
