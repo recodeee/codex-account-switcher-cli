@@ -38,31 +38,44 @@ export default class LoginCommand extends BaseCommand {
       const providedName = args.name as string | undefined;
       const status = await this.accounts.getStatus();
 
-      if (status.autoSwitchEnabled) {
+      const autoSwitchWasEnabled = status.autoSwitchEnabled;
+      if (autoSwitchWasEnabled) {
         await this.accounts.setAutoSwitchEnabled(false);
         this.log("Auto-switch disabled before login.");
       }
 
-      await this.runCodexLogin(Boolean(flags["device-auth"]));
-      await this.waitForCodexAuthSnapshot();
+      try {
+        await this.runCodexLogin(Boolean(flags["device-auth"]));
+        await this.waitForCodexAuthSnapshot();
 
-      const resolvedName = providedName
-        ? { name: providedName, source: "explicit" as const, forceOverwrite: false }
-        : await this.accounts.resolveLoginAccountNameFromCurrentAuth();
-      const forceOverwrite = Boolean(flags.force || resolvedName.forceOverwrite);
-      const savedName = await this.accounts.saveAccount(resolvedName.name, {
-        force: forceOverwrite,
-      });
+        const resolvedName = providedName
+          ? { name: providedName, source: "explicit" as const, forceOverwrite: false }
+          : await this.accounts.resolveLoginAccountNameFromCurrentAuth();
+        const forceOverwrite = Boolean(flags.force || resolvedName.forceOverwrite);
+        const savedName = await this.accounts.saveAccount(resolvedName.name, {
+          force: forceOverwrite,
+        });
 
-      const suffix =
-        resolvedName.source === "explicit"
-          ? ""
-          : resolvedName.source === "active"
-            ? " (reused active account name)"
-            : resolvedName.source === "existing"
-              ? " (reused saved account name)"
-            : " (inferred from auth email)";
-      this.log(`Saved current Codex auth tokens as "${savedName}"${suffix}.`);
+        const suffix =
+          resolvedName.source === "explicit"
+            ? ""
+            : resolvedName.source === "active"
+              ? " (reused active account name)"
+              : resolvedName.source === "existing"
+                ? " (reused saved account name)"
+              : " (inferred from auth email)";
+        this.log(`Saved current Codex auth tokens as "${savedName}"${suffix}.`);
+      } catch (error) {
+        if (autoSwitchWasEnabled) {
+          try {
+            await this.accounts.setAutoSwitchEnabled(true);
+            this.log("Auto-switch re-enabled after login failure.");
+          } catch {
+            this.warn("Failed to re-enable auto-switch after login failure. Run: authmux config auto enable");
+          }
+        }
+        throw error;
+      }
     });
   }
 

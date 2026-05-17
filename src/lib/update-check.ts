@@ -167,6 +167,13 @@ export function shouldProceedWithYesDefault(answer: string): boolean {
   return false;
 }
 
+export function shouldProceedWithNoDefault(answer: string): boolean {
+  const normalized = answer.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === "y" || normalized === "yes") return true;
+  return false;
+}
+
 export async function fetchLatestNpmVersion(
   packageName: string,
   timeoutMs = DEFAULT_UPDATE_CHECK_TIMEOUT_MS,

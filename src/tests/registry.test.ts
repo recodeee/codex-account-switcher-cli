@@ -21,6 +21,58 @@ test("sanitizeRegistry falls back to defaults for invalid thresholds", () => {
   assert.equal(registry.api.usage, false);
 });
 
+test("sanitizeRegistry preserves the proxy usage source", () => {
+  const registry = sanitizeRegistry({
+    accounts: {
+      foo: {
+        name: "foo",
+        createdAt: new Date().toISOString(),
+        lastUsage: {
+          primary: { usedPercent: 42 },
+          fetchedAt: new Date().toISOString(),
+          source: "proxy",
+        },
+      },
+    },
+  });
+
+  assert.equal(registry.accounts.foo.lastUsage?.source, "proxy");
+});
+
+test("sanitizeRegistry preserves api/local/cached sources and rejects unknown", () => {
+  for (const source of ["api", "local", "cached", "proxy"] as const) {
+    const registry = sanitizeRegistry({
+      accounts: {
+        x: {
+          name: "x",
+          createdAt: new Date().toISOString(),
+          lastUsage: {
+            primary: { usedPercent: 1 },
+            fetchedAt: new Date().toISOString(),
+            source,
+          },
+        },
+      },
+    });
+    assert.equal(registry.accounts.x.lastUsage?.source, source);
+  }
+
+  const unknown = sanitizeRegistry({
+    accounts: {
+      x: {
+        name: "x",
+        createdAt: new Date().toISOString(),
+        lastUsage: {
+          primary: { usedPercent: 1 },
+          fetchedAt: new Date().toISOString(),
+          source: "made-up",
+        },
+      },
+    },
+  });
+  assert.equal(unknown.accounts.x.lastUsage?.source, "cached");
+});
+
 test("reconcileRegistryWithAccounts drops missing account entries", () => {
   const registry = sanitizeRegistry({
     accounts: {

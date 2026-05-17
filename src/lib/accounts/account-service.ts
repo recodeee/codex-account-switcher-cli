@@ -49,6 +49,12 @@ import {
   enableManagedService,
   getManagedServiceState,
 } from "./service-manager";
+import {
+  chmodSecureDir,
+  chmodSecureFile,
+  ensureSecureDir,
+  secureWriteFile,
+} from "../io/secure-fs";
 
 const ACCOUNT_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._@+-]*$/;
 const EXTERNAL_SYNC_FORCE_ENV = "CODEX_AUTH_FORCE_EXTERNAL_SYNC";
@@ -406,6 +412,8 @@ export class AccountService {
       force: Boolean(options?.force),
     });
     await fsp.copyFile(authPath, destination);
+    await chmodSecureFile(destination);
+    await chmodSecureDir(accountsDir);
 
     await this.writeCurrentName(name);
 
@@ -885,6 +893,7 @@ export class AccountService {
         const destination = this.snapshotBackupPath(name);
         try {
           await fsp.copyFile(source, destination);
+          await chmodSecureFile(destination);
         } catch {
           // Best-effort backup; one failure shouldn't block codex from running.
         }
@@ -923,6 +932,7 @@ export class AccountService {
         try {
           await this.ensureDir(path.dirname(destination));
           await fsp.copyFile(source, destination);
+          await chmodSecureFile(destination);
         } catch {
           // Best-effort; skip on failure.
         }
@@ -940,6 +950,7 @@ export class AccountService {
           continue;
         }
         await fsp.copyFile(source, destination);
+        await chmodSecureFile(destination);
       } catch {
         // Skip on any read/write failure rather than abort the whole recovery.
       }
@@ -984,7 +995,7 @@ export class AccountService {
   }
 
   private async ensureDir(dirPath: string): Promise<void> {
-    await fsp.mkdir(dirPath, { recursive: true });
+    await ensureSecureDir(dirPath);
   }
 
   private async materializeAuthSymlink(authPath: string): Promise<void> {
@@ -995,7 +1006,7 @@ export class AccountService {
 
     const snapshotData = await fsp.readFile(authPath);
     await this.removeIfExists(authPath);
-    await fsp.writeFile(authPath, snapshotData);
+    await secureWriteFile(authPath, snapshotData);
   }
 
   private async assertSafeSnapshotOverwrite(input: {
@@ -1043,7 +1054,7 @@ export class AccountService {
   private async writeCurrentName(name: string, options?: { authFingerprint?: string }): Promise<void> {
     const currentNamePath = resolveCurrentNamePath();
     await this.ensureDir(path.dirname(currentNamePath));
-    await fsp.writeFile(currentNamePath, `${name}\n`, "utf8");
+    await secureWriteFile(currentNamePath, `${name}\n`);
     await this.setSessionAccountName(name, options?.authFingerprint);
   }
 
@@ -1305,6 +1316,7 @@ export class AccountService {
     const authPath = resolveAuthPath();
     await this.ensureDir(path.dirname(authPath));
     await fsp.copyFile(source, authPath);
+    await chmodSecureFile(authPath);
 
     const authState = await this.readAuthSyncState(authPath);
     await this.writeCurrentName(name, {
@@ -1510,7 +1522,7 @@ export class AccountService {
   private async writeSessionMap(sessionMap: SessionMapData): Promise<void> {
     const sessionMapPath = resolveSessionMapPath();
     await this.ensureDir(path.dirname(sessionMapPath));
-    await fsp.writeFile(sessionMapPath, `${JSON.stringify(sessionMap, null, 2)}\n`, "utf8");
+    await secureWriteFile(sessionMapPath, `${JSON.stringify(sessionMap, null, 2)}\n`);
   }
 
   private async rememberSessionAuthFingerprint(authPath: string): Promise<void> {

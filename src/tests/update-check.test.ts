@@ -15,6 +15,7 @@ import {
   isVersionNewer,
   PACKAGE_NAME,
   parseVersionTriplet,
+  shouldProceedWithNoDefault,
   shouldProceedWithYesDefault,
 } from "../lib/update-check";
 
@@ -121,6 +122,20 @@ test("shouldProceedWithYesDefault rejects no and unknown responses", () => {
   assert.equal(shouldProceedWithYesDefault("n"), false);
   assert.equal(shouldProceedWithYesDefault("No"), false);
   assert.equal(shouldProceedWithYesDefault("later"), false);
+});
+
+test("shouldProceedWithNoDefault defaults to no on empty/unknown input", () => {
+  assert.equal(shouldProceedWithNoDefault(""), false);
+  assert.equal(shouldProceedWithNoDefault("   "), false);
+  assert.equal(shouldProceedWithNoDefault("n"), false);
+  assert.equal(shouldProceedWithNoDefault("No"), false);
+  assert.equal(shouldProceedWithNoDefault("later"), false);
+});
+
+test("shouldProceedWithNoDefault accepts explicit yes responses", () => {
+  assert.equal(shouldProceedWithNoDefault("y"), true);
+  assert.equal(shouldProceedWithNoDefault("Yes"), true);
+  assert.equal(shouldProceedWithNoDefault("YES"), true);
 });
 
 test("fetchLatestNpmVersionCached reuses a fresh cached version", async (t) => {

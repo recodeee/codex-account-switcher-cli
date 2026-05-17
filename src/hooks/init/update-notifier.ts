@@ -8,7 +8,7 @@ import {
   getUpdateSummary,
   PACKAGE_NAME,
   runGlobalNpmInstall,
-  shouldProceedWithYesDefault,
+  shouldProceedWithNoDefault,
 } from "../../lib/update-check";
 
 const hook: Hook.Init = async function (options) {
@@ -36,8 +36,8 @@ const hook: Hook.Init = async function (options) {
 
       let shouldUpdate = false;
       try {
-        const answer = await rl.question(`Install authmux ${latestVersion} now? [Y/n] `);
-        shouldUpdate = shouldProceedWithYesDefault(answer);
+        const answer = await rl.question(`Install authmux ${latestVersion} now? [y/N] `);
+        shouldUpdate = shouldProceedWithNoDefault(answer);
       } finally {
         rl.close();
       }
