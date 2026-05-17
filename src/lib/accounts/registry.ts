@@ -1,6 +1,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { resolveRegistryPath } from "../config/paths";
+import { secureWriteFile, SECURE_DIR_MODE } from "../io/secure-fs";
 import {
   AccountRegistryEntry,
   DEFAULT_THRESHOLD_5H_PERCENT,
@@ -23,7 +24,10 @@ function clampPercent(value: unknown, fallback: number): number {
 function sanitizeUsageSnapshot(input: unknown): UsageSnapshot | undefined {
   if (!input || typeof input !== "object") return undefined;
   const sourceRaw = (input as Record<string, unknown>).source;
-  const source = sourceRaw === "api" || sourceRaw === "local" || sourceRaw === "cached" ? sourceRaw : "cached";
+  const source =
+    sourceRaw === "api" || sourceRaw === "local" || sourceRaw === "cached" || sourceRaw === "proxy"
+      ? sourceRaw
+      : "cached";
 
   const normalizeWindow = (raw: unknown) => {
     if (!raw || typeof raw !== "object") return undefined;
@@ -147,8 +151,8 @@ export async function loadRegistry(): Promise<RegistryData> {
 
 export async function saveRegistry(registry: RegistryData): Promise<void> {
   const registryPath = resolveRegistryPath();
-  await fsp.mkdir(path.dirname(registryPath), { recursive: true });
-  await fsp.writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`, "utf8");
+  await fsp.mkdir(path.dirname(registryPath), { recursive: true, mode: SECURE_DIR_MODE });
+  await secureWriteFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`);
 }
 
 export function reconcileRegistryWithAccounts(registry: RegistryData, accountNames: string[]): RegistryData {

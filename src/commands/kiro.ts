@@ -78,8 +78,13 @@ export default class KiroSwitch extends Command {
       this.error(`Account "${name}" not found. Available: ${getAccounts().join(", ")}`);
     }
 
-    if (fs.existsSync(DATA_FILE) || fs.lstatSync(DATA_FILE).isSymbolicLink()) {
-      try { fs.unlinkSync(DATA_FILE); } catch { /* ok */ }
+    // Remove existing data file or broken symlink. lstatSync throws ENOENT
+    // when the path is completely absent, so wrap it.
+    try {
+      fs.unlinkSync(DATA_FILE);
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== "ENOENT") throw error;
     }
 
     fs.symlinkSync(target, DATA_FILE);

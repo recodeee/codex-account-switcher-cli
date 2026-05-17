@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node-${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+        env:
+          CODEX_AUTH_SKIP_POSTINSTALL: "1"
+
+      - run: npm run build
+
+      - run: npm test
+        env:
+          CODEX_AUTH_SKIP_POSTINSTALL: "1"
+
+  smoke:
+    name: smoke install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+        env:
+          CODEX_AUTH_SKIP_POSTINSTALL: "1"
+
+      - run: npm run build
+
+      - name: pack
+        run: npm pack
+
+      - name: global install from tarball
+        env:
+          CODEX_AUTH_SKIP_POSTINSTALL: "1"
+        run: |
+          tarball=$(ls authmux-*.tgz | head -1)
+          npm install -g "$tarball"
+
+      - name: smoke test
+        run: |
+          authmux --version
+          authmux --help
